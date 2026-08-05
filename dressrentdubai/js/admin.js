@@ -296,16 +296,19 @@ $('photoInput').addEventListener('change', async (e) => {
   if (!files.length) return;
 
   status(`Обрабатываем ${files.length} фото...`);
+  const fresh = [];
   for (let n = 0; n < files.length; n++) {
     status(`Обрабатываем фото ${n + 1} из ${files.length}...`);
     try {
       const dataUrl = await drdResizeImage(files[n]);
       const name = files[n].name.replace(/\.[^.]+$/, '').slice(0, 60) || 'Новый образ';
-      items.push({ id: drdGenId(), name, price: '', tags: [], image: null, _new: true, _dataUrl: dataUrl });
+      fresh.push({ id: drdGenId(), name, price: '', tags: [], image: null, _new: true, _dataUrl: dataUrl });
     } catch (err) {
       console.warn('Не удалось обработать файл', files[n].name, err);
     }
   }
+  // новые образы — в начало, чтобы они сразу были видны и в админке, и на сайте
+  items = fresh.concat(items);
   e.target.value = '';
   status(`Добавлено ${files.length} фото — поставь теги и нажми «Опубликовать»`, 'ok');
   render();
