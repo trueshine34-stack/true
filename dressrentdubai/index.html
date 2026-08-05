@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DressRentDubai — Аренда вечерних платьев в Дубае</title>
-<meta name="description" content="Аренда вечерних платьев, коктейльных нарядов и аксессуаров премиум-класса в Дубае. Подбор образа, примерка и доставка по всему городу.">
+<title>Rent.Dress in Dubai — Прокат платьев для фотосессий в Дубае</title>
+<meta name="description" content="Прокат платьев и стильных образов для фотосессий в Дубае: более 300 образов, стилизация и организация съёмки под ключ — пустыня, океан, знаковая архитектура Эмиратов.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👗</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,7 +14,7 @@
 
 <header class="header">
   <div class="container header__inner">
-    <a href="index.html" class="logo">Dress<span>Rent</span>Dubai</a>
+    <a href="index.html" class="logo">Rent.<span>Dress</span> in Dubai</a>
 
     <nav class="nav" id="nav">
       <a href="index.html#catalog">Галерея</a>
@@ -38,25 +38,25 @@
   <section class="hero">
     <div class="container hero__inner">
       <div>
-        <p class="eyebrow eyebrow--light">Студия аренды образов · Дубай</p>
-        <h1>Безупречный образ<br> на <em>любой вечер</em></h1>
+        <p class="eyebrow eyebrow--light">Прокат образов для фотосессий · Дубай</p>
+        <h1>Платья для ваших<br> <em>лучших кадров</em></h1>
         <p class="hero__text">
-          Вечерние и коктейльные платья от мировых брендов — в аренду
-          с примеркой, стилистом и доставкой по всему Дубаю.
+          Более 300 образов для съёмок, стилизация и организация фотосессии
+          под ключ — пустыня, океан и знаковая архитектура Эмиратов.
         </p>
         <div class="hero__actions">
           <a href="#catalog" class="btn btn--gold">Смотреть галерею</a>
-          <a href="contacts.html#booking" class="btn btn--outline-light">Записаться на примерку</a>
+          <a href="contacts.html#booking" class="btn btn--outline-light">Забронировать образ</a>
         </div>
         <div class="hero__stats">
-          <div><strong>450+</strong><span>образов в наличии</span></div>
-          <div><strong>3 000+</strong><span>довольных клиенток</span></div>
-          <div><strong>4.9 / 5</strong><span>средний рейтинг</span></div>
+          <div><strong>300+</strong><span>образов в каталоге</span></div>
+          <div><strong>3 300+</strong><span>публикаций съёмок</span></div>
+          <div><strong>8 700+</strong><span>подписчиков в Instagram</span></div>
         </div>
       </div>
       <div class="hero__media">
         <div class="arch arch--ring">
-          <img src="https://images.unsplash.com/photo-1485462537746-965f33f7f6a7?auto=format&fit=crop&w=640&q=75" alt="Элегантный образ — аренда платьев в Дубае">
+          <img src="images/hero.jpg" alt="Платье №76 — съёмка в пустыне Дубая, прокат образов для фотосессий">
         </div>
       </div>
     </div>
@@ -68,7 +68,7 @@
       <div class="section-head" data-reveal>
         <div>
           <p class="eyebrow">Галерея</p>
-          <h2>Подберите образ под ваш вечер</h2>
+          <h2>Образы из наших съёмок</h2>
         </div>
         <div class="gallery__arrows">
           <button class="arrow" id="railPrev" aria-label="Назад">&larr;</button>
@@ -78,22 +78,22 @@
 
       <div class="tabs-wrap" data-reveal style="--d:.1s">
         <div class="tabs">
-          <button class="tab is-active" data-cat="evening">Вечерние</button>
-          <button class="tab" data-cat="cocktail">Коктейльные</button>
-          <button class="tab" data-cat="wedding">Гостье на свадьбу</button>
-          <button class="tab" data-cat="accessories">Аксессуары</button>
+          <button class="tab is-active" data-cat="desert">В пустыне</button>
+          <button class="tab" data-cat="city">Архитектура</button>
+          <button class="tab" data-cat="evening">Вечерние</button>
+          <button class="tab" data-cat="mama">Будущим мамам</button>
           <span class="tabs__ink" aria-hidden="true"></span>
         </div>
       </div>
     </div>
 
-    <div class="rail" id="rail" aria-label="Каталог образов"><!-- cards injected by JS --></div>
+    <div class="rail" id="rail" aria-label="Галерея образов"><!-- cards injected by JS --></div>
 
     <div class="container">
       <div class="rail-progress" aria-hidden="true"><span id="railBar"></span></div>
       <p class="gallery__note">
-        В шоуруме — более 450 образов. Не нашли своё?
-        <a href="contacts.html#booking">Стилист подберёт для вас лично</a>.
+        В каталоге — более 300 образов. Все съёмки — в Instagram
+        <a href="https://www.instagram.com/rent.dressindubai" target="_blank" rel="noopener">@rent.dressindubai</a>.
       </p>
     </div>
   </section>
@@ -110,22 +110,22 @@
         <div class="step" data-reveal>
           <div class="step__num">01</div>
           <h3>Выберите образ</h3>
-          <p>В галерее онлайн или в шоуруме в Downtown Dubai.</p>
+          <p>Из 300+ платьев и аксессуаров — в галерее или Instagram.</p>
         </div>
         <div class="step" data-reveal style="--d:.1s">
           <div class="step__num">02</div>
-          <h3>Забронируйте дату</h3>
-          <p>Мы зарезервируем платье и подберём размер.</p>
+          <h3>Забронируйте дату съёмки</h3>
+          <p>Закрепим образ за вами и подготовим его к съёмке.</p>
         </div>
         <div class="step" data-reveal style="--d:.2s">
           <div class="step__num">03</div>
-          <h3>Примерьте и получите</h3>
-          <p>Доставим к вам или пригласим на примерку в студию.</p>
+          <h3>Примерка и стилизация</h3>
+          <p>Подгоним образ и дополним аксессуарами под локацию.</p>
         </div>
         <div class="step" data-reveal style="--d:.3s">
           <div class="step__num">04</div>
-          <h3>Верните после вечера</h3>
-          <p>Заберём в течение 24 часов. Химчистка — за наш счёт.</p>
+          <h3>Съёмка</h3>
+          <p>Организуем под ключ: локация, трансфер, фотограф, визажист.</p>
         </div>
       </div>
     </div>
@@ -136,7 +136,7 @@
     <div class="container cta__inner" data-reveal>
       <div>
         <p class="eyebrow eyebrow--light">Бронирование</p>
-        <h2>Ваш идеальный вечер начинается с примерки</h2>
+        <h2>Ваш идеальный кадр начинается с образа</h2>
       </div>
       <div class="cta__actions">
         <a href="contacts.html#booking" class="btn btn--gold">Забронировать образ</a>
@@ -149,7 +149,7 @@
 
 <footer class="footer">
   <div class="container footer__inner">
-    <a href="index.html" class="logo logo--light">Dress<span>Rent</span>Dubai</a>
+    <a href="index.html" class="logo logo--light">Rent.<span>Dress</span> in Dubai</a>
     <nav class="footer__nav">
       <a href="index.html#catalog">Галерея</a>
       <a href="about.html">О студии</a>
@@ -157,11 +157,10 @@
       <a href="contacts.html">Контакты</a>
     </nav>
     <div class="socials socials--footer">
+      <a href="https://www.instagram.com/rent.dressindubai" target="_blank" rel="noopener">Instagram</a>
       <a href="https://wa.me/971500000000" target="_blank" rel="noopener">WhatsApp</a>
-      <a href="#" target="_blank" rel="noopener">Instagram</a>
-      <a href="#" target="_blank" rel="noopener">TikTok</a>
     </div>
-    <p>© <span id="year"></span> DressRentDubai · Downtown Dubai, Boulevard Plaza, шоурум 12 · Ежедневно 10:00–22:00</p>
+    <p>© <span id="year"></span> Rent.Dress in Dubai · Прокат платьев и образов для фотосессий в Дубае</p>
   </div>
 </footer>
 

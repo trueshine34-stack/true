@@ -1,4 +1,4 @@
-/* DressRentDubai — shared script for all pages.
+/* Rent.Dress in Dubai — shared script for all pages.
    Each block guards on element existence so one file serves the whole site. */
 
 document.documentElement.classList.add('js');
@@ -35,50 +35,35 @@ if (revealEls.length) {
 
 /* ============================================================
    Gallery — horizontal rail with category tabs
-   Replace `img` URLs with your own photos: keep portrait 3:4 shots.
+   Photos: real shoots from Instagram @rent.dressindubai
+   (files in images/, look numbers from the studio's catalog).
    ============================================================ */
 const looks = [
-  // Вечерние
-  { name: 'Elie Saab Midnight', cat: 'evening', catLabel: 'Вечернее', price: '850 AED',
-    img: 'https://images.unsplash.com/photo-1539008835657-9e8e9680c956?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Zuhair Murad Aurora', cat: 'evening', catLabel: 'Вечернее', price: '1 200 AED',
-    img: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Noir Velvet', cat: 'evening', catLabel: 'Вечернее', price: '700 AED',
-    img: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Desert Rose Gown', cat: 'evening', catLabel: 'Вечернее', price: '900 AED',
-    img: 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Sahara Couture', cat: 'evening', catLabel: 'Вечернее', price: '1 100 AED',
-    img: 'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=640&q=75' },
+  // Съёмки в пустыне — платье №76
+  { name: 'Платье №76 · Рассвет', cat: 'desert', catLabel: 'В пустыне', img: 'images/desert-1.jpg' },
+  { name: 'Платье №76 · Караван', cat: 'desert', catLabel: 'В пустыне', img: 'images/desert-2.jpg' },
+  { name: 'Платье №76 · Портрет', cat: 'desert', catLabel: 'В пустыне', img: 'images/desert-3.jpg' },
+  { name: 'Платье №76 · Дюны', cat: 'desert', catLabel: 'В пустыне', img: 'images/desert-4.jpg' },
+  { name: 'Платье №76 · Закат', cat: 'desert', catLabel: 'В пустыне', img: 'images/desert-5.jpg' },
 
-  // Коктейльные
-  { name: 'Rose Cocktail', cat: 'cocktail', catLabel: 'Коктейльное', price: '420 AED',
-    img: 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Emerald Silk', cat: 'cocktail', catLabel: 'Коктейльное', price: '380 AED',
-    img: 'https://images.unsplash.com/photo-1495385794356-15371f348c31?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Champagne Shine', cat: 'cocktail', catLabel: 'Коктейльное', price: '450 AED',
-    img: 'https://images.unsplash.com/photo-1490725263030-1f0521cec8ec?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Ivory Charm', cat: 'cocktail', catLabel: 'Коктейльное', price: '400 AED',
-    img: 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Dune Sunset', cat: 'cocktail', catLabel: 'Коктейльное', price: '440 AED',
-    img: 'https://images.unsplash.com/photo-1581044777550-4cfa60707c03?auto=format&fit=crop&w=640&q=75' },
+  // Архитектурные съёмки — платье №94, Лувр Абу-Даби
+  { name: 'Платье №94 · Ночь', cat: 'city', catLabel: 'Архитектура', img: 'images/arch-1.jpg' },
+  { name: 'Платье №94 · Купол', cat: 'city', catLabel: 'Архитектура', img: 'images/arch-2.jpg' },
+  { name: 'Платье №94 · Лувр Абу-Даби', cat: 'city', catLabel: 'Архитектура', img: 'images/arch-3.jpg' },
+  { name: 'Платье №94 · Золотой час', cat: 'city', catLabel: 'Архитектура', img: 'images/arch-4.jpg' },
+  { name: 'Платье №94 · Силуэт', cat: 'city', catLabel: 'Архитектура', img: 'images/arch-5.jpg' },
 
-  // Гостьям на свадьбу
-  { name: 'Golden Guest', cat: 'wedding', catLabel: 'Гостье на свадьбу', price: '650 AED',
-    img: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Blush Elegance', cat: 'wedding', catLabel: 'Гостье на свадьбу', price: '590 AED',
-    img: 'https://images.unsplash.com/photo-1509319117193-57bab727e09d?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Sahara Silk', cat: 'wedding', catLabel: 'Гостье на свадьбу', price: '620 AED',
-    img: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=640&q=75' },
+  // Вечерние и смелые образы
+  { name: 'Платье №60 · Перья', cat: 'evening', catLabel: 'Вечерние', img: 'images/evening-1.jpg' },
+  { name: 'Платье №60 · Будуар', cat: 'evening', catLabel: 'Вечерние', img: 'images/evening-2.jpg' },
+  { name: 'Платье №60 · Зеркало', cat: 'evening', catLabel: 'Вечерние', img: 'images/evening-3.jpg' },
+  { name: 'Образ №130 · Леопард', cat: 'evening', catLabel: 'Вечерние', img: 'images/evening-4.jpg' },
+  { name: 'Образ №130 · Сафари', cat: 'evening', catLabel: 'Вечерние', img: 'images/evening-5.jpg' },
 
-  // Аксессуары
-  { name: 'Pearl Set', cat: 'accessories', catLabel: 'Украшения', price: '250 AED',
-    img: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Satin Clutch', cat: 'accessories', catLabel: 'Клатч', price: '120 AED',
-    img: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Crystal Earrings', cat: 'accessories', catLabel: 'Украшения', price: '180 AED',
-    img: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=640&q=75' },
-  { name: 'Couture Heels', cat: 'accessories', catLabel: 'Обувь', price: '200 AED',
-    img: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&w=640&q=75' },
+  // Съёмки для будущих мам — шляпа №301
+  { name: 'Шляпа №301 · Океан', cat: 'mama', catLabel: 'Будущим мамам', img: 'images/mama-1.jpg' },
+  { name: 'Шляпа №301 · Бриз', cat: 'mama', catLabel: 'Будущим мамам', img: 'images/mama-2.jpg' },
+  { name: 'Шляпа №301 · Волна', cat: 'mama', catLabel: 'Будущим мамам', img: 'images/mama-3.jpg' },
 ];
 
 const rail = document.getElementById('rail');
@@ -94,12 +79,12 @@ if (rail) {
     rail.innerHTML = items.map((l, i) => `
       <article class="gcard" style="--i:${i}">
         <div class="gcard__frame">
-          <img src="${l.img}" alt="${l.name} — ${l.catLabel.toLowerCase()}, аренда в Дубае" loading="lazy">
+          <img src="${l.img}" alt="${l.name} — прокат образов для фотосессий в Дубае" loading="lazy">
         </div>
         <div class="gcard__body">
           <span class="gcard__cat">${l.catLabel}</span>
           <h3>${l.name}</h3>
-          <p class="gcard__price">от ${l.price}<span> / вечер</span></p>
+          <p class="gcard__price">Аренда <span>· цена по запросу</span></p>
         </div>
       </article>`).join('');
 
@@ -203,10 +188,11 @@ const form = document.getElementById('bookingForm');
 if (form) {
   const note = document.getElementById('formNote');
   const typeLabels = {
-    evening: 'Вечернее платье',
-    cocktail: 'Коктейльное платье',
-    wedding: 'Образ гостьи на свадьбу',
-    accessories: 'Только аксессуары',
+    desert: 'Съёмка в пустыне',
+    city: 'Архитектурная съёмка',
+    evening: 'Вечерний образ',
+    mama: 'Съёмка для будущих мам',
+    fullservice: 'Фотосессия под ключ',
   };
 
   form.addEventListener('submit', (e) => {
@@ -215,8 +201,8 @@ if (form) {
     const text = encodeURIComponent(
       `Здравствуйте! Меня зовут ${data.get('name')}.\n` +
       `Телефон: ${data.get('phone')}\n` +
-      `Дата мероприятия: ${data.get('date')}\n` +
-      `Тип образа: ${typeLabels[data.get('type')] || data.get('type')}\n` +
+      `Дата съёмки: ${data.get('date')}\n` +
+      `Тип съёмки: ${typeLabels[data.get('type')] || data.get('type')}\n` +
       `Комментарий: ${data.get('message') || '—'}`
     );
     if (note) note.textContent = 'Спасибо! Открываем WhatsApp для завершения заявки...';

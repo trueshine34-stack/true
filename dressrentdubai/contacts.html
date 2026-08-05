@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Контакты и бронирование — DressRentDubai</title>
-<meta name="description" content="Забронируйте вечерний образ в Дубае: шоурум в Downtown Dubai, Boulevard Plaza. Заявка онлайн, ответ стилиста в течение 30 минут.">
+<title>Контакты и бронирование — Rent.Dress in Dubai</title>
+<meta name="description" content="Забронируйте образ для фотосессии в Дубае: заявка онлайн, ответ стилиста в течение 30 минут. Прокат платьев и организация съёмок под ключ.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👗</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,7 +14,7 @@
 
 <header class="header">
   <div class="container header__inner">
-    <a href="index.html" class="logo">Dress<span>Rent</span>Dubai</a>
+    <a href="index.html" class="logo">Rent.<span>Dress</span> in Dubai</a>
 
     <nav class="nav" id="nav">
       <a href="index.html#catalog">Галерея</a>
@@ -38,28 +38,27 @@
     <div class="container">
       <p class="eyebrow eyebrow--light">Контакты</p>
       <h1>Оставьте заявку на подбор образа</h1>
-      <p>Стилист свяжется с вами в течение 30 минут и предложит подходящие варианты.</p>
+      <p>Стилист свяжется с вами в течение 30 минут и предложит образы под вашу съёмку.</p>
     </div>
   </section>
 
   <section class="booking" id="booking">
     <div class="container booking__inner">
       <div class="booking__info" data-reveal>
-        <p class="eyebrow">Шоурум</p>
-        <h2>Ждём вас в Downtown Dubai</h2>
-        <p>Приходите на примерку без записи или забронируйте удобное время — подготовим подборку образов к вашему визиту.</p>
+        <p class="eyebrow">Студия</p>
+        <h2>Подберём образ под вашу съёмку</h2>
+        <p>Напишите нам в WhatsApp или Instagram Direct — пришлём подборку образов под вашу локацию и дату, пригласим на примерку.</p>
 
         <ul class="contact-list">
-          <li><b>Адрес</b> Downtown Dubai, Boulevard Plaza, шоурум 12</li>
+          <li><b>Instagram</b> <a href="https://www.instagram.com/rent.dressindubai" target="_blank" rel="noopener">@rent.dressindubai</a></li>
           <li><b>Телефон</b> +971 50 000 0000</li>
-          <li><b>Email</b> hello@dressrentdubai.com</li>
+          <li><b>Локации</b> Дубай и Абу-Даби — съёмки по всем Эмиратам</li>
           <li><b>Часы</b> Ежедневно, 10:00 – 22:00</li>
         </ul>
 
         <div class="socials">
+          <a href="https://www.instagram.com/rent.dressindubai" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
           <a href="https://wa.me/971500000000" target="_blank" rel="noopener" aria-label="WhatsApp">WhatsApp</a>
-          <a href="#" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
-          <a href="#" target="_blank" rel="noopener" aria-label="TikTok">TikTok</a>
         </div>
       </div>
 
@@ -73,21 +72,22 @@
           <input type="tel" id="phone" name="phone" placeholder="+971 5X XXX XXXX" required>
         </div>
         <div class="field">
-          <label for="date">Дата мероприятия</label>
+          <label for="date">Дата съёмки</label>
           <input type="date" id="date" name="date" required>
         </div>
         <div class="field">
-          <label for="type">Тип образа</label>
+          <label for="type">Тип съёмки</label>
           <select id="type" name="type">
-            <option value="evening">Вечернее платье</option>
-            <option value="cocktail">Коктейльное платье</option>
-            <option value="wedding">Образ гостьи на свадьбу</option>
-            <option value="accessories">Только аксессуары</option>
+            <option value="desert">Съёмка в пустыне</option>
+            <option value="city">Архитектурная съёмка</option>
+            <option value="evening">Вечерний образ</option>
+            <option value="mama">Съёмка для будущих мам</option>
+            <option value="fullservice">Фотосессия под ключ</option>
           </select>
         </div>
         <div class="field">
           <label for="message">Комментарий</label>
-          <textarea id="message" name="message" rows="3" placeholder="Размер, цвет, повод..."></textarea>
+          <textarea id="message" name="message" rows="3" placeholder="Размер, локация, идея съёмки..."></textarea>
         </div>
         <button type="submit" class="btn btn--dark btn--full">Отправить заявку</button>
         <p class="form__note" id="formNote"></p>
@@ -99,7 +99,7 @@
 
 <footer class="footer">
   <div class="container footer__inner">
-    <a href="index.html" class="logo logo--light">Dress<span>Rent</span>Dubai</a>
+    <a href="index.html" class="logo logo--light">Rent.<span>Dress</span> in Dubai</a>
     <nav class="footer__nav">
       <a href="index.html#catalog">Галерея</a>
       <a href="about.html">О студии</a>
@@ -107,11 +107,10 @@
       <a href="contacts.html">Контакты</a>
     </nav>
     <div class="socials socials--footer">
+      <a href="https://www.instagram.com/rent.dressindubai" target="_blank" rel="noopener">Instagram</a>
       <a href="https://wa.me/971500000000" target="_blank" rel="noopener">WhatsApp</a>
-      <a href="#" target="_blank" rel="noopener">Instagram</a>
-      <a href="#" target="_blank" rel="noopener">TikTok</a>
     </div>
-    <p>© <span id="year"></span> DressRentDubai · Downtown Dubai, Boulevard Plaza, шоурум 12 · Ежедневно 10:00–22:00</p>
+    <p>© <span id="year"></span> Rent.Dress in Dubai · Прокат платьев и образов для фотосессий в Дубае</p>
   </div>
 </footer>
 
