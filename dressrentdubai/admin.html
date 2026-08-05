@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Админка — DressRentDubai</title>
+<meta name="robots" content="noindex, nofollow">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+
+<!-- LOGIN SCREEN -->
+<section id="loginScreen" class="admin-login">
+  <form id="loginForm" class="admin-login__card">
+    <a href="index.html" class="logo">Dress<span>Rent</span>Dubai</a>
+    <p class="eyebrow">Панель администратора</p>
+    <div class="field">
+      <label for="loginUser">Логин</label>
+      <input type="text" id="loginUser" name="username" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="loginPass">Пароль</label>
+      <input type="password" id="loginPass" name="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn btn--primary btn--full">Войти</button>
+    <p class="form__note" id="loginError"></p>
+  </form>
+</section>
+
+<!-- DASHBOARD -->
+<section id="dashboard" class="admin-dash" hidden>
+  <header class="admin-header">
+    <a href="index.html" class="logo">Dress<span>Rent</span>Dubai <small>admin</small></a>
+    <div class="admin-header__actions">
+      <a href="index.html" class="btn btn--outline" target="_blank">Открыть сайт</a>
+      <button id="logoutBtn" class="btn btn--outline">Выйти</button>
+    </div>
+  </header>
+
+  <main class="admin-main">
+    <div class="admin-grid">
+
+      <div class="admin-panel">
+        <h2 id="formTitle">Добавить образ</h2>
+        <form id="itemForm" class="admin-form">
+          <input type="hidden" id="itemId">
+
+          <div class="field">
+            <label for="itemImage">Фото</label>
+            <input type="file" id="itemImage" accept="image/*">
+            <img id="preview" class="admin-preview" hidden alt="Превью">
+          </div>
+
+          <div class="field">
+            <label for="itemName">Название</label>
+            <input type="text" id="itemName" placeholder="Elie Saab Midnight" required>
+          </div>
+
+          <div class="field">
+            <label for="itemCat">Категория</label>
+            <select id="itemCat">
+              <option value="evening">Вечернее платье</option>
+              <option value="cocktail">Коктейльное платье</option>
+              <option value="wedding">Гостье на свадьбу</option>
+              <option value="accessories">Аксессуары</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="itemPrice">Цена</label>
+            <input type="text" id="itemPrice" placeholder="850 AED" required>
+          </div>
+
+          <div class="field">
+            <label for="itemTags">Теги (через запятую)</label>
+            <input type="text" id="itemTags" placeholder="новинка, премиум, размер S">
+          </div>
+
+          <div class="admin-form__actions">
+            <button type="submit" class="btn btn--primary" id="submitBtn">Добавить в каталог</button>
+            <button type="button" class="btn btn--outline" id="cancelEdit" hidden>Отменить</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="admin-panel admin-panel--list">
+        <h2>Каталог (<span id="itemCount">0</span>)</h2>
+        <div class="admin-list" id="adminList"></div>
+      </div>
+
+    </div>
+  </main>
+</section>
+
+<script src="js/catalog-data.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

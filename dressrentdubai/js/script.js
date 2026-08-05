@@ -8,29 +8,32 @@ nav.querySelectorAll('a').forEach(link =>
   link.addEventListener('click', () => nav.classList.remove('is-open'))
 );
 
-// Catalog data
-const dresses = [
-  { name: 'Elie Saab Midnight', cat: 'evening', catLabel: 'Вечернее', price: '850 AED', icon: '👗' },
-  { name: 'Zuhair Murad Aurora', cat: 'evening', catLabel: 'Вечернее', price: '1 200 AED', icon: '👗' },
-  { name: 'Rose Cocktail', cat: 'cocktail', catLabel: 'Коктейльное', price: '420 AED', icon: '💃' },
-  { name: 'Emerald Silk', cat: 'cocktail', catLabel: 'Коктейльное', price: '380 AED', icon: '💃' },
-  { name: 'Golden Guest', cat: 'wedding', catLabel: 'Гостье на свадьбу', price: '650 AED', icon: '🌸' },
-  { name: 'Blush Elegance', cat: 'wedding', catLabel: 'Гостье на свадьбу', price: '590 AED', icon: '🌸' },
-  { name: 'Diamond Set', cat: 'accessories', catLabel: 'Украшения', price: '250 AED', icon: '💎' },
-  { name: 'Satin Clutch', cat: 'accessories', catLabel: 'Клатч', price: '120 AED', icon: '👛' },
-];
-
+// Catalog data (управляется через /admin.html, хранится в localStorage)
 const grid = document.getElementById('grid');
 
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 function renderCards(filter) {
+  const dresses = drdLoadCatalog();
   const items = filter === 'all' ? dresses : dresses.filter(d => d.cat === filter);
+
+  if (!items.length) {
+    grid.innerHTML = '<p class="grid__empty">В этой категории пока нет образов.</p>';
+    return;
+  }
+
   grid.innerHTML = items.map(d => `
     <div class="card">
-      <div class="card__media">${d.icon}</div>
+      <div class="card__media">${d.image ? `<img src="${d.image}" alt="${escapeHtml(d.name)}">` : (d.icon || '👗')}</div>
       <div class="card__body">
-        <span class="card__cat">${d.catLabel}</span>
-        <h3>${d.name}</h3>
-        <p class="card__price">${d.price} <span>/ вечер</span></p>
+        <span class="card__cat">${DRD_CATEGORIES[d.cat] || d.cat}</span>
+        <h3>${escapeHtml(d.name)}</h3>
+        <p class="card__price">${escapeHtml(d.price)} <span>/ вечер</span></p>
+        ${d.tags && d.tags.length ? `<div class="card__tags">${d.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
       </div>
     </div>
   `).join('');
