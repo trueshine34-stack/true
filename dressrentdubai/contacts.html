@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Контакты и бронирование — Rent.Dress in Dubai</title>
+<meta name="description" content="Забронируйте образ для фотосессии в Дубае: заявка онлайн, ответ стилиста в течение 30 минут. Прокат платьев и организация съёмок под ключ.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👗</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="container header__inner">
+    <a href="index.html" class="logo">Rent.<span>Dress</span> in Dubai</a>
+
+    <nav class="nav" id="nav">
+      <a href="index.html#catalog">Галерея</a>
+      <a href="about.html">О студии</a>
+      <a href="pricing.html">Цены</a>
+      <a href="contacts.html" aria-current="page">Контакты</a>
+    </nav>
+
+    <div class="header__actions">
+      <a href="#booking" class="btn btn--dark">Забронировать</a>
+      <button class="burger" id="burger" aria-label="Меню">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <section class="page-hero">
+    <div class="container">
+      <p class="eyebrow eyebrow--light">Контакты</p>
+      <h1>Оставьте заявку на подбор образа</h1>
+      <p>Стилист свяжется с вами в течение 30 минут и предложит образы под вашу съёмку.</p>
+    </div>
+  </section>
+
+  <section class="booking" id="booking">
+    <div class="container booking__inner">
+      <div class="booking__info" data-reveal>
+        <p class="eyebrow">Студия</p>
+        <h2>Подберём образ под вашу съёмку</h2>
+        <p>Напишите нам в WhatsApp или Instagram Direct — пришлём подборку образов под вашу локацию и дату, пригласим на примерку.</p>
+
+        <ul class="contact-list">
+          <li><b>Instagram</b> <a href="https://www.instagram.com/rent.dressindubai" target="_blank" rel="noopener">@rent.dressindubai</a></li>
+          <li><b>Телефон</b> +971 50 000 0000</li>
+          <li><b>Локации</b> Дубай и Абу-Даби — съёмки по всем Эмиратам</li>
+          <li><b>Часы</b> Ежедневно, 10:00 – 22:00</li>
+        </ul>
+
+        <div class="socials">
+          <a href="https://www.instagram.com/rent.dressindubai" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
+          <a href="https://wa.me/971500000000" target="_blank" rel="noopener" aria-label="WhatsApp">WhatsApp</a>
+        </div>
+      </div>
+
+      <form class="booking__form" id="bookingForm" data-reveal style="--d:.1s">
+        <div class="field">
+          <label for="name">Имя</label>
+          <input type="text" id="name" name="name" placeholder="Ваше имя" required>
+        </div>
+        <div class="field">
+          <label for="phone">Телефон / WhatsApp</label>
+          <input type="tel" id="phone" name="phone" placeholder="+971 5X XXX XXXX" required>
+        </div>
+        <div class="field">
+          <label for="date">Дата съёмки</label>
+          <input type="date" id="date" name="date" required>
+        </div>
+        <div class="field">
+          <label for="type">Тип съёмки</label>
+          <select id="type" name="type">
+            <option value="desert">Съёмка в пустыне</option>
+            <option value="city">Архитектурная съёмка</option>
+            <option value="evening">Вечерний образ</option>
+            <option value="mama">Съёмка для будущих мам</option>
+            <option value="fullservice">Фотосессия под ключ</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="message">Комментарий</label>
+          <textarea id="message" name="message" rows="3" placeholder="Размер, локация, идея съёмки..."></textarea>
+        </div>
+        <button type="submit" class="btn btn--dark btn--full">Отправить заявку</button>
+        <p class="form__note" id="formNote"></p>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container footer__inner">
+    <a href="index.html" class="logo logo--light">Rent.<span>Dress</span> in Dubai</a>
+    <nav class="footer__nav">
+      <a href="index.html#catalog">Галерея</a>
+      <a href="about.html">О студии</a>
+      <a href="pricing.html">Цены</a>
+      <a href="contacts.html">Контакты</a>
+    </nav>
+    <div class="socials socials--footer">
+      <a href="https://www.instagram.com/rent.dressindubai" target="_blank" rel="noopener">Instagram</a>
+      <a href="https://wa.me/971500000000" target="_blank" rel="noopener">WhatsApp</a>
+    </div>
+    <p>© <span id="year"></span> Rent.Dress in Dubai · Прокат платьев и образов для фотосессий в Дубае</p>
+  </div>
+</footer>
+
+<a class="wa-float" href="https://wa.me/971500000000" target="_blank" rel="noopener" aria-label="Написать в WhatsApp">
+  WhatsApp
+</a>
+
+<script src="js/script.js"></script>
+</body>
+</html>
