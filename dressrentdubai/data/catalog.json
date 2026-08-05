@@ -1,0 +1,10 @@
+[
+  { "id": "d1", "name": "Elie Saab Midnight", "price": "850 AED", "tags": ["black", "shine", "stylist"], "image": null },
+  { "id": "d2", "name": "Zuhair Murad Aurora", "price": "1 200 AED", "tags": ["shine", "feathers", "stylist"], "image": null },
+  { "id": "d3", "name": "Rose Cocktail", "price": "420 AED", "tags": ["red", "mini"], "image": null },
+  { "id": "d4", "name": "Emerald Silk", "price": "380 AED", "tags": ["fly", "mini"], "image": null },
+  { "id": "d5", "name": "Golden Guest", "price": "650 AED", "tags": ["wedding", "shine"], "image": null },
+  { "id": "d6", "name": "Blush Elegance", "price": "590 AED", "tags": ["wedding", "white"], "image": null },
+  { "id": "d7", "name": "Desert Safari Set", "price": "480 AED", "tags": ["desert", "safari", "oriental"], "image": null },
+  { "id": "d8", "name": "Beach Breeze", "price": "290 AED", "tags": ["beach", "white", "fly"], "image": null }
+]

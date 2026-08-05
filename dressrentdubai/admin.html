@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Админка — DressRentDubai</title>
 <meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔐</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/admin.css">
@@ -34,18 +35,53 @@
   <header class="admin-header">
     <a href="index.html" class="logo">Dress<span>Rent</span>Dubai <small>admin</small></a>
     <div class="admin-header__actions">
+      <span id="connStatus" class="conn-status conn-status--off">GitHub не подключён</span>
       <a href="index.html" class="btn btn--outline" target="_blank">Открыть сайт</a>
       <button id="logoutBtn" class="btn btn--outline">Выйти</button>
     </div>
   </header>
 
   <main class="admin-main">
+
+    <details class="admin-panel admin-settings" id="settingsPanel">
+      <summary>Настройки подключения к GitHub</summary>
+      <p class="admin-settings__hint">
+        Фото и данные каталога сохраняются прямо в репозиторий GitHub через GitHub API,
+        поэтому их видят все посетители сайта, а не только этот браузер. Для этого нужен
+        Personal Access Token с правом <strong>Contents: Read and write</strong> только на
+        этот репозиторий (создать: GitHub → Settings → Developer settings → Fine-grained tokens).
+        Токен хранится только в этом браузере (localStorage) и никогда не попадает в код сайта —
+        не используйте его на чужих/публичных компьютерах.
+      </p>
+      <div class="admin-settings__grid">
+        <div class="field">
+          <label for="ghOwner">Владелец репозитория</label>
+          <input type="text" id="ghOwner" placeholder="trueshine34-stack">
+        </div>
+        <div class="field">
+          <label for="ghRepo">Репозиторий</label>
+          <input type="text" id="ghRepo" placeholder="true">
+        </div>
+        <div class="field">
+          <label for="ghBranch">Ветка</label>
+          <input type="text" id="ghBranch" placeholder="main">
+        </div>
+        <div class="field">
+          <label for="ghToken">GitHub Token</label>
+          <input type="password" id="ghToken" placeholder="github_pat_...">
+        </div>
+      </div>
+      <button type="button" id="saveSettings" class="btn btn--outline">Сохранить настройки</button>
+      <p class="form__note" id="settingsNote"></p>
+    </details>
+
     <div class="admin-grid">
 
       <div class="admin-panel">
         <h2 id="formTitle">Добавить образ</h2>
         <form id="itemForm" class="admin-form">
           <input type="hidden" id="itemId">
+          <input type="hidden" id="itemImagePath">
 
           <div class="field">
             <label for="itemImage">Фото</label>
@@ -59,29 +95,20 @@
           </div>
 
           <div class="field">
-            <label for="itemCat">Категория</label>
-            <select id="itemCat">
-              <option value="evening">Вечернее платье</option>
-              <option value="cocktail">Коктейльное платье</option>
-              <option value="wedding">Гостье на свадьбу</option>
-              <option value="accessories">Аксессуары</option>
-            </select>
-          </div>
-
-          <div class="field">
             <label for="itemPrice">Цена</label>
-            <input type="text" id="itemPrice" placeholder="850 AED" required>
+            <input type="text" id="itemPrice" placeholder="850 AED">
           </div>
 
           <div class="field">
-            <label for="itemTags">Теги (через запятую)</label>
-            <input type="text" id="itemTags" placeholder="новинка, премиум, размер S">
+            <label>Теги</label>
+            <div class="tag-grid" id="tagGrid"></div>
           </div>
 
           <div class="admin-form__actions">
-            <button type="submit" class="btn btn--primary" id="submitBtn">Добавить в каталог</button>
+            <button type="submit" class="btn btn--primary" id="submitBtn">Опубликовать в каталог</button>
             <button type="button" class="btn btn--outline" id="cancelEdit" hidden>Отменить</button>
           </div>
+          <p class="form__note" id="formNote"></p>
         </form>
       </div>
 

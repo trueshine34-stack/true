@@ -14,7 +14,7 @@
 
 <div class="topbar">
   <div class="container topbar__inner">
-    <span>Дубай, ОАЭ · Доставка по всему городу</span>
+    <span data-i18n="topbar.location">Дубай, ОАЭ · Доставка по всему городу</span>
     <a href="https://wa.me/971500000000" target="_blank" rel="noopener">WhatsApp: +971 50 000 0000</a>
   </div>
 </div>
@@ -24,15 +24,16 @@
     <a href="#top" class="logo">Dress<span>Rent</span>Dubai</a>
 
     <nav class="nav" id="nav">
-      <a href="#catalog">Каталог</a>
-      <a href="#how">Как это работает</a>
-      <a href="#pricing">Цены</a>
-      <a href="#reviews">Отзывы</a>
-      <a href="#contact">Контакты</a>
+      <a href="#catalog" data-i18n="nav.catalog">Каталог</a>
+      <a href="#how" data-i18n="nav.how">Как это работает</a>
+      <a href="#pricing" data-i18n="nav.pricing">Цены</a>
+      <a href="#reviews" data-i18n="nav.reviews">Отзывы</a>
+      <a href="#contact" data-i18n="nav.contact">Контакты</a>
     </nav>
 
     <div class="header__actions">
-      <a href="#booking" class="btn btn--primary">Забронировать образ</a>
+      <button class="lang-toggle" id="langToggle" data-lang-btn title="Switch language / Переключить язык">EN</button>
+      <a href="#booking" class="btn btn--primary" data-i18n="nav.book">Забронировать образ</a>
       <button class="burger" id="burger" aria-label="Меню">
         <span></span><span></span><span></span>
       </button>
@@ -45,20 +46,20 @@
   <!-- HERO -->
   <section class="hero">
     <div class="container hero__inner">
-      <p class="eyebrow">Студия аренды образов №1 в Дубае</p>
-      <h1>Безупречный образ<br> на любой вечер</h1>
-      <p class="hero__text">
+      <p class="eyebrow" data-i18n="hero.eyebrow">Студия аренды образов №1 в Дубае</p>
+      <h1 data-i18n="hero.title">Безупречный образ<br> на любой вечер</h1>
+      <p class="hero__text" data-i18n="hero.text">
         Вечерние и коктейльные платья, аксессуары и украшения от мировых брендов —
         в аренду с примеркой, стилистом и доставкой по Дубаю.
       </p>
       <div class="hero__actions">
-        <a href="#catalog" class="btn btn--light">Смотреть каталог</a>
-        <a href="#booking" class="btn btn--outline-light">Записаться на примерку</a>
+        <a href="#catalog" class="btn btn--light" data-i18n="hero.cta1">Смотреть каталог</a>
+        <a href="#booking" class="btn btn--outline-light" data-i18n="hero.cta2">Записаться на примерку</a>
       </div>
       <div class="hero__stats">
-        <div><strong>450+</strong><span>образов в наличии</span></div>
-        <div><strong>3 000+</strong><span>довольных клиенток</span></div>
-        <div><strong>4.9 / 5</strong><span>средний рейтинг</span></div>
+        <div><strong>450+</strong><span data-i18n="hero.stat1">образов в наличии</span></div>
+        <div><strong>3 000+</strong><span data-i18n="hero.stat2">довольных клиенток</span></div>
+        <div><strong>4.9 / 5</strong><span data-i18n="hero.stat3">средний рейтинг</span></div>
       </div>
     </div>
   </section>
@@ -67,23 +68,23 @@
   <section class="about">
     <div class="container about__inner">
       <div class="about__media" aria-hidden="true">
-        <div class="about__card about__card--1">✨ Стилист поможет с выбором</div>
-        <div class="about__card about__card--2">🚗 Доставка за 2 часа</div>
+        <div class="about__card about__card--1" data-i18n="about.card1">✨ Стилист поможет с выбором</div>
+        <div class="about__card about__card--2" data-i18n="about.card2">🚗 Доставка за 2 часа</div>
       </div>
       <div class="about__content">
-        <p class="eyebrow">О студии</p>
-        <h2>Роскошь, доступная на один вечер</h2>
-        <p>
+        <p class="eyebrow" data-i18n="about.eyebrow">О студии</p>
+        <h2 data-i18n="about.title">Роскошь, доступная на один вечер</h2>
+        <p data-i18n="about.text">
           DressRentDubai — это шоурум премиальных вечерних образов в центре Дубая.
           Мы работаем с оригинальными коллекциями от Elie Saab, Zuhair Murad, Cavalli
           и локальных дизайнерских брендов ОАЭ. Каждое платье проходит химчистку
           и проверку качества перед каждой примеркой.
         </p>
         <ul class="about__list">
-          <li>Персональный подбор образа под мероприятие</li>
-          <li>Примерка в шоуруме или у вас дома</li>
-          <li>Аксессуары, украшения и клатчи в комплекте</li>
-          <li>Страховка от мелких повреждений включена</li>
+          <li data-i18n="about.li1">Персональный подбор образа под мероприятие</li>
+          <li data-i18n="about.li2">Примерка в шоуруме или у вас дома</li>
+          <li data-i18n="about.li3">Аксессуары, украшения и клатчи в комплекте</li>
+          <li data-i18n="about.li4">Страховка от мелких повреждений включена</li>
         </ul>
       </div>
     </div>
@@ -92,49 +93,45 @@
   <!-- CATALOG -->
   <section class="catalog" id="catalog">
     <div class="container">
-      <p class="eyebrow center">Каталог</p>
-      <h2 class="center">Подберите образ под ваш вечер</h2>
+      <p class="eyebrow center" data-i18n="catalog.eyebrow">Каталог</p>
+      <h2 class="center" data-i18n="catalog.title">Подберите образ по тегам</h2>
 
-      <div class="filters">
-        <button class="filter is-active" data-filter="all">Все</button>
-        <button class="filter" data-filter="evening">Вечерние платья</button>
-        <button class="filter" data-filter="cocktail">Коктейльные</button>
-        <button class="filter" data-filter="wedding">Гостьям на свадьбу</button>
-        <button class="filter" data-filter="accessories">Аксессуары</button>
+      <div class="catalog__controls">
+        <input type="search" id="catalogSearch" class="catalog__search" data-i18n-placeholder="catalog.search" placeholder="Поиск по названию или тегу...">
+        <div class="filters" id="filters"></div>
       </div>
 
-      <div class="grid" id="grid">
-        <!-- cards injected by JS -->
-      </div>
+      <div class="grid" id="grid"></div>
+      <p class="catalog__hint" data-i18n="catalog.instaHint">Тег на карточке — это и хэштег в Instagram: ищите ещё больше образов по нему у нас в профиле.</p>
     </div>
   </section>
 
   <!-- HOW IT WORKS -->
   <section class="how" id="how">
     <div class="container">
-      <p class="eyebrow center">Процесс</p>
-      <h2 class="center">Как это работает</h2>
+      <p class="eyebrow center" data-i18n="how.eyebrow">Процесс</p>
+      <h2 class="center" data-i18n="how.title">Как это работает</h2>
 
       <div class="steps">
         <div class="step">
           <div class="step__num">01</div>
-          <h3>Выберите образ</h3>
-          <p>Просмотрите каталог онлайн или посетите шоурум в Downtown Dubai.</p>
+          <h3 data-i18n="how.step1.title">Выберите образ</h3>
+          <p data-i18n="how.step1.text">Просмотрите каталог онлайн или посетите шоурум в Downtown Dubai.</p>
         </div>
         <div class="step">
           <div class="step__num">02</div>
-          <h3>Забронируйте дату</h3>
-          <p>Укажите дату мероприятия — мы зарезервируем платье и подберём размер.</p>
+          <h3 data-i18n="how.step2.title">Забронируйте дату</h3>
+          <p data-i18n="how.step2.text">Укажите дату мероприятия — мы зарезервируем образ и подберём размер.</p>
         </div>
         <div class="step">
           <div class="step__num">03</div>
-          <h3>Примерьте и получите</h3>
-          <p>Доставим образ к вам или пригласим на примерку в студию.</p>
+          <h3 data-i18n="how.step3.title">Примерьте и получите</h3>
+          <p data-i18n="how.step3.text">Доставим образ к вам или пригласим на примерку в студию.</p>
         </div>
         <div class="step">
           <div class="step__num">04</div>
-          <h3>Верните после вечера</h3>
-          <p>Заберём платье в течение 24 часов после мероприятия. Химчистка — за наш счёт.</p>
+          <h3 data-i18n="how.step4.title">Верните после вечера</h3>
+          <p data-i18n="how.step4.text">Заберём образ в течение 24 часов после мероприятия. Химчистка — за наш счёт.</p>
         </div>
       </div>
     </div>
@@ -143,67 +140,67 @@
   <!-- PRICING -->
   <section class="pricing" id="pricing">
     <div class="container">
-      <p class="eyebrow center">Тарифы</p>
-      <h2 class="center">Прозрачные цены аренды</h2>
+      <p class="eyebrow center" data-i18n="pricing.eyebrow">Тарифы</p>
+      <h2 class="center" data-i18n="pricing.title">Прозрачные цены аренды</h2>
 
       <div class="plans">
         <div class="plan">
-          <h3>Коктейльный</h3>
-          <p class="plan__price">от 350 AED<span> / вечер</span></p>
+          <h3 data-i18n="pricing.plan1.title">Коктейльный</h3>
+          <p class="plan__price"><span data-i18n="pricing.plan1.price">от 350 AED</span><span data-i18n="pricing.perEvening"> / вечер</span></p>
           <ul>
-            <li>Коктейльные платья</li>
-            <li>Аксессуары по запросу</li>
-            <li>Примерка в шоуруме</li>
+            <li data-i18n="pricing.plan1.li1">Коктейльные платья</li>
+            <li data-i18n="pricing.plan1.li2">Аксессуары по запросу</li>
+            <li data-i18n="pricing.plan1.li3">Примерка в шоуруме</li>
           </ul>
-          <a href="#booking" class="btn btn--outline">Выбрать</a>
+          <a href="#booking" class="btn btn--outline" data-i18n="pricing.select">Выбрать</a>
         </div>
 
         <div class="plan plan--featured">
-          <span class="plan__badge">Популярный</span>
-          <h3>Вечерний</h3>
-          <p class="plan__price">от 650 AED<span> / вечер</span></p>
+          <span class="plan__badge" data-i18n="pricing.plan2.badge">Популярный</span>
+          <h3 data-i18n="pricing.plan2.title">Вечерний</h3>
+          <p class="plan__price"><span data-i18n="pricing.plan2.price">от 650 AED</span><span data-i18n="pricing.perEvening"> / вечер</span></p>
           <ul>
-            <li>Дизайнерские вечерние платья</li>
-            <li>Клатч и украшения в комплекте</li>
-            <li>Доставка и забор включены</li>
-            <li>Консультация стилиста</li>
+            <li data-i18n="pricing.plan2.li1">Дизайнерские вечерние платья</li>
+            <li data-i18n="pricing.plan2.li2">Клатч и украшения в комплекте</li>
+            <li data-i18n="pricing.plan2.li3">Доставка и забор включены</li>
+            <li data-i18n="pricing.plan2.li4">Консультация стилиста</li>
           </ul>
-          <a href="#booking" class="btn btn--primary">Выбрать</a>
+          <a href="#booking" class="btn btn--primary" data-i18n="pricing.select">Выбрать</a>
         </div>
 
         <div class="plan">
-          <h3>Премиум</h3>
-          <p class="plan__price">от 1 200 AED<span> / вечер</span></p>
+          <h3 data-i18n="pricing.plan3.title">Премиум</h3>
+          <p class="plan__price"><span data-i18n="pricing.plan3.price">от 1 200 AED</span><span data-i18n="pricing.perEvening"> / вечер</span></p>
           <ul>
-            <li>Платья от кутюр-брендов</li>
-            <li>Полный образ: платье + украшения + сумка</li>
-            <li>Персональный стилист на дом</li>
+            <li data-i18n="pricing.plan3.li1">Образы от кутюр-брендов</li>
+            <li data-i18n="pricing.plan3.li2">Полный образ: платье + украшения + сумка</li>
+            <li data-i18n="pricing.plan3.li3">Персональный стилист на дом</li>
           </ul>
-          <a href="#booking" class="btn btn--outline">Выбрать</a>
+          <a href="#booking" class="btn btn--outline" data-i18n="pricing.select">Выбрать</a>
         </div>
       </div>
-      <p class="pricing__note">Залог возвращается сразу после осмотра платья при возврате. Аренда на несколько дней — по индивидуальному расчёту.</p>
+      <p class="pricing__note" data-i18n="pricing.note">Залог возвращается сразу после осмотра образа при возврате. Аренда на несколько дней — по индивидуальному расчёту.</p>
     </div>
   </section>
 
   <!-- REVIEWS -->
   <section class="reviews" id="reviews">
     <div class="container">
-      <p class="eyebrow center">Отзывы</p>
-      <h2 class="center">Что говорят наши клиентки</h2>
+      <p class="eyebrow center" data-i18n="reviews.eyebrow">Отзывы</p>
+      <h2 class="center" data-i18n="reviews.title">Что говорят наши клиентки</h2>
 
       <div class="reviews__grid">
         <blockquote class="review">
-          <p>"Нашла идеальное платье для гала-ужина за один день. Стилист помог подобрать украшения — выглядело как с обложки журнала!"</p>
-          <cite>— Алина, Dubai Marina</cite>
+          <p data-i18n="reviews.r1">"Нашла идеальный образ для гала-ужина за один день. Стилист помог подобрать украшения — выглядело как с обложки журнала!"</p>
+          <cite data-i18n="reviews.r1.cite">— Алина, Dubai Marina</cite>
         </blockquote>
         <blockquote class="review">
-          <p>"Доставили платье прямо в отель за 2 часа до мероприятия. Сервис на высшем уровне, обязательно вернусь ещё."</p>
-          <cite>— Мария, JBR</cite>
+          <p data-i18n="reviews.r2">"Доставили платье прямо в отель за 2 часа до мероприятия. Сервис на высшем уровне, обязательно вернусь ещё."</p>
+          <cite data-i18n="reviews.r2.cite">— Мария, JBR</cite>
         </blockquote>
         <blockquote class="review">
-          <p>"Аренда обошлась в разы дешевле покупки, а платье было в идеальном состоянии. Спасибо команде DressRentDubai!"</p>
-          <cite>— Сара, Downtown Dubai</cite>
+          <p data-i18n="reviews.r3">"Аренда обошлась в разы дешевле покупки, а платье было в идеальном состоянии. Спасибо команде DressRentDubai!"</p>
+          <cite data-i18n="reviews.r3.cite">— Сара, Downtown Dubai</cite>
         </blockquote>
       </div>
     </div>
@@ -213,15 +210,15 @@
   <section class="booking" id="booking">
     <div class="container booking__inner">
       <div class="booking__info">
-        <p class="eyebrow">Бронирование</p>
-        <h2>Оставьте заявку на подбор образа</h2>
-        <p>Заполните форму — стилист свяжется с вами в течение 30 минут и предложит подходящие варианты.</p>
+        <p class="eyebrow" data-i18n="booking.eyebrow">Бронирование</p>
+        <h2 data-i18n="booking.title">Оставьте заявку на подбор образа</h2>
+        <p data-i18n="booking.text">Заполните форму — стилист свяжется с вами в течение 30 минут и предложит подходящие варианты.</p>
 
         <ul class="contact-list">
-          <li>📍 Downtown Dubai, Boulevard Plaza, шоурум 12</li>
-          <li>📞 +971 50 000 0000</li>
-          <li>✉️ hello@dressrentdubai.com</li>
-          <li>🕙 Ежедневно, 10:00 – 22:00</li>
+          <li data-i18n="booking.addr">📍 Downtown Dubai, Boulevard Plaza, шоурум 12</li>
+          <li data-i18n="booking.phone">📞 +971 50 000 0000</li>
+          <li data-i18n="booking.email">✉️ hello@dressrentdubai.com</li>
+          <li data-i18n="booking.hours">🕙 Ежедневно, 10:00 – 22:00</li>
         </ul>
 
         <div class="socials">
@@ -233,31 +230,31 @@
 
       <form class="booking__form" id="bookingForm">
         <div class="field">
-          <label for="name">Имя</label>
-          <input type="text" id="name" name="name" placeholder="Ваше имя" required>
+          <label for="name" data-i18n="booking.name">Имя</label>
+          <input type="text" id="name" name="name" data-i18n-placeholder="booking.namePh" placeholder="Ваше имя" required>
         </div>
         <div class="field">
-          <label for="phone">Телефон / WhatsApp</label>
+          <label for="phone" data-i18n="booking.phoneLabel">Телефон / WhatsApp</label>
           <input type="tel" id="phone" name="phone" placeholder="+971 5X XXX XXXX" required>
         </div>
         <div class="field">
-          <label for="date">Дата мероприятия</label>
+          <label for="date" data-i18n="booking.date">Дата мероприятия</label>
           <input type="date" id="date" name="date" required>
         </div>
         <div class="field">
-          <label for="type">Тип образа</label>
+          <label for="type" data-i18n="booking.type">Тип образа</label>
           <select id="type" name="type">
-            <option value="evening">Вечернее платье</option>
-            <option value="cocktail">Коктейльное платье</option>
-            <option value="wedding">Образ гостьи на свадьбу</option>
-            <option value="accessories">Только аксессуары</option>
+            <option value="evening" data-i18n="booking.typeEvening">Вечернее платье</option>
+            <option value="cocktail" data-i18n="booking.typeCocktail">Коктейльное платье</option>
+            <option value="wedding" data-i18n="booking.typeWedding">Образ гостьи на свадьбу</option>
+            <option value="accessories" data-i18n="booking.typeAccessories">Только аксессуары</option>
           </select>
         </div>
         <div class="field">
-          <label for="message">Комментарий</label>
-          <textarea id="message" name="message" rows="3" placeholder="Размер, цвет, повод..."></textarea>
+          <label for="message" data-i18n="booking.message">Комментарий</label>
+          <textarea id="message" name="message" rows="3" data-i18n-placeholder="booking.messagePh" placeholder="Размер, цвет, повод..."></textarea>
         </div>
-        <button type="submit" class="btn btn--primary btn--full">Отправить заявку</button>
+        <button type="submit" class="btn btn--primary btn--full" data-i18n="booking.submit">Отправить заявку</button>
         <p class="form__note" id="formNote"></p>
       </form>
     </div>
@@ -268,14 +265,14 @@
 <footer class="footer">
   <div class="container footer__inner">
     <a href="#top" class="logo logo--light">Dress<span>Rent</span>Dubai</a>
-    <p>© <span id="year"></span> DressRentDubai. Все права защищены.</p>
+    <p><span id="year"></span> DressRentDubai. <span data-i18n="footer.rights">Все права защищены.</span></p>
     <div class="socials socials--footer">
       <a href="https://wa.me/971500000000" target="_blank" rel="noopener">WhatsApp</a>
       <a href="#" target="_blank" rel="noopener">Instagram</a>
       <a href="#" target="_blank" rel="noopener">TikTok</a>
     </div>
   </div>
-  <div class="container footer__admin"><a href="admin.html">Вход для администратора</a></div>
+  <div class="container footer__admin"><a href="admin.html" data-i18n="footer.admin">Вход для администратора</a></div>
 </footer>
 
 <a class="wa-float" href="https://wa.me/971500000000" target="_blank" rel="noopener" aria-label="Написать в WhatsApp">
@@ -283,6 +280,7 @@
 </a>
 
 <script src="js/catalog-data.js"></script>
+<script src="js/i18n.js"></script>
 <script src="js/script.js"></script>
 </body>
 </html>

@@ -141,6 +141,20 @@ section h2.center { margin-bottom: 48px; }
 
 .header__actions { display: flex; align-items: center; gap: 20px; }
 
+.lang-toggle {
+  background: transparent;
+  border: 1px solid var(--color-dark);
+  color: var(--color-dark);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.lang-toggle:hover { background: var(--color-dark); color: #fff; }
+
 .burger {
   display: none;
   flex-direction: column;
@@ -245,26 +259,53 @@ section h2.center { margin-bottom: 48px; }
 
 /* Catalog */
 .catalog { padding: 100px 0; background: var(--color-bg-alt); }
+
+.catalog__controls { margin-bottom: 40px; }
+
+.catalog__search {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto 24px;
+  padding: 12px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 30px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  background: #fff;
+  color: var(--color-text);
+}
+.catalog__search:focus { outline: none; border-color: var(--color-gold); }
+
 .filters {
   display: flex;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 40px;
+  max-width: 900px;
+  margin: 0 auto;
 }
 .filter {
   background: transparent;
   border: 1px solid var(--color-border);
-  padding: 10px 22px;
+  padding: 8px 18px;
   border-radius: 30px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   color: var(--color-text);
+  white-space: nowrap;
 }
 .filter:hover { border-color: var(--color-gold); }
 .filter.is-active { background: var(--color-dark); color: #fff; border-color: var(--color-dark); }
+
+.catalog__hint {
+  text-align: center;
+  margin-top: 36px;
+  font-size: 13px;
+  color: var(--color-text-light);
+}
 
 .grid {
   display: grid;
@@ -292,7 +333,6 @@ section h2.center { margin-bottom: 48px; }
 .card__media img { width: 100%; height: 100%; object-fit: cover; }
 .card__body { padding: 20px; }
 .card__body h3 { font-size: 19px; margin-bottom: 6px; }
-.card__cat { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--color-gold); margin-bottom: 8px; display: block; }
 .card__price { font-weight: 700; color: var(--color-dark); }
 .card__price span { color: var(--color-text-light); font-weight: 400; font-size: 13px; }
 .card__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
@@ -304,7 +344,10 @@ section h2.center { margin-bottom: 48px; }
   background: var(--color-bg-alt);
   border: 1px solid var(--color-border);
   color: var(--color-text-light);
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
+.tag:hover { border-color: var(--color-gold); color: var(--color-gold); }
 .grid__empty { text-align: center; color: var(--color-text-light); grid-column: 1 / -1; padding: 40px 0; }
 
 /* How it works */

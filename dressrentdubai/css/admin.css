@@ -31,12 +31,72 @@
   align-items: center;
   justify-content: space-between;
   padding: 18px 32px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 .admin-header .logo { color: #fff; }
 .admin-header .logo small { font-size: 12px; color: var(--color-gold-light); font-weight: 600; margin-left: 8px; text-transform: uppercase; letter-spacing: 1px; }
-.admin-header__actions { display: flex; gap: 12px; }
+.admin-header__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .admin-header .btn--outline { border-color: rgba(255,255,255,0.4); color: #fff; }
 .admin-header .btn--outline:hover { background: rgba(255,255,255,0.12); }
+
+.conn-status {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+}
+.conn-status--off { background: rgba(192,57,43,0.15); color: #e6796b; }
+.conn-status--on { background: rgba(46,204,113,0.15); color: #6fd89a; }
+
+/* Settings */
+.admin-settings {
+  max-width: 1200px;
+  margin: 0 auto 24px;
+}
+.admin-settings summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 4px 0;
+}
+.admin-settings__hint {
+  font-size: 13px;
+  color: var(--color-text-light);
+  margin: 14px 0 18px;
+  line-height: 1.6;
+}
+.admin-settings__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+/* Tags */
+.tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.tag-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+.tag-check:has(input:checked) { background: var(--color-dark); color: #fff; border-color: var(--color-dark); }
+.tag-check input { accent-color: var(--color-gold); }
 
 /* Layout */
 .admin-main { padding: 40px 32px 80px; }
@@ -112,4 +172,5 @@
   .admin-grid { grid-template-columns: 1fr; }
   .admin-header { flex-direction: column; gap: 14px; text-align: center; }
   .admin-main { padding: 28px 16px 60px; }
+  .admin-settings__grid { grid-template-columns: 1fr; }
 }

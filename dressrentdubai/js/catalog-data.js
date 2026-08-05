@@ -1,46 +1,43 @@
-/* Общее хранилище каталога для сайта и админки (localStorage браузера) */
+/* Общие константы и хелперы каталога: теги, чтение публичных данных, работа с изображениями */
 
-const DRD_STORAGE_KEY = 'drd_catalog_v1';
+const DRD_TAG_PREFIX = 'rentdressdubai_';
 
-const DRD_CATEGORIES = {
-  evening: 'Вечернее',
-  cocktail: 'Коктейльное',
-  wedding: 'Гостье на свадьбу',
-  accessories: 'Аксессуары',
-};
-
-const DRD_DEFAULT_CATALOG = [
-  { id: 'd1', name: 'Elie Saab Midnight', cat: 'evening', price: '850 AED', tags: ['новинка'], image: null, icon: '👗' },
-  { id: 'd2', name: 'Zuhair Murad Aurora', cat: 'evening', price: '1 200 AED', tags: ['премиум'], image: null, icon: '👗' },
-  { id: 'd3', name: 'Rose Cocktail', cat: 'cocktail', price: '420 AED', tags: [], image: null, icon: '💃' },
-  { id: 'd4', name: 'Emerald Silk', cat: 'cocktail', price: '380 AED', tags: [], image: null, icon: '💃' },
-  { id: 'd5', name: 'Golden Guest', cat: 'wedding', price: '650 AED', tags: [], image: null, icon: '🌸' },
-  { id: 'd6', name: 'Blush Elegance', cat: 'wedding', price: '590 AED', tags: [], image: null, icon: '🌸' },
-  { id: 'd7', name: 'Diamond Set', cat: 'accessories', price: '250 AED', tags: [], image: null, icon: '💎' },
-  { id: 'd8', name: 'Satin Clutch', cat: 'accessories', price: '120 AED', tags: [], image: null, icon: '👛' },
+const DRD_TAGS = [
+  'feathers', 'desert', 'black', 'red', 'white', 'shine', 'oriental', 'fly',
+  'suits', 'wedding', 'mini', 'beach', 'pregnant', 'hat', 'accessories',
+  'shoes', 'safari', 'sexy', 'cowboystyle', 'fur', 'stylist',
 ];
 
-function drdLoadCatalog() {
-  try {
-    const raw = localStorage.getItem(DRD_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.warn('Не удалось прочитать каталог из localStorage', e);
-  }
-  drdSaveCatalog(DRD_DEFAULT_CATALOG);
-  return DRD_DEFAULT_CATALOG.slice();
+const DRD_DEFAULT_ICON = '👗';
+
+const DRD_CATALOG_PATH = 'data/catalog.json';
+const DRD_IMAGE_DIR = 'images/catalog';
+
+function drdTagLabel(slug) {
+  return '#' + DRD_TAG_PREFIX + slug;
 }
 
-function drdSaveCatalog(items) {
-  localStorage.setItem(DRD_STORAGE_KEY, JSON.stringify(items));
+/* Публичная страница: читает опубликованный каталог из репозитория (data/catalog.json).
+   Если файл ещё не опубликован (например, локальный просмотр без загрузки) — используется
+   пустой каталог, и на странице будет предложено зайти в админку и добавить образы. */
+async function drdFetchPublicCatalog() {
+  try {
+    const res = await fetch(DRD_CATALOG_PATH + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.warn('Не удалось загрузить каталог', e);
+    return [];
+  }
 }
 
 function drdGenId() {
   return 'item_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-/* Сжимает изображение до разумного размера перед сохранением в localStorage */
-function drdResizeImage(file, maxSize = 900, quality = 0.82) {
+/* Сжимает изображение до разумного размера перед загрузкой в репозиторий */
+function drdResizeImage(file, maxSize = 1000, quality = 0.82) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = reject;
