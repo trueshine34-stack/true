@@ -2,124 +2,133 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1c1815">
 <title>Админка — DressRentDubai</title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔐</text></svg>">
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/admin.css">
 </head>
-<body class="admin-body">
+<body>
 
-<!-- LOGIN SCREEN -->
-<section id="loginScreen" class="admin-login">
-  <form id="loginForm" class="admin-login__card">
-    <a href="index.html" class="logo">Dress<span>Rent</span>Dubai</a>
-    <p class="eyebrow">Панель администратора</p>
-    <div class="field">
-      <label for="loginUser">Логин</label>
-      <input type="text" id="loginUser" name="username" autocomplete="username" required>
-    </div>
-    <div class="field">
-      <label for="loginPass">Пароль</label>
-      <input type="password" id="loginPass" name="password" autocomplete="current-password" required>
-    </div>
-    <button type="submit" class="btn btn--primary btn--full">Войти</button>
-    <p class="form__note" id="loginError"></p>
+<!-- 1. ВХОД -->
+<section id="loginScreen" class="screen screen--center">
+  <form id="loginForm" class="card card--auth">
+    <div class="brand">Dress<span>Rent</span>Dubai</div>
+    <p class="muted">Панель администратора</p>
+    <label class="field">
+      <span>Логин</span>
+      <input type="text" id="loginUser" autocomplete="username" inputmode="text" required>
+    </label>
+    <label class="field">
+      <span>Пароль</span>
+      <input type="password" id="loginPass" autocomplete="current-password" required>
+    </label>
+    <button type="submit" class="btn btn--primary btn--block">Войти</button>
+    <p class="note note--error" id="loginError"></p>
   </form>
 </section>
 
-<!-- DASHBOARD -->
-<section id="dashboard" class="admin-dash" hidden>
-  <header class="admin-header">
-    <a href="index.html" class="logo">Dress<span>Rent</span>Dubai <small>admin</small></a>
-    <div class="admin-header__actions">
-      <span id="connStatus" class="conn-status conn-status--off">GitHub не подключён</span>
-      <a href="index.html" class="btn btn--outline" target="_blank">Открыть сайт</a>
-      <button id="logoutBtn" class="btn btn--outline">Выйти</button>
+<!-- 2. ОДНОРАЗОВОЕ ПОДКЛЮЧЕНИЕ GITHUB -->
+<section id="connectScreen" class="screen screen--center" hidden>
+  <form id="connectForm" class="card card--auth">
+    <div class="brand">Подключение</div>
+    <p class="muted">Это нужно сделать <strong>один раз</strong> на этом телефоне.<br>Дальше админка будет открываться сразу.</p>
+
+    <ol class="steps-list">
+      <li>Нажми кнопку ниже — GitHub откроется с уже заполненными настройками.</li>
+      <li>Внизу страницы нажми зелёную кнопку <strong>Generate token</strong>.</li>
+      <li>Скопируй появившийся код и вставь его сюда.</li>
+    </ol>
+
+    <a class="btn btn--outline btn--block" id="tokenLink" target="_blank" rel="noopener">Открыть GitHub и создать код</a>
+
+    <label class="field">
+      <span>Код доступа</span>
+      <input type="password" id="tokenInput" placeholder="ghp_..." autocomplete="off" required>
+    </label>
+    <button type="submit" class="btn btn--primary btn--block" id="connectBtn">Подключить</button>
+    <p class="note" id="connectNote"></p>
+    <button type="button" class="linkbtn" id="connectBack">Выйти</button>
+  </form>
+</section>
+
+<!-- 3. ГЛАВНЫЙ ЭКРАН -->
+<section id="dashboard" class="screen" hidden>
+
+  <header class="topbar">
+    <div class="topbar__brand">Dress<span>Rent</span>Dubai</div>
+    <div class="topbar__right">
+      <a href="index.html" target="_blank" class="iconlink" title="Открыть сайт">↗</a>
+      <button class="iconlink" id="logoutBtn" title="Выйти">⎋</button>
     </div>
   </header>
 
-  <main class="admin-main">
+  <div class="statusbar" id="statusBar" hidden></div>
 
-    <details class="admin-panel admin-settings" id="settingsPanel">
-      <summary>Настройки подключения к GitHub</summary>
-      <p class="admin-settings__hint">
-        Фото и данные каталога сохраняются прямо в репозиторий GitHub через GitHub API,
-        поэтому их видят все посетители сайта, а не только этот браузер. Для этого нужен
-        Personal Access Token с правом <strong>Contents: Read and write</strong> только на
-        этот репозиторий (создать: GitHub → Settings → Developer settings → Fine-grained tokens).
-        Токен хранится только в этом браузере (localStorage) и никогда не попадает в код сайта —
-        не используйте его на чужих/публичных компьютерах.
-      </p>
-      <div class="admin-settings__grid">
-        <div class="field">
-          <label for="ghOwner">Владелец репозитория</label>
-          <input type="text" id="ghOwner" placeholder="trueshine34-stack">
-        </div>
-        <div class="field">
-          <label for="ghRepo">Репозиторий</label>
-          <input type="text" id="ghRepo" placeholder="true">
-        </div>
-        <div class="field">
-          <label for="ghBranch">Ветка</label>
-          <input type="text" id="ghBranch" placeholder="main">
-        </div>
-        <div class="field">
-          <label for="ghToken">GitHub Token</label>
-          <input type="password" id="ghToken" placeholder="github_pat_...">
-        </div>
-      </div>
-      <button type="button" id="saveSettings" class="btn btn--outline">Сохранить настройки</button>
-      <p class="form__note" id="settingsNote"></p>
-    </details>
+  <main class="content">
 
-    <div class="admin-grid">
+    <label class="uploader" for="photoInput">
+      <span class="uploader__icon">＋</span>
+      <span class="uploader__title">Добавить фото</span>
+      <span class="uploader__hint">можно выбрать сразу несколько</span>
+      <input type="file" id="photoInput" accept="image/*" multiple hidden>
+    </label>
 
-      <div class="admin-panel">
-        <h2 id="formTitle">Добавить образ</h2>
-        <form id="itemForm" class="admin-form">
-          <input type="hidden" id="itemId">
-          <input type="hidden" id="itemImagePath">
-
-          <div class="field">
-            <label for="itemImage">Фото</label>
-            <input type="file" id="itemImage" accept="image/*">
-            <img id="preview" class="admin-preview" hidden alt="Превью">
-          </div>
-
-          <div class="field">
-            <label for="itemName">Название</label>
-            <input type="text" id="itemName" placeholder="Elie Saab Midnight" required>
-          </div>
-
-          <div class="field">
-            <label for="itemPrice">Цена</label>
-            <input type="text" id="itemPrice" placeholder="850 AED">
-          </div>
-
-          <div class="field">
-            <label>Теги</label>
-            <div class="tag-grid" id="tagGrid"></div>
-          </div>
-
-          <div class="admin-form__actions">
-            <button type="submit" class="btn btn--primary" id="submitBtn">Опубликовать в каталог</button>
-            <button type="button" class="btn btn--outline" id="cancelEdit" hidden>Отменить</button>
-          </div>
-          <p class="form__note" id="formNote"></p>
-        </form>
-      </div>
-
-      <div class="admin-panel admin-panel--list">
-        <h2>Каталог (<span id="itemCount">0</span>)</h2>
-        <div class="admin-list" id="adminList"></div>
-      </div>
-
+    <div class="toolbar">
+      <button class="chipbtn" id="selectAllBtn">Выбрать все</button>
+      <button class="chipbtn" id="clearSelBtn" hidden>Снять выделение</button>
+      <span class="toolbar__count" id="countLabel">0 образов</span>
     </div>
+
+    <div class="gallery" id="gallery"></div>
+
   </main>
+
+  <!-- Нижняя панель действий над выделенными -->
+  <div class="actionbar" id="actionBar" hidden>
+    <div class="actionbar__head">
+      <strong id="selCount">0 выбрано</strong>
+      <button class="linkbtn" id="closeTags">Готово</button>
+    </div>
+    <p class="actionbar__hint">Нажми на тег — он применится ко всем выбранным</p>
+    <div class="tagbar" id="tagBar"></div>
+    <button class="btn btn--danger btn--block" id="deleteSelBtn">Удалить выбранные</button>
+  </div>
+
+  <!-- Кнопка публикации -->
+  <div class="publishbar" id="publishBar" hidden>
+    <span id="publishInfo">Есть несохранённые изменения</span>
+    <button class="btn btn--primary" id="publishBtn">Опубликовать</button>
+  </div>
+
 </section>
+
+<!-- Редактор карточки -->
+<div class="sheet" id="editSheet" hidden>
+  <div class="sheet__backdrop" data-close-sheet></div>
+  <form class="sheet__body" id="editForm">
+    <div class="sheet__handle"></div>
+    <img id="editPreview" class="sheet__img" alt="">
+    <label class="field">
+      <span>Название</span>
+      <input type="text" id="editName" required>
+    </label>
+    <label class="field">
+      <span>Цена</span>
+      <input type="text" id="editPrice" inputmode="text" placeholder="850 AED">
+    </label>
+    <div class="field">
+      <span>Теги</span>
+      <div class="tagbar tagbar--wrap" id="editTags"></div>
+    </div>
+    <div class="sheet__actions">
+      <button type="button" class="btn btn--outline" data-close-sheet>Отмена</button>
+      <button type="submit" class="btn btn--primary">Сохранить</button>
+    </div>
+  </form>
+</div>
 
 <script src="js/catalog-data.js"></script>
 <script src="js/admin.js"></script>

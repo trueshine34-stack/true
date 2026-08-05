@@ -1,388 +1,562 @@
+/* Админка DressRentDubai — массовая загрузка фото и групповые теги.
+   Репозиторий зашит в код; администратор один раз вводит код доступа GitHub,
+   который сохраняется только в его браузере. */
+
 const ADMIN_LOGIN = 'admin';
 const ADMIN_PASSWORD = 'Admin555';
-const ADMIN_SESSION_KEY = 'drd_admin_session';
-const GH_SETTINGS_KEY = 'drd_gh_settings';
-const REPO_BASE = 'dressrentdubai/';
+
+const GH_OWNER = 'trueshine34-stack';
+const GH_REPO = 'true';
+const GH_BRANCH_PREFERRED = 'claude/dressrentdubai-website-w9cyx2';
+const GH_BRANCH_FALLBACK = 'main';
 const GH_API = 'https://api.github.com';
+const REPO_BASE = 'dressrentdubai/';
 
-const loginScreen = document.getElementById('loginScreen');
-const dashboard = document.getElementById('dashboard');
-const loginForm = document.getElementById('loginForm');
-const loginError = document.getElementById('loginError');
+const SESSION_KEY = 'drd_admin_session';
+const TOKEN_KEY = 'drd_gh_token';
 
-function isAuthed() {
-  return sessionStorage.getItem(ADMIN_SESSION_KEY) === '1';
+const TOKEN_CREATE_URL =
+  'https://github.com/settings/tokens/new?scopes=repo&description=DressRentDubai%20admin';
+
+// ---------- состояние ----------
+let items = [];            // { id, name, price, tags, image, _new?, _dataUrl?, _dirty? }
+let removed = [];          // удалённые (для чистки картинок в репозитории)
+let selected = new Set();
+let branch = GH_BRANCH_PREFERRED;
+let editingId = null;
+
+// ---------- элементы ----------
+const $ = (id) => document.getElementById(id);
+const loginScreen = $('loginScreen');
+const connectScreen = $('connectScreen');
+const dashboard = $('dashboard');
+const gallery = $('gallery');
+const statusBar = $('statusBar');
+const actionBar = $('actionBar');
+const publishBar = $('publishBar');
+const editSheet = $('editSheet');
+
+// ---------- утилиты ----------
+const getToken = () => localStorage.getItem(TOKEN_KEY) || '';
+const isAuthed = () => sessionStorage.getItem(SESSION_KEY) === '1';
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str == null ? '' : str;
+  return d.innerHTML;
 }
 
-function showDashboard() {
-  loginScreen.hidden = true;
-  dashboard.hidden = false;
-  loadSettingsIntoForm();
-  buildTagGrid();
-  refreshList();
-}
+/* В админке префикс у всех тегов одинаковый — показываем короткую форму,
+   чтобы на телефоне в строку помещалось больше чипсов. */
+const shortTag = (slug) => '#' + slug;
 
-function showLogin() {
-  loginScreen.hidden = false;
-  dashboard.hidden = true;
-}
-
-if (isAuthed()) showDashboard(); else showLogin();
-
-loginForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const user = document.getElementById('loginUser').value.trim();
-  const pass = document.getElementById('loginPass').value;
-  if (user === ADMIN_LOGIN && pass === ADMIN_PASSWORD) {
-    sessionStorage.setItem(ADMIN_SESSION_KEY, '1');
-    loginError.textContent = '';
-    loginForm.reset();
-    showDashboard();
-  } else {
-    loginError.textContent = 'Неверный логин или пароль';
-  }
-});
-
-document.getElementById('logoutBtn').addEventListener('click', () => {
-  sessionStorage.removeItem(ADMIN_SESSION_KEY);
-  showLogin();
-});
-
-// --- GitHub settings ---
-function loadSettings() {
-  try {
-    return JSON.parse(localStorage.getItem(GH_SETTINGS_KEY)) || {};
-  } catch (e) {
-    return {};
-  }
-}
-
-function saveSettings(settings) {
-  localStorage.setItem(GH_SETTINGS_KEY, JSON.stringify(settings));
-}
-
-function loadSettingsIntoForm() {
-  const s = loadSettings();
-  document.getElementById('ghOwner').value = s.owner || 'trueshine34-stack';
-  document.getElementById('ghRepo').value = s.repo || 'true';
-  document.getElementById('ghBranch').value = s.branch || 'claude/dressrentdubai-website-w9cyx2';
-  document.getElementById('ghToken').value = s.token || '';
-  const connected = !!(s.owner && s.repo && s.branch && s.token);
-  updateConnStatus(connected);
-  if (!connected) document.getElementById('settingsPanel').open = true;
-}
-
-function updateConnStatus(connected) {
-  const el = document.getElementById('connStatus');
-  el.textContent = connected ? 'GitHub подключён' : 'GitHub не подключён';
-  el.classList.toggle('conn-status--on', connected);
-  el.classList.toggle('conn-status--off', !connected);
-}
-
-document.getElementById('saveSettings').addEventListener('click', async () => {
-  const settings = {
-    owner: document.getElementById('ghOwner').value.trim(),
-    repo: document.getElementById('ghRepo').value.trim(),
-    branch: document.getElementById('ghBranch').value.trim(),
-    token: document.getElementById('ghToken').value.trim(),
-  };
-  const note = document.getElementById('settingsNote');
-
-  if (!settings.owner || !settings.repo || !settings.branch || !settings.token) {
-    note.textContent = 'Заполните все поля.';
-    updateConnStatus(false);
+function status(text, kind) {
+  if (!text) {
+    statusBar.hidden = true;
     return;
   }
+  statusBar.hidden = false;
+  statusBar.textContent = text;
+  statusBar.className = 'statusbar' + (kind ? ' statusbar--' + kind : '');
+}
 
-  note.textContent = 'Проверяем подключение...';
-  try {
-    const res = await fetch(`${GH_API}/repos/${settings.owner}/${settings.repo}`, { headers: ghHeaders(settings.token) });
-    if (!res.ok) throw new Error((await safeJson(res)).message || `HTTP ${res.status}`);
-    saveSettings(settings);
-    note.textContent = 'Готово, подключение работает.';
-    updateConnStatus(true);
-    refreshList();
-  } catch (err) {
-    note.textContent = 'Ошибка подключения: ' + err.message;
-    updateConnStatus(false);
-  }
-});
+function b64Utf8(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
 
-// --- GitHub API helpers ---
-function ghHeaders(token) {
+function fromB64Utf8(str) {
+  return decodeURIComponent(escape(atob(String(str).replace(/\s/g, ''))));
+}
+
+function hasChanges() {
+  return removed.length > 0 || items.some((i) => i._new || i._dirty);
+}
+
+// ---------- GitHub API ----------
+function ghHeaders() {
   return {
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${getToken()}`,
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
   };
 }
 
-async function safeJson(res) {
-  try { return await res.json(); } catch (e) { return {}; }
-}
-
-function ghEncodePath(path) {
-  return path.split('/').map(encodeURIComponent).join('/');
-}
-
-function b64EncodeUnicode(str) {
-  return btoa(unescape(encodeURIComponent(str)));
-}
-
-function b64DecodeUnicode(str) {
-  return decodeURIComponent(escape(atob(str.replace(/\n/g, ''))));
-}
-
-async function ghGetFile(path, settings) {
-  const url = `${GH_API}/repos/${settings.owner}/${settings.repo}/contents/${ghEncodePath(path)}?ref=${encodeURIComponent(settings.branch)}`;
-  const res = await fetch(url, { headers: ghHeaders(settings.token) });
+async function gh(path, options = {}) {
+  const res = await fetch(GH_API + path, {
+    ...options,
+    headers: { ...ghHeaders(), 'Content-Type': 'application/json', ...(options.headers || {}) },
+  });
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error((await safeJson(res)).message || `GitHub API ${res.status}`);
+  if (!res.ok) {
+    let msg = `GitHub ${res.status}`;
+    try {
+      const j = await res.json();
+      if (j.message) msg = j.message;
+    } catch (e) { /* пусто */ }
+    throw new Error(msg);
+  }
   return res.json();
 }
 
-async function ghPutFile(path, contentBase64, message, sha, settings) {
-  const url = `${GH_API}/repos/${settings.owner}/${settings.repo}/contents/${ghEncodePath(path)}`;
-  const body = { message, content: contentBase64, branch: settings.branch };
-  if (sha) body.sha = sha;
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: { ...ghHeaders(settings.token), 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+/* Определяет рабочую ветку: сначала ветку разработки, иначе main. */
+async function resolveBranch() {
+  const dev = await gh(`/repos/${GH_OWNER}/${GH_REPO}/git/ref/heads/${GH_BRANCH_PREFERRED}`);
+  branch = dev ? GH_BRANCH_PREFERRED : GH_BRANCH_FALLBACK;
+  return branch;
+}
+
+async function loadCatalog() {
+  const file = await gh(
+    `/repos/${GH_OWNER}/${GH_REPO}/contents/${REPO_BASE}${DRD_CATALOG_PATH}?ref=${encodeURIComponent(branch)}`
+  );
+  if (!file) return [];
+  const parsed = JSON.parse(fromB64Utf8(file.content));
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+/* Публикует все изменения одним коммитом через Git Data API. */
+async function publishAll() {
+  const head = await gh(`/repos/${GH_OWNER}/${GH_REPO}/git/ref/heads/${branch}`);
+  if (!head) throw new Error(`Ветка ${branch} не найдена`);
+  const headSha = head.object.sha;
+
+  const headCommit = await gh(`/repos/${GH_OWNER}/${GH_REPO}/git/commits/${headSha}`);
+  const baseTree = headCommit.tree.sha;
+
+  const tree = [];
+  const newPhotos = items.filter((i) => i._new && i._dataUrl);
+
+  for (let n = 0; n < newPhotos.length; n++) {
+    const item = newPhotos[n];
+    status(`Загружаем фото ${n + 1} из ${newPhotos.length}...`);
+    const blob = await gh(`/repos/${GH_OWNER}/${GH_REPO}/git/blobs`, {
+      method: 'POST',
+      body: JSON.stringify({ content: item._dataUrl.split(',')[1], encoding: 'base64' }),
+    });
+    item.image = `${DRD_IMAGE_DIR}/${item.id}.jpg`;
+    tree.push({ path: REPO_BASE + item.image, mode: '100644', type: 'blob', sha: blob.sha });
+  }
+
+  status('Сохраняем каталог...');
+  const payload = items.map((i) => ({
+    id: i.id,
+    name: i.name,
+    price: i.price || '',
+    tags: i.tags || [],
+    image: i.image || null,
+  }));
+  const catalogBlob = await gh(`/repos/${GH_OWNER}/${GH_REPO}/git/blobs`, {
+    method: 'POST',
+    body: JSON.stringify({ content: JSON.stringify(payload, null, 2) + '\n', encoding: 'utf-8' }),
   });
-  if (!res.ok) throw new Error((await safeJson(res)).message || `GitHub API ${res.status}`);
-  return res.json();
-}
-
-async function ghDeleteFile(path, message, sha, settings) {
-  const url = `${GH_API}/repos/${settings.owner}/${settings.repo}/contents/${ghEncodePath(path)}`;
-  const res = await fetch(url, {
-    method: 'DELETE',
-    headers: { ...ghHeaders(settings.token), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, sha, branch: settings.branch }),
+  tree.push({
+    path: REPO_BASE + DRD_CATALOG_PATH,
+    mode: '100644',
+    type: 'blob',
+    sha: catalogBlob.sha,
   });
-  if (!res.ok) throw new Error((await safeJson(res)).message || `GitHub API ${res.status}`);
-  return res.json();
-}
 
-function fullPath(relPath) {
-  return REPO_BASE + relPath;
-}
-
-async function fetchRemoteCatalog(settings) {
-  const file = await ghGetFile(fullPath(DRD_CATALOG_PATH), settings);
-  if (!file) return { items: [], sha: null };
-  return { items: JSON.parse(b64DecodeUnicode(file.content)), sha: file.sha };
-}
-
-// --- Tag grid ---
-function buildTagGrid() {
-  const grid = document.getElementById('tagGrid');
-  grid.innerHTML = DRD_TAGS.map(slug => `
-    <label class="tag-check">
-      <input type="checkbox" value="${slug}">
-      <span>${drdTagLabel(slug)}</span>
-    </label>
-  `).join('');
-}
-
-function getSelectedTags() {
-  return Array.from(document.querySelectorAll('#tagGrid input:checked')).map(el => el.value);
-}
-
-function setSelectedTags(tags) {
-  document.querySelectorAll('#tagGrid input').forEach(el => {
-    el.checked = (tags || []).includes(el.value);
+  // удаляем фото убранных образов
+  removed.forEach((item) => {
+    if (item.image && !item._new) {
+      tree.push({ path: REPO_BASE + item.image, mode: '100644', type: 'blob', sha: null });
+    }
   });
+
+  const newTree = await gh(`/repos/${GH_OWNER}/${GH_REPO}/git/trees`, {
+    method: 'POST',
+    body: JSON.stringify({ base_tree: baseTree, tree }),
+  });
+
+  const added = newPhotos.length;
+  const message = added
+    ? `Каталог: +${added} фото, всего образов ${items.length}`
+    : `Каталог: обновлено, всего образов ${items.length}`;
+
+  const commit = await gh(`/repos/${GH_OWNER}/${GH_REPO}/git/commits`, {
+    method: 'POST',
+    body: JSON.stringify({ message, tree: newTree.sha, parents: [headSha] }),
+  });
+
+  await gh(`/repos/${GH_OWNER}/${GH_REPO}/git/refs/heads/${branch}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ sha: commit.sha }),
+  });
+
+  // _dataUrl оставляем: пока GitHub Pages пересобирается, плитки показывают локальное превью
+  items.forEach((i) => {
+    delete i._new;
+    delete i._dirty;
+  });
+  removed = [];
 }
 
-// --- Item form ---
-const itemForm = document.getElementById('itemForm');
-const itemIdField = document.getElementById('itemId');
-const itemImagePathField = document.getElementById('itemImagePath');
-const itemImage = document.getElementById('itemImage');
-const preview = document.getElementById('preview');
-const adminList = document.getElementById('adminList');
-const itemCount = document.getElementById('itemCount');
-const formTitle = document.getElementById('formTitle');
-const submitBtn = document.getElementById('submitBtn');
-const cancelEditBtn = document.getElementById('cancelEdit');
-const formNote = document.getElementById('formNote');
-
-let pendingImage = null;
-let currentCatalog = [];
-
-itemImage.addEventListener('change', async () => {
-  const file = itemImage.files[0];
-  if (!file) return;
-  pendingImage = await drdResizeImage(file);
-  preview.src = pendingImage;
-  preview.hidden = false;
-});
-
-function resetForm() {
-  itemForm.reset();
-  itemIdField.value = '';
-  itemImagePathField.value = '';
-  pendingImage = null;
-  preview.hidden = true;
-  setSelectedTags([]);
-  formTitle.textContent = 'Добавить образ';
-  submitBtn.textContent = 'Опубликовать в каталог';
-  cancelEditBtn.hidden = true;
+// ---------- экраны ----------
+function showLogin() {
+  loginScreen.hidden = false;
+  connectScreen.hidden = true;
+  dashboard.hidden = true;
 }
 
-cancelEditBtn.addEventListener('click', resetForm);
+function showConnect() {
+  loginScreen.hidden = true;
+  connectScreen.hidden = false;
+  dashboard.hidden = true;
+  $('tokenLink').href = TOKEN_CREATE_URL;
+}
 
-itemForm.addEventListener('submit', async (e) => {
+async function showDashboard() {
+  loginScreen.hidden = true;
+  connectScreen.hidden = true;
+  dashboard.hidden = false;
+  buildTagBar($('tagBar'), applyTagToSelection);
+  buildTagBar($('editTags'), toggleEditTag);
+  await refresh();
+}
+
+function route() {
+  if (!isAuthed()) return showLogin();
+  if (!getToken()) return showConnect();
+  showDashboard();
+}
+
+// ---------- вход ----------
+$('loginForm').addEventListener('submit', (e) => {
   e.preventDefault();
-  const settings = loadSettings();
-  if (!settings.owner || !settings.repo || !settings.branch || !settings.token) {
-    formNote.textContent = 'Сначала заполните и сохраните настройки подключения к GitHub выше.';
-    document.getElementById('settingsPanel').open = true;
-    return;
-  }
-
-  const id = itemIdField.value || drdGenId();
-  const isNew = !itemIdField.value;
-  const name = document.getElementById('itemName').value.trim();
-  const price = document.getElementById('itemPrice').value.trim();
-  const tags = getSelectedTags();
-
-  submitBtn.disabled = true;
-  formNote.textContent = 'Публикуем в GitHub...';
-
-  try {
-    let imagePath = itemImagePathField.value || null;
-
-    if (pendingImage) {
-      formNote.textContent = 'Загружаем фото...';
-      const relPath = `${DRD_IMAGE_DIR}/${id}.jpg`;
-      const full = fullPath(relPath);
-      const existing = await ghGetFile(full, settings);
-      const base64 = pendingImage.split(',')[1];
-      await ghPutFile(full, base64, `${isNew ? 'Добавить' : 'Обновить'} фото: ${name}`, existing ? existing.sha : undefined, settings);
-      imagePath = relPath;
-    }
-
-    formNote.textContent = 'Обновляем каталог...';
-    const { items, sha } = await fetchRemoteCatalog(settings);
-    const newItem = { id, name, price, tags, image: imagePath };
-    const idx = items.findIndex(i => i.id === id);
-    if (idx >= 0) items[idx] = newItem; else items.push(newItem);
-
-    const newContent = b64EncodeUnicode(JSON.stringify(items, null, 2));
-    await ghPutFile(fullPath(DRD_CATALOG_PATH), newContent, `${isNew ? 'Добавить' : 'Обновить'} образ: ${name}`, sha, settings);
-
-    currentCatalog = items;
-    renderList();
-    formNote.textContent = 'Опубликовано! Изменения появятся на сайте в течение 1-2 минут.';
-    resetForm();
-  } catch (err) {
-    formNote.textContent = 'Ошибка публикации: ' + err.message;
-  } finally {
-    submitBtn.disabled = false;
+  const user = $('loginUser').value.trim();
+  const pass = $('loginPass').value;
+  if (user === ADMIN_LOGIN && pass === ADMIN_PASSWORD) {
+    sessionStorage.setItem(SESSION_KEY, '1');
+    $('loginError').textContent = '';
+    $('loginForm').reset();
+    route();
+  } else {
+    $('loginError').textContent = 'Неверный логин или пароль';
   }
 });
 
-function editItem(id) {
-  const item = currentCatalog.find(i => i.id === id);
-  if (!item) return;
-  itemIdField.value = item.id;
-  itemImagePathField.value = item.image || '';
-  document.getElementById('itemName').value = item.name;
-  document.getElementById('itemPrice').value = item.price || '';
-  setSelectedTags(item.tags);
-  pendingImage = null;
-  if (item.image) {
-    preview.src = item.image;
-    preview.hidden = false;
-  } else {
-    preview.hidden = true;
-  }
-  formTitle.textContent = 'Редактировать образ';
-  submitBtn.textContent = 'Сохранить изменения';
-  cancelEditBtn.hidden = false;
-  formNote.textContent = '';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
+$('logoutBtn').addEventListener('click', () => {
+  sessionStorage.removeItem(SESSION_KEY);
+  showLogin();
+});
 
-async function deleteItem(id) {
-  const item = currentCatalog.find(i => i.id === id);
-  if (!item) return;
-  if (!confirm(`Удалить «${item.name}» из каталога?`)) return;
+$('connectBack').addEventListener('click', () => {
+  sessionStorage.removeItem(SESSION_KEY);
+  showLogin();
+});
 
-  const settings = loadSettings();
-  if (!settings.token) {
-    formNote.textContent = 'Сначала заполните и сохраните настройки подключения к GitHub выше.';
-    return;
-  }
+$('connectForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const token = $('tokenInput').value.trim();
+  const note = $('connectNote');
+  if (!token) return;
 
-  formNote.textContent = 'Удаляем...';
+  $('connectBtn').disabled = true;
+  note.className = 'note';
+  note.textContent = 'Проверяем...';
+
+  localStorage.setItem(TOKEN_KEY, token);
   try {
-    const { items, sha } = await fetchRemoteCatalog(settings);
-    const remaining = items.filter(i => i.id !== id);
-    const newContent = b64EncodeUnicode(JSON.stringify(remaining, null, 2));
-    await ghPutFile(fullPath(DRD_CATALOG_PATH), newContent, `Удалить образ: ${item.name}`, sha, settings);
+    const repo = await gh(`/repos/${GH_OWNER}/${GH_REPO}`);
+    if (!repo) throw new Error('Нет доступа к репозиторию');
+    note.textContent = 'Готово!';
+    $('tokenInput').value = '';
+    route();
+  } catch (err) {
+    localStorage.removeItem(TOKEN_KEY);
+    note.className = 'note note--error';
+    note.textContent = 'Не получилось: ' + err.message;
+  } finally {
+    $('connectBtn').disabled = false;
+  }
+});
 
-    if (item.image) {
-      const imgFull = fullPath(item.image);
-      const imgFile = await ghGetFile(imgFull, settings);
-      if (imgFile) await ghDeleteFile(imgFull, `Удалить фото: ${item.name}`, imgFile.sha, settings);
+// ---------- загрузка каталога ----------
+async function refresh() {
+  status('Загружаем каталог...');
+  try {
+    await resolveBranch();
+    items = await loadCatalog();
+    selected.clear();
+    removed = [];
+    status('');
+    render();
+  } catch (err) {
+    status('Ошибка: ' + err.message, 'error');
+    if (/bad credentials|requires authentication/i.test(err.message)) {
+      localStorage.removeItem(TOKEN_KEY);
+      showConnect();
     }
-
-    currentCatalog = remaining;
-    renderList();
-    formNote.textContent = 'Удалено.';
-  } catch (err) {
-    formNote.textContent = 'Ошибка удаления: ' + err.message;
   }
 }
 
-async function refreshList() {
-  const settings = loadSettings();
-  if (!settings.owner || !settings.repo || !settings.branch || !settings.token) {
-    adminList.innerHTML = '<p class="admin-empty">Заполните настройки подключения к GitHub выше, чтобы увидеть и редактировать каталог.</p>';
-    itemCount.textContent = '0';
+// ---------- фото ----------
+$('photoInput').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+
+  status(`Обрабатываем ${files.length} фото...`);
+  for (let n = 0; n < files.length; n++) {
+    status(`Обрабатываем фото ${n + 1} из ${files.length}...`);
+    try {
+      const dataUrl = await drdResizeImage(files[n]);
+      const name = files[n].name.replace(/\.[^.]+$/, '').slice(0, 60) || 'Новый образ';
+      items.push({ id: drdGenId(), name, price: '', tags: [], image: null, _new: true, _dataUrl: dataUrl });
+    } catch (err) {
+      console.warn('Не удалось обработать файл', files[n].name, err);
+    }
+  }
+  e.target.value = '';
+  status(`Добавлено ${files.length} фото — поставь теги и нажми «Опубликовать»`, 'ok');
+  render();
+});
+
+// ---------- теги ----------
+function buildTagBar(container, handler) {
+  container.innerHTML = '';
+  DRD_TAGS.forEach((slug) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tagchip';
+    b.dataset.tag = slug;
+    b.textContent = shortTag(slug);
+    b.addEventListener('click', () => handler(slug));
+    container.appendChild(b);
+  });
+}
+
+/* Ставит тег всем выделенным; если он уже у всех — снимает. */
+function applyTagToSelection(slug) {
+  const chosen = items.filter((i) => selected.has(i.id));
+  if (!chosen.length) return;
+  const everyone = chosen.every((i) => (i.tags || []).includes(slug));
+
+  chosen.forEach((i) => {
+    i.tags = i.tags || [];
+    if (everyone) {
+      i.tags = i.tags.filter((t) => t !== slug);
+    } else if (!i.tags.includes(slug)) {
+      i.tags.push(slug);
+    }
+    i._dirty = true;
+    paintTags(i);
+  });
+  syncTagBar();
+  updateBars();
+}
+
+/* Обновляет теги одной плитки, не перерисовывая галерею целиком. */
+function paintTags(item) {
+  const tile = gallery.querySelector(`.tile[data-id="${item.id}"]`);
+  if (!tile) return;
+  const html = (item.tags || []).map((t) => `<span class="minitag">${esc(shortTag(t))}</span>`).join('');
+  let box = tile.querySelector('.tile__tags');
+  if (!html) {
+    if (box) box.remove();
     return;
   }
-  adminList.innerHTML = '<p class="admin-empty">Загружаем каталог из GitHub...</p>';
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'tile__tags';
+    tile.querySelector('.tile__edit').before(box);
+  }
+  box.innerHTML = html;
+}
+
+function syncTagBar() {
+  const chosen = items.filter((i) => selected.has(i.id));
+  $('tagBar').querySelectorAll('.tagchip').forEach((chip) => {
+    const tag = chip.dataset.tag;
+    const count = chosen.filter((i) => (i.tags || []).includes(tag)).length;
+    chip.classList.toggle('is-on', chosen.length > 0 && count === chosen.length);
+    chip.classList.toggle('is-partial', count > 0 && count < chosen.length);
+  });
+}
+
+// ---------- выделение ----------
+function paintSelection() {
+  gallery.querySelectorAll('.tile').forEach((tile) => {
+    tile.classList.toggle('is-selected', selected.has(tile.dataset.id));
+  });
+}
+
+function toggleSelect(id) {
+  if (selected.has(id)) selected.delete(id);
+  else selected.add(id);
+  paintSelection();
+  updateBars();
+}
+
+$('selectAllBtn').addEventListener('click', () => {
+  if (selected.size === items.length) selected.clear();
+  else items.forEach((i) => selected.add(i.id));
+  paintSelection();
+  updateBars();
+});
+
+$('clearSelBtn').addEventListener('click', () => {
+  selected.clear();
+  paintSelection();
+  updateBars();
+});
+
+$('closeTags').addEventListener('click', () => {
+  selected.clear();
+  paintSelection();
+  updateBars();
+});
+
+$('deleteSelBtn').addEventListener('click', () => {
+  const chosen = items.filter((i) => selected.has(i.id));
+  if (!chosen.length) return;
+  if (!confirm(`Удалить ${chosen.length} образ(ов) из каталога?`)) return;
+  chosen.forEach((i) => { if (!i._new) removed.push(i); });
+  items = items.filter((i) => !selected.has(i.id));
+  selected.clear();
+  render();
+});
+
+// ---------- редактор ----------
+function openEditor(id) {
+  const item = items.find((i) => i.id === id);
+  if (!item) return;
+  editingId = id;
+  $('editName').value = item.name || '';
+  $('editPrice').value = item.price || '';
+  const img = $('editPreview');
+  const src = item._dataUrl || item.image;
+  img.hidden = !src;
+  if (src) img.src = src;
+  syncEditTags();
+  editSheet.hidden = false;
+}
+
+function closeEditor() {
+  editSheet.hidden = true;
+  editingId = null;
+}
+
+function toggleEditTag(slug) {
+  const item = items.find((i) => i.id === editingId);
+  if (!item) return;
+  item.tags = item.tags || [];
+  if (item.tags.includes(slug)) item.tags = item.tags.filter((t) => t !== slug);
+  else item.tags.push(slug);
+  item._dirty = true;
+  syncEditTags();
+}
+
+function syncEditTags() {
+  const item = items.find((i) => i.id === editingId);
+  $('editTags').querySelectorAll('.tagchip').forEach((chip) => {
+    chip.classList.toggle('is-on', !!item && (item.tags || []).includes(chip.dataset.tag));
+  });
+}
+
+document.querySelectorAll('[data-close-sheet]').forEach((el) =>
+  el.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeEditor();
+    render();
+  })
+);
+
+$('editForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const item = items.find((i) => i.id === editingId);
+  if (item) {
+    item.name = $('editName').value.trim();
+    item.price = $('editPrice').value.trim();
+    item._dirty = true;
+  }
+  closeEditor();
+  render();
+});
+
+// ---------- публикация ----------
+$('publishBtn').addEventListener('click', async () => {
+  const btn = $('publishBtn');
+  btn.disabled = true;
   try {
-    const { items } = await fetchRemoteCatalog(settings);
-    currentCatalog = items;
-    renderList();
+    await publishAll();
+    status('Опубликовано! Сайт обновится через 1–2 минуты.', 'ok');
+    render();
   } catch (err) {
-    adminList.innerHTML = `<p class="admin-empty">Ошибка загрузки каталога: ${err.message}</p>`;
+    status('Ошибка публикации: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
   }
+});
+
+// ---------- отрисовка ----------
+/* Обновляет счётчики и нижние панели без перерисовки галереи. */
+function updateBars() {
+  $('countLabel').textContent = `${items.length} образов`;
+  $('selectAllBtn').textContent = selected.size === items.length && items.length ? 'Снять все' : 'Выбрать все';
+  $('clearSelBtn').hidden = selected.size === 0;
+
+  const anySelected = selected.size > 0;
+  actionBar.hidden = !anySelected;
+  if (anySelected) {
+    $('selCount').textContent = `${selected.size} выбрано`;
+    syncTagBar();
+  }
+
+  const dirty = hasChanges();
+  publishBar.hidden = !dirty || anySelected;
+  if (dirty) {
+    const added = items.filter((i) => i._new).length;
+    $('publishInfo').textContent = added
+      ? `${added} новых фото готово`
+      : 'Есть несохранённые изменения';
+  }
+
+  reserveBarSpace();
 }
 
-function renderList() {
-  itemCount.textContent = currentCatalog.length;
+/* Резервирует под галереей место под плавающую панель, чтобы нижние фото не перекрывались. */
+function reserveBarSpace() {
+  requestAnimationFrame(() => {
+    const bar = !actionBar.hidden ? actionBar : (!publishBar.hidden ? publishBar : null);
+    const h = bar ? bar.getBoundingClientRect().height : 0;
+    document.documentElement.style.setProperty('--bar-h', h + 'px');
+  });
+}
 
-  if (!currentCatalog.length) {
-    adminList.innerHTML = '<p class="admin-empty">Каталог пуст — добавьте первый образ слева.</p>';
-    return;
+function render() {
+  if (!items.length) {
+    gallery.innerHTML = '<p class="gallery__empty">Пока пусто. Нажми «Добавить фото» — можно выбрать сразу несколько снимков.</p>';
+  } else {
+    gallery.innerHTML = items
+      .map((item) => {
+        const src = item._dataUrl || item.image;
+        const tags = (item.tags || []).map((t) => `<span class="minitag">${esc(shortTag(t))}</span>`).join('');
+        return `
+          <div class="tile ${selected.has(item.id) ? 'is-selected' : ''}" data-id="${item.id}">
+            <div class="tile__media" data-select="${item.id}">
+              ${src ? `<img src="${src}" alt="" loading="lazy">` : DRD_DEFAULT_ICON}
+              <span class="tile__check">✓</span>
+              ${item._new ? '<span class="tile__badge">ново</span>' : ''}
+            </div>
+            <div class="tile__body">
+              <div class="tile__name">${esc(item.name)}</div>
+              <div class="tile__price">${esc(item.price) || '—'}</div>
+              ${tags ? `<div class="tile__tags">${tags}</div>` : ''}
+              <button type="button" class="tile__edit" data-edit="${item.id}">Изменить</button>
+            </div>
+          </div>`;
+      })
+      .join('');
+
+    gallery.querySelectorAll('[data-select]').forEach((el) =>
+      el.addEventListener('click', () => toggleSelect(el.dataset.select))
+    );
+    gallery.querySelectorAll('[data-edit]').forEach((el) =>
+      el.addEventListener('click', () => openEditor(el.dataset.edit))
+    );
   }
 
-  adminList.innerHTML = currentCatalog.map(item => `
-    <div class="admin-row">
-      <div class="admin-row__media">${item.image ? `<img src="${item.image}" alt="">` : DRD_DEFAULT_ICON}</div>
-      <div class="admin-row__body">
-        <strong>${item.name}</strong>
-        <span>${item.price || ''}</span>
-        ${item.tags && item.tags.length ? `<div class="card__tags">${item.tags.map(t => `<span class="tag">${drdTagLabel(t)}</span>`).join('')}</div>` : ''}
-      </div>
-      <div class="admin-row__actions">
-        <button type="button" data-edit="${item.id}" class="icon-btn" title="Редактировать">✎</button>
-        <button type="button" data-del="${item.id}" class="icon-btn icon-btn--danger" title="Удалить">✕</button>
-      </div>
-    </div>
-  `).join('');
-
-  adminList.querySelectorAll('[data-edit]').forEach(btn =>
-    btn.addEventListener('click', () => editItem(btn.dataset.edit))
-  );
-  adminList.querySelectorAll('[data-del]').forEach(btn =>
-    btn.addEventListener('click', () => deleteItem(btn.dataset.del))
-  );
+  updateBars();
 }
+
+route();
