@@ -1,0 +1,23 @@
+# Overlay applied on top of matraix-persona-8b/mkdocs.yml when building the
+# GitHub Pages copy of the MatrAIx Handbook.
+#
+# The workflow copies this file next to the vendored mkdocs.yml before building,
+# so every relative path in the inherited config (docs_dir, nav, ...) resolves
+# exactly as it does upstream.
+INHERIT: ./mkdocs.yml
+
+site_url: https://trueshine34-stack.github.io/true/docs/
+repo_url: https://github.com/MatrAIx-ai/MatrAIx-Persona-8B
+edit_uri: ""
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/MatrAIx-ai/MatrAIx-Persona-8B
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/knVyQQnRFa
+    - icon: fontawesome/brands/x-twitter
+      link: https://x.com/MatrAIx2026
+
+plugins:
+  - search

@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MatrAIx Persona 8B — Simulate before reality</title>
+<meta name="description" content="Population-scale, persona-driven infrastructure for evaluating AI systems and interactive products with heterogeneous simulated users.">
+<meta property="og:title" content="MatrAIx Persona 8B">
+<meta property="og:description" content="Population-scale, persona-driven infrastructure for evaluating AI systems with simulated users.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f7cff'/%3E%3Ctext x='16' y='23' font-size='19' font-family='monospace' font-weight='bold' text-anchor='middle' fill='%23fff'%3EM%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f5f7fb;
+    --panel: #ffffff;
+    --border: #e2e6ef;
+    --text: #16191f;
+    --muted: #5c6474;
+    --accent: #3b62d9;
+    --accent-soft: #eaf0ff;
+    --code-bg: #f2f4f9;
+    --shadow: 0 1px 2px rgba(16, 24, 48, .06), 0 8px 24px rgba(16, 24, 48, .06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0c0f16;
+      --bg-alt: #10141d;
+      --panel: #141924;
+      --border: #232a38;
+      --text: #e8ecf4;
+      --muted: #9aa4b8;
+      --accent: #7d9dff;
+      --accent-soft: #1a2340;
+      --code-bg: #0a0d14;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c0f16;
+    --bg-alt: #10141d;
+    --panel: #141924;
+    --border: #232a38;
+    --text: #e8ecf4;
+    --muted: #9aa4b8;
+    --accent: #7d9dff;
+    --accent-soft: #1a2340;
+    --code-bg: #0a0d14;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+
+  /* ---- header ---- */
+  header {
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    position: sticky; top: 0; z-index: 10;
+    backdrop-filter: blur(8px);
+  }
+  .nav { display: flex; align-items: center; gap: 20px; height: 60px; }
+  .brand { font-weight: 700; letter-spacing: -.02em; text-decoration: none; color: var(--text); font-size: 17px; }
+  .brand span { color: var(--accent); }
+  .nav-links { margin-left: auto; display: flex; gap: 20px; flex-wrap: wrap; }
+  .nav-links a { text-decoration: none; color: var(--muted); font-size: 14.5px; font-weight: 500; }
+  .nav-links a:hover { color: var(--text); }
+
+  /* ---- hero ---- */
+  .hero { padding: 72px 0 56px; text-align: center; background: var(--bg-alt); border-bottom: 1px solid var(--border); }
+  .eyebrow {
+    display: inline-block; font-size: 12.5px; font-weight: 600; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--accent);
+    background: var(--accent-soft); border-radius: 999px; padding: 5px 13px; margin-bottom: 20px;
+  }
+  h1 { font-size: clamp(34px, 6vw, 52px); line-height: 1.1; letter-spacing: -.03em; margin: 0 0 8px; }
+  .tagline { font-size: clamp(17px, 2.4vw, 21px); color: var(--accent); font-weight: 600; margin: 0 0 18px; }
+  .lede { font-size: 17.5px; color: var(--muted); max-width: 660px; margin: 0 auto 30px; }
+  .btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; text-decoration: none; font-weight: 600; font-size: 15px;
+    padding: 11px 22px; border-radius: 9px; border: 1px solid transparent; transition: .15s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-ghost { background: var(--panel); color: var(--text); border-color: var(--border); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ---- sections ---- */
+  section { padding: 56px 0; }
+  section + section { border-top: 1px solid var(--border); }
+  h2 { font-size: 25px; letter-spacing: -.02em; margin: 0 0 8px; }
+  .sub { color: var(--muted); margin: 0 0 28px; }
+
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 22px; box-shadow: var(--shadow);
+  }
+  .card h3 { margin: 0 0 6px; font-size: 16.5px; letter-spacing: -.01em; }
+  .card p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.6; }
+  a.card { text-decoration: none; color: inherit; display: block; transition: .15s; }
+  a.card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .card .arrow { color: var(--accent); font-weight: 600; font-size: 14px; display: inline-block; margin-top: 12px; }
+
+  .stats { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .stat .n { font-size: 27px; font-weight: 700; letter-spacing: -.02em; color: var(--accent); }
+  .stat .l { font-size: 13.5px; color: var(--muted); margin-top: 2px; }
+
+  figure { margin: 0; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+  figcaption { color: var(--muted); font-size: 13.5px; margin-top: 10px; text-align: center; }
+
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; overflow-x: auto; font-size: 13.5px; line-height: 1.7; margin: 0;
+  }
+  pre code { color: var(--text); }
+  .cmt { color: var(--muted); }
+
+  .note {
+    background: var(--accent-soft); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 10px; padding: 18px 20px;
+  }
+  .note strong { display: block; margin-bottom: 6px; }
+  .note p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .note p + p { margin-top: 10px; }
+
+  .tree { overflow-x: auto; }
+
+  footer {
+    border-top: 1px solid var(--border); background: var(--bg-alt);
+    padding: 32px 0; color: var(--muted); font-size: 14px;
+  }
+  .foot { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .foot .links { margin-left: auto; display: flex; gap: 16px; flex-wrap: wrap; }
+  .foot a { text-decoration: none; }
+  .foot a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="./">Matr<span>AI</span>x <span style="color:var(--muted);font-weight:500">Persona 8B</span></a>
+    <nav class="nav-links">
+      <a href="docs/">Handbook</a>
+      <a href="docs/quickstart/">Quickstart</a>
+      <a href="https://github.com/trueshine34-stack/true/tree/main/matraix-persona-8b">Source</a>
+      <a href="https://huggingface.co/datasets/MatrAIx2026/MatrAIx_Persona_1M_Public_Release">Personas</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Persona-driven AI evaluation</span>
+    <h1>MatrAIx Persona 8B</h1>
+    <p class="tagline">Simulate before reality.</p>
+    <p class="lede">
+      Population-scale infrastructure for evaluating AI systems and interactive
+      products with heterogeneous simulated users — not one generic tester, but a
+      sampled population of them.
+    </p>
+    <div class="btns">
+      <a class="btn btn-primary" href="docs/">Read the Handbook</a>
+      <a class="btn btn-ghost" href="docs/quickstart/">Quickstart</a>
+      <a class="btn btn-ghost" href="https://github.com/trueshine34-stack/true/tree/main/matraix-persona-8b">Browse the code</a>
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="stats">
+      <div class="stat"><div class="n">1,290</div><div class="l">Categorical persona dimensions</div></div>
+      <div class="stat"><div class="n">1M</div><div class="l">Public persona coreset</div></div>
+      <div class="stat"><div class="n">4</div><div class="l">Task environments</div></div>
+      <div class="stat"><div class="n">MIT</div><div class="l">License</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What it does</h2>
+    <p class="sub">
+      MatrAIx instantiates sampled persona records as LLM agents and runs them
+      through reproducible tasks across four environments. Shared telemetry and
+      task-owned verification connect individual trajectories to subgroup- and
+      population-level findings.
+    </p>
+    <div class="grid">
+      <div class="card">
+        <h3>Survey</h3>
+        <p>Structured questionnaires answered in-character by persona-conditioned agents.</p>
+      </div>
+      <div class="card">
+        <h3>AI Chatbot</h3>
+        <p>Multi-turn conversations against a chat API, scored by task-owned verifiers.</p>
+      </div>
+      <div class="card">
+        <h3>Web</h3>
+        <p>Browser-driven flows via Playwright and computer-use agents on real pages.</p>
+      </div>
+      <div class="card">
+        <h3>App</h3>
+        <p>Native desktop and mobile targets, including macOS, iOS, and Linux apps.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Architecture</h2>
+    <p class="sub">Persona synthesis feeds the runtime; the runtime drives agents through task environments and returns verified trajectories.</p>
+    <figure>
+      <img src="docs/assets/matraix-architecture.png" alt="MatrAIx architecture: persona pipeline feeding the Harbor runtime, agents, and task environments">
+      <figcaption>MatrAIx architecture overview</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Documentation</h2>
+    <p class="sub">The full MatrAIx Handbook is built from the vendored sources and published here.</p>
+    <div class="grid">
+      <a class="card" href="docs/quickstart/">
+        <h3>Quickstart</h3>
+        <p>Smoke test, GUI runs through Playground, and CLI job generation.</p>
+        <span class="arrow">Open &rarr;</span>
+      </a>
+      <a class="card" href="docs/persona/">
+        <h3>Persona</h3>
+        <p>The 1,290-dimension schema, the synthesis pipeline, and grounding validation.</p>
+        <span class="arrow">Open &rarr;</span>
+      </a>
+      <a class="card" href="docs/application/">
+        <h3>Application</h3>
+        <p>Task specs, the task authoring guide, and the Playground API.</p>
+        <span class="arrow">Open &rarr;</span>
+      </a>
+      <a class="card" href="docs/environment/">
+        <h3>Environment</h3>
+        <p>Runtime, persona-conditioned agents, web interaction, and large-scale runs.</p>
+        <span class="arrow">Open &rarr;</span>
+      </a>
+      <a class="card" href="docs/configuration/">
+        <h3>Configuration</h3>
+        <p>Job recipes, model providers, and the API key matrix.</p>
+        <span class="arrow">Open &rarr;</span>
+      </a>
+      <a class="card" href="docs/packages/">
+        <h3>Packages</h3>
+        <p>playground, rewardkit, and harbor-langsmith.</p>
+        <span class="arrow">Open &rarr;</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Run it locally</h2>
+    <p class="sub">Requires Docker, Python 3.12 with <code>uv</code>, and Node.js 20+ for the frontends.</p>
+    <pre><code><span class="cmt"># clone this repository and enter the vendored project</span>
+git clone https://github.com/trueshine34-stack/true.git
+cd true/matraix-persona-8b
+
+<span class="cmt"># install</span>
+uv venv --python 3.12
+uv pip install -e .
+uv pip install -e packages/playground
+
+<span class="cmt"># smoke test — no API key needed, but Docker must be running</span>
+uv run harbor run -c configs/jobs/example-job-recipe/harbor-smoke-local.yaml</code></pre>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>What is and isn't hosted here</h2>
+    <div class="note">
+      <strong>This page is static hosting.</strong>
+      <p>
+        GitHub Pages serves files, not servers. The Handbook on this domain is the
+        live, complete documentation — rebuilt automatically from
+        <code>matraix-persona-8b/docs/</code> on every push to <code>main</code>.
+      </p>
+      <p>
+        The MatrAIx runtime itself cannot run here: <code>harbor</code> jobs need Docker
+        containers, the Playground and viewer need a Python/FastAPI backend, and
+        persona agents need model API keys. Those run on your own machine or
+        infrastructure — follow the Quickstart above.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Repository layout</h2>
+    <p class="sub">The upstream project is vendored under <code>matraix-persona-8b/</code> at commit <code>1567aca</code>.</p>
+    <div class="tree">
+<pre><code>matraix-persona-8b/
+├── persona/          Schema, datasets, synthesis and validation pipelines
+├── application/      Task specs, Playground runner, task tooling
+├── environment/      Runtime, persona-conditioned agents, task environments
+├── packages/         playground · rewardkit · harbor-langsmith
+├── apps/viewer/      Frontend paired with `harbor view`
+├── configs/jobs/     Curated and generated job recipes
+├── docs/             Handbook sources — published at /docs/
+└── src/matraix/      Python package entrypoints</code></pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div>MatrAIx is MIT-licensed. Vendored from the upstream project.</div>
+    <div class="links">
+      <a href="https://github.com/MatrAIx-ai/MatrAIx-Persona-8B">Upstream repo</a>
+      <a href="https://matraix.ai/">matraix.ai</a>
+      <a href="https://discord.gg/knVyQQnRFa">Discord</a>
+      <a href="https://x.com/MatrAIx2026">X</a>
+      <a href="dressrentdubai/">DressRentDubai</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

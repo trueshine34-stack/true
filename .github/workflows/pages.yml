@@ -1,0 +1,67 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "matraix-persona-8b/docs/**"
+      - "matraix-persona-8b/mkdocs.yml"
+      - "dressrentdubai/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+# Allow one concurrent deployment; don't cancel an in-flight one mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install MkDocs Material
+        run: pip install "mkdocs-material==9.5.49"
+
+      - name: Build the MatrAIx Handbook
+        run: |
+          # The overlay lives next to the vendored mkdocs.yml so that every
+          # relative path it inherits (docs_dir, nav, ...) resolves upstream-identically.
+          cp site/mkdocs.pages.yml matraix-persona-8b/mkdocs.pages.yml
+          mkdocs build \
+            --config-file matraix-persona-8b/mkdocs.pages.yml \
+            --site-dir "$GITHUB_WORKSPACE/_site/docs"
+
+      - name: Assemble the site
+        run: |
+          cp site/index.html _site/index.html
+          # Keep the pre-existing site published at its current path.
+          cp -R dressrentdubai _site/dressrentdubai
+          # MkDocs Material ships underscore-prefixed assets that Jekyll would drop.
+          touch _site/.nojekyll
+          find _site -maxdepth 2 -name "index.html" | sort
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
