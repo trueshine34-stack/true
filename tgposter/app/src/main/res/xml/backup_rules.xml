@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Секреты зашифрованы ключом из Android Keystore, который не переносится
+         между устройствами, поэтому файл с секретами из бэкапа исключён. -->
+    <exclude domain="sharedpref" path="tgposter_secrets.xml" />
+</full-backup-content>
