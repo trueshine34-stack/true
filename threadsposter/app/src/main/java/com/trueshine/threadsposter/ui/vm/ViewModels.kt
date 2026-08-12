@@ -515,8 +515,8 @@ class SearchVm(private val container: AppContainer) : MessageVm() {
     fun delete(query: QueryEntity) = act { container.repository.queries.delete(query) }
 
     fun runNow(query: QueryEntity) = act {
-        if (query.id <= 0) {
-            _message.value = "Сначала сохраните запрос"
+        if (query.id <= 0 || query.query.isBlank()) {
+            _message.value = "Сначала заполните и сохраните запрос"
             return@act
         }
         container.workScheduler.runSearchNow(query.id)

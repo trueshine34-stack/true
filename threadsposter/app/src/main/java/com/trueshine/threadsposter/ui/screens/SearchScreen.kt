@@ -161,26 +161,27 @@ private fun QueryCard(
     var expanded by remember(query.id) { mutableStateOf(query.query.isBlank()) }
 
     SectionCard(draft.query.ifBlank { "Новый запрос" }) {
+        // Статистика берётся из свежих данных БД, а не из редактируемого черновика.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                if (draft.enabled) "Активен" else "Выключен",
+                if (query.enabled) "Активен" else "Выключен",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                "найдено ${draft.foundTotal} · ответов ${draft.repliedTotal}",
+                "найдено ${query.foundTotal} · ответов ${query.repliedTotal}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        draft.lastRunAt?.let {
+        query.lastRunAt?.let {
             Text(
                 "Последний прогон: ${Time.format(it)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        draft.lastError?.let {
+        query.lastError?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
 

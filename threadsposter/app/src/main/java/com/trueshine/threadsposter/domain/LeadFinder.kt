@@ -40,6 +40,8 @@ class LeadFinder(
         val now = System.currentTimeMillis()
 
         for (query in repo.queries.enabled()) {
+            // Только что созданный через «+» запрос ещё пуст — его API дёргать нельзя.
+            if (query.query.isBlank()) continue
             val account = repo.accounts.byId(query.accountId) ?: continue
             if (!account.enabled) continue
             val due = (query.lastRunAt ?: 0L) + query.checkIntervalMinutes.coerceAtLeast(15) * 60_000L
@@ -51,6 +53,7 @@ class LeadFinder(
 
     suspend fun runQuery(account: AccountEntity, query: QueryEntity): SearchRunResult =
         withContext(Dispatchers.IO) {
+            if (query.query.isBlank()) return@withContext SearchRunResult()
             val token = repo.tokenFor(account.id) ?: run {
                 repo.logError("search", "Нет токена у «${account.displayName}»", account.id)
                 return@withContext SearchRunResult()
