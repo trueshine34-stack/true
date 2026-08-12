@@ -1,0 +1,14 @@
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+
+# Свой ключ подписи — никогда не коммитим
+keystore.properties
+*.jks
+!signing/dev-signing.jks
+*.keystore

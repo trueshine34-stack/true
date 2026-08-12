@@ -1,21 +1,27 @@
-name: TG Poster Android
+name: Android apps
 
 on:
   push:
     paths:
       - 'tgposter/**'
-      - '.github/workflows/tgposter-android.yml'
+      - 'threadsposter/**'
+      - '.github/workflows/android.yml'
   pull_request:
     paths:
       - 'tgposter/**'
+      - 'threadsposter/**'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [tgposter, threadsposter]
     defaults:
       run:
-        working-directory: tgposter
+        working-directory: ${{ matrix.app }}
 
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +44,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tgposter-release-apk
-          path: tgposter/app/build/outputs/apk/release/app-release.apk
+          name: ${{ matrix.app }}-release-apk
+          path: ${{ matrix.app }}/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error

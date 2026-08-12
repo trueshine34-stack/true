@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Стилизованная «нить»: разомкнутое кольцо с хвостом -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M67,42 C67,32 59,26 51,26 C41,26 34,34 34,46 C34,60 42,68 53,68 C61,68 66,64 68,59" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M67,42 L67,58 C67,66 61,72 53,74 C43,76 35,72 31,64" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M53,38 C47,38 43,42 43,47 C43,52 47,56 52,56 C58,56 62,52 62,46" />
+</vector>

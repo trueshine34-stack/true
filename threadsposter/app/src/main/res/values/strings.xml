@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Threads Poster</string>
+    <string name="notif_channel_status">Статус автопилота</string>
+    <string name="notif_channel_errors">Ошибки публикации</string>
+</resources>
