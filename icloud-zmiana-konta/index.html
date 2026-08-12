@@ -1,0 +1,816 @@
+<title>Zmiana konta iCloud</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ground: #EFF1F5;
+    --surface: #FFFFFF;
+    --surface-sunken: #E4E7ED;
+    --ink: #101418;
+    --ink-soft: #454E5C;
+    --ink-mute: #6B7482;
+    --hairline: #D9DEE6;
+    --accent: #0B62F4;
+    --accent-soft: #E4EDFE;
+    --danger: #D2382B;
+    --danger-soft: #FBE9E7;
+    --warn-ink: #8A5A00;
+    --warn-soft: #FBF0D9;
+    --warn-line: #E8D2A0;
+    --good: #1D7A4C;
+
+    --serif: "Iowan Old Style", Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0A0C0F;
+      --surface: #15181D;
+      --surface-sunken: #1E222A;
+      --ink: #EDF0F4;
+      --ink-soft: #C2C9D4;
+      --ink-mute: #949CAA;
+      --hairline: #272C35;
+      --accent: #4C9BFF;
+      --accent-soft: #14223A;
+      --danger: #FF6F61;
+      --danger-soft: #2C1614;
+      --warn-ink: #F0B84C;
+      --warn-soft: #241D10;
+      --warn-line: #453519;
+      --good: #4FBF8B;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0A0C0F;
+    --surface: #15181D;
+    --surface-sunken: #1E222A;
+    --ink: #EDF0F4;
+    --ink-soft: #C2C9D4;
+    --ink-mute: #949CAA;
+    --hairline: #272C35;
+    --accent: #4C9BFF;
+    --accent-soft: #14223A;
+    --danger: #FF6F61;
+    --danger-soft: #2C1614;
+    --warn-ink: #F0B84C;
+    --warn-soft: #241D10;
+    --warn-line: #453519;
+    --good: #4FBF8B;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    padding: 0 20px 96px;
+  }
+
+  .wrap {
+    max-width: 680px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 44px;
+  }
+
+  /* ---------- nagłówek ---------- */
+
+  header.masthead {
+    padding-top: 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-size: clamp(34px, 7vw, 50px);
+    line-height: 1.08;
+    letter-spacing: -0.015em;
+    font-weight: 600;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  .lead {
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin: 0;
+    max-width: 34em;
+  }
+
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-top: 4px;
+  }
+
+  .fact {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    padding: 5px 13px;
+  }
+
+  /* ---------- sekcje ---------- */
+
+  section {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  h2 {
+    font-family: var(--serif);
+    font-size: 27px;
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  h3 {
+    font-size: 19px;
+    line-height: 1.35;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  p { margin: 0; }
+
+  .stage-rule {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    color: var(--ink-mute);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+  }
+
+  .stage-rule::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--hairline);
+  }
+
+  /* ---------- karta kroku ---------- */
+
+  .step {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+
+  .step-num {
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+    background: var(--accent);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-size: 19px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .step-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-top: 6px;
+    min-width: 0;
+  }
+
+  .step-body p { color: var(--ink-soft); }
+  .step-body p strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------- ścieżka dotknięć ---------- */
+
+  .path {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 1.9;
+    color: var(--ink-soft);
+    background: var(--surface-sunken);
+    border-radius: 10px;
+    padding: 10px 14px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .path b { color: var(--ink); font-weight: 600; }
+  .path i { font-style: normal; color: var(--ink-mute); padding: 0 4px; }
+
+  /* ---------- replika ekranu Ustawień ---------- */
+
+  .screen {
+    background: var(--surface-sunken);
+    border-radius: 18px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .screen-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    padding: 0 4px;
+  }
+
+  .list {
+    background: var(--surface);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 46px;
+    padding: 9px 14px;
+    font-size: 16px;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .row:first-child { border-top: 0; }
+  .row .label { flex: 1; min-width: 0; }
+  .row .value { color: var(--ink-mute); font-size: 15px; }
+
+  .row.action .label { color: var(--accent); }
+  .row.destructive .label { color: var(--danger); font-weight: 500; }
+  .row.focus { background: var(--accent-soft); }
+  .row.focus .label { font-weight: 600; }
+
+  .avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--surface-sunken);
+    color: var(--ink-mute);
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 600;
+    flex: none;
+  }
+
+  .sub {
+    display: block;
+    font-size: 13px;
+    color: var(--ink-mute);
+    line-height: 1.4;
+  }
+
+  .chev {
+    flex: none;
+    width: 8px;
+    height: 13px;
+    color: var(--ink-mute);
+    opacity: 0.65;
+  }
+
+  .toggle {
+    flex: none;
+    width: 44px;
+    height: 26px;
+    border-radius: 999px;
+    background: var(--good);
+    position: relative;
+  }
+
+  .toggle.off { background: var(--surface-sunken); }
+
+  .toggle::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  }
+
+  .toggle.off::after { right: auto; left: 3px; }
+
+  .caption {
+    font-size: 13px;
+    color: var(--ink-mute);
+    padding: 0 4px;
+    line-height: 1.45;
+  }
+
+  /* ---------- wyróżnienia ---------- */
+
+  .note {
+    border-radius: 12px;
+    padding: 15px 17px;
+    font-size: 15.5px;
+    line-height: 1.55;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .note .tag {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .note.warn {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn-line);
+    color: var(--ink-soft);
+  }
+
+  .note.warn .tag { color: var(--warn-ink); }
+
+  .note.info {
+    background: var(--accent-soft);
+    color: var(--ink-soft);
+  }
+
+  .note.info .tag { color: var(--accent); }
+
+  .note b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- lista kontrolna ---------- */
+
+  .checklist {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+    padding: 6px 18px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .check {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 13px;
+    align-items: start;
+    padding: 15px 0;
+    border-top: 1px solid var(--hairline);
+    font-size: 15.5px;
+    color: var(--ink-soft);
+  }
+
+  .check:first-child { border-top: 0; }
+  .check b { color: var(--ink); font-weight: 600; }
+
+  .box {
+    width: 21px;
+    height: 21px;
+    border-radius: 6px;
+    border: 1.5px solid var(--accent);
+    margin-top: 2px;
+  }
+
+  /* ---------- tabela ---------- */
+
+  .table-scroll { overflow-x: auto; }
+
+  table {
+    width: 100%;
+    min-width: 460px;
+    border-collapse: collapse;
+    font-size: 15px;
+    background: var(--surface);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 13px 16px;
+    border-top: 1px solid var(--hairline);
+    vertical-align: top;
+    color: var(--ink-soft);
+  }
+
+  thead th {
+    border-top: 0;
+    font-size: 12px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--ink-mute);
+    background: var(--surface-sunken);
+  }
+
+  td:first-child { color: var(--ink); font-weight: 600; }
+
+  /* ---------- rozwiązywanie problemów ---------- */
+
+  details {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    padding: 0 18px;
+  }
+
+  summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 15px 0;
+    font-weight: 600;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  summary::-webkit-details-marker { display: none; }
+
+  summary::after {
+    content: "+";
+    margin-left: auto;
+    font-size: 20px;
+    font-weight: 400;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  details[open] summary::after { content: "–"; }
+
+  details[open] summary { border-bottom: 1px solid var(--hairline); }
+
+  .answer {
+    padding: 14px 0 18px;
+    font-size: 15.5px;
+    color: var(--ink-soft);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .faq-group { display: flex; flex-direction: column; gap: 10px; }
+
+  a { color: var(--accent); text-underline-offset: 3px; }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  footer {
+    border-top: 1px solid var(--hairline);
+    padding-top: 20px;
+    font-size: 13.5px;
+    color: var(--ink-mute);
+    line-height: 1.55;
+  }
+
+  @media (max-width: 520px) {
+    body { font-size: 16.5px; padding: 0 16px 72px; }
+    .step { grid-template-columns: 38px 1fr; gap: 14px; }
+    .step-num { width: 38px; height: 38px; border-radius: 11px; font-size: 17px; }
+    header.masthead { padding-top: 44px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Instrukcja krok po kroku</p>
+    <h1>Jak zmienić konto iCloud na iPhonie</h1>
+    <p class="lead">Konta iCloud nie da się „podmienić” w jednym miejscu — najpierw wylogowujesz stare konto Apple, potem logujesz nowe. Poniżej masz obie części po kolei, z dokładnym wyglądem ekranów, które zobaczysz.</p>
+    <div class="facts">
+      <span class="fact">iOS 18 i nowszy</span>
+      <span class="fact">Około 10 minut</span>
+      <span class="fact">Potrzebne 2 hasła</span>
+      <span class="fact">Bez komputera</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Zanim zaczniesz</h2>
+    <div class="checklist">
+      <div class="check">
+        <span class="box"></span>
+        <span><b>Hasło do starego konta Apple.</b> Bez niego iPhone nie pozwoli wyłączyć Lokalizatora, a więc nie pozwoli się wylogować.</span>
+      </div>
+      <div class="check">
+        <span class="box"></span>
+        <span><b>Dane logowania do nowego konta</b> — adres e-mail, hasło i dostęp do telefonu lub urządzenia, na które przyjdzie kod weryfikacyjny.</span>
+      </div>
+      <div class="check">
+        <span class="box"></span>
+        <span><b>Wi-Fi i naładowana bateria.</b> Kopia zapasowa i pobranie danych nowego konta potrafią trwać kilkanaście minut.</span>
+      </div>
+      <div class="check">
+        <span class="box"></span>
+        <span><b>Świeża kopia zapasowa</b> zdjęć i kontaktów — robisz ją w kroku 1.</span>
+      </div>
+    </div>
+    <div class="note warn">
+      <span class="tag">Uwaga</span>
+      <span>Jeśli przygotowujesz iPhone’a <b>do sprzedaży lub oddania</b>, nie zatrzymuj się na wylogowaniu. Użyj <b>Ustawienia › Ogólne › Wymaż zawartość i ustawienia</b> — to jedyny sposób, który zdejmuje Blokadę aktywacji i pozwala nowemu właścicielowi uruchomić telefon.</span>
+    </div>
+  </section>
+
+  <div class="stage-rule">Etap 1 — wyloguj stare konto</div>
+
+  <section>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Zrób kopię zapasową</h3>
+        <p>Po wylogowaniu część danych zniknie z telefonu. Kopia w starym iCloud sprawia, że nic nie przepada i w razie czego wrócisz do poprzedniego stanu.</p>
+        <div class="path"><b>Ustawienia</b><i>›</i>Twoje imię<i>›</i><b>iCloud</b><i>›</i>Kopia zapasowa iCloud<i>›</i><b>Utwórz kopię zapasową teraz</b></div>
+        <p>Zaczekaj, aż pod przyciskiem pojawi się dzisiejsza data i godzina. Zdjęcia dodatkowo warto zgrać do komputera lub innej chmury.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Otwórz swoje konto Apple</h3>
+        <p>Wejdź w <strong>Ustawienia</strong> i dotknij paska ze swoim imieniem — to pierwsza pozycja na samej górze ekranu.</p>
+        <div class="screen">
+          <div class="screen-title">Ustawienia</div>
+          <div class="list">
+            <div class="row focus">
+              <span class="avatar">JK</span>
+              <span class="label">Jan Kowalski<span class="sub">Konto Apple, iCloud i inne</span></span>
+              <svg class="chev" viewBox="0 0 8 13" fill="none" aria-hidden="true"><path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="row">
+              <span class="label">Tryb Samolot</span>
+              <span class="toggle off"></span>
+            </div>
+            <div class="row">
+              <span class="label">Wi-Fi</span>
+              <span class="value">Dom_5G</span>
+              <svg class="chev" viewBox="0 0 8 13" fill="none" aria-hidden="true"><path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <p class="caption">W nowszych wersjach iOS „Apple ID” nazywa się <b>Konto Apple</b>. To to samo konto.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Przewiń na sam dół i dotknij „Wyloguj się”</h3>
+        <p>Przycisk jest ostatni na liście, pod spisem urządzeń podłączonych do konta. Jest zapisany na czerwono.</p>
+        <div class="screen">
+          <div class="screen-title">Konto Apple</div>
+          <div class="list">
+            <div class="row">
+              <span class="label">iCloud</span>
+              <span class="value">36,4 GB z 50 GB</span>
+              <svg class="chev" viewBox="0 0 8 13" fill="none" aria-hidden="true"><path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="row">
+              <span class="label">Multimedia i zakupy</span>
+              <svg class="chev" viewBox="0 0 8 13" fill="none" aria-hidden="true"><path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="row">
+              <span class="label">Lokalizator</span>
+              <svg class="chev" viewBox="0 0 8 13" fill="none" aria-hidden="true"><path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <div class="list">
+            <div class="row destructive focus">
+              <span class="label">Wyloguj się</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Wpisz hasło, aby wyłączyć Lokalizator</h3>
+        <p>iPhone poprosi o hasło do <strong>starego</strong> konta Apple. To zabezpieczenie przed kradzieżą: dopóki działa funkcja „Znajdź mój iPhone”, konta nie da się usunąć.</p>
+        <p>Wpisz hasło i dotknij <strong>Wyłącz</strong>. Jeśli hasła nie pamiętasz — zobacz sekcję z problemami na końcu.</p>
+        <div class="note info">
+          <span class="tag">Dobrze wiedzieć</span>
+          <span>To jedyny moment, w którym potrzebujesz starego hasła. Dalej wszystko dzieje się już na nowym koncie.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h3>Zdecyduj, co zostaje na iPhonie</h3>
+        <p>Pojawi się lista przełączników. Włączony przełącznik oznacza: <strong>zachowaj kopię tych danych w pamięci telefonu</strong>. Wyłączony — dane znikną z iPhone’a, ale zostaną na starym koncie iCloud.</p>
+        <div class="screen">
+          <div class="screen-title">Kopia danych na tym iPhonie</div>
+          <div class="list">
+            <div class="row">
+              <span class="label">Kontakty</span>
+              <span class="toggle"></span>
+            </div>
+            <div class="row">
+              <span class="label">Kalendarze</span>
+              <span class="toggle"></span>
+            </div>
+            <div class="row">
+              <span class="label">Safari</span>
+              <span class="toggle off"></span>
+            </div>
+            <div class="row">
+              <span class="label">Zdrowie</span>
+              <span class="toggle"></span>
+            </div>
+          </div>
+          <p class="caption">Zalecenie: zostaw włączone <b>Kontakty</b> i <b>Zdrowie</b>. Kontakty da się potem przenieść na nowe konto, danych Zdrowia — nie.</p>
+        </div>
+        <p>Potwierdź, dotykając <strong>Wyloguj się</strong> w prawym górnym rogu. Telefon przez chwilę będzie usuwał dane — to normalne.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="stage-rule">Etap 2 — zaloguj nowe konto</div>
+
+  <section>
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <h3>Zaloguj się na nowe konto Apple</h3>
+        <p>Wróć do <strong>Ustawień</strong>. Na górze ekranu, w miejscu Twojego imienia, jest teraz zaproszenie do logowania.</p>
+        <div class="screen">
+          <div class="screen-title">Ustawienia</div>
+          <div class="list">
+            <div class="row action focus">
+              <span class="avatar">?</span>
+              <span class="label">Zaloguj się na iPhonie<span class="sub">Skonfiguruj iCloud i inne funkcje</span></span>
+              <svg class="chev" viewBox="0 0 8 13" fill="none" aria-hidden="true"><path d="M1 1l5.5 5.5L1 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+        </div>
+        <p>Podaj adres e-mail i hasło nowego konta, a następnie sześciocyfrowy kod, który przyjdzie na Twoje inne urządzenie Apple albo SMS-em. Na koniec iPhone poprosi o <strong>kod blokady tego telefonu</strong>.</p>
+        <div class="note info">
+          <span class="tag">Pytanie o scalanie</span>
+          <span>Jeśli pojawi się pytanie „Scal kontakty i kalendarze z iCloud?”, wybierz <b>Scal</b>, gdy dane zostawione w kroku 5 mają trafić na nowe konto. Wybierz <b>Nie scalaj</b>, jeśli mają zostać wyłącznie na telefonie.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <h3>Sprawdź iMessage, FaceTime i App Store</h3>
+        <p>Te trzy usługi mają własne ustawienia konta i nie zawsze przełączają się same. Po zmianie warto je zweryfikować.</p>
+        <div class="path"><b>Ustawienia</b><i>›</i>Aplikacje<i>›</i><b>Wiadomości</b><i>›</i>Wyślij i odbierz</div>
+        <div class="path"><b>Ustawienia</b><i>›</i>Aplikacje<i>›</i><b>FaceTime</b></div>
+        <div class="path"><b>Ustawienia</b><i>›</i>Twoje imię<i>›</i><b>Multimedia i zakupy</b></div>
+        <p>W każdym miejscu powinien widnieć adres nowego konta. Jeśli jest stary — dotknij go i wybierz <strong>Wyloguj się</strong>, a potem zaloguj nowym.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Co dzieje się z danymi</h2>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Dane</th>
+            <th scope="col">Po zmianie konta</th>
+            <th scope="col">Co zrobić</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Zdjęcia z iCloud</td>
+            <td>Znikają z telefonu, zostają na starym koncie</td>
+            <td>Pobierz oryginały przed wylogowaniem</td>
+          </tr>
+          <tr>
+            <td>Kontakty</td>
+            <td>Zostają, jeśli włączysz przełącznik w kroku 5</td>
+            <td>Po zalogowaniu wybierz „Scal”</td>
+          </tr>
+          <tr>
+            <td>Aplikacje</td>
+            <td>Zostają na telefonie i działają</td>
+            <td>Aktualizacje mogą prosić o stare hasło</td>
+          </tr>
+          <tr>
+            <td>Zakupy i subskrypcje</td>
+            <td>Pozostają przypisane do starego konta</td>
+            <td>Nie da się ich przenieść — wykup ponownie</td>
+          </tr>
+          <tr>
+            <td>Hasła w Kluczu</td>
+            <td>Usuwane razem z kontem</td>
+            <td>Zapisz ważne hasła zawczasu</td>
+          </tr>
+          <tr>
+            <td>Wiadomości iMessage</td>
+            <td>Historia zostaje, nowe idą na nowe konto</td>
+            <td>Sprawdź ustawienia z kroku 7</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Gdy coś nie działa</h2>
+    <div class="faq-group">
+
+      <details>
+        <summary>Nie pamiętam hasła do starego konta</summary>
+        <div class="answer">
+          <p>Zresetuj je na stronie <a href="https://iforgot.apple.com" target="_blank" rel="noopener">iforgot.apple.com</a> lub w <strong>Ustawienia › Twoje imię › Logowanie i bezpieczeństwo › Zmień hasło</strong>. Jeśli konto należy do kogoś innego — tylko ta osoba może je odblokować. Bez hasła wylogowanie jest niemożliwe i nie ma tu żadnego obejścia.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Przycisk „Wyloguj się” jest szary i nie reaguje</summary>
+        <div class="answer">
+          <p>Blokuje go Czas przed ekranem. Wejdź w <strong>Ustawienia › Czas przed ekranem › Ograniczenia treści i prywatności › Zmiany konta</strong> i ustaw <strong>Zezwalaj</strong>. Potrzebny będzie kod Czasu przed ekranem.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Telefon prosi o hasło konta, którego nie znam</summary>
+        <div class="answer">
+          <p>To Blokada aktywacji — iPhone wciąż jest przypisany do poprzedniego właściciela. Musi on zdalnie usunąć urządzenie ze swojego konta na <a href="https://icloud.com/find" target="_blank" rel="noopener">icloud.com/find</a>. Ani serwis, ani Apple nie zdejmą jej bez dowodu zakupu.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Po zalogowaniu nie widzę swoich zdjęć</summary>
+        <div class="answer">
+          <p>Sprawdź, czy w <strong>Ustawienia › Twoje imię › iCloud › Zdjęcia</strong> włączona jest synchronizacja. Pobieranie biblioteki wymaga Wi-Fi i potrafi trwać kilka godzin — trzymaj telefon podłączony do ładowarki.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Aplikacja prosi o hasło do starego konta przy aktualizacji</summary>
+        <div class="answer">
+          <p>To normalne: aplikacje na zawsze zostają związane z kontem, z którego je pobrano. Usuń taką aplikację i pobierz ją ponownie z App Store na nowym koncie — wtedy aktualizacje przestaną pytać.</p>
+        </div>
+      </details>
+
+    </div>
+  </section>
+
+  <footer>
+    Instrukcja opisuje iOS 18 i nowsze wersje. We wcześniejszych wydaniach nazwa „Konto Apple” brzmi „Apple ID”, a ustawienia aplikacji Wiadomości i FaceTime znajdziesz bezpośrednio na głównej liście Ustawień, poza sekcją „Aplikacje”.
+  </footer>
+
+</div>
