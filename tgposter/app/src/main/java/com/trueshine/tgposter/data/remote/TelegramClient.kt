@@ -1,8 +1,11 @@
 package com.trueshine.tgposter.data.remote
 
+import com.trueshine.tgposter.core.describe
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -176,14 +179,18 @@ class TelegramClient(
             .post(body.toString().toRequestBody(JSON_MEDIA))
             .build()
 
+        // Запрос всегда уходит в IO: метод вызывается и из воркеров, и напрямую из
+        // экранов настройки, где корутина живёт на главном потоке.
         val (code, raw) = try {
-            http.newCall(request).execute().use { it.code to (it.body?.string().orEmpty()) }
+            withContext(Dispatchers.IO) {
+                http.newCall(request).execute().use { it.code to (it.body?.string().orEmpty()) }
+            }
         } catch (e: Exception) {
             if (attempt < MAX_NETWORK_RETRIES) {
                 delay(1000L * (attempt + 1))
                 return call(token, method, body, attempt + 1)
             }
-            throw TelegramException("Сеть недоступна: ${e.message}")
+            throw TelegramException("Сеть недоступна: ${e.describe()}")
         }
 
         val parsed = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()

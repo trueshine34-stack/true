@@ -1,6 +1,9 @@
 package com.trueshine.tgposter.data.remote
 
+import com.trueshine.tgposter.core.describe
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -76,9 +79,11 @@ class DeepSeekClient(
                 .build()
 
             val (code, raw) = try {
-                http.newCall(request).execute().use { it.code to it.body?.string().orEmpty() }
+                withContext(Dispatchers.IO) {
+                    http.newCall(request).execute().use { it.code to it.body?.string().orEmpty() }
+                }
             } catch (e: Exception) {
-                lastError = DeepSeekException("Сеть недоступна: ${e.message}")
+                lastError = DeepSeekException("Сеть недоступна: ${e.describe()}")
                 delay(BACKOFF_MS * (attempt + 1))
                 return@repeat
             }

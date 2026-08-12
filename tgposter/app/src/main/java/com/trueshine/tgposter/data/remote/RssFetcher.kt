@@ -1,6 +1,8 @@
 package com.trueshine.tgposter.data.remote
 
 import com.trueshine.tgposter.core.TelegramText
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.xmlpull.v1.XmlPullParser
@@ -12,7 +14,7 @@ data class FeedItem(val title: String, val summary: String, val link: String)
 /** Забирает RSS/Atom-ленты, чтобы дать модели свежий фактический материал. */
 class RssFetcher(private val http: OkHttpClient) {
 
-    fun fetch(url: String, limit: Int = 8): List<FeedItem> {
+    suspend fun fetch(url: String, limit: Int = 8): List<FeedItem> = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", "TgPoster/1.0 (+android)")
@@ -21,7 +23,7 @@ class RssFetcher(private val http: OkHttpClient) {
             if (!response.isSuccessful) error("HTTP ${response.code}")
             response.body?.string().orEmpty()
         }
-        return parse(xml, limit)
+        parse(xml, limit)
     }
 
     private fun parse(xml: String, limit: Int): List<FeedItem> {

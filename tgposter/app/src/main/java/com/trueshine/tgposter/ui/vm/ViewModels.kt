@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.trueshine.tgposter.AppContainer
 import com.trueshine.tgposter.core.SecretStore
+import com.trueshine.tgposter.core.describe
 import com.trueshine.tgposter.data.AppSettings
 import com.trueshine.tgposter.data.db.AccountEntity
 import com.trueshine.tgposter.data.db.ChannelEntity
@@ -39,7 +40,7 @@ open class MessageVm : ViewModel() {
             try {
                 block()
             } catch (e: Exception) {
-                _message.value = e.message ?: "Ошибка"
+                _message.value = e.describe()
             } finally {
                 _busy.value = false
             }
