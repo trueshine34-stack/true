@@ -31,14 +31,34 @@
 
 ## Сборка в APK
 
-`index.html` — единственный ассет приложения. Чтобы обновить APK, положите
-этот файл в `assets/index.html`, соберите пакет и подпишите его:
+`index.html` — единственный ассет приложения, а нативная часть
+(`AndroidManifest.xml`, `classes.dex`, `resources.arsc`, иконки) не меняется.
+Поэтому сборка сводится к подмене ассета, выравниванию и подписи — Gradle
+и Android SDK не нужны, достаточно build-tools:
 
-```
-# assets/index.html ← sos/index.html
-zipalign -f 4 app-unsigned.apk app-aligned.apk
-apksigner sign --ks keystore.jks app-aligned.apk
+```sh
+export ANDROID_BUILD_TOOLS=/path/to/android/build-tools/34.0.0
+./build-apk.sh Sosv1.1.apk Sos-v1.1-auth.apk
 ```
 
-Нативный код (`MainActivity`) при нажатии «назад» вызывает JS-функцию
-`sosBack()`, которая закрывает открытые шторки/чаты и только затем выходит.
+Скрипт берёт скомпилированные артефакты из указанного APK-донора, кладёт рядом
+текущий `index.html`, выравнивает пакет и подписывает его.
+
+Важные детали, которые скрипт учитывает:
+
+- `resources.arsc` и PNG-иконки укладываются **без сжатия** — при `targetSdk 34`
+  сжатый `resources.arsc` ломает установку;
+- подпись ставится схемами **v1 + v2 + v3**: приложение таргетит API 34, а
+  начиная с Android 11 пакет только с v1-подписью не устанавливается;
+- ключ создаётся один раз в `sos.jks`. **Храните его** — обновление
+  устанавливается поверх, только если подписано тем же ключом.
+
+Параметры ключа переопределяются переменными `KEYSTORE`, `KEYSTORE_PASS`,
+`KEYSTORE_ALIAS`.
+
+## Нативная часть
+
+`MainActivity` — WebView, загружающий `file:///android_asset/index.html`.
+При нажатии «назад» вызывается JS-функция `sosBack()`, которая закрывает
+открытые шторки/чаты и только затем выпускает пользователя из приложения.
+Манифест: `package com.sos.app`, `minSdk 21`, `targetSdk 34`, `versionName 1.1`.

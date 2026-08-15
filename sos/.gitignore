@@ -1,0 +1,4 @@
+# сборка APK
+*.jks
+*.keystore
+*.apk
