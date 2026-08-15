@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Sos.</title>
+<style>
+  :root{
+    --bg:#0a0a0b; --card:#141416; --card2:#1c1c1f; --line:#232327;
+    --text:#f4f4f5; --mut:#8e8e93; --accent:#ff4d4d;
+    --tg:#2aabee; --th:#e8e8e8; --ok:#4cd964;
+    --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    overscroll-behavior:none; user-select:none;
+  }
+  #app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+  button{font-family:inherit}
+
+  /* ---------- header ---------- */
+  header{
+    padding:calc(var(--sat) + 14px) 20px 12px;
+    display:flex;align-items:baseline;gap:10px;
+    border-bottom:1px solid var(--line);
+    background:rgba(10,10,11,.9);backdrop-filter:blur(14px);
+    position:sticky;top:0;z-index:10;
+  }
+  .logo{font-size:26px;font-weight:800;letter-spacing:-1px}
+  .logo b{color:var(--accent)}
+  .hsub{font-size:12px;color:var(--mut);font-weight:500}
+  .hspacer{flex:1}
+  .hbtn{font-size:12px;color:var(--mut);border:1px solid var(--line);border-radius:99px;padding:5px 11px}
+
+  main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .screen{display:none;padding-bottom:20px}
+  .screen.on{display:block}
+
+  /* ---------- feed ---------- */
+  .algo-note{
+    margin:14px 16px 4px;padding:11px 14px;border-radius:14px;
+    background:var(--card);border:1px solid var(--line);
+    font-size:12px;color:var(--mut);line-height:1.45;
+  }
+  .algo-note b{color:var(--text)}
+  .post{
+    margin:12px 16px 0;background:var(--card);border:1px solid var(--line);
+    border-radius:18px;padding:14px 14px 10px;
+  }
+  .prow{display:flex;align-items:center;gap:10px}
+  .ava{
+    width:40px;height:40px;border-radius:50%;flex:0 0 40px;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:15px;color:#fff;
+  }
+  .pname{font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px}
+  .phandle{font-size:12px;color:var(--mut);margin-top:1px}
+  .netchip{
+    font-size:10px;font-weight:700;letter-spacing:.4px;
+    padding:3px 8px;border-radius:99px;margin-left:auto;flex:0 0 auto;
+  }
+  .net-tg{background:rgba(42,171,238,.14);color:var(--tg)}
+  .net-ig{background:linear-gradient(45deg,rgba(240,148,51,.16),rgba(188,24,136,.2));color:#f77}
+  .net-th{background:rgba(255,255,255,.08);color:var(--th)}
+  .ptext{font-size:14.5px;line-height:1.5;margin:10px 2px 4px;white-space:pre-wrap}
+  .pimg{
+    margin-top:10px;border-radius:13px;height:200px;
+    display:flex;align-items:flex-end;padding:12px;
+    font-size:12px;color:rgba(255,255,255,.75);font-weight:600;
+  }
+  .pfoot{display:flex;align-items:center;gap:18px;margin-top:10px;padding:4px 2px}
+  .act{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mut);font-weight:600}
+  .act svg{width:20px;height:20px;fill:none;stroke:var(--mut);stroke-width:1.8}
+  .act.liked{color:var(--accent)}
+  .act.liked svg{fill:var(--accent);stroke:var(--accent)}
+  .topbadge{
+    margin-left:auto;font-size:10px;font-weight:700;color:#ffb02e;
+    background:rgba(255,176,46,.1);padding:3px 8px;border-radius:99px;
+  }
+  .hidden-group{margin:8px 16px 0;text-align:center}
+  .hidden-btn{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:12px;color:var(--mut);background:none;border:none;
+    padding:6px 12px;font-weight:600;
+  }
+  .hidden-posts{display:none}
+  .hidden-posts.open{display:block}
+  .hidden-posts .post{opacity:.6;transform:scale(.985)}
+  .time{font-size:11px;color:var(--mut)}
+
+  .empty{
+    margin:60px 30px;text-align:center;color:var(--mut);font-size:14px;line-height:1.5;
+  }
+  .empty .big{font-size:40px;margin-bottom:12px}
+  .primary{
+    display:inline-block;margin-top:16px;background:var(--accent);color:#fff;
+    border:none;border-radius:99px;padding:12px 24px;font-size:14px;font-weight:700;
+  }
+  .primary:disabled{opacity:.35}
+  .ghost{
+    display:inline-block;background:none;color:var(--mut);border:1px solid var(--line);
+    border-radius:99px;padding:11px 22px;font-size:13px;font-weight:600;
+  }
+
+  /* ---------- chats ---------- */
+  .chat-item{
+    display:flex;align-items:center;gap:12px;
+    padding:13px 18px;border-bottom:1px solid var(--line);
+  }
+  .chat-item:active{background:var(--card)}
+  .cbody{flex:1;min-width:0}
+  .cname{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:6px}
+  .cmsg{font-size:13px;color:var(--mut);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cmeta{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+  .unread{
+    min-width:20px;height:20px;border-radius:99px;background:var(--accent);
+    color:#fff;font-size:11px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;padding:0 6px;
+  }
+  .netdot{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
+  .dot-tg{background:var(--tg)} .dot-ig{background:#dc2743} .dot-th{background:#bbb}
+
+  #chatview{position:fixed;inset:0;background:var(--bg);z-index:40;display:none;flex-direction:column}
+  #chatview.on{display:flex}
+  .cv-head{
+    padding:calc(var(--sat) + 10px) 14px 10px;
+    display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);
+  }
+  .back{font-size:22px;color:var(--text);background:none;border:none;padding:4px 10px 4px 0}
+  .cv-msgs{flex:1;overflow-y:auto;padding:14px 14px 8px;display:flex;flex-direction:column;gap:8px}
+  .bub{max-width:78%;padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.4}
+  .bub.them{background:var(--card2);align-self:flex-start;border-bottom-left-radius:5px}
+  .bub.me{background:var(--accent);align-self:flex-end;border-bottom-right-radius:5px}
+  .cv-input{display:flex;gap:8px;padding:10px 14px calc(var(--sab) + 12px);border-top:1px solid var(--line)}
+  .cv-input input{
+    flex:1;background:var(--card2);border:1px solid var(--line);border-radius:99px;
+    padding:11px 16px;color:var(--text);font-size:14px;outline:none;font-family:inherit;
+  }
+  .send{width:42px;height:42px;border-radius:50%;background:var(--accent);border:none;color:#fff;font-size:17px;display:flex;align-items:center;justify-content:center}
+
+  /* ---------- profile ---------- */
+  .phead{padding:26px 20px 18px;text-align:center}
+  .bigava{
+    width:86px;height:86px;border-radius:50%;margin:0 auto 12px;
+    background:linear-gradient(135deg,#ff4d4d,#7b2ff7);
+    display:flex;align-items:center;justify-content:center;
+    font-size:32px;font-weight:800;color:#fff;
+  }
+  .pfname{font-size:20px;font-weight:800}
+  .pfhandle{font-size:13px;color:var(--mut);margin-top:3px}
+  .stats{display:flex;justify-content:center;gap:34px;margin-top:18px}
+  .stat b{display:block;font-size:17px}
+  .stat span{font-size:11px;color:var(--mut)}
+  .sect{font-size:12px;font-weight:700;color:var(--mut);letter-spacing:.6px;margin:20px 20px 8px;text-transform:uppercase}
+  .acc{
+    margin:8px 16px 0;display:flex;align-items:center;gap:12px;
+    background:var(--card);border:1px solid var(--line);border-radius:16px;padding:13px 14px;
+  }
+  .accicon{width:40px;height:40px;border-radius:12px;flex:0 0 40px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;font-weight:800}
+  .ai-tg{background:var(--tg)} .ai-ig{background:linear-gradient(45deg,#f09433,#dc2743,#bc1888)} .ai-th{background:#1c1c1f;border:1px solid #333}
+  .accname{font-weight:700;font-size:14px}
+  .accsub{font-size:12px;color:var(--mut);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .linkbtn{
+    margin-left:auto;flex:0 0 auto;border-radius:99px;font-size:12px;font-weight:700;
+    padding:8px 14px;border:none;
+  }
+  .linkbtn.do{background:var(--accent);color:#fff}
+  .linkbtn.undo{background:none;color:var(--mut);border:1px solid var(--line)}
+
+  /* ---------- tabbar ---------- */
+  nav{
+    display:flex;border-top:1px solid var(--line);
+    padding:8px 0 calc(var(--sab) + 8px);
+    background:rgba(10,10,11,.92);backdrop-filter:blur(14px);
+  }
+  .tab{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:none;border:none;color:var(--mut);font-size:10px;font-weight:600;
+  }
+  .tab svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .tab.on{color:var(--text)}
+  .tab .ic{position:relative}
+  .tab .bdg{
+    position:absolute;top:-3px;right:-7px;min-width:16px;height:16px;border-radius:99px;
+    background:var(--accent);color:#fff;font-size:9px;font-weight:800;
+    display:flex;align-items:center;justify-content:center;padding:0 4px;
+  }
+
+  /* ---------- onboarding ---------- */
+  #onb{
+    position:fixed;inset:0;background:var(--bg);z-index:60;display:none;
+    flex-direction:column;padding:calc(var(--sat) + 40px) 24px calc(var(--sab) + 24px);
+    overflow-y:auto;
+  }
+  #onb.on{display:flex}
+  .onb-logo{font-size:44px;font-weight:800;letter-spacing:-2px}
+  .onb-logo b{color:var(--accent)}
+  .onb-sub{color:var(--mut);font-size:15px;line-height:1.5;margin:10px 0 26px}
+  .onb-card{
+    display:flex;align-items:center;gap:12px;background:var(--card);
+    border:1px solid var(--line);border-radius:18px;padding:15px 14px;margin-bottom:10px;
+  }
+  .onb-foot{margin-top:auto;padding-top:20px;text-align:center}
+  .onb-hint{font-size:12px;color:var(--mut);margin-top:12px}
+  .okmark{margin-left:auto;color:var(--ok);font-weight:700;font-size:13px}
+
+  /* ---------- auth sheet ---------- */
+  #shade{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:70;display:none}
+  #shade.on{display:block}
+  #sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:71;display:none;
+    background:var(--card2);border-radius:22px 22px 0 0;
+    padding:10px 20px calc(var(--sab) + 22px);
+    max-height:86vh;overflow-y:auto;
+  }
+  #sheet.on{display:block}
+  .grab{width:38px;height:4px;border-radius:99px;background:#3a3a40;margin:4px auto 16px}
+  .sh-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .sh-title{font-size:17px;font-weight:800}
+  .sh-sub{font-size:12px;color:var(--mut);margin-top:2px}
+  .field{margin-top:10px}
+  .field label{display:block;font-size:11px;font-weight:700;color:var(--mut);letter-spacing:.4px;margin:0 4px 6px;text-transform:uppercase}
+  .field input{
+    width:100%;background:var(--bg);border:1px solid var(--line);border-radius:13px;
+    padding:13px 15px;color:var(--text);font-size:15px;outline:none;font-family:inherit;
+  }
+  .field input:focus{border-color:#3a3a42}
+  .err{color:var(--accent);font-size:12px;margin:8px 4px 0;display:none}
+  .err.on{display:block}
+  .sh-btn{
+    width:100%;margin-top:16px;background:var(--accent);border:none;color:#fff;
+    border-radius:13px;padding:14px;font-size:15px;font-weight:700;
+  }
+  .sh-btn.alt{background:var(--bg);color:var(--text);border:1px solid var(--line);margin-top:10px}
+  .sh-btn.load{opacity:.75;pointer-events:none}
+  .sh-btn:disabled{opacity:.5;pointer-events:none}
+  .spin{
+    display:inline-block;width:15px;height:15px;border-radius:50%;
+    border:2px solid rgba(255,255,255,.35);border-top-color:#fff;
+    animation:spin .6s linear infinite;vertical-align:-2px;margin-right:8px;
+  }
+  .sh-btn.alt .spin{border-color:rgba(244,244,245,.3);border-top-color:var(--text)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .resend{font-size:12px;color:var(--mut);text-align:center;margin-top:14px;line-height:1.5}
+  .resend b{color:var(--text)}
+  .resend .rlink{color:var(--accent);font-weight:700}
+  .code-in{letter-spacing:8px;text-align:center;font-size:20px;font-weight:700}
+  .sh-note{font-size:12px;color:var(--mut);text-align:center;margin-top:14px;line-height:1.5}
+  .democode{
+    margin-top:12px;text-align:center;font-size:12px;color:var(--mut);
+    background:var(--bg);border:1px dashed var(--line);border-radius:12px;padding:10px;
+  }
+  .democode b{color:var(--text);letter-spacing:3px;font-size:15px}
+  .done-ico{width:64px;height:64px;border-radius:50%;background:rgba(76,217,100,.12);color:var(--ok);font-size:28px;display:flex;align-items:center;justify-content:center;margin:10px auto 14px}
+
+  /* ---------- toast ---------- */
+  #toast{
+    position:fixed;left:50%;transform:translateX(-50%) translateY(20px);
+    bottom:calc(var(--sab) + 86px);z-index:90;background:#26262b;color:var(--text);
+    font-size:13px;font-weight:600;padding:11px 18px;border-radius:99px;
+    border:1px solid #333;opacity:0;pointer-events:none;transition:all .25s;
+    max-width:86vw;text-align:center;
+  }
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast.high{bottom:auto;top:calc(var(--sat) + 70px);transform:translateX(-50%) translateY(-20px)}
+  #toast.high.on{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">Sos<b>.</b></div>
+    <div class="hsub" id="hsub"></div>
+    <div class="hspacer"></div>
+    <div class="hbtn">beta</div>
+  </header>
+
+  <main id="main">
+    <section id="scr-feed" class="screen on"></section>
+    <section id="scr-chats" class="screen"></section>
+    <section id="scr-profile" class="screen"></section>
+  </main>
+
+  <nav>
+    <button class="tab on" data-t="feed" onclick="go('feed')">
+      <span class="ic"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9h14v-9"/></svg></span>Лента
+    </button>
+    <button class="tab" data-t="chats" onclick="go('chats')">
+      <span class="ic"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z"/></svg><span class="bdg" id="chatbdg"></span></span>Чаты
+    </button>
+    <button class="tab" data-t="profile" onclick="go('profile')">
+      <span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5"/></svg></span>Профиль
+    </button>
+  </nav>
+</div>
+
+<!-- chat overlay -->
+<div id="chatview">
+  <div class="cv-head">
+    <button class="back" onclick="closeChat()">‹</button>
+    <div class="ava" id="cv-ava" style="width:36px;height:36px;flex-basis:36px;font-size:13px"></div>
+    <div>
+      <div class="cname" id="cv-name"></div>
+      <div class="cmsg" id="cv-net" style="white-space:normal"></div>
+    </div>
+  </div>
+  <div class="cv-msgs" id="cv-msgs"></div>
+  <div class="cv-input">
+    <input id="cv-text" placeholder="Сообщение в Sos." autocomplete="off">
+    <button class="send" onclick="sendMsg()">➤</button>
+  </div>
+</div>
+
+<!-- onboarding -->
+<div id="onb">
+  <div class="onb-logo">Sos<b>.</b></div>
+  <div class="onb-sub">Одна лента вместо трёх.<br>Привяжи свои соцсети — Sos. соберёт посты и чаты из Telegram, Instagram и Threads в одном месте.</div>
+  <div id="onb-cards"></div>
+  <div class="onb-foot">
+    <button class="primary" id="onb-go" style="width:100%" disabled onclick="finishOnb()">Войти в Sos.</button>
+    <div class="onb-hint">Можно привязать одну сеть, а остальные — позже в профиле.</div>
+  </div>
+</div>
+
+<!-- auth / confirm sheet -->
+<div id="shade" onclick="closeSheet()"></div>
+<div id="sheet"></div>
+
+<div id="toast"></div>
+
+<script>
+/* ================= networks ================= */
+const NETS = {
+  tg:{name:'Telegram', chip:'net-tg', dot:'dot-tg', icon:'ai-tg', sym:'✈',
+      followers:2340, posts:31, likes:9800, defHandle:'@trueshine'},
+  ig:{name:'Instagram', chip:'net-ig', dot:'dot-ig', icon:'ai-ig', sym:'◎',
+      followers:8115, posts:42, likes:30100, defHandle:'@trueshine34'},
+  th:{name:'Threads', chip:'net-th', dot:'dot-th', icon:'ai-th', sym:'@',
+      followers:1987, posts:14, likes:8300, defHandle:'@trueshine34'}
+};
+const NET_KEYS = ['tg','ig','th'];
+const AVAC = ['#5856d6','#ff9500','#34c759','#ff2d55','#007aff','#af52de','#ff6b35','#00b8a9'];
+const GRADS = [
+  'linear-gradient(135deg,#232526,#414345)',
+  'linear-gradient(135deg,#1f1c2c,#4a3f6b)',
+  'linear-gradient(135deg,#0f2027,#2c5364)',
+  'linear-gradient(135deg,#42275a,#734b6d)',
+  'linear-gradient(135deg,#141e30,#243b55)',
+  'linear-gradient(135deg,#3a1c71,#d76d77 140%)'
+];
+
+/* ================= demo content ================= */
+const FEED = [
+  [
+    {net:'tg', a:'Канал «Ночной кофе»', h:'@night_coffee', t:'Собрали 10 мест в городе, где наливают фильтр после полуночи. Полный список — в закрепе ☕️', likes:1284, cm:56, img:0, time:'12 мин'},
+    {net:'ig', a:'Лера Митина', h:'@lera.mit', t:'Закат с крыши сегодня. Без фильтров.', likes:942, cm:31, img:3, time:'25 мин'},
+    {net:'th', a:'Паша Дроздов', h:'@drozdov', t:'Непопулярное мнение: утренние созвоны должны быть запрещены конвенцией ООН.', likes:2107, cm:340, img:null, time:'34 мин'}
+  ],
+  [
+    {net:'tg', a:'Техножурнал', h:'@technozh', t:'Свежий обзор: складные телефоны наконец перестали ломаться. Почти.', likes:503, cm:12, img:null, time:'1 ч'},
+    {net:'ig', a:'Стас Кухня', h:'@stas.cooks', t:'Паста за 15 минут, которая выглядит на все 50. Рецепт в карусели →', likes:3311, cm:189, img:1, time:'1 ч'},
+    {net:'th', a:'Аня Райт', h:'@anya_wright', t:'Прочитала 4 книги за отпуск и хочу обсудить каждую. Кто здесь вообще читает описания профилей?', likes:764, cm:98, img:null, time:'2 ч'}
+  ],
+  [
+    {net:'tg', a:'Городские афиши', h:'@city_afisha', t:'В субботу — маркет виниловых пластинок в старом депо. Вход свободный, начало в 12:00 🎷', likes:1876, cm:44, img:2, time:'3 ч'},
+    {net:'ig', a:'Мика Спорт', h:'@mika.run', t:'Первый полумарафон готов! 1:52:14 — не рекорд, но мой.', likes:1210, cm:87, img:4, time:'3 ч'},
+    {net:'th', a:'Дэн Ковров', h:'@dan_kv', t:'Тред: как я месяц жил без соцсетей и почему вернулся на четвёртый день.', likes:1655, cm:212, img:null, time:'4 ч'}
+  ],
+  [
+    {net:'tg', a:'Канал «Ночной кофе»', h:'@night_coffee', t:'Опрос: капучино после 18:00 — это преступление? Голосуем в комментариях.', likes:689, cm:154, img:null, time:'5 ч'},
+    {net:'ig', a:'Лера Митина', h:'@lera.mit', t:'Архитектура района, в котором я выросла. Люблю эти дворы.', likes:2540, cm:66, img:5, time:'6 ч'},
+    {net:'th', a:'Соня Верн', h:'@sonya_v', t:'Если бы у меня был рубль за каждый «давай созвонимся на 5 минут», который длился час…', likes:1930, cm:141, img:null, time:'6 ч'}
+  ]
+];
+
+const CHATS = [
+  {net:'tg', n:'Мама', last:'Купи хлеб по дороге, пожалуйста 🙏', time:'12:40', un:2,
+   msgs:[['them','Привет! Ты сегодня зайдёшь?'],['me','Привет! Да, буду к семи'],['them','Купи хлеб по дороге, пожалуйста 🙏']]},
+  {net:'ig', n:'Лера Митина', last:'Скинь фотки с крыши!', time:'12:16', un:1,
+   msgs:[['them','Видел мой пост про закат?'],['me','Да! Кадры огонь 🔥'],['them','Скинь фотки с крыши!']]},
+  {net:'th', n:'Паша Дроздов', last:'Ты видел, сколько лайков на моём треде?', time:'11:58', un:2,
+   msgs:[['them','Ты видел, сколько лайков на моём треде?'],['them','2107! Я легенда'],['me','Sos. выбрал его лучшим из тройки, поздравляю 😄']]},
+  {net:'tg', n:'Рабочий чат · Дизайн', last:'Макеты согласованы, можно верстать', time:'11:30', un:0,
+   msgs:[['them','Макеты согласованы, можно верстать'],['me','Принял, беру в работу']]},
+  {net:'ig', n:'Стас Кухня', last:'Приходи на дегустацию в пятницу', time:'вчера', un:0,
+   msgs:[['them','Приходи на дегустацию в пятницу'],['me','Буду! Что взять с собой?'],['them','Только аппетит 😄']]},
+  {net:'th', n:'Аня Райт', last:'Начала новую книгу, это шедевр', time:'вчера', un:0,
+   msgs:[['them','Начала новую книгу, это шедевр'],['me','Название в студию!']]}
+];
+
+const MY_POSTS = [
+  {net:'th', t:'Sos. — потому что три ленты это на две больше, чем нужно.', likes:214, time:'2 ч'},
+  {net:'ig', t:'Работаю над приложением мечты. Скоро покажу 👀', likes:388, time:'1 д'},
+  {net:'tg', t:'Запустил канал о том, как собираю Sos. Подписывайтесь!', likes:97, time:'3 д'}
+];
+
+/* ================= state & storage ================= */
+let state = { linked:{tg:null, ig:null, th:null}, onboarded:false, liked:{} };
+function save(){ try{ localStorage.setItem('sos_state', JSON.stringify(state)) }catch(e){} }
+function loadState(){
+  try{
+    const s = JSON.parse(localStorage.getItem('sos_state'));
+    if(s && s.linked) state = s;
+    if(!state.liked) state.liked = {};
+  }catch(e){}
+}
+const linkedKeys = () => NET_KEYS.filter(k => state.linked[k]);
+
+/* ================= helpers ================= */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+function avaOf(name,i,sz){
+  const c = AVAC[i % AVAC.length];
+  const ini = String(name).replace(/[«»@]/g,'').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+  return `<div class="ava" style="background:${c}${sz?';width:'+sz+'px;height:'+sz+'px;flex-basis:'+sz+'px;font-size:13px':''}">${ini}</div>`;
+}
+function fmt(n){ return n>=1000 ? (n/1000).toFixed(1).replace('.',',')+' тыс' : String(n) }
+let toastT = null;
+function toast(msg){
+  const t = $('toast'); t.textContent = msg;
+  /* если открыта шторка или онбординг — показываем сверху, чтобы не перекрывать кнопки */
+  const high = $('sheet').classList.contains('on') || $('onb').classList.contains('on');
+  t.classList.toggle('high', high);
+  t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('on'), 2400);
+}
+
+/* ================= feed ================= */
+function postCard(p, key, winner, n){
+  const heart = `<svg viewBox="0 0 24 24"><path d="M12 20.5C7 16.5 3.5 13.4 3.5 9.7 3.5 7 5.6 5 8.1 5c1.6 0 3 .8 3.9 2.1C12.9 5.8 14.3 5 15.9 5c2.5 0 4.6 2 4.6 4.7 0 3.7-3.5 6.8-8.5 10.8z"/></svg>`;
+  const cmt = `<svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H4l2-3a8 8 0 1 1 15-5z"/></svg>`;
+  const isL = state.liked[key];
+  return `<article class="post">
+    <div class="prow">
+      ${avaOf(p.a, p.a.length)}
+      <div><div class="pname">${esc(p.a)}</div><div class="phandle">${p.h} · ${p.time}</div></div>
+      <span class="netchip ${NETS[p.net].chip}">${NETS[p.net].name}</span>
+    </div>
+    <div class="ptext">${esc(p.t)}</div>
+    ${p.img!==null&&p.img!==undefined?`<div class="pimg" style="background:${GRADS[p.img]}">📷 фото · ${NETS[p.net].name}</div>`:''}
+    <div class="pfoot">
+      <button class="act ${isL?'liked':''}" style="background:none;border:none" onclick="toggleLike('${key}',this)">
+        ${heart}<span>${fmt(p.likes + (isL?1:0))}</span>
+      </button>
+      <span class="act">${cmt}<span>${p.cm}</span></span>
+      ${winner&&n>1?`<span class="topbadge">★ топ из ${n}</span>`:''}
+    </div>
+  </article>`;
+}
+function renderFeed(){
+  const lk = linkedKeys();
+  if(!lk.length){
+    $('scr-feed').innerHTML = `<div class="empty"><div class="big">🔗</div>
+      Ни одна соцсеть не привязана.<br>Привяжи Telegram, Instagram или Threads — и здесь появится твоя лента.
+      <br><button class="primary" onclick="openOnb()">Привязать соцсети</button></div>`;
+    return;
+  }
+  let note;
+  if(lk.length===3) note = `Из каждой <b>тройки постов</b> (Telegram + Instagram + Threads) Sos. показывает <b>самый популярный по лайкам</b>. Остальные — свёрнуты.`;
+  else if(lk.length===2) note = `Привязаны 2 сети (${lk.map(k=>NETS[k].name).join(' + ')}) — из каждой <b>пары постов</b> показывается <b>более популярный</b>. Привяжи третью, чтобы собрать полную тройку.`;
+  else note = `Привязана одна сеть — <b>${NETS[lk[0]].name}</b>. Показываются все её посты. Привяжи ещё, и Sos. начнёт выбирать лучшее.`;
+  let html = `<div class="algo-note">${note}</div>`;
+
+  FEED.forEach((group, gi) => {
+    const posts = group.filter(p => state.linked[p.net]);
+    if(!posts.length) return;
+    const sorted = [...posts].sort((a,b)=>b.likes-a.likes);
+    const win = sorted[0], rest = sorted.slice(1);
+    html += postCard(win, gi+'-0', true, posts.length);
+    if(rest.length){
+      html += `<div class="hidden-group">
+        <button class="hidden-btn" id="hb${gi}" onclick="toggleHidden(${gi})">▾ ещё ${rest.length===1?'1 пост':rest.length+' поста'} из группы №${gi+1}</button>
+        <div class="hidden-posts" id="hg${gi}">
+          ${rest.map((p,i)=>postCard(p, gi+'-'+(i+1), false, posts.length)).join('')}
+        </div>
+      </div>`;
+    }
+  });
+  $('scr-feed').innerHTML = html;
+}
+function toggleLike(key, btn){
+  state.liked[key] = !state.liked[key]; save();
+  const span = btn.querySelector('span');
+  btn.classList.toggle('liked', state.liked[key]);
+  if(!span.textContent.includes('тыс')){
+    const cur = parseInt(span.textContent.replace(/[^\d]/g,'')) || 0;
+    span.textContent = state.liked[key] ? cur+1 : cur-1;
+  }
+}
+function toggleHidden(gi){
+  const el = $('hg'+gi), btn = $('hb'+gi);
+  const open = el.classList.toggle('open');
+  if(open) btn.textContent = '▴ скрыть';
+  else { renderFeed(); }
+}
+
+/* ================= chats ================= */
+let curChat = null;
+function renderChats(){
+  const lk = linkedKeys();
+  const list = CHATS.filter(c => state.linked[c.net]);
+  if(!list.length){
+    $('scr-chats').innerHTML = `<div class="empty"><div class="big">💬</div>
+      ${lk.length?'В привязанных сетях пока нет чатов.':'Привяжи соцсети, чтобы собрать все чаты в одном месте.'}
+      ${lk.length?'':'<br><button class="primary" onclick="openOnb()">Привязать соцсети</button>'}</div>`;
+    $('chatbdg').style.display='none';
+    return;
+  }
+  $('scr-chats').innerHTML = list.map(c=>{
+    const i = CHATS.indexOf(c);
+    return `<div class="chat-item" onclick="openChat(${i})">
+      ${avaOf(c.n,i+3)}
+      <div class="cbody">
+        <div class="cname"><span class="netdot ${NETS[c.net].dot}"></span>${esc(c.n)}</div>
+        <div class="cmsg">${esc(c.last)}</div>
+      </div>
+      <div class="cmeta">
+        <span class="time">${c.time}</span>
+        ${c.un?`<span class="unread">${c.un}</span>`:''}
+      </div>
+    </div>`}).join('');
+  const un = list.reduce((s,c)=>s+c.un,0);
+  $('chatbdg').style.display = un?'flex':'none';
+  $('chatbdg').textContent = un;
+}
+function openChat(i){
+  curChat = i;
+  const c = CHATS[i];
+  $('cv-ava').outerHTML = avaOf(c.n,i+3,36).replace('class="ava"','class="ava" id="cv-ava"');
+  $('cv-name').innerHTML = `<span class="netdot ${NETS[c.net].dot}"></span>${esc(c.n)}`;
+  $('cv-net').textContent = 'чат из ' + NETS[c.net].name + ' · показан в Sos.';
+  $('cv-msgs').innerHTML = c.msgs.map(m=>`<div class="bub ${m[0]}">${esc(m[1])}</div>`).join('');
+  c.un = 0; renderChats();
+  $('chatview').classList.add('on');
+  setTimeout(()=>{const m=$('cv-msgs');m.scrollTop=m.scrollHeight},30);
+}
+function closeChat(){ $('chatview').classList.remove('on') }
+function sendMsg(){
+  const inp = $('cv-text'); const v = inp.value.trim();
+  if(!v || curChat===null) return;
+  CHATS[curChat].msgs.push(['me',v]);
+  CHATS[curChat].last = v; CHATS[curChat].time = 'сейчас';
+  inp.value='';
+  const m = $('cv-msgs');
+  m.innerHTML += `<div class="bub me">${esc(v)}</div>`;
+  m.scrollTop = m.scrollHeight;
+  renderChats();
+}
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter') return;
+  if($('chatview').classList.contains('on')) sendMsg();
+  else if($('sheet').classList.contains('on')){
+    const b = $('sheet').querySelector('.sh-btn'); if(b) b.click();
+  }
+});
+
+/* ================= profile ================= */
+function renderProfile(){
+  const lk = linkedKeys();
+  const posts = lk.reduce((s,k)=>s+NETS[k].posts,0);
+  const fol = lk.reduce((s,k)=>s+NETS[k].followers,0);
+  const likes = lk.reduce((s,k)=>s+NETS[k].likes,0);
+  const myPosts = MY_POSTS.filter(p=>state.linked[p.net]);
+  $('scr-profile').innerHTML = `
+    <div class="phead">
+      <div class="bigava">S</div>
+      <div class="pfname">Shine</div>
+      <div class="pfhandle">@trueshine · единый аккаунт Sos.</div>
+      <div class="stats">
+        <div class="stat"><b>${posts}</b><span>постов</span></div>
+        <div class="stat"><b>${fmt(fol)}</b><span>подписчиков</span></div>
+        <div class="stat"><b>${fmt(likes)}</b><span>лайков</span></div>
+      </div>
+    </div>
+    <div class="sect">Соцсети · привязано ${lk.length} из 3</div>
+    ${NET_KEYS.map(k=>{
+      const n = NETS[k], l = state.linked[k];
+      return `<div class="acc">
+        <div class="accicon ${n.icon}">${n.sym}</div>
+        <div style="min-width:0">
+          <div class="accname">${n.name}</div>
+          <div class="accsub">${l ? esc(l.handle)+' · '+fmt(n.followers)+' подписчиков' : 'не привязан'}</div>
+        </div>
+        ${l
+          ? `<button class="linkbtn undo" onclick="askUnlink('${k}')">Отвязать</button>`
+          : `<button class="linkbtn do" onclick="openAuth('${k}')">Привязать</button>`}
+      </div>`}).join('')}
+    ${lk.length ? `<div class="sect">Мои посты</div>` : ''}
+    ${myPosts.map(p=>`
+      <div class="acc" style="align-items:flex-start">
+        <div style="flex:1">
+          <div class="accsub" style="margin-bottom:5px"><span class="netchip ${NETS[p.net].chip}">${NETS[p.net].name}</span> · ${p.time}</div>
+          <div style="font-size:14px;line-height:1.45">${esc(p.t)}</div>
+          <div class="accsub" style="margin-top:7px">♥ ${p.likes}</div>
+        </div>
+      </div>`).join('')}
+    <div style="height:10px"></div>`;
+}
+
+/* ================= onboarding ================= */
+function renderOnb(){
+  $('onb-cards').innerHTML = NET_KEYS.map(k=>{
+    const n = NETS[k], l = state.linked[k];
+    return `<div class="onb-card">
+      <div class="accicon ${n.icon}">${n.sym}</div>
+      <div style="min-width:0">
+        <div class="accname">${n.name}</div>
+        <div class="accsub">${l?esc(l.handle):'посты, чаты и лайки'}</div>
+      </div>
+      ${l ? `<span class="okmark">✓ привязан</span>`
+          : `<button class="linkbtn do" onclick="openAuth('${k}')">Привязать</button>`}
+    </div>`}).join('');
+  $('onb-go').disabled = !linkedKeys().length;
+}
+function openOnb(){ renderOnb(); $('onb').classList.add('on') }
+function finishOnb(){
+  state.onboarded = true; save();
+  $('onb').classList.remove('on');
+  renderAll();
+  toast('Добро пожаловать в Sos. 👋');
+}
+
+/* ================= auth flow ================= */
+/* Демо-авторизация: единый сценарий для всех трёх сетей —
+   ввод данных → «отправка» кода → подтверждение → привязка.
+   Ничего не уходит в сеть, всё хранится в localStorage этого устройства. */
+const DEMO_CODE = '1111';
+let auth = null; // {net, step, login, handle, manual, timerId, remain}
+
+function openAuth(net){
+  clearAuthTimer();
+  auth = {net, step:'login'};
+  renderSheet();
+  $('shade').classList.add('on'); $('sheet').classList.add('on');
+}
+function closeSheet(){
+  clearAuthTimer();
+  auth = null;
+  $('shade').classList.remove('on'); $('sheet').classList.remove('on');
+}
+function clearAuthTimer(){
+  if(auth && auth.timerId){ clearInterval(auth.timerId); auth.timerId = null; }
+}
+function shHead(net, title, sub){
+  const n = NETS[net];
+  return `<div class="grab"></div>
+    <div class="sh-head">
+      <div class="accicon ${n.icon}">${n.sym}</div>
+      <div><div class="sh-title">${title}</div><div class="sh-sub">${sub}</div></div>
+    </div>`;
+}
+function showErr(msg){
+  const e = $('ferr'); if(!e) return;
+  if(msg) e.textContent = msg;
+  e.classList.add('on');
+}
+/* переводит кнопку в состояние загрузки на время «сетевого» запроса */
+function btnLoad(btn, txt){
+  if(!btn) return;
+  if(auth) auth.busy = true;
+  btn.classList.add('load');
+  btn.innerHTML = `<span class="spin"></span>${txt}`;
+  $('sheet').querySelectorAll('button').forEach(b=>{ if(b!==btn) b.disabled = true; });
+}
+
+function renderSheet(){
+  const sh = $('sheet');
+  if(!auth) return;
+  auth.busy = false;
+  const {net, step} = auth;
+  const n = NETS[net];
+  const note = `<div class="sh-note">Демо-режим: данные никуда не отправляются и хранятся только на этом устройстве.</div>`;
+
+  if(step==='login'){
+    if(net==='tg'){
+      sh.innerHTML = shHead(net,'Вход в Telegram','Sos. подключится к твоему аккаунту') + `
+        <div class="field"><label>Номер телефона</label>
+          <input id="f1" type="tel" inputmode="tel" placeholder="+7 900 000-00-00" autocomplete="off"></div>
+        <div class="err" id="ferr">Введи номер телефона</div>
+        <button class="sh-btn" onclick="authNext()">Получить код</button>` + note;
+    } else if(net==='ig'){
+      sh.innerHTML = shHead(net,'Вход в Instagram','Sos. подключится к твоему аккаунту') + `
+        <div class="field"><label>Имя пользователя</label>
+          <input id="f1" placeholder="trueshine34" autocomplete="off" autocapitalize="none"></div>
+        <div class="field"><label>Пароль</label>
+          <input id="f2" type="password" placeholder="••••••••" autocomplete="off"></div>
+        <div class="err" id="ferr">Заполни имя пользователя и пароль</div>
+        <button class="sh-btn" onclick="authNext()">Войти</button>` + note;
+    } else {
+      const ig = state.linked.ig;
+      sh.innerHTML = shHead(net,'Вход в Threads','Threads использует аккаунт Instagram') + (
+        ig ? `<button class="sh-btn" onclick="authThreadsVia()">Продолжить как ${esc(ig.handle)}</button>
+              <button class="sh-btn alt" onclick="authThreadsManual()">Войти в другой аккаунт</button>`
+           : `<div class="field"><label>Имя пользователя Instagram</label>
+                <input id="f1" placeholder="trueshine34" autocomplete="off" autocapitalize="none"></div>
+              <div class="field"><label>Пароль</label>
+                <input id="f2" type="password" placeholder="••••••••" autocomplete="off"></div>
+              <div class="err" id="ferr">Заполни имя пользователя и пароль</div>
+              <button class="sh-btn" onclick="authNext()">Войти</button>`
+      ) + note;
+    }
+  }
+
+  if(step==='code'){
+    const dest = net==='tg'
+      ? 'Отправлен в Telegram на '+esc(auth.login)
+      : 'Отправлен на почту аккаунта '+esc(auth.handle||auth.login);
+    sh.innerHTML = shHead(net,'Код подтверждения', dest) + `
+      <div class="field"><label>Код из 4 цифр</label>
+        <input id="f1" class="code-in" inputmode="numeric" maxlength="4" placeholder="••••"
+               autocomplete="one-time-code" oninput="onCodeInput(this)"></div>
+      <div class="err" id="ferr">Неверный код. Демо-код: ${DEMO_CODE}</div>
+      <div class="democode">Это демо — настоящие сообщения не отправляются.<br>Твой код: <b>${DEMO_CODE}</b></div>
+      <button class="sh-btn" onclick="authNext()">Подтвердить</button>
+      <button class="sh-btn alt" onclick="backToLogin()">Изменить данные</button>
+      <div class="resend" id="resend"></div>`;
+    renderResend();
+  }
+
+  if(step==='done'){
+    sh.innerHTML = shHead(net, n.name+' привязан','аккаунт '+esc(state.linked[net].handle)) + `
+      <div class="done-ico">✓</div>
+      <div class="sh-note">Посты, чаты и лайки из ${n.name} теперь попадают в единую ленту Sos.</div>
+      <button class="sh-btn" onclick="afterLink()">Готово</button>`;
+  }
+  const f = sh.querySelector('input'); if(f) setTimeout(()=>f.focus(),80);
+}
+
+/* автоподтверждение, когда введены все 4 цифры */
+function onCodeInput(inp){
+  inp.value = inp.value.replace(/\D/g,'');
+  if(inp.value.length===4) authNext();
+}
+function backToLogin(){
+  clearAuthTimer();
+  auth = {net:auth.net, step:'login', manual:auth.manual};
+  if(auth.manual) authThreadsManual();
+  else renderSheet();
+}
+
+function authNext(){
+  if(!auth || auth.busy) return;
+  const {net, step} = auth;
+  const btn = $('sheet').querySelector('.sh-btn');
+
+  if(step==='login'){
+    const f1 = $('f1'), f2 = $('f2');
+    const v1 = f1 ? f1.value.trim() : '';
+    const v2 = f2 ? f2.value.trim() : null;
+    if(!v1 || (f2 && !v2)){ showErr(); return; }
+    if(net==='tg' && !/^\+?\d[\d\s\-()]{8,}$/.test(v1)){ showErr('Введи корректный номер телефона'); return; }
+    if(f2 && v2.length < 4){ showErr('Пароль слишком короткий'); return; }
+
+    auth.login = v1;
+    auth.handle = '@'+v1.replace(/^@/,'');
+    btnLoad(btn, net==='tg' ? 'Отправляем код…' : 'Проверяем…');
+    setTimeout(()=>{
+      if(!auth) return;
+      auth.step = 'code';
+      startResend();
+      renderSheet();
+    }, 900);
+    return;
+  }
+
+  if(step==='code'){
+    const f1 = $('f1');
+    const code = f1 ? f1.value.trim() : '';
+    if(code !== DEMO_CODE){ showErr(); if(f1) f1.select(); return; }
+    btnLoad(btn, 'Входим…');
+    setTimeout(()=>{
+      if(!auth) return;
+      /* Telegram привязывается под своим аккаунтом (телефон — в примечании),
+         Instagram/Threads — под введённым именем пользователя. */
+      const handle = net==='tg' ? NETS.tg.defHandle : (auth.handle || NETS[net].defHandle);
+      doLink(net, handle, net==='tg' ? auth.login : null);
+    }, 800);
+  }
+}
+
+/* Threads через уже привязанный Instagram — без пароля, только «подключение» */
+function authThreadsVia(){
+  if(!auth || auth.busy) return;
+  const btn = $('sheet').querySelector('.sh-btn');
+  btnLoad(btn, 'Подключаем Threads…');
+  setTimeout(()=>{ if(auth) doLink('th', state.linked.ig.handle); }, 900);
+}
+function authThreadsManual(){
+  clearAuthTimer();
+  auth = {net:'th', step:'login', manual:true};
+  const sh = $('sheet');
+  sh.innerHTML = shHead('th','Вход в Threads','через аккаунт Instagram') + `
+    <div class="field"><label>Имя пользователя Instagram</label>
+      <input id="f1" placeholder="trueshine34" autocomplete="off" autocapitalize="none"></div>
+    <div class="field"><label>Пароль</label>
+      <input id="f2" type="password" placeholder="••••••••" autocomplete="off"></div>
+    <div class="err" id="ferr">Заполни имя пользователя и пароль</div>
+    <button class="sh-btn" onclick="authNext()">Войти</button>
+    <div class="sh-note">Демо-режим: данные никуда не отправляются.</div>`;
+  setTimeout(()=>$('f1').focus(),80);
+}
+
+/* ----- resend code timer ----- */
+function startResend(){
+  clearAuthTimer();
+  auth.remain = 30;
+  auth.timerId = setInterval(()=>{
+    if(!auth){ return; }
+    auth.remain--;
+    if(auth.remain <= 0) clearAuthTimer();
+    renderResend();
+  }, 1000);
+}
+function renderResend(){
+  const el = $('resend'); if(!el || !auth) return;
+  if(auth.remain > 0){
+    el.innerHTML = `Не пришёл код? Отправить снова через <b>${auth.remain} с</b>`;
+  } else {
+    el.innerHTML = `Не пришёл код? <span class="rlink" onclick="resendCode()">Отправить снова</span>`;
+  }
+}
+function resendCode(){
+  if(!auth || auth.step!=='code') return;
+  startResend(); renderResend();
+  toast('Код отправлен повторно · '+DEMO_CODE);
+}
+
+function doLink(net, handle, sub){
+  clearAuthTimer();
+  state.linked[net] = {handle, sub: sub||null, at: (state.onboarded?'later':'onb')};
+  save();
+  auth = {net, step:'done'};
+  renderSheet();
+}
+function afterLink(){
+  const net = auth.net;
+  closeSheet();
+  renderAll();
+  if($('onb').classList.contains('on')) renderOnb();
+  toast(NETS[net].name+' привязан к Sos. ✓');
+}
+
+/* ================= unlink ================= */
+function askUnlink(net){
+  const n = NETS[net];
+  const sh = $('sheet');
+  auth = {net, step:'unlink'};
+  sh.innerHTML = shHead(net,'Отвязать '+n.name+'?','аккаунт '+esc(state.linked[net].handle)) + `
+    <div class="sh-note" style="text-align:left">Посты и чаты из ${n.name} исчезнут из ленты Sos. Аккаунт в самой соцсети не пострадает. Привязать обратно можно в любой момент.</div>
+    <button class="sh-btn" onclick="doUnlink('${net}')">Отвязать</button>
+    <button class="sh-btn alt" onclick="closeSheet()">Отмена</button>`;
+  $('shade').classList.add('on'); sh.classList.add('on');
+}
+function doUnlink(net){
+  state.linked[net] = null; save();
+  closeSheet(); renderAll();
+  toast(NETS[net].name+' отвязан');
+}
+
+/* ================= nav & render ================= */
+function subLine(){
+  const c = linkedKeys().length;
+  return c ? ('привязано сетей: '+c+' из 3') : 'сети не привязаны';
+}
+function go(t){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
+  $('scr-'+t).classList.add('on');
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.t===t));
+  $('main').scrollTop = 0;
+}
+function renderAll(){
+  $('hsub').textContent = subLine();
+  renderFeed(); renderChats(); renderProfile();
+}
+
+/* back button (Android) */
+function sosBack(){
+  if($('sheet').classList.contains('on')){ closeSheet(); if($('onb').classList.contains('on')) renderOnb(); return '1' }
+  if($('chatview').classList.contains('on')){ closeChat(); return '1' }
+  if($('onb').classList.contains('on') && state.onboarded){ $('onb').classList.remove('on'); return '1' }
+  return '0';
+}
+
+/* ================= boot ================= */
+loadState();
+renderAll();
+if(!state.onboarded && !linkedKeys().length) openOnb();
+</script>
+</body>
+</html>
