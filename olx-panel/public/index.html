@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OLX Panel — автовыставление с наценкой</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
+<link rel="stylesheet" href="/css/panel.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">OLX</span><span>Panel</span></div>
+  <nav class="tabs" id="tabs">
+    <button class="tab is-active" data-tab="listings">Объявления</button>
+    <button class="tab" data-tab="import">Импорт</button>
+    <button class="tab" data-tab="pricing">Наценка</button>
+    <button class="tab" data-tab="template">Шаблон</button>
+    <button class="tab" data-tab="settings">Настройки</button>
+    <button class="tab" data-tab="logs">Логи</button>
+  </nav>
+  <div class="topbar-right">
+    <span class="badge" id="mode-badge">…</span>
+    <button class="btn btn-ghost" id="refresh">Обновить</button>
+  </div>
+</header>
+
+<main>
+  <section class="stats" id="stats"></section>
+
+  <!-- ОБЪЯВЛЕНИЯ -->
+  <section class="panel" data-view="listings">
+    <div class="toolbar">
+      <input type="search" id="search" placeholder="Поиск по названию, ID, категории…">
+      <select id="filter-status">
+        <option value="all">Все статусы</option>
+        <option value="draft">Черновики</option>
+        <option value="ready">Готовы</option>
+        <option value="queued">В очереди</option>
+        <option value="published">Опубликованы</option>
+        <option value="error">Ошибки</option>
+      </select>
+      <div class="spacer"></div>
+      <button class="btn" id="bulk-queue">В очередь</button>
+      <button class="btn" id="bulk-delete">Удалить</button>
+      <button class="btn btn-primary" id="publish-selected">Опубликовать выбранные</button>
+      <button class="btn btn-danger" id="publish-stop" hidden>Стоп</button>
+    </div>
+    <div class="queue-bar" id="queue-bar" hidden><div class="queue-fill"></div><span></span></div>
+    <div class="table-wrap">
+      <table class="grid">
+        <thead>
+          <tr>
+            <th class="col-check"><input type="checkbox" id="check-all"></th>
+            <th class="col-photo"></th>
+            <th>Объявление</th>
+            <th class="num">Закупка</th>
+            <th class="num">Наценка</th>
+            <th class="num">Цена OLX</th>
+            <th>Статус</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="listing-rows"></tbody>
+      </table>
+      <p class="empty" id="listings-empty" hidden>Пока пусто — начните с вкладки «Импорт».</p>
+    </div>
+  </section>
+
+  <!-- ИМПОРТ -->
+  <section class="panel" data-view="import" hidden>
+    <div class="cards">
+      <article class="card">
+        <h2>Импорт по ссылкам</h2>
+        <p class="hint">По одной ссылке в строке, до 50 за раз. Данные берутся из микроразметки страницы.</p>
+        <textarea id="import-urls" rows="8" placeholder="https://www.olx.pl/d/oferta/...&#10;https://sklep.example.com/produkt/123"></textarea>
+        <div class="row">
+          <select id="import-source-url"></select>
+          <button class="btn btn-primary" id="do-import-url">Импортировать</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>Импорт файла (CSV / JSON)</h2>
+        <p class="hint">Колонки: title, price, description, images, category, sku. Неизвестные колонки станут параметрами.</p>
+        <div class="row">
+          <input type="file" id="import-file" accept=".csv,.json,.txt">
+          <select id="import-format">
+            <option value="csv">CSV</option>
+            <option value="json">JSON</option>
+          </select>
+        </div>
+        <textarea id="import-text" rows="8" placeholder="title;price;images;description&#10;Kurtka zimowa;149;https://…/1.jpg;Ciepła kurtka…"></textarea>
+        <div class="row">
+          <select id="import-source-file"></select>
+          <button class="btn btn-primary" id="do-import-file">Загрузить</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>Источники</h2>
+        <p class="hint">Источник = поставщик. К нему можно привязать отдельное правило наценки.</p>
+        <div class="row">
+          <input id="source-name" placeholder="Название поставщика">
+          <input id="source-url" placeholder="URL фида (необязательно)">
+          <button class="btn" id="add-source">Добавить</button>
+        </div>
+        <ul class="list" id="sources-list"></ul>
+      </article>
+    </div>
+    <pre class="output" id="import-output" hidden></pre>
+  </section>
+
+  <!-- НАЦЕНКА -->
+  <section class="panel" data-view="pricing" hidden>
+    <div class="cards">
+      <article class="card">
+        <h2>Базовое правило</h2>
+        <div class="form-grid" id="pricing-form">
+          <label>Наценка, %<input type="number" step="0.1" name="percent"></label>
+          <label>Фикс. надбавка, zł<input type="number" step="0.01" name="fixed"></label>
+          <label>Мин. маржа, zł<input type="number" step="0.01" name="minMargin"></label>
+          <label>Макс. маржа, zł (0 = без лимита)<input type="number" step="0.01" name="maxMargin"></label>
+          <label>Доставка в цене, zł<input type="number" step="0.01" name="shipping"></label>
+          <label>Комиссия площадки, %<input type="number" step="0.1" name="feePercent"></label>
+          <label>Округление
+            <select name="rounding">
+              <option value="none">без округления</option>
+              <option value="end99">до …,99</option>
+              <option value="up1">до 1 zł вверх</option>
+              <option value="up5">до 5 zł вверх</option>
+              <option value="up10">до 10 zł вверх</option>
+              <option value="up50">до 50 zł вверх</option>
+              <option value="up100">до 100 zł вверх</option>
+            </select>
+          </label>
+          <label>Валюта<input name="currency" maxlength="3"></label>
+          <label class="checkbox"><input type="checkbox" name="negotiable"> Цена договорная</label>
+        </div>
+        <div class="row">
+          <button class="btn btn-primary" id="save-pricing">Сохранить правило</button>
+          <button class="btn" id="apply-pricing">Применить к выбранным</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>Как это ляжет на цены</h2>
+        <table class="grid compact" id="pricing-preview"></table>
+      </article>
+    </div>
+  </section>
+
+  <!-- ШАБЛОН -->
+  <section class="panel" data-view="template" hidden>
+    <div class="cards cards-2">
+      <article class="card">
+        <h2>Шаблон оформления</h2>
+        <label class="field">Заголовок
+          <input id="tpl-title" placeholder="{{title}}">
+        </label>
+        <label class="field">Текст объявления
+          <textarea id="tpl-body" rows="16"></textarea>
+        </label>
+        <p class="hint">Переменные: <code>{{title}}</code> <code>{{description}}</code> <code>{{price}}</code>
+          <code>{{brand}}</code> <code>{{highlights}}</code> <code>{{hashtags}}</code> и любые свои из блока ниже.</p>
+        <label class="field">Свои переменные (JSON)
+          <textarea id="tpl-vars" rows="7"></textarea>
+        </label>
+        <div class="form-grid">
+          <label>Лимит заголовка<input type="number" id="tpl-max-title"></label>
+          <label>Лимит текста<input type="number" id="tpl-max-body"></label>
+          <label>Регистр заголовка
+            <select id="tpl-case">
+              <option value="none">как есть</option>
+              <option value="smart">умный</option>
+              <option value="upperFirst">с заглавной</option>
+            </select>
+          </label>
+          <label class="checkbox"><input type="checkbox" id="tpl-sanitize"> Чистить чужие контакты и ссылки</label>
+          <label class="checkbox"><input type="checkbox" id="tpl-hashtags"> Добавлять хештеги</label>
+        </div>
+        <button class="btn btn-primary" id="save-template">Сохранить шаблон</button>
+      </article>
+
+      <article class="card">
+        <h2>Предпросмотр</h2>
+        <select id="preview-pick"><option value="">— выберите объявление —</option></select>
+        <div class="ad-preview" id="ad-preview">
+          <p class="hint">Выберите объявление, чтобы увидеть готовый вид.</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- НАСТРОЙКИ -->
+  <section class="panel" data-view="settings" hidden>
+    <div class="cards">
+      <article class="card">
+        <h2>Аккаунт OLX</h2>
+        <p class="hint" id="olx-status">…</p>
+        <div class="row">
+          <button class="btn" id="olx-connect">Подключить через OAuth</button>
+          <button class="btn" id="olx-check">Проверить связь</button>
+        </div>
+        <pre class="output" id="olx-output" hidden></pre>
+      </article>
+
+      <article class="card">
+        <h2>Контакт и локация</h2>
+        <div class="form-grid">
+          <label>Имя в объявлении<input id="set-contact-name"></label>
+          <label>Телефон<input id="set-contact-phone"></label>
+          <label>Город (поиск)<input id="set-city-search" placeholder="Warszawa"></label>
+          <label>city_id<input id="set-city-id" type="number"></label>
+          <label>district_id<input id="set-district-id" type="number"></label>
+          <label>Тип продавца
+            <select id="set-advertiser">
+              <option value="private">частное лицо</option>
+              <option value="business">компания</option>
+            </select>
+          </label>
+        </div>
+        <ul class="list" id="city-results"></ul>
+        <button class="btn btn-primary" id="save-settings">Сохранить</button>
+      </article>
+
+      <article class="card">
+        <h2>Категории OLX</h2>
+        <p class="hint">Найдите ID категории, чтобы проставить его объявлениям.</p>
+        <div class="row">
+          <input id="cat-parent" type="number" placeholder="parent_id (пусто = корень)">
+          <button class="btn" id="cat-load">Показать</button>
+        </div>
+        <ul class="list" id="cat-list"></ul>
+      </article>
+    </div>
+  </section>
+
+  <!-- ЛОГИ -->
+  <section class="panel" data-view="logs" hidden>
+    <div class="toolbar">
+      <div class="spacer"></div>
+      <button class="btn" id="logs-clear">Очистить</button>
+    </div>
+    <ul class="logs" id="logs-list"></ul>
+  </section>
+</main>
+
+<!-- Модалка редактирования -->
+<div class="modal" id="editor" hidden>
+  <div class="modal-box">
+    <header class="modal-head">
+      <h2 id="editor-title">Объявление</h2>
+      <button class="btn btn-ghost" id="editor-close">✕</button>
+    </header>
+    <div class="modal-body">
+      <div class="form-grid">
+        <label class="wide">Заголовок источника<input id="ed-title"></label>
+        <label>Закупочная цена<input id="ed-base" type="number" step="0.01"></label>
+        <label>Ручная цена (перебивает наценку)<input id="ed-manual" type="number" step="0.01"></label>
+        <label>category_id OLX<input id="ed-category" type="number"></label>
+        <label>Статус
+          <select id="ed-status">
+            <option value="draft">черновик</option>
+            <option value="ready">готово</option>
+            <option value="queued">в очередь</option>
+          </select>
+        </label>
+        <label class="wide">Описание источника<textarea id="ed-desc" rows="7"></textarea></label>
+        <label class="wide">Фото (по одной ссылке в строке)<textarea id="ed-images" rows="4"></textarea></label>
+        <label class="wide">Атрибуты OLX (JSON: {"code":"value"})<textarea id="ed-attrs" rows="4"></textarea></label>
+      </div>
+      <div class="ad-preview" id="ed-preview"></div>
+    </div>
+    <footer class="modal-foot">
+      <span class="hint" id="ed-validation"></span>
+      <div class="spacer"></div>
+      <button class="btn" id="ed-refresh">Пересчитать</button>
+      <button class="btn btn-primary" id="ed-save">Сохранить</button>
+      <button class="btn btn-primary" id="ed-publish">Опубликовать сейчас</button>
+    </footer>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<script src="/js/app.js" type="module"></script>
+</body>
+</html>
