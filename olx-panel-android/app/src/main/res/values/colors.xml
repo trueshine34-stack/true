@@ -2,11 +2,7 @@
 <resources>
   <color name="bg">#0F1115</color>
   <color name="bg_card">#1B202A</color>
-  <color name="bg_field">#12161D</color>
   <color name="line">#262D3A</color>
   <color name="text">#E6E9EF</color>
-  <color name="muted">#8B94A7</color>
-  <color name="accent">#2F8FD8</color>
   <color name="accent_light">#7EC9FF</color>
-  <color name="error">#F87171</color>
 </resources>

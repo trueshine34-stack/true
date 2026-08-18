@@ -47,6 +47,7 @@
         <option value="error">Ошибки</option>
       </select>
       <div class="spacer"></div>
+      <button class="btn" id="toggle-all">Выбрать все</button>
       <button class="btn" id="bulk-queue">В очередь</button>
       <button class="btn" id="bulk-delete">Удалить</button>
       <button class="btn btn-primary" id="publish-selected">Опубликовать выбранные</button>
@@ -204,11 +205,40 @@
       <article class="card">
         <h2>Аккаунт OLX</h2>
         <p class="hint" id="olx-status">…</p>
+        <div class="form-grid" data-standalone hidden>
+          <label class="wide">client_id<input id="set-olx-id" autocomplete="off"></label>
+          <label class="wide">client_secret<input id="set-olx-secret" type="password" autocomplete="off"></label>
+          <label class="wide">redirect_uri (укажите такой же в кабинете OLX)
+            <input id="set-olx-redirect" autocomplete="off"></label>
+        </div>
         <div class="row">
+          <button class="btn btn-primary" id="save-olx-keys" data-standalone hidden>Сохранить ключи</button>
           <button class="btn" id="olx-connect">Подключить через OAuth</button>
           <button class="btn" id="olx-check">Проверить связь</button>
         </div>
         <pre class="output" id="olx-output" hidden></pre>
+      </article>
+
+      <article class="card" data-standalone hidden>
+        <h2>Публикация</h2>
+        <p class="hint">Очередь идёт, пока приложение открыто. Пауза защищает от лимитов OLX.</p>
+        <div class="form-grid">
+          <label>Пауза между объявлениями, сек<input type="number" id="set-interval" min="5"></label>
+          <label>Максимум за один прогон<input type="number" id="set-max-run" min="1"></label>
+          <label class="checkbox"><input type="checkbox" id="set-dry"> Тестовый режим (ничего не отправлять)</label>
+        </div>
+        <button class="btn btn-primary" id="save-publish">Сохранить</button>
+      </article>
+
+      <article class="card" data-standalone hidden>
+        <h2>Резервная копия</h2>
+        <p class="hint">Все объявления и настройки хранятся в этом устройстве. Копия — единственный
+          способ не потерять их при переустановке.</p>
+        <div class="row">
+          <button class="btn btn-primary" id="backup-export">Сохранить копию</button>
+          <button class="btn" id="backup-import">Восстановить из файла</button>
+        </div>
+        <input type="file" id="backup-file" accept=".json" hidden>
       </article>
 
       <article class="card">
@@ -291,7 +321,9 @@
 <div class="toast" id="toast" hidden></div>
 <script src="/js/app.js" type="module"></script>
 <script>
-  if ('serviceWorker' in navigator) {
+  // В приложении файлы панели и так лежат на устройстве — service worker нужен
+  // только браузерной версии, где он даёт установку на главный экран и офлайн.
+  if ('serviceWorker' in navigator && typeof window.OlxNative === 'undefined') {
     addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
   }
 </script>

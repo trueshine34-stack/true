@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   sanitizeText, normalizeText, formatTitle, renderTemplate,
   buildHighlights, buildHashtags, formatListing, truncateWords,
-} from '../server/lib/formatter.js';
+} from '../shared/formatter.js';
 
 test('очистка убирает чужой телефон, почту, ссылку и упоминание площадки', () => {
   const out = sanitizeText('Zadzwoń 601 234 567 lub kontakt@sklep.pl, więcej na www.allegro.pl/oferta');

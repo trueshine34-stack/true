@@ -8,6 +8,7 @@ import { config, hasOlxCredentials, ROOT } from './lib/config.js';
 import { routes, notFound } from './routes/api.js';
 
 const PUBLIC_DIR = path.join(ROOT, 'public');
+const SHARED_DIR = path.join(ROOT, 'shared');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -22,8 +23,12 @@ const MIME = {
 
 function sendStatic(req, res, url) {
   const rel = url.pathname === '/' ? '/index.html' : url.pathname;
-  const target = path.join(PUBLIC_DIR, path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
-  if (!target.startsWith(PUBLIC_DIR) || !fs.existsSync(target) || fs.statSync(target).isDirectory()) {
+  const safe = path.normalize(rel).replace(/^(\.\.[/\\])+/, '');
+  // shared/ отдаём отдельно: те же модули логики использует автономный режим панели
+  const isShared = safe.startsWith('/shared/');
+  const base = isShared ? SHARED_DIR : PUBLIC_DIR;
+  const target = path.join(base, isShared ? safe.slice('/shared'.length) : safe);
+  if (!target.startsWith(base) || !fs.existsSync(target) || fs.statSync(target).isDirectory()) {
     return notFound(res);
   }
   res.writeHead(200, {

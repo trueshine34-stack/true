@@ -45,4 +45,35 @@ android {
 
 dependencies {
   implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+  implementation 'androidx.webkit:webkit:1.11.0'
+  implementation 'androidx.core:core:1.13.1'
+}
+
+/*
+ * Panel jest jeden - aplikacja nosi w sobie te same pliki, ktore serwuje
+ * wersja serwerowa. Kopiujemy je do generowanego katalogu assets,
+ * zeby zrodla nie dublowaly sie w repozytorium.
+ */
+def panelDir = file("${rootDir}/../olx-panel")
+
+def generatedAssets = layout.buildDirectory.dir('generated/panelAssets')
+
+def syncPanelAssets = tasks.register('syncPanelAssets', Copy) {
+  description = 'Kopiuje pliki panelu do assets aplikacji'
+  from(file("${panelDir}/public")) { into 'panel' }
+  from(file("${panelDir}/shared")) { into 'panel/shared' }
+  // service worker jest potrzebny tylko wersji przegladarkowej
+  exclude 'sw.js'
+  into generatedAssets
+}
+
+android.sourceSets.main.assets.srcDirs += generatedAssets
+
+// Katalog jest generowany, wiec kazde zadanie ktore go czyta - scalanie assets
+// oraz lint - musi poczekac na kopiowanie. Inaczej Gradle slusznie protestuje.
+tasks.matching {
+  it.name != 'syncPanelAssets'
+      && (it.name.toLowerCase().contains('assets') || it.name.toLowerCase().contains('lint'))
+}.configureEach {
+  dependsOn syncPanelAssets
 }

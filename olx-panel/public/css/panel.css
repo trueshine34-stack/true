@@ -198,10 +198,15 @@ label.checkbox input { width: auto; }
 }
 .modal-head, .modal-foot {
   display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
 }
 .modal-foot { border-bottom: 0; border-top: 1px solid var(--line); }
 .modal-head h2 { margin: 0; }
-.modal-body { padding: 18px; overflow-y: auto; }
+.modal-body {
+  padding: 18px; overflow-y: auto;
+  /* без min-height:0 длинная форма распирает колонку и выталкивает кнопки за экран */
+  flex: 1 1 auto; min-height: 0;
+}
 
 /* ---------- тост ---------- */
 .toast {
@@ -280,9 +285,14 @@ body { padding-bottom: env(safe-area-inset-bottom); }
   .grid.listings td.cell-actions .btn { width: 100%; border-color: var(--line); }
   .empty { padding: 30px 12px; }
 
-  /* Модалка редактора — на весь экран */
-  .modal { padding: 0; }
-  .modal-box { width: 100%; height: 100%; max-height: none; border-radius: 0; border: 0; }
+  /* Модалка редактора — на весь экран.
+     Не через height:100%: строка grid растёт под содержимое, и проценты
+     считаются от неё, а не от экрана — кнопки уезжали за нижний край. */
+  .modal { padding: 0; display: block; }
+  .modal-box {
+    position: absolute; inset: 0; width: auto; height: auto;
+    max-height: none; border-radius: 0; border: 0;
+  }
   .modal-body { padding: 14px; }
   .modal-foot { flex-wrap: wrap; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
   .modal-foot .btn { flex: 1 1 auto; }

@@ -5,8 +5,8 @@
 import crypto from 'node:crypto';
 import { config, hasOlxCredentials } from './config.js';
 import { read, update, log, settings as settingsStore } from './store.js';
-import { priceListing } from './pricing.js';
-import { formatListing } from './formatter.js';
+import { priceListing } from '../../shared/pricing.js';
+import { formatListing } from '../../shared/formatter.js';
 import { olx, toAdvertPayload, validatePayload } from './olx.js';
 
 /** Dodaje wyliczona cene i sformatowana tresc. Nie zapisuje niczego. */

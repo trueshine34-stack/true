@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+  <!-- Отсюда уходит только файл резервной копии, который пользователь сам сохранил. -->
+  <files-path name="export" path="export/" />
+</paths>

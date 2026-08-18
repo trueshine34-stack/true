@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCsv, mapRow, importFromCsv, importFromJson, parseHtml, toNumber, normalizeListing } from '../server/lib/importer.js';
+import { parseCsv, mapRow, importFromCsv, importFromJson, parseHtml, toNumber, normalizeListing } from '../shared/importer.js';
 
 test('разбор чисел в польском формате', () => {
   assert.equal(toNumber('1 299,99 zł'), 1299.99);

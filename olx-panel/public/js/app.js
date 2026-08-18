@@ -1,8 +1,27 @@
 /* Панель OLX — клиентская логика. Без сборщика и зависимостей. */
 
-const TOKEN = new URLSearchParams(location.search).get('token') || '';
+const PARAMS = new URLSearchParams(location.search);
+const TOKEN = PARAMS.get('token') || '';
+
+/**
+ * Панель работает в двух режимах с одним и тем же интерфейсом:
+ *   — автономный: вся логика внутри устройства (приложение на телефоне);
+ *   — серверный: запросы уходят на Node-сервер.
+ * Автономный включается, когда есть нативный мост Android или ?standalone=1.
+ */
+const STANDALONE = typeof window.OlxNative !== 'undefined' || PARAMS.has('standalone');
+
+let localApiPromise = null;
+const loadLocalApi = () => {
+  localApiPromise = localApiPromise || import('./local-api.js').then((m) => m.localApi);
+  return localApiPromise;
+};
 
 async function api(path, options = {}) {
+  if (STANDALONE) {
+    const localApi = await loadLocalApi();
+    return localApi(path, options);
+  }
   const res = await fetch(path, {
     ...options,
     headers: {
@@ -72,9 +91,12 @@ async function loadState() {
   const badge = $('#mode-badge');
   badge.textContent = data.dryRun ? 'Тест (dry-run)' : 'Публикация включена';
   badge.className = `badge ${data.dryRun ? 'dry' : 'live'}`;
+  const keysHint = STANDALONE
+    ? 'Ключи OLX не заданы. Введите client_id и client_secret из кабинета developer.olx.pl — до этого панель считает цены и готовит текст, но ничего не отправляет.'
+    : 'Ключи OLX не заданы в .env — панель работает в режиме dry-run: считает цены и готовит текст, но ничего не отправляет.';
   $('#olx-status').textContent = data.olxConfigured
     ? 'Ключи Partner API найдены. Если публикация даёт 401 — подключите аккаунт через OAuth.'
-    : 'Ключи OLX не заданы в .env — панель работает в режиме dry-run: считает цены и готовит текст, но ничего не отправляет.';
+    : keysHint;
 
   renderStats();
   renderSources();
@@ -145,6 +167,16 @@ function renderListings() {
 
   $('#listing-rows').innerHTML = rows;
   $('#listings-empty').hidden = state.listings.length > 0;
+  renderSelection();
+}
+
+/** Выделение доступно и с телефона: в шапке таблицы там чекбокса нет. */
+function renderSelection() {
+  const total = state.listings.length;
+  const selected = state.listings.filter((l) => state.selected.has(l.id)).length;
+  $('#toggle-all').textContent = selected ? `Снять выделение (${selected})` : 'Выбрать все';
+  $('#toggle-all').disabled = total === 0;
+  $('#check-all').checked = total > 0 && selected === total;
 }
 
 $('#listing-rows').addEventListener('click', (event) => {
@@ -153,14 +185,22 @@ $('#listing-rows').addEventListener('click', (event) => {
   if (event.target.classList.contains('pick')) {
     if (event.target.checked) state.selected.add(row.dataset.id);
     else state.selected.delete(row.dataset.id);
+    renderSelection();
     return;
   }
   if (event.target.classList.contains('edit')) openEditor(row.dataset.id);
 });
 
-$('#check-all').addEventListener('change', (event) => {
-  state.selected = event.target.checked ? new Set(state.listings.map((l) => l.id)) : new Set();
+function setAllSelected(selectAll) {
+  state.selected = selectAll ? new Set(state.listings.map((l) => l.id)) : new Set();
   renderListings();
+}
+
+$('#check-all').addEventListener('change', (event) => setAllSelected(event.target.checked));
+
+$('#toggle-all').addEventListener('click', () => {
+  const selected = state.listings.filter((l) => state.selected.has(l.id)).length;
+  setAllSelected(selected === 0);
 });
 
 let searchTimer;
@@ -455,6 +495,15 @@ async function showPreview(id) {
 
 function fillSettingsForm() {
   const s = state.settings;
+  $$('[data-standalone]').forEach((el) => { el.hidden = !STANDALONE; });
+  if (STANDALONE && s.olx) {
+    $('#set-olx-id').value = s.olx.clientId || '';
+    $('#set-olx-secret').value = s.olx.clientSecret || '';
+    $('#set-olx-redirect').value = s.olx.redirectUri || '';
+    $('#set-interval').value = Math.round((s.publish?.intervalMs ?? 45000) / 1000);
+    $('#set-max-run').value = s.publish?.maxPerRun ?? 20;
+    $('#set-dry').checked = Boolean(s.publish?.dryRun);
+  }
   $('#set-contact-name').value = s.contact.name || '';
   $('#set-contact-phone').value = s.contact.phone || '';
   $('#set-city-id').value = s.location.cityId ?? '';
@@ -525,8 +574,89 @@ $('#cat-list').addEventListener('click', (event) => {
   $('#cat-load').click();
 });
 
+$('#save-olx-keys')?.addEventListener('click', async () => {
+  await api('/api/settings', {
+    method: 'PUT',
+    body: {
+      olx: {
+        clientId: $('#set-olx-id').value.trim(),
+        clientSecret: $('#set-olx-secret').value.trim(),
+        redirectUri: $('#set-olx-redirect').value.trim() || 'olxpanel://oauth',
+      },
+    },
+  });
+  toast('Ключи сохранены', 'ok');
+  await loadState();
+});
+
+$('#save-publish')?.addEventListener('click', async () => {
+  await api('/api/settings', {
+    method: 'PUT',
+    body: {
+      publish: {
+        intervalMs: Math.max(5, Number($('#set-interval').value) || 45) * 1000,
+        maxPerRun: Math.max(1, Number($('#set-max-run').value) || 20),
+        dryRun: $('#set-dry').checked,
+      },
+    },
+  });
+  toast('Настройки публикации сохранены', 'ok');
+  await loadState();
+});
+
+$('#backup-export')?.addEventListener('click', async () => {
+  const data = await api('/api/backup');
+  const json = JSON.stringify(data, null, 2);
+  const name = `olx-panel-${new Date().toISOString().slice(0, 10)}.json`;
+  if (window.OlxNative?.saveFile) {
+    window.OlxNative.saveFile(name, json);
+    toast('Копия сохранена — выберите, куда её отправить', 'ok');
+    return;
+  }
+  const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  const link = Object.assign(document.createElement('a'), { href: url, download: name });
+  link.click();
+  URL.revokeObjectURL(url);
+  toast('Копия сохранена', 'ok');
+});
+
+$('#backup-import')?.addEventListener('click', () => $('#backup-file').click());
+
+$('#backup-file')?.addEventListener('change', async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const result = await api('/api/restore', { method: 'POST', body: JSON.parse(await file.text()) });
+    toast(`Восстановлено объявлений: ${result.listings}`, 'ok');
+    await refreshAll();
+  } catch (err) {
+    toast(`Не удалось восстановить: ${err.message}`, 'err');
+  } finally {
+    event.target.value = '';
+  }
+});
+
+// Код авторизации приходит из нативного окна OLX — обмениваем его на токены.
+window.__olxOAuthResult = async (code, error) => {
+  if (error || !code) {
+    toast(error || 'Авторизация отменена', 'err');
+    return;
+  }
+  try {
+    await api('/api/olx/oauth/exchange', { method: 'POST', body: { code } });
+    toast('Аккаунт OLX подключён', 'ok');
+    await loadState();
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+};
+
 $('#olx-connect').addEventListener('click', async () => {
-  const { url } = await api('/api/olx/authorize');
+  const { url, redirectUri } = await api('/api/olx/authorize');
+  if (window.OlxNative?.startOAuth) {
+    window.OlxNative.startOAuth(url, redirectUri || '');
+    return;
+  }
   window.open(url, '_blank', 'noopener');
 });
 

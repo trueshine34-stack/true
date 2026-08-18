@@ -1,7 +1,7 @@
 /** Definicje endpointow JSON API panelu. */
 import { config, hasOlxCredentials } from '../lib/config.js';
 import { read, write, update, newId, log, settings as settingsStore } from '../lib/store.js';
-import { computePrice, resolveRule, ROUNDING_MODES } from '../lib/pricing.js';
+import { computePrice, resolveRule, ROUNDING_MODES } from '../../shared/pricing.js';
 import { importFromUrl, importFromCsv, importFromJson, normalizeListing } from '../lib/importer.js';
 import { prepareListing, publishOne, startQueue, stopQueue, getQueueState, findDuplicates } from '../lib/publisher.js';
 import { olx, authorizeUrl, exchangeAuthorizationCode, toAdvertPayload, validatePayload } from '../lib/olx.js';

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyRounding, computePrice, resolveRule } from '../server/lib/pricing.js';
+import { applyRounding, computePrice, resolveRule } from '../shared/pricing.js';
 
 test('округление до ...,99 всегда идёт вверх', () => {
   assert.equal(applyRounding(100, 'end99'), 100.99);
