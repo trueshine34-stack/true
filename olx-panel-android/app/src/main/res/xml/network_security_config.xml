@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Панель обычно живёт в локальной сети по http (127.0.0.1, 192.168.x.x),
+  поэтому открытый трафик разрешён. Если вы вынесли панель в интернет —
+  используйте https, тогда это правило просто не понадобится.
+-->
+<network-security-config>
+  <base-config cleartextTrafficPermitted="true">
+    <!-- Пользовательские сертификаты не доверяем: для http-панели в локальной
+         сети они не нужны, а открытая дверь для перехвата трафика — нужна ещё меньше. -->
+    <trust-anchors>
+      <certificates src="system" />
+    </trust-anchors>
+  </base-config>
+</network-security-config>

@@ -79,7 +79,7 @@ label.checkbox input { width: auto; }
 .field { margin-bottom: 12px; }
 
 .badge {
-  font-size: 12px; padding: 4px 10px; border-radius: 999px;
+  font-size: 12px; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
   background: var(--bg-card); border: 1px solid var(--line); color: var(--muted);
 }
 .badge.live { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
@@ -100,6 +100,7 @@ label.checkbox input { width: auto; }
 .card {
   background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 16px; box-shadow: var(--shadow);
+  min-width: 0; /* иначе широкая таблица внутри распирает страницу вместо своего скролла */
 }
 .hint { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
 .row { display: flex; gap: 8px; align-items: center; margin: 10px 0 0; flex-wrap: wrap; }
@@ -135,6 +136,7 @@ label.checkbox input { width: auto; }
 .margin-pos { color: var(--ok); }
 .margin-neg { color: var(--err); }
 .grid.compact { min-width: 0; }
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .grid.compact td, .grid.compact th { padding: 6px 8px; font-size: 13px; }
 .empty { padding: 40px; text-align: center; color: var(--muted); }
 
@@ -182,7 +184,7 @@ label.checkbox input { width: auto; }
 }
 .ad-preview .ad-title { font-size: 18px; font-weight: 650; letter-spacing: -.01em; margin-bottom: 6px; }
 .ad-preview .ad-price { font-size: 22px; font-weight: 700; color: var(--ok); margin-bottom: 12px; }
-.ad-preview .ad-body { white-space: pre-wrap; font-size: 14px; line-height: 1.6; }
+.ad-preview .ad-body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.6; }
 .ad-preview .ad-photos { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 12px; }
 .ad-preview .ad-photos img { width: 78px; height: 78px; border-radius: 8px; object-fit: cover; flex: 0 0 auto; }
 .ad-preview .ad-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 12px; }
@@ -210,7 +212,89 @@ label.checkbox input { width: auto; }
 .toast.err { border-color: var(--err); color: var(--err); }
 .toast.ok { border-color: var(--ok); }
 
-@media (max-width: 720px) {
-  .topbar { flex-wrap: wrap; }
-  main { padding: 14px; }
+/* ------------------------- телефон и PWA ------------------------- */
+
+body { padding-bottom: env(safe-area-inset-bottom); }
+
+@media (max-width: 860px) {
+  .topbar {
+    flex-wrap: wrap; gap: 10px; padding: 10px 12px;
+    padding-top: max(10px, env(safe-area-inset-top));
+  }
+  .tabs {
+    order: 3; width: 100%; flex-wrap: nowrap; overflow-x: auto; gap: 4px;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 0 0 auto; padding: 9px 14px; }
+  .topbar-right { margin-left: auto; }
+  main { padding: 12px; }
+
+  /* Плитки уезжают в горизонтальную ленту — не съедают экран по вертикали */
+  .stats {
+    display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; padding-bottom: 4px;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .stats::-webkit-scrollbar { display: none; }
+  .stat { flex: 0 0 auto; min-width: 96px; padding: 10px 12px; }
+  .stat b { font-size: 18px; white-space: nowrap; }
+  .stat span { white-space: nowrap; }
+
+  .cards, .cards-2 { grid-template-columns: 1fr; }
+  .card { padding: 14px; }
+
+  /* Панель кнопок: тапабельные цели, главное действие на всю ширину */
+  .toolbar { gap: 8px; }
+  .toolbar #search, .toolbar select { flex: 1 1 100%; max-width: none; }
+  .toolbar .btn { flex: 1 1 auto; min-height: 44px; }
+  #publish-selected { flex-basis: 100%; }
+  .btn { min-height: 42px; }
+  input, select, textarea { font-size: 16px; } /* iOS не зумит поля от 16px */
+
+  /* Таблица объявлений превращается в карточки */
+  .table-wrap { background: none; border: 0; box-shadow: none; overflow: visible; }
+  .grid.listings { min-width: 0; }
+  .grid.listings thead { display: none; }
+  .grid.listings tbody, .grid.listings tr, .grid.listings td { display: block; }
+  .grid.listings tr {
+    display: grid; grid-template-columns: 26px 52px minmax(0, 1fr); gap: 6px 10px;
+    align-items: start; background: var(--bg-card); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 12px; margin-bottom: 10px; box-shadow: var(--shadow);
+  }
+  .grid.listings tbody tr:hover { background: var(--bg-card); }
+  .grid.listings td { border: 0; padding: 0; }
+  .grid.listings td.col-check { grid-column: 1; align-self: center; }
+  .grid.listings td.col-check input { width: 20px; height: 20px; }
+  .grid.listings td.col-photo { grid-column: 2; }
+  .grid.listings td.cell-title { grid-column: 3; }
+  .grid.listings .thumb { width: 52px; height: 52px; }
+  .grid.listings td.cell-data {
+    grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline;
+    gap: 12px; text-align: right; padding-top: 6px; border-top: 1px solid var(--line);
+  }
+  .grid.listings td.cell-data::before {
+    content: attr(data-label); color: var(--muted); font-size: 12px;
+    text-transform: uppercase; letter-spacing: .05em; text-align: left; flex: 0 0 auto;
+  }
+  .grid.listings td.cell-actions { grid-column: 1 / -1; }
+  .grid.listings td.cell-actions .btn { width: 100%; border-color: var(--line); }
+  .empty { padding: 30px 12px; }
+
+  /* Модалка редактора — на весь экран */
+  .modal { padding: 0; }
+  .modal-box { width: 100%; height: 100%; max-height: none; border-radius: 0; border: 0; }
+  .modal-body { padding: 14px; }
+  .modal-foot { flex-wrap: wrap; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); }
+  .modal-foot .btn { flex: 1 1 auto; }
+  .modal-foot .hint { flex: 1 1 100%; order: -1; }
+  .form-grid { grid-template-columns: 1fr; }
+
+  .grid.compact th, .grid.compact td { white-space: nowrap; }
+  .logs li { flex-wrap: wrap; gap: 4px 10px; }
+  .toast { left: 12px; right: 12px; transform: none; max-width: none; bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
+
+@media (display-mode: standalone) {
+  /* В установленном приложении нет адресной строки — шапка становится статус-баром */
+  .topbar { padding-top: max(12px, env(safe-area-inset-top)); }
 }

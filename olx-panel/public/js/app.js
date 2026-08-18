@@ -121,7 +121,7 @@ function renderListings() {
         <td class="col-photo">${l.images?.[0]
           ? `<img class="thumb" src="${esc(l.images[0])}" alt="" loading="lazy">`
           : '<div class="thumb"></div>'}</td>
-        <td>
+        <td class="cell-title">
           <div class="title">${esc(l.formatted?.title || l.title || '(без названия)')}</div>
           ${l.formatted?.title && l.formatted.title !== l.title
             ? `<div class="sub">источник: ${esc(l.title)}</div>` : ''}
@@ -133,12 +133,13 @@ function renderListings() {
             ${l.olx?.url ? ` · <a href="${esc(l.olx.url)}" target="_blank" rel="noopener">на OLX</a>` : ''}
           </div>
         </td>
-        <td class="num">${money(l.basePrice, priced.currency)}</td>
-        <td class="num ${marginClass}">${priced.margin != null ? `${money(priced.margin, '')}<div class="sub">${priced.marginPercent}%</div>` : '—'}</td>
-        <td class="num"><span class="price-main">${money(priced.price, priced.currency)}</span>${priced.manual ? '<div class="sub">вручную</div>' : ''}</td>
-        <td><span class="pill ${l.status}">${STATUS_LABEL[l.status] || l.status}</span>
+        <td class="num cell-data" data-label="Закупка">${money(l.basePrice, priced.currency)}</td>
+        <td class="num cell-data ${marginClass}" data-label="Наценка">${priced.margin != null
+          ? `${money(priced.margin, '')} <span class="sub">${priced.marginPercent}%</span>` : '—'}</td>
+        <td class="num cell-data" data-label="Цена OLX"><span class="price-main">${money(priced.price, priced.currency)}</span>${priced.manual ? ' <span class="sub">вручную</span>' : ''}</td>
+        <td class="cell-data" data-label="Статус"><span class="pill ${l.status}">${STATUS_LABEL[l.status] || l.status}</span>
           ${l.error ? `<div class="sub margin-neg">${esc(l.error.slice(0, 90))}</div>` : ''}</td>
-        <td><button class="btn btn-ghost edit">Открыть</button></td>
+        <td class="cell-actions"><button class="btn btn-ghost edit">Открыть</button></td>
       </tr>`;
   }).join('');
 

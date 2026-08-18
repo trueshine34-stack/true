@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+  <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+      android:id="@+id/refresh"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent">
+
+    <WebView
+        android:id="@+id/webview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+  </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+  <LinearLayout
+      android:id="@+id/error_view"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:background="@color/bg"
+      android:orientation="vertical"
+      android:gravity="center"
+      android:padding="28dp"
+      android:visibility="gone">
+
+    <TextView
+        android:id="@+id/error_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/error_offline"
+        android:textColor="@color/muted"
+        android:textSize="16sp"
+        android:gravity="center"
+        android:lineSpacingExtra="4dp" />
+
+    <Button
+        android:id="@+id/button_retry"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:background="@drawable/bg_button"
+        android:text="@string/action_retry"
+        android:textColor="#FFFFFF"
+        android:textAllCaps="false"
+        android:textSize="16sp"
+        android:layout_marginTop="22dp" />
+
+    <Button
+        android:id="@+id/button_change"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:background="@drawable/bg_button_ghost"
+        android:text="@string/action_change"
+        android:textColor="@color/text"
+        android:textAllCaps="false"
+        android:textSize="16sp"
+        android:layout_marginTop="10dp" />
+  </LinearLayout>
+
+  <Button
+      android:id="@+id/button_menu"
+      android:layout_width="44dp"
+      android:layout_height="44dp"
+      android:layout_gravity="bottom|end"
+      android:layout_margin="16dp"
+      android:background="@drawable/bg_fab"
+      android:text="@string/menu_dots"
+      android:textColor="@color/text"
+      android:textSize="20sp"
+      android:paddingBottom="6dp"
+      android:stateListAnimator="@null" />
+</FrameLayout>

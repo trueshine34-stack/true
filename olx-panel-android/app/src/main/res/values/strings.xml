@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">OLX Panel</string>
+  <string name="setup_title">Подключение к панели</string>
+  <string name="setup_hint">Укажите адрес компьютера, на котором запущена панель. Телефон и компьютер должны быть в одной сети Wi-Fi.</string>
+  <string name="label_url">Адрес панели</string>
+  <string name="label_token">Токен панели (PANEL_TOKEN, если задан)</string>
+  <string name="action_connect">Подключиться</string>
+  <string name="action_retry">Повторить</string>
+  <string name="action_change">Изменить адрес</string>
+  <string name="error_empty_url">Введите адрес панели</string>
+  <string name="error_bad_url">Адрес должен начинаться с http:// или https://</string>
+  <string name="error_offline">Панель не отвечает. Проверьте, что сервер запущен и телефон в той же сети.</string>
+  <string name="menu_reload">Обновить</string>
+  <string name="menu_server">Сменить сервер</string>
+  <string name="menu_clear">Очистить кэш</string>
+  <string name="exit_hint">Нажмите ещё раз, чтобы выйти</string>
+  <string name="logo_text" translatable="false">OLX</string>
+  <string name="menu_dots" translatable="false">⋯</string>
+  <string name="hint_url" translatable="false">http://192.168.1.10:8787</string>
+  <string name="hint_token" translatable="false">—</string>
+</resources>

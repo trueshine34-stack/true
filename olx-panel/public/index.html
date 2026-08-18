@@ -2,7 +2,14 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="OLX Panel">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
 <title>OLX Panel — автовыставление с наценкой</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
 <link rel="stylesheet" href="/css/panel.css">
@@ -47,7 +54,7 @@
     </div>
     <div class="queue-bar" id="queue-bar" hidden><div class="queue-fill"></div><span></span></div>
     <div class="table-wrap">
-      <table class="grid">
+      <table class="grid listings">
         <thead>
           <tr>
             <th class="col-check"><input type="checkbox" id="check-all"></th>
@@ -144,7 +151,7 @@
 
       <article class="card">
         <h2>Как это ляжет на цены</h2>
-        <table class="grid compact" id="pricing-preview"></table>
+        <div class="table-scroll"><table class="grid compact" id="pricing-preview"></table></div>
       </article>
     </div>
   </section>
@@ -283,5 +290,10 @@
 
 <div class="toast" id="toast" hidden></div>
 <script src="/js/app.js" type="module"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  }
+</script>
 </body>
 </html>

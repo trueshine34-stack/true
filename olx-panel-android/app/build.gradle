@@ -1,0 +1,48 @@
+plugins {
+  id 'com.android.application'
+}
+
+android {
+  namespace 'pl.olxpanel.app'
+  compileSdk 34
+
+  defaultConfig {
+    applicationId "pl.olxpanel.app"
+    minSdk 24
+    targetSdk 34
+    versionCode 1
+    versionName "1.0"
+  }
+
+  // Podpis release'owy wlacza sie sam, gdy w gradle.properties (albo przez -P)
+  // podasz sciezke do keystore. Bez tego budujemy tylko debug.
+  signingConfigs {
+    if (project.hasProperty('OLX_KEYSTORE_FILE')) {
+      release {
+        storeFile file(project.property('OLX_KEYSTORE_FILE'))
+        storePassword project.property('OLX_KEYSTORE_PASSWORD')
+        keyAlias project.property('OLX_KEY_ALIAS')
+        keyPassword project.property('OLX_KEY_PASSWORD')
+      }
+    }
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+      if (project.hasProperty('OLX_KEYSTORE_FILE')) {
+        signingConfig signingConfigs.release
+      }
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+dependencies {
+  implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+}
