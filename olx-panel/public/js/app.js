@@ -91,12 +91,7 @@ async function loadState() {
   const badge = $('#mode-badge');
   badge.textContent = data.dryRun ? 'Тест (dry-run)' : 'Публикация включена';
   badge.className = `badge ${data.dryRun ? 'dry' : 'live'}`;
-  const keysHint = STANDALONE
-    ? 'Ключи OLX не заданы. Введите client_id и client_secret из кабинета developer.olx.pl — до этого панель считает цены и готовит текст, но ничего не отправляет.'
-    : 'Ключи OLX не заданы в .env — панель работает в режиме dry-run: считает цены и готовит текст, но ничего не отправляет.';
-  $('#olx-status').textContent = data.olxConfigured
-    ? 'Ключи Partner API найдены. Если публикация даёт 401 — подключите аккаунт через OAuth.'
-    : keysHint;
+  $('#olx-status').textContent = olxStatusText(data);
 
   renderStats();
   renderSources();
@@ -651,10 +646,32 @@ window.__olxOAuthResult = async (code, error) => {
   }
 };
 
+/** Три разных состояния: ключей нет, ключи есть, аккаунт подключён. */
+function olxStatusText(data) {
+  if (!data.olxConfigured) {
+    return STANDALONE
+      ? 'Шаг 1. Ключей нет. Получите client_id и client_secret в кабинете developer.olx.pl (заявку проверяют вручную, ключи придут на почту) и сохраните их здесь. Пока панель считает цены и готовит текст, но ничего не отправляет.'
+      : 'Ключи OLX не заданы в .env — панель работает в режиме dry-run: считает цены и готовит текст, но ничего не отправляет.';
+  }
+  if (!data.olxConnected) {
+    return 'Шаг 2. Ключи сохранены, аккаунт ещё не подключён. Нажмите «Подключить через OAuth» и подтвердите доступ на странице OLX — без этого объявления публиковать нельзя.';
+  }
+  return 'Аккаунт OLX подключён, публикация доступна. «Проверить связь» покажет, от чьего имени работает панель.';
+}
+
 $('#olx-connect').addEventListener('click', async () => {
+  // Без client_id страница OLX отвечает «No client id supplied» — не отправляем туда впустую.
   const { url, redirectUri } = await api('/api/olx/authorize');
+  if (STANDALONE && !state.settings?.olx?.clientId) {
+    toast('Сначала сохраните client_id и client_secret из кабинета OLX', 'err');
+    return;
+  }
   if (window.OlxNative?.startOAuth) {
-    window.OlxNative.startOAuth(url, redirectUri || '');
+    if (!redirectUri) {
+      toast('Укажите redirect_uri — точно такой же, как в кабинете OLX', 'err');
+      return;
+    }
+    window.OlxNative.startOAuth(url, redirectUri);
     return;
   }
   window.open(url, '_blank', 'noopener');

@@ -51,7 +51,7 @@ const DEFAULTS = {
     location: { cityId: null, cityName: '', districtId: null, lat: null, lon: null },
     advertiserType: 'private',
     // На телефоне нет .env, поэтому ключи и режим публикации живут в настройках.
-    olx: { clientId: '', clientSecret: '', redirectUri: 'olxpanel://oauth', scope: 'v2 read write' },
+    olx: { clientId: '', clientSecret: '', redirectUri: 'https://localhost/oauth', scope: 'v2 read write' },
     publish: { intervalMs: 45000, maxPerRun: 20, dryRun: false },
   },
   sources: [],
@@ -361,11 +361,15 @@ route('GET', '/api/state', () => {
   const margin = all.filter((l) => l.status === 'published')
     .reduce((sum, l) => sum + (l.priced?.margin || 0), 0);
   const settings = settingsOf();
+  const tokens = read('tokens') || {};
   return {
     settings,
     sources: read('sources'),
     queue: { ...queueState },
     olxConfigured: olx.hasCredentials(),
+    // Публикация идёт только по authorization_code, поэтому одних ключей мало —
+    // нужен ещё токен, полученный после подтверждения доступа в OLX.
+    olxConnected: Boolean(tokens.refreshToken || tokens.accessToken),
     dryRun: settings.publish.dryRun || !olx.hasCredentials(),
     standalone: true,
     hasNative: Boolean(native()),

@@ -10,7 +10,7 @@ const TOKEN_SKEW_MS = 60_000;
 export const DEFAULT_ENDPOINTS = {
   baseUrl: 'https://www.olx.pl/api/partner',
   tokenUrl: 'https://www.olx.pl/api/open/oauth/token',
-  authorizeUrl: 'https://www.olx.pl/oauth/authorize/',
+  authorizeUrl: 'https://www.olx.pl/oauth/authorize',
   scope: 'v2 read write',
 };
 

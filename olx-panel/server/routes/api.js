@@ -48,6 +48,7 @@ export const routes = [
         sources: read('sources'),
         queue: getQueueState(),
         olxConfigured: hasOlxCredentials(),
+        olxConnected: Boolean(read('tokens').refreshToken || read('tokens').accessToken),
         dryRun: config.publisher.dryRun || !hasOlxCredentials(),
         roundingModes: ROUNDING_MODES,
         stats: {
