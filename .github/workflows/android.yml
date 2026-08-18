@@ -3,7 +3,10 @@ name: Build APK
 on:
   push:
     paths:
+      # Файлы панели попадают внутрь APK, поэтому их правки тоже пересобирают приложение
       - 'olx-panel-android/**'
+      - 'olx-panel/public/**'
+      - 'olx-panel/shared/**'
       - '.github/workflows/android.yml'
   workflow_dispatch:
 
@@ -23,6 +26,9 @@ jobs:
           java-version: '17'
 
       - uses: android-actions/setup-android@v3
+
+      - name: Проверить, что панель отдаётся из assets
+        run: ./gradlew --no-daemon testDebugUnitTest
 
       - name: Собрать debug APK
         run: ./gradlew --no-daemon assembleDebug

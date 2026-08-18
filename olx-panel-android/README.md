@@ -67,8 +67,14 @@
 ```bash
 cd olx-panel-android
 echo "sdk.dir=/путь/к/android-sdk" > local.properties
-./gradlew assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
+./gradlew testDebugUnitTest   # проверяет, что панель отдаётся из assets
+./gradlew assembleDebug       # app/build/outputs/apk/debug/app-debug.apk
 ```
+
+Тест `PanelAssetsTest` открывает `index.html` так же, как это делает WebView,
+и проходит по всем ссылкам страницы и по графу импортов — если файл лежит не по
+тому адресу, по которому его просит страница, сборка падает здесь, а не белым
+экраном на телефоне.
 
 Файлы панели не дублируются: задача `syncPanelAssets` кладёт в assets те же
 `olx-panel/public` и `olx-panel/shared`, что использует серверная версия.

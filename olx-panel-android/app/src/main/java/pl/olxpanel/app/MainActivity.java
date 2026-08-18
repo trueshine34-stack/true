@@ -35,8 +35,6 @@ import java.io.File;
 public class MainActivity extends Activity implements NativeBridge.Host {
 
   private static final int REQUEST_FILE = 1001;
-  private static final String PANEL_URL =
-      "https://appassets.androidplatform.net/panel/index.html";
 
   private WebView webView;
   private SwipeRefreshLayout refresh;
@@ -54,9 +52,7 @@ public class MainActivity extends Activity implements NativeBridge.Host {
     webView = findViewById(R.id.webview);
     refresh = findViewById(R.id.refresh);
 
-    assetLoader = new WebViewAssetLoader.Builder()
-        .addPathHandler("/panel/", new WebViewAssetLoader.AssetsPathHandler(this))
-        .build();
+    assetLoader = PanelAssets.createLoader(this);
 
     bridge = new NativeBridge(webView, new File(getFilesDir(), "panel"), this);
     configureWebView();
@@ -69,7 +65,7 @@ public class MainActivity extends Activity implements NativeBridge.Host {
     });
 
     findViewById(R.id.button_menu).setOnClickListener(v -> showMenu());
-    webView.loadUrl(PANEL_URL);
+    webView.loadUrl(PanelAssets.PANEL_URL);
   }
 
   // Панель — это JS-приложение, страницы берутся только из assets самой сборки.
@@ -99,7 +95,7 @@ public class MainActivity extends Activity implements NativeBridge.Host {
       @Override
       public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
         Uri uri = request.getUrl();
-        if ("appassets.androidplatform.net".equals(uri.getHost())) return false;
+        if (PanelAssets.DOMAIN.equals(uri.getHost())) return false;
         openExternally(uri);
         return true;
       }
