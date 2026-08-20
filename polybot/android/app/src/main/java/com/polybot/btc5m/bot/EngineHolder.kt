@@ -35,7 +35,13 @@ object EngineHolder {
                     onServiceState?.invoke()
                 },
                 onLog = { entry -> onLogEntry?.invoke(entry) },
-            ).also { engine = it }
+            ).also {
+                engine = it
+                // Quotes, positions and the price feed are screen data: they
+                // must flow from the moment the app opens, not only once the
+                // bot is started.
+                it.startFeed()
+            }
         }
     }
 

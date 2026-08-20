@@ -180,7 +180,7 @@ class BotEngine(
         }
         running = true
         haltReason = null
-        feed.start()
+        startFeed()
 
         val newScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = newScope

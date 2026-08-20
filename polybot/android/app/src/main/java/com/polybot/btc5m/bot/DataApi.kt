@@ -14,8 +14,17 @@ object DataApi {
 
     private const val HOST = "https://data-api.polymarket.com"
 
+    /**
+     * Open positions only.
+     *
+     * Without `redeemable=false` the answer is dominated by settled markets
+     * waiting to be claimed — on a five-minute series that is a new dead entry
+     * every five minutes, which would bury the one position that is still live.
+     */
     fun positions(user: String, limit: Int = 50): List<Position> {
-        val text = Http.get("$HOST/positions?user=$user&limit=$limit&sizeThreshold=0.1")
+        val text = Http.get(
+            "$HOST/positions?user=$user&limit=$limit&sizeThreshold=0.1&redeemable=false",
+        )
         val array = JSONArray(text)
         val out = ArrayList<Position>(array.length())
         for (i in 0 until array.length()) {

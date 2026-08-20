@@ -219,10 +219,12 @@ export function Dashboard({
         )}
       </div>
 
-      {(snap.positions?.length ?? 0) > 0 && (
-        <div className="card">
-          <h2>Позиции</h2>
-          {snap.positions!.map((p) => (
+      <div className="card">
+        <h2>Позиции</h2>
+        {(snap.positions?.length ?? 0) === 0 ? (
+          <div className="muted">Открытых позиций нет.</div>
+        ) : (
+          snap.positions!.map((p) => (
             <button
               key={p.asset}
               className="position"
@@ -242,12 +244,14 @@ export function Dashboard({
                 </span>
               </div>
             </button>
-          ))}
+          ))
+        )}
+        {(snap.positions?.length ?? 0) > 0 && (
           <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>
             Нажмите на позицию, чтобы открыть продажу с её размером.
           </p>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="grid2" style={{ marginBottom: 12 }}>
         <div className="stat">
