@@ -30,6 +30,7 @@ object EngineHolder {
         return synchronized(this) {
             engine ?: BotEngine(
                 statsStore = StatsStore(context),
+                journal = Journal(context).also { it.prune() },
                 onStateChanged = {
                     onState?.invoke()
                     onServiceState?.invoke()

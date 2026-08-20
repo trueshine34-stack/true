@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
  */
 class BotEngine(
     private val statsStore: StatsStore,
+    val journal: Journal,
     private val onStateChanged: () -> Unit,
     private val onLog: (LogEntry) -> Unit,
 ) {
@@ -88,6 +89,9 @@ class BotEngine(
     private var scope: CoroutineScope? = null
     private var loop: Job? = null
 
+    /** Numbering for simulated orders, so paper fills are traceable in the log. */
+    private var paperOrderSeq = 0
+
     private val ambientScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var ambientJob: Job? = null
     private var cachedMarket: Market? = null
@@ -98,6 +102,7 @@ class BotEngine(
         const val SETTLE_RETRY_MS = 10_000L
         const val STRIKE_GRACE_MS = 15_000L
         const val STALE_TICK_MS = 5_000L
+        const val ENTRY_DEADLINE_MS = 30_000L
         const val MAX_HISTORY = 200
         const val MAX_LOGS = 400
     }
@@ -117,6 +122,7 @@ class BotEngine(
     }
 
     fun log(level: String, message: String) {
+        journal.log(level, message)
         val entry = LogEntry(logId.incrementAndGet(), System.currentTimeMillis(), level, message)
         logs.add(0, entry)
         while (logs.size > MAX_LOGS) logs.removeAt(logs.size - 1)
@@ -278,13 +284,19 @@ class BotEngine(
         }
 
         val entryAt = cycle.windowStart * 1000 + settings.entryDelaySec * 1000L
-        val tooLate = now > cycle.windowEnd * 1000 - 30_000L
+        val tooLate = now > cycle.windowEnd * 1000 - ENTRY_DEADLINE_MS
 
+        simulatePaperFills(cycle)
         maybeTakeProfit(cycle, now)
         maybeAverageDown(cycle, now)
         maybeSyncExit(cycle, now)
 
-        if (cycle.state == CycleState.ARMED && cycle.strike != null && now >= entryAt) {
+        if (
+            cycle.state == CycleState.ARMED &&
+            cycle.strike != null &&
+            now >= entryAt &&
+            now >= cycle.nextEntryAtMs
+        ) {
             if (tooLate) {
                 cycle.state = CycleState.SKIPPED
                 cycle.note = "слишком поздно для входа в этом окне"
@@ -372,30 +384,72 @@ class BotEngine(
         return null
     }
 
+    /**
+     * A missed window is usually a moment, not a verdict.
+     *
+     * The book moves constantly, so a price that offered no edge at the twenty
+     * second mark often does thirty seconds later. Rather than writing the
+     * window off on the first look, retry a few times — but only for reasons
+     * that a later look could change. A risk stop is a decision, not a
+     * condition, and retrying it would defeat the point.
+     */
+    private fun retryOrSkip(cycle: Cycle, reason: String, now: Long) {
+        cycle.entryAttempts += 1
+        val attemptsLeft = settings.entryAttempts - cycle.entryAttempts
+        val nextAt = now + settings.entryRetryDelaySec * 1000L
+        val wouldBeTooLate = nextAt > cycle.windowEnd * 1000 - ENTRY_DEADLINE_MS
+
+        if (attemptsLeft <= 0 || wouldBeTooLate) {
+            cycle.state = CycleState.SKIPPED
+            cycle.note = reason
+            log(
+                "info",
+                "Окно ${formatWindow(cycle.windowStart)} пропущено после " +
+                    "${cycle.entryAttempts} попыт(ок): $reason",
+            )
+            return
+        }
+
+        cycle.nextEntryAtMs = nextAt
+        cycle.note = "$reason — попытка ${cycle.entryAttempts} из ${settings.entryAttempts}"
+        log(
+            "info",
+            "Окно ${formatWindow(cycle.windowStart)}: $reason. Повтор через " +
+                "${settings.entryRetryDelaySec} с (осталось попыток $attemptsLeft)",
+        )
+    }
+
     private suspend fun attemptEntry(cycle: Cycle) = withContext(Dispatchers.IO) {
         val market = cycle.market ?: return@withContext
         val strike = cycle.strike ?: return@withContext
 
+        val now = System.currentTimeMillis()
         val block = preTradeBlock()
         if (block != null) {
-            cycle.state = CycleState.SKIPPED
-            cycle.note = block
-            log("warn", "Окно ${formatWindow(cycle.windowStart)} пропущено: $block")
-            if (block.startsWith("достигнут лимит") || block.contains("убытков подряд")) {
-                stop(block)
+            val terminal = block.startsWith("достигнут лимит") ||
+                block.contains("убытков подряд") ||
+                block.contains("не торговать") ||
+                block.contains("не подключён")
+            if (terminal) {
+                cycle.state = CycleState.SKIPPED
+                cycle.note = block
+                log("warn", "Окно ${formatWindow(cycle.windowStart)} пропущено: $block")
+                if (block.startsWith("достигнут лимит") || block.contains("убытков подряд")) {
+                    stop(block)
+                }
+            } else {
+                retryOrSkip(cycle, block, now)
             }
             return@withContext
         }
 
         val spot = feed.last?.value
         if (spot == null) {
-            cycle.state = CycleState.SKIPPED
-            cycle.note = "нет текущей цены"
+            retryOrSkip(cycle, "нет текущей цены", now)
             return@withContext
         }
         cycle.spotAtEntry = spot
 
-        val now = System.currentTimeMillis()
         cycle.fair = Strategy.fairValue(
             strike = strike,
             spot = spot,
@@ -415,22 +469,20 @@ class BotEngine(
             val decision = Strategy.decide(
                 settings, cycle.fair, upAsk, downAsk, feeRate, feeExponent,
             )
+            cycle.decision = decision
             if (!decision.act || decision.side == null) {
-                cycle.state = CycleState.SKIPPED
-                cycle.note = decision.reason
-                log(
-                    "info",
-                    "Окно ${formatWindow(cycle.windowStart)}: не входим — ${decision.reason}",
-                )
+                retryOrSkip(cycle, decision.reason, now)
                 return@withContext
             }
 
             val sized = sizeOrder(decision.price, stake, market.minimumOrderSize)
             if (sized == null) {
-                cycle.state = CycleState.SKIPPED
-                cycle.note = "$stake $ по цене ${decision.price} даёт меньше минимума " +
-                    "в ${market.minimumOrderSize} долей"
-                log("warn", "Окно ${formatWindow(cycle.windowStart)}: ${cycle.note}")
+                retryOrSkip(
+                    cycle,
+                    "$stake $ по цене ${decision.price} даёт меньше минимума " +
+                        "в ${market.minimumOrderSize} долей",
+                    now,
+                )
                 return@withContext
             }
             if (sized.second != stake) {
@@ -446,18 +498,31 @@ class BotEngine(
                 if (decision.side == "Up") market.up.tokenId else market.down.tokenId
 
             if (settings.dryRun) {
+                // Paper trades carry the same taker fee the exchange would
+                // charge, otherwise the simulated result flatters every entry.
+                val fee = Strategy.takerFeePerShare(decision.price, feeRate, feeExponent) *
+                    sized.first
+                cycle.feesUsd += fee
                 cycle.entry = Entry(
-                    decision.side, decision.price, sized.first, sized.second, null, true,
+                    side = decision.side!!,
+                    price = decision.price,
+                    shares = sized.first,
+                    costUsd = sized.second + fee,
+                    orderId = null,
+                    dryRun = true,
                 )
                 cycle.state = CycleState.ENTERED
+                cycle.entryFilledAtMs = System.currentTimeMillis()
+                cycle.baseCostUsd = sized.second + fee
                 stats.trades += 1
-                stats.stakedUsd += sized.second
+                stats.stakedUsd += sized.second + fee
                 persistStats()
                 log(
                     "trade",
                     "[ТЕСТ] ${decision.side} · " + String.format("%.2f", sized.first) +
                         " долей по " + String.format("%.0f", decision.price * 100) + "¢ = " +
-                        String.format("%.2f", sized.second) + " $ — ${decision.reason}",
+                        String.format("%.2f", sized.second) + " $ + комиссия " +
+                        String.format("%.3f", fee) + " $ — ${decision.reason}",
                 )
                 return@withContext
             }
@@ -497,24 +562,28 @@ class BotEngine(
         val result = try {
             ClobApi.postOrder(order, creds, acct.signerAddress)
         } catch (e: Exception) {
-            cycle.state = CycleState.FAILED
-            cycle.note = "ордер отклонён: ${e.message}"
             log("error", "Ордер не прошёл (${formatWindow(cycle.windowStart)}): ${e.message}")
+            retryOrSkip(cycle, "ордер не прошёл: ${e.message}", System.currentTimeMillis())
             return
         }
 
         if (!result.success || result.error != null) {
-            cycle.state = CycleState.FAILED
-            cycle.note = result.error ?: "CLOB отклонил ордер"
-            log("error", "Ордер отклонён: ${cycle.note}")
+            val reason = result.error ?: "CLOB отклонил ордер"
+            log("error", "Ордер отклонён: $reason")
+            retryOrSkip(cycle, reason, System.currentTimeMillis())
             return
         }
 
         val shares = result.takingAmount ?: sized.first
-        val cost = result.makingAmount ?: sized.second
+        val filled = result.makingAmount ?: sized.second
+        // The exchange debits the taker fee separately from the order amount,
+        // so a P&L built only from the order would quietly overstate itself.
+        val fee = Strategy.takerFeePerShare(decision.price, feeRate, feeExponent) * shares
+        val cost = filled + fee
+        cycle.feesUsd += fee
         cycle.entry = Entry(
             side = decision.side!!,
-            price = if (shares > 0) cost / shares else decision.price,
+            price = if (shares > 0) filled / shares else decision.price,
             shares = shares,
             costUsd = cost,
             orderId = result.orderId,
@@ -528,7 +597,8 @@ class BotEngine(
         log(
             "trade",
             "${decision.side} · " + String.format("%.2f", shares) + " долей за " +
-                String.format("%.2f", cost) + " $ (${result.status ?: "ok"}) — ${decision.reason}",
+                String.format("%.2f", filled) + " $ + комиссия " +
+                String.format("%.3f", fee) + " $ (${result.status ?: "ok"}) — ${decision.reason}",
         )
 
         cycle.entryFilledAtMs = System.currentTimeMillis()
@@ -544,8 +614,7 @@ class BotEngine(
      */
     private suspend fun maybeSyncExit(cycle: Cycle, now: Long) {
         if (!settings.exitEnabled || cycle.exitFrozen) return
-        val entry = cycle.entry ?: return
-        if (entry.dryRun) return
+        cycle.entry ?: return
         if (cycle.entryFilledAtMs == 0L) return
         if (now < cycle.entryFilledAtMs + settings.exitDelaySec * 1000L) return
 
@@ -560,7 +629,11 @@ class BotEngine(
         cycle.lastExitPriceTried = target
         cycle.lastExitAttemptMs = now
 
-        withContext(Dispatchers.IO) { syncExit(cycle, target) }
+        if (cycle.entry?.dryRun == true) {
+            syncPaperExit(cycle, target)
+        } else {
+            withContext(Dispatchers.IO) { syncExit(cycle, target) }
+        }
         onStateChanged()
     }
 
@@ -621,6 +694,63 @@ class BotEngine(
         placeExit(cycle, market, tokenId, sizeToRest, targetPrice)
     }
 
+    /**
+     * Same reconciliation on paper.
+     *
+     * Test mode has to walk the whole ladder, not just the entry: a simulated
+     * result that skips the exits is not a simulation of this strategy at all.
+     */
+    private fun syncPaperExit(cycle: Cycle, targetPrice: Double) {
+        val market = cycle.market ?: return
+        val entry = cycle.entry ?: return
+
+        cycle.exitNeedsResync = false
+        cycle.exits.lastOrNull { !it.cancelled }?.cancelled = true
+
+        val sizeToRest =
+            entry.shares - cycle.exits.sumOf { it.matched } - cycle.soldAtMarket
+        if (sizeToRest < market.minimumOrderSize) {
+            cycle.exitFrozen = true
+            log(
+                "info",
+                "[ТЕСТ] Продажу оставляем как есть: остаток " +
+                    String.format("%.2f", sizeToRest) + " долей меньше минимума",
+            )
+            return
+        }
+
+        paperOrderSeq += 1
+        cycle.exits.add(ExitOrder("paper-$paperOrderSeq", targetPrice, sizeToRest))
+        log(
+            "trade",
+            "[ТЕСТ] Продажа " + String.format("%.2f", sizeToRest) +
+                " долей по ${cents(targetPrice)}",
+        )
+    }
+
+    /**
+     * Fill a resting paper sell once the market has traded through its price.
+     *
+     * Requiring the bid to pass the level, rather than merely touch it, keeps
+     * the simulation on the pessimistic side: a touch would only fill an order
+     * already at the front of the queue, which ours has no reason to be.
+     */
+    private fun simulatePaperFills(cycle: Cycle) {
+        val entry = cycle.entry ?: return
+        if (!entry.dryRun) return
+        val active = cycle.exits.lastOrNull { !it.cancelled && it.matched <= 0.0 } ?: return
+        val bid = liveQuote(entry.side)?.bestBid ?: return
+        if (bid <= active.price) return
+
+        active.matched = active.size
+        log(
+            "trade",
+            "[ТЕСТ] Лимитка исполнена: " + String.format("%.2f", active.size) +
+                " долей по ${cents(active.price)} (бид ${cents(bid)})",
+        )
+        onStateChanged()
+    }
+
     /** Top of book for the side we are holding, ignored once it goes stale. */
     private fun liveQuote(side: String): Quote? {
         val q = quotes ?: return null
@@ -637,7 +767,6 @@ class BotEngine(
     private suspend fun maybeTakeProfit(cycle: Cycle, now: Long) {
         if (!settings.takeProfitEnabled || cycle.takeProfitDone) return
         val entry = cycle.entry ?: return
-        if (entry.dryRun) return
         if (now < cycle.entryFilledAtMs + settings.exitDelaySec * 1000L) return
 
         val market = cycle.market ?: return
@@ -658,6 +787,27 @@ class BotEngine(
         }
 
         cycle.takeProfitDone = true
+
+        if (entry.dryRun) {
+            // Crossing the spread on paper: fill at the bid, pay the taker fee.
+            cycle.exits.lastOrNull { !it.cancelled }?.cancelled = true
+            val fee = Strategy.takerFeePerShare(bid, feeRate, feeExponent) * wanted
+            cycle.soldAtMarket += wanted
+            cycle.marketProceedsUsd += wanted * bid - fee
+            cycle.feesUsd += fee
+            log(
+                "trade",
+                "[ТЕСТ] Тейк-профит: продано " + String.format("%.2f", wanted) +
+                    " долей по ${cents(bid)} = " + String.format("%.2f", wanted * bid) +
+                    " $ − комиссия " + String.format("%.3f", fee) + " $",
+            )
+            cycle.exitNeedsResync = true
+            cycle.exitFrozen = false
+            cycle.lastExitPriceTried = null
+            onStateChanged()
+            return
+        }
+
         withContext(Dispatchers.IO) {
             val acct = account ?: return@withContext
             val creds = this@BotEngine.creds ?: return@withContext
@@ -695,7 +845,6 @@ class BotEngine(
         if (!settings.averageDownEnabled) return
         if (cycle.averageDownCount >= settings.averageDownMaxTimes) return
         val entry = cycle.entry ?: return
-        if (entry.dryRun) return
         if (now > cycle.windowEnd * 1000 - settings.averageDownDeadlineSec * 1000L) return
 
         val market = cycle.market ?: return
@@ -711,6 +860,35 @@ class BotEngine(
         }
 
         cycle.averageDownCount += 1
+
+        if (entry.dryRun) {
+            val fee = Strategy.takerFeePerShare(ask, feeRate, feeExponent) * sized.first
+            val shares = entry.shares + sized.first
+            val cost = entry.costUsd + sized.second + fee
+            cycle.feesUsd += fee
+            cycle.entry = entry.copy(
+                shares = shares,
+                costUsd = cost,
+                price = if (shares > 0) cost / shares else entry.price,
+            )
+            stats.trades += 1
+            stats.stakedUsd += sized.second + fee
+            persistStats()
+            log(
+                "trade",
+                "[ТЕСТ] Докупка ${entry.side}: " + String.format("%.2f", sized.first) +
+                    " долей по ${cents(ask)} за " + String.format("%.2f", sized.second) +
+                    " $ + комиссия " + String.format("%.3f", fee) + " $. Средняя " +
+                    cents(if (shares > 0) cost / shares else entry.price),
+            )
+            cycle.exitNeedsResync = true
+            cycle.exitFrozen = false
+            cycle.lastExitPriceTried = null
+            cycle.takeProfitDone = false
+            onStateChanged()
+            return
+        }
+
         withContext(Dispatchers.IO) {
             val acct = account ?: return@withContext
             val creds = this@BotEngine.creds ?: return@withContext
@@ -944,21 +1122,75 @@ class BotEngine(
 
         val entry = cycle.entry
         if (entry == null) {
+            journal.record(windowRecord(cycle))
             onStateChanged()
             return
         }
 
         settlePosition(cycle, entry, resolved)
+        journal.record(windowRecord(cycle))
+    }
+
+    /**
+     * One machine-readable line per window: the inputs the decision saw, what
+     * it did, and how it ended. This is what makes a session analysable after
+     * the fact rather than a wall of prose.
+     */
+    private fun windowRecord(cycle: Cycle): String {
+        val entry = cycle.entry
+        val fair = cycle.fair
+        val decision = cycle.decision
+        val exits = cycle.exits.joinToString(",") {
+            "{\"price\":${jsonNumber(it.price, 4)}," +
+                "\"size\":${jsonNumber(it.size, 4)}," +
+                "\"matched\":${jsonNumber(it.matched, 4)}," +
+                "\"cancelled\":${it.cancelled}}"
+        }
+        return buildString {
+            append("{")
+            append("\"window\":${jsonString(isoUtc(cycle.windowStart * 1000))},")
+            append("\"slug\":${jsonString(cycle.market?.slug)},")
+            append("\"dryRun\":${entry?.dryRun ?: settings.dryRun},")
+            append("\"strike\":${jsonNumber(cycle.strike, 2)},")
+            append("\"spotAtEntry\":${jsonNumber(cycle.spotAtEntry, 2)},")
+            append("\"pModel\":${jsonNumber(fair?.rawPUp, 5)},")
+            append("\"pUsed\":${jsonNumber(fair?.pUp, 5)},")
+            append("\"sigmaSettlement\":${jsonNumber(fair?.sigmaHorizon, 3)},")
+            append("\"drift\":${jsonNumber(fair?.drift, 3)},")
+            append("\"shrinkage\":${jsonNumber(calibration.shrinkage(), 4)},")
+            append("\"feeRate\":${jsonNumber(feeRate, 4)},")
+            append("\"feeExponent\":${jsonNumber(feeExponent, 2)},")
+            append("\"attempts\":${cycle.entryAttempts},")
+            append("\"decisionAct\":${decision?.act ?: false},")
+            append("\"decisionSide\":${jsonString(decision?.side)},")
+            append("\"decisionPrice\":${jsonNumber(decision?.price, 4)},")
+            append("\"netEdge\":${jsonNumber(decision?.edge, 5)},")
+            append("\"reason\":${jsonString(decision?.reason ?: cycle.note)},")
+            append("\"entrySide\":${jsonString(entry?.side)},")
+            append("\"entryPrice\":${jsonNumber(entry?.price, 4)},")
+            append("\"entryShares\":${jsonNumber(entry?.shares, 4)},")
+            append("\"entryCostUsd\":${jsonNumber(entry?.costUsd, 4)},")
+            append("\"exits\":[$exits],")
+            append("\"soldAtMarket\":${jsonNumber(cycle.soldAtMarket, 4)},")
+            append("\"marketProceedsUsd\":${jsonNumber(cycle.marketProceedsUsd, 4)},")
+            append("\"averageDowns\":${cycle.averageDownCount},")
+            append("\"takeProfitDone\":${cycle.takeProfitDone},")
+            append("\"feesUsd\":${jsonNumber(cycle.feesUsd, 4)},")
+            append("\"winner\":${jsonString(cycle.winner)},")
+            append("\"pnlUsd\":${jsonNumber(cycle.pnlUsd, 4)},")
+            append("\"state\":${jsonString(cycle.state.name.lowercase())}")
+            append("}")
+        }
     }
 
     /** Money side of a settlement: what the sells realised, what rode to the end. */
     private fun settlePosition(cycle: Cycle, entry: Entry, resolved: String) {
-        var soldShares = 0.0
-        var proceeds = 0.0
         val acct = account
         val creds = this.creds
         for (exit in cycle.exits) {
-            if (acct != null && creds != null) {
+            // Simulated orders have no server side; their fills are whatever the
+            // paper simulation decided.
+            if (!entry.dryRun && acct != null && creds != null) {
                 try {
                     ClobApi.order(creds, acct.signerAddress, exit.orderId)?.let {
                         exit.matched = it.sizeMatched
@@ -967,15 +1199,18 @@ class BotEngine(
                     // Keep the last known fill rather than dropping the order.
                 }
             }
-            soldShares += exit.matched
-            proceeds += exit.matched * exit.price
         }
-        soldShares += cycle.soldAtMarket
-        proceeds += cycle.marketProceedsUsd
-
-        val heldShares = (entry.shares - soldShares).coerceAtLeast(0.0)
-        val resolvedWin = resolved == entry.side
-        val pnl = proceeds + (if (resolvedWin) heldShares else 0.0) - entry.costUsd
+        val settlement = Strategy.settlementPnl(
+            entryShares = entry.shares,
+            entryCostUsd = entry.costUsd,
+            ladderFills = cycle.exits.map { it.matched to it.price },
+            soldAtMarket = cycle.soldAtMarket,
+            marketProceedsUsd = cycle.marketProceedsUsd,
+            outcomeWon = resolved == entry.side,
+        )
+        val soldShares = settlement.soldShares
+        val proceeds = settlement.proceedsUsd
+        val pnl = settlement.pnlUsd
 
         cycle.pnlUsd = pnl
         cycle.state = CycleState.SETTLED

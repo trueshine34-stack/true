@@ -2,6 +2,8 @@ package com.polybot.btc5m.bot
 
 import android.Manifest
 import android.content.Intent
+import androidx.core.content.FileProvider
+import java.io.File
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -380,6 +382,126 @@ class BotPlugin : Plugin() {
         }.start()
     }
 
+    /**
+     * Write the whole journal to a shareable text file.
+     *
+     * The header carries the configuration and the model's self-assessment, so
+     * the file explains on its own what produced the numbers below it — a log
+     * without its settings is not analysable.
+     */
+    @PluginMethod
+    fun exportJournal(call: PluginCall) {
+        Thread {
+            try {
+                val bot = engine
+                val stamp = java.text.SimpleDateFormat(
+                    "yyyyMMdd-HHmmss",
+                    java.util.Locale.US,
+                ).format(java.util.Date())
+                val target = File(context.cacheDir, "polybot-journal-$stamp.txt")
+
+                bot.journal.exportTo(target, buildHeader(bot))
+
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    target,
+                )
+                val share = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, "PolyBot журнал $stamp")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(
+                    Intent.createChooser(share, "Отправить журнал")
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+
+                call.resolve(
+                    JSObject()
+                        .put("file", target.name)
+                        .put("bytes", target.length()),
+                )
+            } catch (e: Exception) {
+                call.reject(e.message ?: "не удалось выгрузить журнал")
+            }
+        }.start()
+    }
+
+    @PluginMethod
+    fun clearJournal(call: PluginCall) {
+        engine.journal.clear()
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun getJournalSize(call: PluginCall) {
+        call.resolve(JSObject().put("bytes", engine.journal.totalBytes()))
+    }
+
+    private fun appVersion(): String = try {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "?"
+    } catch (e: Exception) {
+        "?"
+    }
+
+    private fun buildHeader(bot: BotEngine): String {
+        val settings = bot.settings
+        val ladder = settings.exitLadder.joinToString(", ") {
+            "${it.fromSec}с→${(it.price * 100).toInt()}¢"
+        }
+        return buildString {
+            appendLine("PolyBot · журнал")
+            appendLine("Выгружено: ${isoUtc(System.currentTimeMillis())}")
+            appendLine("Версия: ${appVersion()}")
+            appendLine()
+            appendLine("--- Настройки ---")
+            appendLine("Режим: ${settings.mode}, тестовый режим: ${settings.dryRun}")
+            appendLine("Ставка: ${settings.stakeUsd} $, вход через ${settings.entryDelaySec} с")
+            appendLine(
+                "Попыток входа: ${settings.entryAttempts}, " +
+                    "интервал ${settings.entryRetryDelaySec} с",
+            )
+            appendLine("Мин. преимущество (после комиссии): ${settings.minEdge}")
+            appendLine("Ценовой коридор: ${settings.minPrice}–${settings.maxPrice}")
+            appendLine("Поднимать до минимума биржи: ${settings.autoBumpToMinimum}")
+            appendLine(
+                "Лесенка выхода: ${if (settings.exitEnabled) ladder else "выключена"}, " +
+                    "задержка ${settings.exitDelaySec} с",
+            )
+            appendLine(
+                "Тейк-профит: ${settings.takeProfitEnabled}, " +
+                    "×${settings.takeProfitMultiple}, доля ${settings.takeProfitFraction}",
+            )
+            appendLine(
+                "Докупка: ${settings.averageDownEnabled}, " +
+                    "×${settings.averageDownMultiple}, до ${settings.averageDownMaxTimes} раз, " +
+                    "дедлайн ${settings.averageDownDeadlineSec} с",
+            )
+            appendLine(
+                "Стопы: убыток ${settings.dailyLossLimitUsd} $, " +
+                    "${settings.maxConsecutiveLosses} убытков подряд",
+            )
+            appendLine()
+            appendLine("--- Калибровка модели ---")
+            appendLine("Оценённых окон: ${bot.calibration.samples}")
+            appendLine("Доверие (сжатие): ${bot.calibration.shrinkage()}")
+            appendLine("Brier: ${bot.calibration.brier ?: "нет данных"}")
+            appendLine()
+            appendLine("--- Статистика за ${bot.statsDay} ---")
+            appendLine("Сделок: ${bot.stats.trades}, побед ${bot.stats.wins}, поражений ${bot.stats.losses}")
+            appendLine("Результат: ${bot.stats.realisedPnlUsd} $, оборот ${bot.stats.stakedUsd} $")
+            appendLine()
+            appendLine("--- Как читать ---")
+            appendLine("Строки [WINDOW] — по одной на закрытое окно, JSON.")
+            appendLine("pModel — сырая вероятность модели, pUsed — после сжатия.")
+            appendLine("netEdge — преимущество уже за вычетом комиссии тейкера.")
+            appendLine("Комиссии учтены в entryCostUsd и marketProceedsUsd.")
+        }
+    }
+
     @PluginMethod
     fun getState(call: PluginCall) {
         call.resolve(buildState())
@@ -590,6 +712,11 @@ class BotPlugin : Plugin() {
             mode = StrategyMode.from(raw.getString("mode")),
             stakeUsd = raw.optDouble("stakeUsd", defaults.stakeUsd),
             entryDelaySec = raw.optInt("entryDelaySec", defaults.entryDelaySec),
+            entryAttempts = raw.optInt("entryAttempts", defaults.entryAttempts),
+            entryRetryDelaySec = raw.optInt(
+                "entryRetryDelaySec",
+                defaults.entryRetryDelaySec,
+            ),
             minEdge = raw.optDouble("minEdge", defaults.minEdge),
             maxPrice = raw.optDouble("maxPrice", defaults.maxPrice),
             minPrice = raw.optDouble("minPrice", defaults.minPrice),

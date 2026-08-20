@@ -10,6 +10,10 @@ export type StrategySettings = {
   stakeUsd: number;
   /** Seconds after the window opens before the decision is taken. */
   entryDelaySec: number;
+  /** How many times to try entering a window before giving up on it. */
+  entryAttempts: number;
+  /** Wait between entry attempts, in seconds. */
+  entryRetryDelaySec: number;
   /** Minimum modelled edge, in probability points, for `edge` mode. */
   minEdge: number;
   /** Never pay more than this per share. */
@@ -58,6 +62,8 @@ export const DEFAULT_SETTINGS: StrategySettings = {
   mode: 'edge',
   stakeUsd: 2,
   entryDelaySec: 20,
+  entryAttempts: 4,
+  entryRetryDelaySec: 15,
   minEdge: 0.04,
   maxPrice: 0.9,
   minPrice: 0.05,

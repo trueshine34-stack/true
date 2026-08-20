@@ -188,6 +188,9 @@ export interface PolyBotPlugin {
   getState(): Promise<NativeState>;
   getLogs(): Promise<{ entries: NativeLog[] }>;
   getBalance(): Promise<{ usdc: number }>;
+  exportJournal(): Promise<{ file: string; bytes: number }>;
+  clearJournal(): Promise<void>;
+  getJournalSize(): Promise<{ bytes: number }>;
   getOpenOrders(args?: { market?: string }): Promise<{ orders: OpenOrder[] }>;
   getCurrentMarket(): Promise<NativeMarket>;
   placeOrder(args: PlaceOrderArgs): Promise<PlaceOrderResult>;
@@ -235,6 +238,11 @@ const webStub: PolyBotPlugin = {
   getBalance: async () => {
     throw new Error('Баланс доступен только в приложении Android');
   },
+  exportJournal: async () => {
+    throw new Error('Экспорт доступен только в приложении Android');
+  },
+  clearJournal: async () => {},
+  getJournalSize: async () => ({ bytes: 0 }),
   getOpenOrders: async () => ({ orders: [] }),
   getCurrentMarket: async () => {
     throw new Error('Рынок доступен только в приложении Android');

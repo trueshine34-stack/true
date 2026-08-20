@@ -64,6 +64,10 @@ data class Settings(
     val mode: StrategyMode = StrategyMode.EDGE,
     val stakeUsd: Double = 2.0,
     val entryDelaySec: Int = 20,
+    /** How many times to try entering a window before giving up on it. */
+    val entryAttempts: Int = 4,
+    /** Wait between entry attempts, in seconds. */
+    val entryRetryDelaySec: Int = 15,
     val minEdge: Double = 0.04,
     val maxPrice: Double = 0.90,
     val minPrice: Double = 0.05,
@@ -259,9 +263,13 @@ data class Cycle(
     var strike: Double? = null,
     var spotAtEntry: Double? = null,
     var fair: FairValue? = null,
+    var decision: Decision? = null,
     var entry: Entry? = null,
     /** When the buy filled, which is what the sell delay counts from. */
     var entryFilledAtMs: Long = 0,
+    /** Entry attempts made in this window, and when the next one is allowed. */
+    var entryAttempts: Int = 0,
+    var nextEntryAtMs: Long = 0,
     val exits: MutableList<ExitOrder> = mutableListOf(),
     /** Price of the last sell we tried to rest, for retry throttling. */
     var lastExitPriceTried: Double? = null,
@@ -277,6 +285,8 @@ data class Cycle(
     /** Shares sold at market rather than through the ladder, and their proceeds. */
     var soldAtMarket: Double = 0.0,
     var marketProceedsUsd: Double = 0.0,
+    /** Taker fees paid across the window, already folded into cost and proceeds. */
+    var feesUsd: Double = 0.0,
     var winner: String? = null,
     var pnlUsd: Double? = null,
     var state: CycleState = CycleState.WAITING,

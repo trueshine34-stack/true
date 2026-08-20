@@ -270,3 +270,100 @@ class CalibrationTest {
         assertEquals(null, Calibration().brier)
     }
 }
+
+/**
+ * Settlement arithmetic, which is what test mode has to get right for a paper
+ * session to mean anything.
+ */
+class SettlementTest {
+
+    private fun settle(
+        shares: Double,
+        cost: Double,
+        fills: List<Pair<Double, Double>> = emptyList(),
+        soldAtMarket: Double = 0.0,
+        marketProceeds: Double = 0.0,
+        won: Boolean,
+    ) = Strategy.settlementPnl(shares, cost, fills, soldAtMarket, marketProceeds, won)
+
+    @Test
+    fun `a position held to a winning resolution pays out at par`() {
+        // 5 shares at 40c plus 3.5c of fee.
+        val result = settle(shares = 5.0, cost = 2.035, won = true)
+        assertEquals(5.0, result.heldShares, 1e-9)
+        assertEquals(5.0 - 2.035, result.pnlUsd, 1e-9)
+    }
+
+    @Test
+    fun `a losing resolution costs exactly what was paid`() {
+        val result = settle(shares = 5.0, cost = 2.035, won = false)
+        assertEquals(-2.035, result.pnlUsd, 1e-9)
+    }
+
+    @Test
+    fun `a ladder fill takes the position off the table`() {
+        // The whole position sold at 89c before the close: the outcome no
+        // longer matters.
+        val win = settle(5.0, 2.035, fills = listOf(5.0 to 0.89), won = true)
+        val loss = settle(5.0, 2.035, fills = listOf(5.0 to 0.89), won = false)
+        assertEquals(win.pnlUsd, loss.pnlUsd, 1e-9)
+        assertEquals(4.45 - 2.035, win.pnlUsd, 1e-9)
+        assertEquals(0.0, win.heldShares, 1e-9)
+    }
+
+    @Test
+    fun `a partial ladder fill leaves the rest riding on the outcome`() {
+        val result = settle(10.0, 4.07, fills = listOf(6.0 to 0.93), won = true)
+        assertEquals(6.0, result.soldShares, 1e-9)
+        assertEquals(4.0, result.heldShares, 1e-9)
+        assertEquals(6.0 * 0.93 + 4.0 - 4.07, result.pnlUsd, 1e-9)
+    }
+
+    @Test
+    fun `take profit and ladder proceeds both count`() {
+        // Half sold at market for 0.94 net of fee, the rest rested at 96c and
+        // filled.
+        val result = settle(
+            shares = 10.0,
+            cost = 4.07,
+            fills = listOf(5.0 to 0.96),
+            soldAtMarket = 5.0,
+            marketProceeds = 4.66,
+            won = false,
+        )
+        assertEquals(10.0, result.soldShares, 1e-9)
+        assertEquals(0.0, result.heldShares, 1e-9)
+        assertEquals(5.0 * 0.96 + 4.66 - 4.07, result.pnlUsd, 1e-9)
+    }
+
+    @Test
+    fun `an average down is simply a larger position at a larger cost`() {
+        // 5 shares at 40c, then 10 more at 20c: 15 shares for 4.07 all in.
+        val result = settle(shares = 15.0, cost = 4.07, won = true)
+        assertEquals(15.0 - 4.07, result.pnlUsd, 1e-9)
+    }
+
+    @Test
+    fun `over-reported fills never manufacture a phantom holding`() {
+        // Rounding on the venue can report marginally more filled than bought;
+        // that must not turn into shares we do not have.
+        val result = settle(5.0, 2.0, fills = listOf(5.0001 to 0.9), won = true)
+        assertEquals(0.0, result.heldShares, 1e-9)
+    }
+
+    @Test
+    fun `fees are what turn a flat trade into a loss`() {
+        val price = 0.5
+        val shares = 10.0
+        val fee = Strategy.takerFeePerShare(price, 0.07, 1.0) * shares
+        // Bought at 50c, sold at 50c: nominally flat, actually down the fee.
+        val result = settle(
+            shares = shares,
+            cost = shares * price + fee,
+            fills = listOf(shares to price),
+            won = false,
+        )
+        assertEquals(-fee, result.pnlUsd, 1e-9)
+        assertEquals(-0.175, result.pnlUsd, 1e-9)
+    }
+}

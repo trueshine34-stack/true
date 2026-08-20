@@ -3,6 +3,10 @@ import { PolyBot, type NativeLog } from '../native/polybot';
 
 export function Logs() {
   const [entries, setEntries] = useState<NativeLog[]>([]);
+  const [journalBytes, setJournalBytes] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let handle: { remove: () => Promise<void> } | null = null;
@@ -27,7 +31,18 @@ export function Logs() {
       else handle = h;
     });
 
-    const poll = setInterval(load, 10_000);
+    const size = () =>
+      PolyBot.getJournalSize()
+        .then((r) => {
+          if (!cancelled) setJournalBytes(r.bytes);
+        })
+        .catch(() => {});
+    void size();
+
+    const poll = setInterval(() => {
+      void load();
+      void size();
+    }, 10_000);
     return () => {
       cancelled = true;
       clearInterval(poll);
@@ -35,7 +50,61 @@ export function Logs() {
     };
   }, []);
 
+  const exportJournal = async () => {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const r = await PolyBot.exportJournal();
+      setNotice(`Файл ${r.file} · ${(r.bytes / 1024).toFixed(0)} КБ`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearJournal = async () => {
+    await PolyBot.clearJournal();
+    setJournalBytes(0);
+    setNotice('Журнал на диске очищен');
+  };
+
   return (
+    <>
+      {error && <div className="banner error">{error}</div>}
+      {notice && <div className="banner info">{notice}</div>}
+
+      <div className="card">
+        <h2>Экспорт</h2>
+        <div className="row">
+          <span className="label">Записано на диск</span>
+          <span className="value">
+            {journalBytes === null ? '—' : `${(journalBytes / 1024).toFixed(0)} КБ`}
+          </span>
+        </div>
+        <button
+          className="primary"
+          style={{ marginTop: 10 }}
+          disabled={busy}
+          onClick={() => void exportJournal()}
+        >
+          {busy ? 'Готовим файл…' : 'Выгрузить журнал в файл'}
+        </button>
+        <button
+          className="ghost"
+          style={{ marginTop: 10 }}
+          onClick={() => void clearJournal()}
+        >
+          Очистить журнал на диске
+        </button>
+        <p className="muted" style={{ fontSize: 12, margin: '10px 0 0' }}>
+          Откроется меню «Поделиться» — файл можно отправить куда угодно. Внутри
+          настройки, калибровка модели и по строке на каждое закрытое окно с
+          ценами, преимуществом, комиссиями и результатом.
+        </p>
+      </div>
+
     <div className="card">
       <h2>Журнал сервиса</h2>
       {entries.length === 0 && (
@@ -56,5 +125,6 @@ export function Logs() {
         </div>
       ))}
     </div>
+    </>
   );
 }

@@ -149,6 +149,46 @@ object Strategy {
         return sd / sqrt(horizonSec)
     }
 
+    data class Settlement(
+        val soldShares: Double,
+        val proceedsUsd: Double,
+        val heldShares: Double,
+        val pnlUsd: Double,
+    )
+
+    /**
+     * What a finished window was worth.
+     *
+     * Shares leave a position two ways — filled by the resting ladder, or sold
+     * at market by a take-profit — and only what is left rides on the outcome.
+     * Costs and proceeds arrive here already net of fees, so this is pure
+     * arithmetic with nowhere for a fee to hide.
+     */
+    fun settlementPnl(
+        entryShares: Double,
+        entryCostUsd: Double,
+        ladderFills: List<Pair<Double, Double>>,
+        soldAtMarket: Double,
+        marketProceedsUsd: Double,
+        outcomeWon: Boolean,
+    ): Settlement {
+        val ladderShares = ladderFills.sumOf { it.first }
+        val ladderProceeds = ladderFills.sumOf { it.first * it.second }
+
+        val soldShares = ladderShares + soldAtMarket
+        val proceeds = ladderProceeds + marketProceedsUsd
+        // Never claim to hold more than was bought, however the fills arrived.
+        val heldShares = (entryShares - soldShares).coerceAtLeast(0.0)
+        val redeemed = if (outcomeWon) heldShares else 0.0
+
+        return Settlement(
+            soldShares = soldShares,
+            proceedsUsd = proceeds,
+            heldShares = heldShares,
+            pnlUsd = proceeds + redeemed - entryCostUsd,
+        )
+    }
+
     /**
      * Taker fee per share, in the same units as the probability.
      *

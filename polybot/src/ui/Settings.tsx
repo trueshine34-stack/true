@@ -119,6 +119,41 @@ export function SettingsScreen({
           />
         </label>
 
+        <div className="grid2">
+          <label className="field">
+            <span>Попыток входа</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={String(settings.entryAttempts)}
+              onChange={(e) =>
+                set(
+                  'entryAttempts',
+                  clampInt(num(e.target.value, settings.entryAttempts), 1, 10),
+                )
+              }
+            />
+          </label>
+          <label className="field">
+            <span>Пауза между ними, с</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={String(settings.entryRetryDelaySec)}
+              onChange={(e) =>
+                set(
+                  'entryRetryDelaySec',
+                  clampInt(num(e.target.value, settings.entryRetryDelaySec), 5, 120),
+                )
+              }
+            />
+          </label>
+        </div>
+        <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
+          Если преимущества не было или ордер не прошёл — бот попробует ещё раз.
+          Стопы по риску не повторяются: это решение, а не помеха.
+        </p>
+
         {settings.mode === 'edge' && (
           <label className="field">
             <span>Минимальный перевес модели, %</span>
