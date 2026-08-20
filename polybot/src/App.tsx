@@ -25,6 +25,7 @@ export function App() {
   const [settings, setSettings] = useState<StrategySettings>(DEFAULT_SETTINGS);
   const [account, setAccount] = useState<AccountConfig | null>(null);
   const [sellPrefill, setSellPrefill] = useState<SellPrefill | null>(null);
+  const [balance, setBalance] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +52,30 @@ export function App() {
       cancelled = true;
     };
   }, []);
+
+  // Wallet balance in the header. It only moves when an order fills, so a slow
+  // poll is enough — and it must not run before the engine holds credentials.
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    let cancelled = false;
+
+    const read = () => {
+      void PolyBot.getBalance()
+        .then((r) => {
+          if (!cancelled) setBalance(r.usdc);
+        })
+        .catch(() => {
+          // Offline or not connected yet; keep the last known figure.
+        });
+    };
+
+    read();
+    const timer = window.setInterval(read, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [phase]);
 
   const applySettings = useCallback((next: StrategySettings) => {
     setSettings(next);
@@ -128,7 +153,12 @@ export function App() {
     <div className="app">
       <div className="topbar">
         <h1>PolyBot · BTC 5м</h1>
-        {account && <span className="pill mono">{short(account.signerAddress)}</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span className="pill balance">
+            {balance === null ? '— $' : `${balance.toFixed(2)} $`}
+          </span>
+          {account && <span className="pill mono">{short(account.signerAddress)}</span>}
+        </div>
       </div>
 
       <div className="scroll">

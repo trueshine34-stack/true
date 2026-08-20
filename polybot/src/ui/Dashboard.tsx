@@ -90,6 +90,7 @@ export function Dashboard({
 
   const cycle = snap.current;
   const price = snap.lastTick?.value ?? null;
+  const spot = snap.spotTick?.value ?? null;
   const strike = cycle?.strike ?? null;
   const drift =
     price !== null && strike !== null && strike !== undefined ? price - strike : null;
@@ -236,6 +237,13 @@ export function Dashboard({
             <div className="price">
               {price !== null ? `$${price.toFixed(2)}` : '—'}
             </div>
+            {spot !== null && (
+              <div className="muted" style={{ fontSize: 12 }}>
+                Спот btcusdt: ${spot.toFixed(2)}
+                {price !== null &&
+                  ` · базис ${price - spot >= 0 ? '+' : ''}${(price - spot).toFixed(2)} $`}
+              </div>
+            )}
           </div>
           <span className="pill">
             <i className={`dot ${snap.feedStatus}`} />

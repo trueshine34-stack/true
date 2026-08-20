@@ -444,3 +444,11 @@ button.stat.quote {
 button.stat.quote:active {
   border-color: var(--accent);
 }
+
+.pill.balance {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}

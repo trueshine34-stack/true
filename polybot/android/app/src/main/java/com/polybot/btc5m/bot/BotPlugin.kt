@@ -620,6 +620,13 @@ class BotPlugin : Plugin() {
             )
         }
 
+        bot.feed.spot?.let {
+            state.put(
+                "spotTick",
+                JSObject().put("timestamp", it.timestamp).put("value", it.value),
+            )
+        }
+
         state.put(
             "stats",
             JSObject()

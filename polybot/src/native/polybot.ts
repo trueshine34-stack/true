@@ -139,6 +139,7 @@ export type NativeState = {
     brier?: number | null;
   };
   lastTick?: NativeTick;
+  spotTick?: NativeTick;
   quotes?: NativeQuotes;
   positions?: NativePosition[];
   stats?: NativeStats;
