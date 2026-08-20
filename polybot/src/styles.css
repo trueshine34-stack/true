@@ -430,3 +430,17 @@ button.position:active {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+button.stat.quote {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--text);
+}
+
+button.stat.quote:active {
+  border-color: var(--accent);
+}

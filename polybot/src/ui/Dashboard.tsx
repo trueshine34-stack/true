@@ -4,10 +4,18 @@ import type { StrategySettings } from '../core/settings';
 import {
   PolyBot,
   type NativeCycle,
+  type NativeMarket,
   type NativePosition,
   type NativeQuote,
   type NativeState,
 } from '../native/polybot';
+
+/** A limit buy being composed on the terminal, before it is sent. */
+type BuyDraft = {
+  outcome: 'Up' | 'Down';
+  price: string;
+  amount: string;
+};
 
 const IDLE: NativeState = {
   serviceAlive: false,
@@ -26,6 +34,11 @@ export function Dashboard({
   const [snap, setSnap] = useState<NativeState>(IDLE);
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [draft, setDraft] = useState<BuyDraft | null>(null);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [placing, setPlacing] = useState(false);
+  const [loadedMarket, setLoadedMarket] = useState<NativeMarket | null>(null);
 
   useEffect(() => {
     let handle: { remove: () => Promise<void> } | null = null;
@@ -57,6 +70,24 @@ export function Dashboard({
     return () => clearInterval(t);
   }, []);
 
+  // The running cycle carries its market, but manual orders must work with the
+  // bot stopped too, so keep an independently loaded copy.
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      PolyBot.getCurrentMarket()
+        .then((m) => {
+          if (!cancelled) setLoadedMarket(m);
+        })
+        .catch(() => {});
+    void load();
+    const poll = setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+  }, []);
+
   const cycle = snap.current;
   const price = snap.lastTick?.value ?? null;
   const strike = cycle?.strike ?? null;
@@ -74,6 +105,96 @@ export function Dashboard({
   const entryIn = cycle
     ? cycle.windowStart * 1000 + settings.entryDelaySec * 1000 - now
     : null;
+
+  const market: NativeMarket | undefined = cycle?.market ?? loadedMarket ?? undefined;
+
+  /**
+   * Tapping a price opens a limit buy on it, sized to the whole balance.
+   *
+   * The displayed number is the middle of the book, which can sit between
+   * ticks, so it is snapped to the market's grid before it becomes a price the
+   * exchange would accept.
+   */
+  const openDraft = (outcome: 'Up' | 'Down', quote?: NativeQuote | null) => {
+    if (!market) {
+      setError('Рынок текущего окна ещё не загружен.');
+      return;
+    }
+    const tick = market.tickSize || 0.01;
+    const raw = quote?.mid ?? quote?.bestAsk ?? quote?.bestBid;
+    if (raw == null) {
+      setError('Котировка ещё не загружена.');
+      return;
+    }
+    const snapped = Math.round(raw / tick) * tick;
+    setError(null);
+    setNotice(null);
+    setDraft({
+      outcome,
+      price: (snapped * 100).toFixed(0),
+      amount: '',
+    });
+    // The whole balance is the default size, so fetch it before the user types.
+    void PolyBot.getBalance()
+      .then((r) => {
+        setBalance(r.usdc);
+        setDraft((d) => (d && d.amount === '' ? { ...d, amount: r.usdc.toFixed(2) } : d));
+      })
+      .catch(() => setBalance(null));
+  };
+
+  const snapPrice = (value?: number | null) => {
+    if (value == null || !draft) return;
+    setDraft({ ...draft, price: (value * 100).toFixed(0) });
+  };
+
+  const placeDraft = async () => {
+    if (!draft || !market) return;
+    const price = Number(draft.price.replace(',', '.')) / 100;
+    const amount = Number(draft.amount.replace(',', '.'));
+
+    if (!Number.isFinite(price) || price <= 0 || price >= 1) {
+      setError('Цена должна быть от 1 до 99 центов.');
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Сумма должна быть больше нуля.');
+      return;
+    }
+    const shares = amount / price;
+    if (shares < market.minimumOrderSize) {
+      setError(
+        `${amount.toFixed(2)} $ по ${(price * 100).toFixed(0)}¢ даёт ` +
+          `${shares.toFixed(2)} долей — минимум ${market.minimumOrderSize}.`,
+      );
+      return;
+    }
+
+    setPlacing(true);
+    setError(null);
+    setNotice(null);
+    try {
+      // A limit order is sized in shares, not dollars.
+      const r = await PolyBot.placeOrder({
+        tokenId: draft.outcome === 'Up' ? market.upTokenId : market.downTokenId,
+        conditionId: market.conditionId,
+        side: 'BUY',
+        price,
+        size: shares,
+        orderType: 'GTC',
+      });
+      if (!r.success) throw new Error(r.error ?? 'CLOB отклонил ордер');
+      setNotice(
+        `Лимитка ${draft.outcome} · ${shares.toFixed(2)} долей по ` +
+          `${(price * 100).toFixed(0)}¢${r.status ? ` · ${r.status}` : ''}`,
+      );
+      setDraft(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPlacing(false);
+    }
+  };
 
   const toggle = async () => {
     setError(null);
@@ -98,6 +219,7 @@ export function Dashboard({
         <div className="banner error">Бот остановлен: {snap.haltReason}</div>
       )}
       {error && <div className="banner error">{error}</div>}
+      {notice && <div className="banner info">{notice}</div>}
 
       <div className="card">
         <div
@@ -156,8 +278,21 @@ export function Dashboard({
         </div>
 
         <div className="grid2" style={{ marginTop: 12 }}>
-          <OutcomeQuote label="Up" quote={snap.quotes?.up} up />
-          <OutcomeQuote label="Down" quote={snap.quotes?.down} up={false} />
+          <OutcomeQuote
+            label="Up"
+            quote={snap.quotes?.up}
+            up
+            onPick={() => openDraft('Up', snap.quotes?.up)}
+          />
+          <OutcomeQuote
+            label="Down"
+            quote={snap.quotes?.down}
+            up={false}
+            onPick={() => openDraft('Down', snap.quotes?.down)}
+          />
+        </div>
+        <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+          Нажмите на цену, чтобы выставить лимитку на покупку.
         </div>
 
         <div className="bar" style={{ marginTop: 12 }}>
@@ -176,6 +311,94 @@ export function Dashboard({
           <span>до закрытия {formatClock(remaining)}</span>
         </div>
       </div>
+
+      {draft && market && (
+        <div className="card">
+          <h2>
+            Лимитка на покупку ·{' '}
+            <span className={draft.outcome === 'Up' ? 'up' : 'down'}>
+              {draft.outcome}
+            </span>
+          </h2>
+
+          <div className="grid2">
+            <label className="field">
+              <span>Цена, ¢</span>
+              <input
+                inputMode="decimal"
+                value={draft.price}
+                onChange={(e) => setDraft({ ...draft, price: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              <span>Сумма, $</span>
+              <input
+                inputMode="decimal"
+                value={draft.amount}
+                onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
+              />
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <button
+              className="ghost"
+              onClick={() =>
+                snapPrice(
+                  draft.outcome === 'Up'
+                    ? snap.quotes?.up?.bestBid
+                    : snap.quotes?.down?.bestBid,
+                )
+              }
+            >
+              бид
+            </button>
+            <button
+              className="ghost"
+              onClick={() =>
+                snapPrice(
+                  draft.outcome === 'Up'
+                    ? snap.quotes?.up?.bestAsk
+                    : snap.quotes?.down?.bestAsk,
+                )
+              }
+            >
+              аск
+            </button>
+            {balance !== null && (
+              <button
+                className="ghost"
+                onClick={() => setDraft({ ...draft, amount: balance.toFixed(2) })}
+              >
+                вся сумма
+              </button>
+            )}
+          </div>
+
+          <DraftSummary draft={draft} market={market} balance={balance} />
+
+          <button
+            className="primary"
+            style={{ marginTop: 10 }}
+            disabled={placing}
+            onClick={() => void placeDraft()}
+          >
+            {placing ? 'Отправляем…' : 'Выставить лимитку'}
+          </button>
+          <button
+            className="ghost"
+            style={{ marginTop: 10 }}
+            onClick={() => setDraft(null)}
+          >
+            Отмена
+          </button>
+
+          <div className="banner warn" style={{ marginTop: 12, marginBottom: 0 }}>
+            Ручной ордер уходит на биржу на реальные деньги — тестовый режим бота
+            на него не распространяется.
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h2>Текущее окно</h2>
@@ -395,22 +618,68 @@ function OutcomeQuote({
   label,
   quote,
   up,
+  onPick,
 }: {
   label: string;
   quote?: NativeQuote | null;
   up: boolean;
+  onPick: () => void;
 }) {
-  const cents = (v?: number | null) =>
-    v === null || v === undefined ? '—' : `${(v * 100).toFixed(0)}¢`;
   return (
-    <div className="stat">
+    <button className="stat quote" onClick={onPick}>
       <div className="k">{label}</div>
       <div className={`v ${up ? 'up' : 'down'}`}>{cents(quote?.mid)}</div>
       <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
         бид {cents(quote?.bestBid)} · аск {cents(quote?.bestAsk)}
       </div>
-    </div>
+    </button>
   );
+}
+
+/** Turns the two edited fields into the numbers the exchange will see. */
+function DraftSummary({
+  draft,
+  market,
+  balance,
+}: {
+  draft: BuyDraft;
+  market: NativeMarket;
+  balance: number | null;
+}) {
+  const price = Number(draft.price.replace(',', '.')) / 100;
+  const amount = Number(draft.amount.replace(',', '.'));
+  const valid =
+    Number.isFinite(price) && price > 0 && price < 1 &&
+    Number.isFinite(amount) && amount > 0;
+  const shares = valid ? amount / price : 0;
+  const belowMinimum = valid && shares < market.minimumOrderSize;
+  const overBalance = valid && balance !== null && amount > balance + 1e-9;
+
+  return (
+    <>
+      <div className="row">
+        <span className="label">Получится долей</span>
+        <span className={`value ${belowMinimum ? 'down' : ''}`}>
+          {valid ? shares.toFixed(2) : '—'}
+          {belowMinimum && ` · минимум ${market.minimumOrderSize}`}
+        </span>
+      </div>
+      <div className="row">
+        <span className="label">Доступно USDC</span>
+        <span className={`value ${overBalance ? 'down' : ''}`}>
+          {balance === null ? '—' : `${balance.toFixed(2)} $`}
+        </span>
+      </div>
+      <div className="row">
+        <span className="label">Выигрыш, если сыграет</span>
+        <span className="value up">{valid ? `${shares.toFixed(2)} $` : '—'}</span>
+      </div>
+    </>
+  );
+}
+
+function cents(v?: number | null): string {
+  return v === null || v === undefined ? '—' : `${(v * 100).toFixed(0)}¢`;
 }
 
 function windowLabel(c: NativeCycle): string {
