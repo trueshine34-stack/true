@@ -521,15 +521,13 @@ export class BotEngine {
     cycle.pnlUsd = pnl;
     cycle.state = 'settled';
 
-    if (!entry.dryRun || this.settings.dryRun) {
-      this.stats.realisedPnlUsd += pnl;
-      if (won) {
-        this.stats.wins += 1;
-        this.stats.consecutiveLosses = 0;
-      } else {
-        this.stats.losses += 1;
-        this.stats.consecutiveLosses += 1;
-      }
+    this.stats.realisedPnlUsd += pnl;
+    if (won) {
+      this.stats.wins += 1;
+      this.stats.consecutiveLosses = 0;
+    } else {
+      this.stats.losses += 1;
+      this.stats.consecutiveLosses += 1;
     }
 
     log.trade(

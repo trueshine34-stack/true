@@ -1,4 +1,5 @@
 import { Wallet } from 'ethers';
+import { nowSec } from '../core/clock';
 import { CHAIN_ID } from '../core/config';
 import { buildHmacSignature } from '../core/hmac';
 import type { ApiCreds } from './types';
@@ -13,7 +14,7 @@ export async function createLevel1Headers(
   nonce = 0,
   timestampSec?: number,
 ): Promise<Record<string, string>> {
-  const ts = timestampSec ?? Math.floor(Date.now() / 1000);
+  const ts = timestampSec ?? nowSec();
 
   const domain = {
     name: 'ClobAuthDomain',
@@ -57,7 +58,7 @@ export async function createLevel2Headers(
   serializedBody?: string,
   timestampSec?: number,
 ): Promise<Record<string, string>> {
-  const ts = timestampSec ?? Math.floor(Date.now() / 1000);
+  const ts = timestampSec ?? nowSec();
   const message = `${ts}${method}${path}${serializedBody ?? ''}`;
   const signature = await buildHmacSignature(creds.secret, message);
 

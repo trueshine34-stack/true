@@ -12,7 +12,8 @@ import {
   saveSettings,
   type AccountConfig,
 } from './core/storage';
-import { createOrDeriveApiCreds } from './polymarket/clob';
+import { syncClock } from './core/clock';
+import { createOrDeriveApiCreds, getServerTime } from './polymarket/clob';
 import { Dashboard } from './ui/Dashboard';
 import { Logs } from './ui/Logs';
 import { Lock } from './ui/Lock';
@@ -45,6 +46,17 @@ export function App() {
       setAccount(acct);
       setPhase(vault && acct ? 'locked' : 'setup');
       engine.startFeed();
+
+      try {
+        const offset = await syncClock(getServerTime);
+        if (Math.abs(offset) > 5) {
+          log.warn(
+            `Часы телефона расходятся с биржей на ${offset} с — подписи выравниваются по серверу`,
+          );
+        }
+      } catch (err) {
+        log.warn('Не удалось сверить время с биржей', err);
+      }
     })();
     return () => {
       cancelled = true;
