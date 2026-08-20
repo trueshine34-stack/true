@@ -24,6 +24,14 @@ export type StrategySettings = {
   dailyLossLimitUsd: number;
   /** Stop trading after this many losing settlements in a row. */
   maxConsecutiveLosses: number;
+  /** Park a resting sell on the position as soon as it is filled. */
+  exitEnabled: boolean;
+  /** Price of the resting sell for most of the window. */
+  exitPriceEarly: number;
+  /** Price it is moved to for the closing stretch. */
+  exitPriceLate: number;
+  /** Seconds before the close at which the sell is repriced. */
+  exitSwitchSec: number;
 };
 
 export const DEFAULT_SETTINGS: StrategySettings = {
@@ -37,4 +45,8 @@ export const DEFAULT_SETTINGS: StrategySettings = {
   dryRun: true,
   dailyLossLimitUsd: 20,
   maxConsecutiveLosses: 6,
+  exitEnabled: true,
+  exitPriceEarly: 0.97,
+  exitPriceLate: 0.99,
+  exitSwitchSec: 30,
 };

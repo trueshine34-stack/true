@@ -183,6 +183,78 @@ export function SettingsScreen({
       </div>
 
       <div className="card">
+        <h2>Выход из позиции</h2>
+
+        <div className="toggle" style={{ borderTop: 'none', paddingTop: 0 }}>
+          <div>
+            <div>Ставить продажу сразу после входа</div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Лимитка на всю позицию: сначала по первой цене, за N секунд до
+              конца окна переставляется на вторую.
+            </div>
+          </div>
+          <Switch
+            on={settings.exitEnabled}
+            onToggle={() => set('exitEnabled', !settings.exitEnabled)}
+          />
+        </div>
+
+        {settings.exitEnabled && (
+          <>
+            <div className="grid2">
+              <label className="field">
+                <span>Первая цена, ¢</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={(settings.exitPriceEarly * 100).toFixed(0)}
+                  onChange={(e) =>
+                    set(
+                      'exitPriceEarly',
+                      num(e.target.value, settings.exitPriceEarly * 100) / 100,
+                    )
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Вторая цена, ¢</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={(settings.exitPriceLate * 100).toFixed(0)}
+                  onChange={(e) =>
+                    set(
+                      'exitPriceLate',
+                      num(e.target.value, settings.exitPriceLate * 100) / 100,
+                    )
+                  }
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>Переставить за N секунд до конца окна</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={String(settings.exitSwitchSec)}
+                onChange={(e) =>
+                  set(
+                    'exitSwitchSec',
+                    clampInt(num(e.target.value, settings.exitSwitchSec), 5, 280),
+                  )
+                }
+              />
+            </label>
+            <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+              Если к моменту перестановки неисполненный остаток меньше минимума
+              биржи, ордер остаётся на первой цене — снимать его было бы хуже,
+              чем оставить шанс на исполнение.
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="card">
         <h2>Ограничение риска</h2>
         <label className="field">
           <span>Стоп по убытку за сессию, $</span>

@@ -11,12 +11,13 @@ import {
 import { PolyBot } from './native/polybot';
 import { Dashboard } from './ui/Dashboard';
 import { Logs } from './ui/Logs';
+import { Orders } from './ui/Orders';
 import { Lock } from './ui/Lock';
 import { SettingsScreen } from './ui/Settings';
 import { Setup } from './ui/Setup';
 
 type Phase = 'loading' | 'setup' | 'locked' | 'ready';
-type Tab = 'dashboard' | 'settings' | 'logs';
+type Tab = 'dashboard' | 'orders' | 'settings' | 'logs';
 
 export function App() {
   const [phase, setPhase] = useState<Phase>('loading');
@@ -119,6 +120,7 @@ export function App() {
 
       <div className="scroll">
         {tab === 'dashboard' && <Dashboard settings={settings} />}
+        {tab === 'orders' && <Orders />}
         {tab === 'settings' && (
           <SettingsScreen
             settings={settings}
@@ -136,6 +138,12 @@ export function App() {
           onClick={() => setTab('dashboard')}
         >
           Терминал
+        </button>
+        <button
+          className={tab === 'orders' ? 'active' : ''}
+          onClick={() => setTab('orders')}
+        >
+          Ордера
         </button>
         <button
           className={tab === 'settings' ? 'active' : ''}

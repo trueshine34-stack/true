@@ -20,6 +20,55 @@ export type NativeEntry = {
   dryRun: boolean;
 };
 
+export type NativeMarket = {
+  conditionId: string;
+  question: string;
+  upTokenId: string;
+  downTokenId: string;
+  tickSize: number;
+  minimumOrderSize: number;
+  windowStart?: number;
+  windowEnd?: number;
+};
+
+export type NativeExit = {
+  orderId: string;
+  price: number;
+  size: number;
+  matched: number;
+  cancelled: boolean;
+};
+
+export type OpenOrder = {
+  id: string;
+  status: string;
+  market: string;
+  assetId: string;
+  side: 'BUY' | 'SELL';
+  price: number;
+  originalSize: number;
+  sizeMatched: number;
+  remaining: number;
+  outcome?: string | null;
+};
+
+export type PlaceOrderArgs = {
+  tokenId: string;
+  conditionId: string;
+  side: 'BUY' | 'SELL';
+  price: number;
+  /** Shares for a limit order, USDC for a FOK/FAK buy. */
+  size: number;
+  orderType?: 'GTC' | 'FOK' | 'FAK';
+};
+
+export type PlaceOrderResult = {
+  success: boolean;
+  orderId?: string | null;
+  status?: string | null;
+  error?: string | null;
+};
+
 export type NativeCycle = {
   windowStart: number;
   windowEnd: number;
@@ -31,6 +80,9 @@ export type NativeCycle = {
   note?: string | null;
   fair?: { pUp: number; sigmaHorizon: number; drift: number };
   entry?: NativeEntry;
+  market?: NativeMarket;
+  exits?: NativeExit[];
+  exitStage?: number;
 };
 
 export type NativeStats = {
@@ -48,6 +100,8 @@ export type NativeState = {
   haltReason?: string | null;
   feedStatus: 'live' | 'connecting' | 'stalled' | 'closed';
   clockOffsetSec: number;
+  /** Local calendar day the stats belong to, yyyy-MM-dd. */
+  statsDay?: string;
   lastTick?: NativeTick;
   stats?: NativeStats;
   current?: NativeCycle;
@@ -96,6 +150,14 @@ export interface PolyBotPlugin {
   getState(): Promise<NativeState>;
   getLogs(): Promise<{ entries: NativeLog[] }>;
   getBalance(): Promise<{ usdc: number }>;
+  getOpenOrders(args?: { market?: string }): Promise<{ orders: OpenOrder[] }>;
+  getCurrentMarket(): Promise<NativeMarket>;
+  placeOrder(args: PlaceOrderArgs): Promise<PlaceOrderResult>;
+  cancelOrder(args: { orderId: string }): Promise<{ cancelled: boolean }>;
+  cancelMarketOrders(args: { conditionId: string }): Promise<{ cancelled: number }>;
+  replaceOrder(
+    args: PlaceOrderArgs & { orderId: string },
+  ): Promise<PlaceOrderResult>;
   requestBatteryExemption(): Promise<{ exempt: boolean }>;
   isBatteryExempt(): Promise<{ exempt: boolean }>;
   addListener(
@@ -134,6 +196,18 @@ const webStub: PolyBotPlugin = {
   getLogs: async () => ({ entries: [] }),
   getBalance: async () => {
     throw new Error('Баланс доступен только в приложении Android');
+  },
+  getOpenOrders: async () => ({ orders: [] }),
+  getCurrentMarket: async () => {
+    throw new Error('Рынок доступен только в приложении Android');
+  },
+  placeOrder: async () => {
+    throw new Error('Ордера доступны только в приложении Android');
+  },
+  cancelOrder: async () => ({ cancelled: false }),
+  cancelMarketOrders: async () => ({ cancelled: 0 }),
+  replaceOrder: async () => {
+    throw new Error('Ордера доступны только в приложении Android');
   },
   requestBatteryExemption: async () => ({ exempt: true }),
   isBatteryExempt: async () => ({ exempt: true }),

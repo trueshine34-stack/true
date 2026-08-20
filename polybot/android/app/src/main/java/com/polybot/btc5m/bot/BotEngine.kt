@@ -22,6 +22,7 @@ import kotlinx.coroutines.withContext
  * coroutine because it outlives the window that opened it.
  */
 class BotEngine(
+    private val statsStore: StatsStore,
     private val onStateChanged: () -> Unit,
     private val onLog: (LogEntry) -> Unit,
 ) {
@@ -52,7 +53,14 @@ class BotEngine(
         private set
 
     val history = CopyOnWriteArrayList<Cycle>()
-    val stats = Stats()
+
+    /** Today's figures, restored from disk so a stop does not erase them. */
+    var stats: Stats = statsStore.load()
+        private set
+
+    var statsDay: String = statsStore.today()
+        private set
+
     val logs = CopyOnWriteArrayList<LogEntry>()
 
     private val logId = AtomicLong(0)
@@ -68,6 +76,20 @@ class BotEngine(
         const val MAX_LOGS = 400
     }
 
+    /** Persist after every change, and start a clean bucket once the day turns. */
+    private fun persistStats() {
+        statsStore.save(stats)
+    }
+
+    private fun rollDayIfNeeded() {
+        val today = statsStore.today()
+        if (today == statsDay) return
+        statsDay = today
+        stats = statsStore.load()
+        log("info", "Новый день — статистика начата заново")
+        onStateChanged()
+    }
+
     fun log(level: String, message: String) {
         val entry = LogEntry(logId.incrementAndGet(), System.currentTimeMillis(), level, message)
         logs.add(0, entry)
@@ -81,6 +103,8 @@ class BotEngine(
         this.settings = settings
         this.keyPair = Secp256k1.keyPairFromPrivateKey(account.privateKey)
     }
+
+    fun isConfigured(): Boolean = account != null && creds != null && keyPair != null
 
     fun updateSettings(settings: Settings) {
         this.settings = settings
@@ -118,9 +142,12 @@ class BotEngine(
         onStateChanged()
     }
 
+    /**
+     * Stop trading but stay usable: the feed keeps the price on screen, and the
+     * credentials stay loaded so resting orders can still be managed by hand.
+     */
     fun shutdown() {
         stop()
-        feed.stop()
     }
 
     private suspend fun runLoop() {
@@ -143,6 +170,7 @@ class BotEngine(
     private fun currentCoroutineActive(): Boolean = scope?.isActive == true && running
 
     private suspend fun tick() {
+        rollDayIfNeeded()
         val now = System.currentTimeMillis()
         val windowStart = GammaApi.windowStartFor(now)
 
@@ -179,6 +207,15 @@ class BotEngine(
 
         val entryAt = cycle.windowStart * 1000 + settings.entryDelaySec * 1000L
         val tooLate = now > cycle.windowEnd * 1000 - 30_000L
+
+        if (
+            settings.exitEnabled &&
+            cycle.exitStage == 1 &&
+            now >= cycle.windowEnd * 1000 - settings.exitSwitchSec * 1000L
+        ) {
+            withContext(Dispatchers.IO) { repriceExit(cycle) }
+            onStateChanged()
+        }
 
         if (cycle.state == CycleState.ARMED && cycle.strike != null && now >= entryAt) {
             if (tooLate) {
@@ -312,6 +349,7 @@ class BotEngine(
                 cycle.state = CycleState.ENTERED
                 stats.trades += 1
                 stats.stakedUsd += sized.second
+                persistStats()
                 log(
                     "trade",
                     "[ТЕСТ] ${decision.side} · " + String.format("%.2f", sized.first) +
@@ -382,13 +420,125 @@ class BotEngine(
         cycle.state = CycleState.ENTERED
         stats.trades += 1
         stats.stakedUsd += cost
+        persistStats()
 
         log(
             "trade",
             "${decision.side} · " + String.format("%.2f", shares) + " долей за " +
                 String.format("%.2f", cost) + " $ (${result.status ?: "ok"}) — ${decision.reason}",
         )
+
+        if (settings.exitEnabled) {
+            placeExit(cycle, market, tokenId, shares, settings.exitPriceEarly, stage = 1)
+        }
     }
+
+    /**
+     * Park a resting sell on the position.
+     *
+     * Selling into the book before resolution turns a nearly-decided window
+     * into cash early; the price is raised for the closing stretch, when the
+     * TWAP leaves less room for the outcome to flip.
+     */
+    private fun placeExit(
+        cycle: Cycle,
+        market: Market,
+        tokenId: String,
+        size: Double,
+        price: Double,
+        stage: Int,
+    ) {
+        val acct = account ?: return
+        val creds = this.creds ?: return
+        val keys = keyPair ?: return
+
+        if (size < market.minimumOrderSize) {
+            cycle.note = listOfNotNull(
+                cycle.note,
+                "продажа не выставлена: " + String.format("%.2f", size) +
+                    " долей меньше минимума ${market.minimumOrderSize}",
+            ).joinToString("; ")
+            log("warn", cycle.note!!)
+            return
+        }
+
+        try {
+            val cfg = Orders.roundConfigFor(market.tickSize)
+            val amounts = Orders.limitOrderAmounts("SELL", size, price, cfg)
+            val order = Orders.buildAndSign(
+                keyPair = keys,
+                signerAddress = acct.signerAddress,
+                funder = acct.funderAddress,
+                signatureType = acct.signatureType,
+                tokenId = tokenId,
+                side = "SELL",
+                amounts = amounts,
+                negRisk = market.negRisk,
+            )
+            val result = ClobApi.postOrder(order, creds, acct.signerAddress, "GTC")
+            if (!result.success || result.orderId == null) {
+                log("error", "Продажа по ${cents(price)} не принята: ${result.error ?: "отказ CLOB"}")
+                return
+            }
+            cycle.exits.add(ExitOrder(result.orderId, price, size))
+            cycle.exitStage = stage
+            log(
+                "trade",
+                "Выставлена продажа " + String.format("%.2f", size) +
+                    " долей по ${cents(price)}",
+            )
+        } catch (e: Exception) {
+            log("error", "Не удалось выставить продажу: ${e.message}")
+        }
+    }
+
+    /**
+     * Move the resting sell up for the closing stretch. Only worth doing when
+     * the unfilled remainder is still large enough to be a valid order — a
+     * cancel we cannot replace would just throw away the chance of a fill.
+     */
+    private fun repriceExit(cycle: Cycle) {
+        val acct = account ?: return
+        val creds = this.creds ?: return
+        val market = cycle.market ?: return
+        val entry = cycle.entry ?: return
+        // One attempt, whatever the outcome: the loop ticks four times a second,
+        // and a failure that left the stage untouched would hammer the exchange.
+        cycle.exitStage = 2
+
+        val resting = cycle.exits.lastOrNull { !it.cancelled } ?: return
+
+        val live = ClobApi.order(creds, acct.signerAddress, resting.orderId)
+        val matched = live?.sizeMatched ?: resting.matched
+        resting.matched = matched
+        val remaining = (resting.size - matched).coerceAtLeast(0.0)
+
+        if (remaining < market.minimumOrderSize) {
+            log(
+                "info",
+                "Продажу не переставляем: остаток " + String.format("%.2f", remaining) +
+                    " долей меньше минимума",
+            )
+            return
+        }
+
+        val cancelled = try {
+            ClobApi.cancelOrder(creds, acct.signerAddress, resting.orderId)
+        } catch (e: Exception) {
+            log("error", "Не удалось отменить продажу: ${e.message}")
+            false
+        }
+        if (!cancelled) {
+            log("warn", "Ордер уже неактивен — перестановка пропущена")
+            return
+        }
+        resting.cancelled = true
+
+        val tokenId = if (entry.side == "Up") market.up.tokenId else market.down.tokenId
+        placeExit(cycle, market, tokenId, remaining, settings.exitPriceLate, stage = 2)
+    }
+
+    private fun cents(price: Double): String = String.format("%.0f", price * 100) + "¢"
 
     /**
      * The venue enforces a minimum order size in shares, which a $2 stake misses
@@ -453,27 +603,52 @@ class BotEngine(
             return
         }
 
-        val won = resolved == entry.side
-        val pnl = (if (won) entry.shares else 0.0) - entry.costUsd
+        // Whatever the resting sells filled is already cash; only the unsold
+        // remainder rides on the resolution.
+        var soldShares = 0.0
+        var proceeds = 0.0
+        val acct = account
+        val creds = this.creds
+        for (exit in cycle.exits) {
+            if (acct != null && creds != null) {
+                ClobApi.order(creds, acct.signerAddress, exit.orderId)?.let {
+                    exit.matched = it.sizeMatched
+                }
+            }
+            soldShares += exit.matched
+            proceeds += exit.matched * exit.price
+        }
+
+        val heldShares = (entry.shares - soldShares).coerceAtLeast(0.0)
+        val resolvedWin = resolved == entry.side
+        val pnl = proceeds + (if (resolvedWin) heldShares else 0.0) - entry.costUsd
 
         cycle.winner = resolved
         cycle.pnlUsd = pnl
         cycle.state = CycleState.SETTLED
 
         stats.realisedPnlUsd += pnl
-        if (won) {
+        // Score by money, not by the outcome: a window can resolve against us
+        // and still be green if the sell filled first.
+        if (pnl >= 0) {
             stats.wins += 1
             stats.consecutiveLosses = 0
         } else {
             stats.losses += 1
             stats.consecutiveLosses += 1
         }
+        persistStats()
 
+        val soldNote = if (soldShares > 0) {
+            " Продано " + String.format("%.2f", soldShares) + " долей на " +
+                String.format("%.2f", proceeds) + " $."
+        } else {
+            ""
+        }
         log(
             "trade",
-            "${formatWindow(cycle.windowStart)} → $resolved. " +
-                (if (won) "Выигрыш " else "Проигрыш ") +
-                (if (pnl >= 0) "+" else "") + String.format("%.2f", pnl) + " $",
+            "${formatWindow(cycle.windowStart)} → $resolved.$soldNote " +
+                (if (pnl >= 0) "Итог +" else "Итог ") + String.format("%.2f", pnl) + " $",
         )
         onStateChanged()
     }
@@ -492,6 +667,92 @@ class BotEngine(
         return format.format(java.util.Date(windowStart * 1000))
     }
 
+    /**
+     * The market of the window in progress, loading it on demand so manual
+     * trading works before the bot has been started.
+     */
+    fun currentMarket(): Market? =
+        current?.market ?: try {
+            GammaApi.marketForWindow(GammaApi.windowStartFor())
+        } catch (e: Exception) {
+            null
+        }
+
+    fun openOrders(market: String? = null): List<ClobApi.OpenOrder> {
+        val acct = account ?: error("кошелёк не подключён")
+        val creds = this.creds ?: error("нет ключей CLOB")
+        return ClobApi.openOrders(creds, acct.signerAddress, market)
+    }
+
+    fun cancelOrder(orderId: String): Boolean {
+        val acct = account ?: error("кошелёк не подключён")
+        val creds = this.creds ?: error("нет ключей CLOB")
+        val ok = ClobApi.cancelOrder(creds, acct.signerAddress, orderId)
+        // Keep the ladder honest if the user cancelled the bot's own sell.
+        current?.exits?.firstOrNull { it.orderId == orderId }?.cancelled = true
+        log("info", if (ok) "Ордер отменён" else "Ордер уже неактивен")
+        onStateChanged()
+        return ok
+    }
+
+    fun cancelMarketOrders(conditionId: String): Int {
+        val acct = account ?: error("кошелёк не подключён")
+        val creds = this.creds ?: error("нет ключей CLOB")
+        val n = ClobApi.cancelMarketOrders(creds, acct.signerAddress, conditionId)
+        current?.exits?.forEach { it.cancelled = true }
+        log("info", "Отменено ордеров: $n")
+        onStateChanged()
+        return n
+    }
+
+    /**
+     * Place an order by hand. Limit orders size in shares; a market buy sizes
+     * in USDC, matching how the venue reads the amount.
+     */
+    fun placeManualOrder(
+        tokenId: String,
+        conditionId: String,
+        side: String,
+        price: Double,
+        size: Double,
+        orderType: String,
+    ): ClobApi.OrderResult {
+        val acct = account ?: error("кошелёк не подключён")
+        val creds = this.creds ?: error("нет ключей CLOB")
+        val keys = keyPair ?: error("ключ не загружен")
+
+        val meta = ClobApi.marketMeta(conditionId)
+        val cfg = Orders.roundConfigFor(meta.tickSize)
+        val amounts = if (orderType == "FOK" || orderType == "FAK") {
+            Orders.marketOrderAmounts(side, size, price, cfg)
+        } else {
+            Orders.limitOrderAmounts(side, size, price, cfg)
+        }
+
+        val order = Orders.buildAndSign(
+            keyPair = keys,
+            signerAddress = acct.signerAddress,
+            funder = acct.funderAddress,
+            signatureType = acct.signatureType,
+            tokenId = tokenId,
+            side = side,
+            amounts = amounts,
+            negRisk = meta.negRisk,
+        )
+        val result = ClobApi.postOrder(order, creds, acct.signerAddress, orderType)
+        log(
+            if (result.success) "trade" else "error",
+            if (result.success) {
+                "Ручной ордер $side " + String.format("%.2f", size) + " по " +
+                    String.format("%.0f", price * 100) + "¢ (${result.status ?: "ok"})"
+            } else {
+                "Ручной ордер отклонён: ${result.error ?: "отказ CLOB"}"
+            },
+        )
+        onStateChanged()
+        return result
+    }
+
     /** Reads the funder's USDC balance using the credentials held here. */
     fun usdcBalance(): Double {
         val acct = account ?: error("кошелёк не подключён")
@@ -500,13 +761,11 @@ class BotEngine(
     }
 
     fun resetStats() {
-        stats.trades = 0
-        stats.wins = 0
-        stats.losses = 0
-        stats.consecutiveLosses = 0
-        stats.realisedPnlUsd = 0.0
-        stats.stakedUsd = 0.0
+        stats = Stats()
+        statsDay = statsStore.today()
+        statsStore.clear()
         history.clear()
+        log("info", "Статистика обнулена вручную")
         onStateChanged()
     }
 }

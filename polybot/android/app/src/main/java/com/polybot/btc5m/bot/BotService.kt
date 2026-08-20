@@ -36,31 +36,7 @@ class BotService : Service() {
         private const val CHANNEL_ID = "polybot_engine"
         private const val NOTIFICATION_ID = 4201
 
-        /**
-         * Config staged by the plugin before the service starts. Kept in
-         * process memory rather than passed through an Intent, which the system
-         * records where other apps and log dumps can read it.
-         */
-        @Volatile
-        var pendingAccount: Account? = null
-
-        @Volatile
-        var pendingCreds: Credentials? = null
-
-        @Volatile
-        var pendingSettings: Settings = Settings()
-
-        @Volatile
-        var engine: BotEngine? = null
-            private set
-
-        @Volatile
-        var onState: (() -> Unit)? = null
-
-        @Volatile
-        var onLogEntry: ((LogEntry) -> Unit)? = null
-
-        fun isRunning(): Boolean = engine?.running == true
+        fun isRunning(): Boolean = EngineHolder.peek()?.running == true
 
         fun start(context: Context) {
             val intent = Intent(context, BotService::class.java).setAction(ACTION_START)
@@ -79,21 +55,18 @@ class BotService : Service() {
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var stateHook: (() -> Unit)? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createChannel()
-
-        val created = BotEngine(
-            onStateChanged = {
-                onState?.invoke()
-                updateNotification()
-            },
-            onLog = { entry -> onLogEntry?.invoke(entry) },
-        )
-        engine = created
+        // The engine is process-wide and long-lived; the service only drives its
+        // foreground lifecycle.
+        EngineHolder.get(this)
+        stateHook = { updateNotification() }
+        EngineHolder.onServiceState = stateHook
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -114,31 +87,31 @@ class BotService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification("Запуск…"))
         acquireWakeLock()
 
-        val account = pendingAccount
-        val creds = pendingCreds
-        val bot = engine ?: return
-
-        if (account == null || creds == null) {
-            bot.log("error", "Кошелёк не передан в сервис — откройте приложение и разблокируйте ключ")
+        val bot = EngineHolder.get(this)
+        if (!bot.isConfigured()) {
+            bot.log(
+                "error",
+                "Кошелёк не подключён — откройте приложение и введите PIN",
+            )
             updateNotification()
             return
         }
-
-        bot.configure(account, creds, pendingSettings)
         bot.start()
         updateNotification()
     }
 
     private fun stopEngine() {
-        engine?.shutdown()
+        // Stops trading only. The engine keeps the day's statistics, the price
+        // feed and the credentials so the user can still manage orders.
+        EngineHolder.peek()?.shutdown()
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     override fun onDestroy() {
-        engine?.shutdown()
-        engine = null
+        if (EngineHolder.onServiceState === stateHook) EngineHolder.onServiceState = null
+        EngineHolder.peek()?.shutdown()
         releaseWakeLock()
         super.onDestroy()
     }
@@ -206,7 +179,7 @@ class BotService : Service() {
     }
 
     private fun updateNotification() {
-        val bot = engine ?: return
+        val bot = EngineHolder.peek() ?: return
         val stats = bot.stats
         val mode = if (bot.settings.dryRun) "тест" else "реальные сделки"
         val state = when {

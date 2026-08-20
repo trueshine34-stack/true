@@ -37,14 +37,17 @@ class BotPlugin : Plugin() {
         const val NOTIFICATIONS = "notifications"
     }
 
+    /** The engine outlives the service, so it is always available here. */
+    private val engine: BotEngine get() = EngineHolder.get(context)
+
     override fun load() {
-        BotService.onState = { notifyState() }
-        BotService.onLogEntry = { entry -> notifyLog(entry) }
+        EngineHolder.onState = { notifyState() }
+        EngineHolder.onLogEntry = { entry -> notifyLog(entry) }
     }
 
     override fun handleOnDestroy() {
-        BotService.onState = null
-        BotService.onLogEntry = null
+        EngineHolder.onState = null
+        EngineHolder.onLogEntry = null
         super.handleOnDestroy()
     }
 
@@ -65,7 +68,7 @@ class BotPlugin : Plugin() {
         }
         val signatureType = SignatureType.from(call.getInt("signatureType") ?: 0)
         val settings = call.getObject("settings")?.let { parseSettings(it) }
-            ?: BotService.pendingSettings
+            ?: engine.settings
 
         Thread {
             try {
@@ -84,16 +87,13 @@ class BotPlugin : Plugin() {
 
                 val creds = ClobApi.createOrDeriveApiCreds(keyPair)
 
-                BotService.pendingAccount = Account(
-                    privateKey = privateKey.trim(),
-                    signerAddress = keyPair.address,
-                    funderAddress = funder,
-                    signatureType = signatureType,
-                )
-                BotService.pendingCreds = creds
-                BotService.pendingSettings = settings
-                BotService.engine?.configure(
-                    BotService.pendingAccount!!,
+                engine.configure(
+                    Account(
+                        privateKey = privateKey.trim(),
+                        signerAddress = keyPair.address,
+                        funderAddress = funder,
+                        signatureType = signatureType,
+                    ),
                     creds,
                     settings,
                 )
@@ -160,15 +160,13 @@ class BotPlugin : Plugin() {
             call.reject("settings required")
             return
         }
-        val settings = parseSettings(raw)
-        BotService.pendingSettings = settings
-        BotService.engine?.updateSettings(settings)
+        engine.updateSettings(parseSettings(raw))
         call.resolve()
     }
 
     @PluginMethod
     fun start(call: PluginCall) {
-        if (BotService.pendingAccount == null || BotService.pendingCreds == null) {
+        if (!engine.isConfigured()) {
             call.reject("Сначала подключите кошелёк")
             return
         }
@@ -199,7 +197,7 @@ class BotPlugin : Plugin() {
 
     @PluginMethod
     fun stop(call: PluginCall) {
-        BotService.engine?.stop()
+        engine.stop()
         BotService.stop(context)
         call.resolve()
         notifyState()
@@ -207,22 +205,177 @@ class BotPlugin : Plugin() {
 
     @PluginMethod
     fun resetStats(call: PluginCall) {
-        BotService.engine?.resetStats()
+        engine.resetStats()
         call.resolve()
     }
 
     @PluginMethod
     fun getBalance(call: PluginCall) {
-        val engine = BotService.engine
-        if (engine == null) {
-            call.reject("Сервис не запущен")
-            return
-        }
         Thread {
             try {
                 call.resolve(JSObject().put("usdc", engine.usdcBalance()))
             } catch (e: Exception) {
                 call.reject(e.message ?: "не удалось прочитать баланс")
+            }
+        }.start()
+    }
+
+    @PluginMethod
+    fun getOpenOrders(call: PluginCall) {
+        val market = call.getString("market")
+        Thread {
+            try {
+                val orders = JSArray()
+                engine.openOrders(market).forEach {
+                    orders.put(
+                        JSObject()
+                            .put("id", it.id)
+                            .put("status", it.status)
+                            .put("market", it.market)
+                            .put("assetId", it.assetId)
+                            .put("side", it.side)
+                            .put("price", it.price)
+                            .put("originalSize", it.originalSize)
+                            .put("sizeMatched", it.sizeMatched)
+                            .put("remaining", it.remaining)
+                            .put("outcome", it.outcome),
+                    )
+                }
+                call.resolve(JSObject().put("orders", orders))
+            } catch (e: Exception) {
+                call.reject(e.message ?: "не удалось прочитать ордера")
+            }
+        }.start()
+    }
+
+    /** The window's market, so the UI can offer Up/Down without guessing ids. */
+    @PluginMethod
+    fun getCurrentMarket(call: PluginCall) {
+        Thread {
+            val market = engine.currentMarket()
+            if (market == null) {
+                call.reject("Рынок текущего окна не найден")
+                return@Thread
+            }
+            call.resolve(
+                JSObject()
+                    .put("conditionId", market.conditionId)
+                    .put("question", market.question)
+                    .put("upTokenId", market.up.tokenId)
+                    .put("downTokenId", market.down.tokenId)
+                    .put("tickSize", market.tickSize)
+                    .put("minimumOrderSize", market.minimumOrderSize)
+                    .put("windowStart", market.windowStart)
+                    .put("windowEnd", market.windowEnd),
+            )
+        }.start()
+    }
+
+    @PluginMethod
+    fun placeOrder(call: PluginCall) {
+        val tokenId = call.getString("tokenId")
+        val conditionId = call.getString("conditionId")
+        val side = call.getString("side")?.uppercase()
+        val price = call.getDouble("price")
+        val size = call.getDouble("size")
+        val orderType = call.getString("orderType") ?: "GTC"
+
+        if (tokenId.isNullOrEmpty() || conditionId.isNullOrEmpty() ||
+            side !in setOf("BUY", "SELL") || price == null || size == null
+        ) {
+            call.reject("Нужны рынок, сторона, цена и размер")
+            return
+        }
+
+        Thread {
+            try {
+                val result = engine.placeManualOrder(
+                    tokenId, conditionId, side!!, price, size, orderType,
+                )
+                call.resolve(
+                    JSObject()
+                        .put("success", result.success)
+                        .put("orderId", result.orderId)
+                        .put("status", result.status)
+                        .put("error", result.error),
+                )
+            } catch (e: Exception) {
+                call.reject(e.message ?: "не удалось выставить ордер")
+            }
+        }.start()
+    }
+
+    @PluginMethod
+    fun cancelOrder(call: PluginCall) {
+        val orderId = call.getString("orderId")
+        if (orderId.isNullOrEmpty()) {
+            call.reject("Нужен идентификатор ордера")
+            return
+        }
+        Thread {
+            try {
+                call.resolve(JSObject().put("cancelled", engine.cancelOrder(orderId)))
+            } catch (e: Exception) {
+                call.reject(e.message ?: "не удалось отменить ордер")
+            }
+        }.start()
+    }
+
+    @PluginMethod
+    fun cancelMarketOrders(call: PluginCall) {
+        val conditionId = call.getString("conditionId")
+        if (conditionId.isNullOrEmpty()) {
+            call.reject("Нужен рынок")
+            return
+        }
+        Thread {
+            try {
+                call.resolve(JSObject().put("cancelled", engine.cancelMarketOrders(conditionId)))
+            } catch (e: Exception) {
+                call.reject(e.message ?: "не удалось отменить ордера")
+            }
+        }.start()
+    }
+
+    /**
+     * Editing a resting order means cancelling and re-placing it: the exchange
+     * has no amend, and the price and size are inside the signature.
+     */
+    @PluginMethod
+    fun replaceOrder(call: PluginCall) {
+        val orderId = call.getString("orderId")
+        val tokenId = call.getString("tokenId")
+        val conditionId = call.getString("conditionId")
+        val side = call.getString("side")?.uppercase()
+        val price = call.getDouble("price")
+        val size = call.getDouble("size")
+
+        if (orderId.isNullOrEmpty() || tokenId.isNullOrEmpty() ||
+            conditionId.isNullOrEmpty() || side !in setOf("BUY", "SELL") ||
+            price == null || size == null
+        ) {
+            call.reject("Нужны ордер, рынок, сторона, цена и размер")
+            return
+        }
+
+        Thread {
+            try {
+                if (!engine.cancelOrder(orderId)) {
+                    call.reject("Ордер уже исполнен или снят — изменить нечего")
+                    return@Thread
+                }
+                val result = engine.placeManualOrder(
+                    tokenId, conditionId, side!!, price, size, "GTC",
+                )
+                call.resolve(
+                    JSObject()
+                        .put("success", result.success)
+                        .put("orderId", result.orderId)
+                        .put("status", result.status)
+                        .put("error", result.error),
+                )
+            } catch (e: Exception) {
+                call.reject(e.message ?: "не удалось изменить ордер")
             }
         }.start()
     }
@@ -234,9 +387,8 @@ class BotPlugin : Plugin() {
 
     @PluginMethod
     fun getLogs(call: PluginCall) {
-        val engine = BotService.engine
         val array = JSArray()
-        engine?.logs?.forEach { array.put(logToJson(it)) }
+        engine.logs.forEach { array.put(logToJson(it)) }
         call.resolve(JSObject().put("entries", array))
     }
 
@@ -290,38 +442,37 @@ class BotPlugin : Plugin() {
         .put("message", entry.message)
 
     private fun buildState(): JSObject {
-        val engine = BotService.engine
+        val bot = engine
         val state = JSObject()
-            .put("serviceAlive", engine != null)
-            .put("running", engine?.running == true)
-            .put("haltReason", engine?.haltReason)
-            .put("feedStatus", engine?.feed?.status?.name?.lowercase() ?: "closed")
+            .put("serviceAlive", bot.isConfigured())
+            .put("running", bot.running)
+            .put("haltReason", bot.haltReason)
+            .put("feedStatus", bot.feed.status.name.lowercase())
             .put("clockOffsetSec", Clock.offset())
+            .put("statsDay", bot.statsDay)
 
-        engine?.feed?.last?.let {
+        bot.feed.last?.let {
             state.put(
                 "lastTick",
                 JSObject().put("timestamp", it.timestamp).put("value", it.value),
             )
         }
 
-        engine?.let { bot ->
-            state.put(
-                "stats",
-                JSObject()
-                    .put("trades", bot.stats.trades)
-                    .put("wins", bot.stats.wins)
-                    .put("losses", bot.stats.losses)
-                    .put("consecutiveLosses", bot.stats.consecutiveLosses)
-                    .put("realisedPnlUsd", bot.stats.realisedPnlUsd)
-                    .put("stakedUsd", bot.stats.stakedUsd),
-            )
-            bot.current?.let { state.put("current", cycleToJson(it)) }
+        state.put(
+            "stats",
+            JSObject()
+                .put("trades", bot.stats.trades)
+                .put("wins", bot.stats.wins)
+                .put("losses", bot.stats.losses)
+                .put("consecutiveLosses", bot.stats.consecutiveLosses)
+                .put("realisedPnlUsd", bot.stats.realisedPnlUsd)
+                .put("stakedUsd", bot.stats.stakedUsd),
+        )
+        bot.current?.let { state.put("current", cycleToJson(it)) }
 
-            val history = JSArray()
-            bot.history.take(30).forEach { history.put(cycleToJson(it)) }
-            state.put("history", history)
-        }
+        val history = JSArray()
+        bot.history.take(30).forEach { history.put(cycleToJson(it)) }
+        state.put("history", history)
 
         return state
     }
@@ -345,6 +496,33 @@ class BotPlugin : Plugin() {
                     .put("sigmaHorizon", it.sigmaHorizon)
                     .put("drift", it.drift),
             )
+        }
+        cycle.market?.let { m ->
+            json.put(
+                "market",
+                JSObject()
+                    .put("conditionId", m.conditionId)
+                    .put("question", m.question)
+                    .put("upTokenId", m.up.tokenId)
+                    .put("downTokenId", m.down.tokenId)
+                    .put("tickSize", m.tickSize)
+                    .put("minimumOrderSize", m.minimumOrderSize),
+            )
+        }
+        if (cycle.exits.isNotEmpty()) {
+            val exits = JSArray()
+            cycle.exits.forEach {
+                exits.put(
+                    JSObject()
+                        .put("orderId", it.orderId)
+                        .put("price", it.price)
+                        .put("size", it.size)
+                        .put("matched", it.matched)
+                        .put("cancelled", it.cancelled),
+                )
+            }
+            json.put("exits", exits)
+            json.put("exitStage", cycle.exitStage)
         }
         cycle.entry?.let {
             json.put(
@@ -383,6 +561,10 @@ class BotPlugin : Plugin() {
                 "maxConsecutiveLosses",
                 defaults.maxConsecutiveLosses,
             ),
+            exitEnabled = raw.optBoolean("exitEnabled", defaults.exitEnabled),
+            exitPriceEarly = raw.optDouble("exitPriceEarly", defaults.exitPriceEarly),
+            exitPriceLate = raw.optDouble("exitPriceLate", defaults.exitPriceLate),
+            exitSwitchSec = raw.optInt("exitSwitchSec", defaults.exitSwitchSec),
         )
     }
 }

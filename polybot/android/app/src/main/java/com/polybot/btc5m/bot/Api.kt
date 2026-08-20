@@ -35,6 +35,14 @@ object Http {
         return execute(builder.build(), url)
     }
 
+    fun deleteJson(url: String, body: String, headers: Map<String, String>): String {
+        val builder = Request.Builder()
+            .url(url)
+            .delete(body.toRequestBody("application/json".toMediaType()))
+        headers.forEach { (k, v) -> builder.header(k, v) }
+        return execute(builder.build(), url)
+    }
+
     private fun execute(request: Request, url: String): String {
         Http.client.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
@@ -67,6 +75,28 @@ object Clock {
 }
 
 object ClobApi {
+
+    /**
+     * L2 headers. The signature covers `timestamp + METHOD + path [+ body]`,
+     * with the path carrying no query string and the body byte-identical to
+     * what goes on the wire.
+     */
+    private fun authHeaders(
+        creds: Credentials,
+        signerAddress: String,
+        method: String,
+        path: String,
+        body: String = "",
+    ): Map<String, String> {
+        val ts = Clock.nowSec()
+        return mapOf(
+            "POLY_ADDRESS" to signerAddress,
+            "POLY_SIGNATURE" to Signing.hmacSignature(creds.secret, "$ts$method$path$body"),
+            "POLY_TIMESTAMP" to ts.toString(),
+            "POLY_API_KEY" to creds.apiKey,
+            "POLY_PASSPHRASE" to creds.passphrase,
+        )
+    }
 
     data class Level(val price: Double, val size: Double)
     data class Book(val bids: List<Level>, val asks: List<Level>)
@@ -107,6 +137,21 @@ object ClobApi {
             if (total >= amount) return level.price
         }
         return null
+    }
+
+    data class MarketMeta(
+        val tickSize: Double,
+        val negRisk: Boolean,
+        val minimumOrderSize: Double,
+    )
+
+    fun marketMeta(conditionId: String): MarketMeta {
+        val json = JSONObject(Http.get("${Endpoints.CLOB}/markets/$conditionId"))
+        return MarketMeta(
+            tickSize = json.optDouble("minimum_tick_size", 0.01),
+            negRisk = json.optBoolean("neg_risk", false),
+            minimumOrderSize = json.optDouble("minimum_order_size", 5.0),
+        )
     }
 
     /** Winning outcome once the market has resolved, or null while it is open. */
@@ -178,19 +223,106 @@ object ClobApi {
         signatureType: SignatureType,
     ): Double {
         val path = "/balance-allowance"
-        val ts = Clock.nowSec()
-        val signature = Signing.hmacSignature(creds.secret, "${ts}GET$path")
-        val headers = mapOf(
-            "POLY_ADDRESS" to signerAddress,
-            "POLY_SIGNATURE" to signature,
-            "POLY_TIMESTAMP" to ts.toString(),
-            "POLY_API_KEY" to creds.apiKey,
-            "POLY_PASSPHRASE" to creds.passphrase,
-        )
         val url = "${Endpoints.CLOB}$path?signature_type=${signatureType.value}" +
             "&asset_type=COLLATERAL"
-        val json = JSONObject(Http.get(url, headers))
+        val json = JSONObject(
+            Http.get(url, authHeaders(creds, signerAddress, "GET", path)),
+        )
         return (json.optString("balance").toDoubleOrNull() ?: 0.0) / 1_000_000.0
+    }
+
+    /** One resting order as the CLOB reports it. */
+    data class OpenOrder(
+        val id: String,
+        val status: String,
+        val market: String,
+        val assetId: String,
+        val side: String,
+        val price: Double,
+        val originalSize: Double,
+        val sizeMatched: Double,
+        val outcome: String?,
+    ) {
+        val remaining: Double get() = (originalSize - sizeMatched).coerceAtLeast(0.0)
+    }
+
+    private fun parseOrder(o: JSONObject): OpenOrder = OpenOrder(
+        id = o.optString("id"),
+        status = o.optString("status"),
+        market = o.optString("market"),
+        assetId = o.optString("asset_id"),
+        side = o.optString("side"),
+        price = o.optString("price").toDoubleOrNull() ?: 0.0,
+        originalSize = o.optString("original_size").toDoubleOrNull() ?: 0.0,
+        sizeMatched = o.optString("size_matched").toDoubleOrNull() ?: 0.0,
+        outcome = o.optString("outcome").ifEmpty { null },
+    )
+
+    private const val INITIAL_CURSOR = "MA=="
+    private const val END_CURSOR = "LTE="
+
+    fun openOrders(
+        creds: Credentials,
+        signerAddress: String,
+        market: String? = null,
+    ): List<OpenOrder> {
+        val path = "/data/orders"
+        val out = ArrayList<OpenOrder>()
+        var cursor = INITIAL_CURSOR
+        // The listing is paged; stop at the sentinel the API returns for "done".
+        while (cursor != END_CURSOR) {
+            val url = StringBuilder("${Endpoints.CLOB}$path?next_cursor=$cursor")
+            if (market != null) url.append("&market=").append(market)
+            val text = Http.get(
+                url.toString(),
+                authHeaders(creds, signerAddress, "GET", path),
+            )
+            val json = JSONObject(text)
+            val data = json.optJSONArray("data") ?: break
+            for (i in 0 until data.length()) out.add(parseOrder(data.getJSONObject(i)))
+            cursor = json.optString("next_cursor", END_CURSOR).ifEmpty { END_CURSOR }
+            if (data.length() == 0) break
+        }
+        return out
+    }
+
+    /** Single order, used to learn how much of an exit actually filled. */
+    fun order(creds: Credentials, signerAddress: String, orderId: String): OpenOrder? {
+        val path = "/data/order/$orderId"
+        return try {
+            val text = Http.get(
+                "${Endpoints.CLOB}$path",
+                authHeaders(creds, signerAddress, "GET", path),
+            )
+            val json = JSONObject(text)
+            if (json.optString("id").isEmpty()) null else parseOrder(json)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun cancelOrder(creds: Credentials, signerAddress: String, orderId: String): Boolean {
+        val path = "/order"
+        val body = "{\"orderID\":\"$orderId\"}"
+        val headers = authHeaders(creds, signerAddress, "DELETE", path, body) +
+            mapOf("Content-Type" to "application/json")
+        val text = Http.deleteJson("${Endpoints.CLOB}$path", body, headers)
+        val json = JSONObject(text)
+        val canceled = json.optJSONArray("canceled")
+        return canceled != null && canceled.length() > 0
+    }
+
+    fun cancelMarketOrders(
+        creds: Credentials,
+        signerAddress: String,
+        conditionId: String,
+    ): Int {
+        val path = "/cancel-market-orders"
+        val body = "{\"market\":\"$conditionId\"}"
+        val headers = authHeaders(creds, signerAddress, "DELETE", path, body) +
+            mapOf("Content-Type" to "application/json")
+        val text = Http.deleteJson("${Endpoints.CLOB}$path", body, headers)
+        return JSONObject(text).optJSONArray("canceled")?.length() ?: 0
     }
 
     data class OrderResult(
@@ -231,16 +363,7 @@ object ClobApi {
             append("\"postOnly\":false}")
         }
 
-        val ts = Clock.nowSec()
-        val signature = Signing.hmacSignature(creds.secret, "${ts}POST/order$payload")
-        val headers = mapOf(
-            "POLY_ADDRESS" to signerAddress,
-            "POLY_SIGNATURE" to signature,
-            "POLY_TIMESTAMP" to ts.toString(),
-            "POLY_API_KEY" to creds.apiKey,
-            "POLY_PASSPHRASE" to creds.passphrase,
-        )
-
+        val headers = authHeaders(creds, signerAddress, "POST", "/order", payload)
         val text = Http.postJson("${Endpoints.CLOB}/order", payload, headers)
         val json = JSONObject(text)
         val error = json.optString("errorMsg").ifEmpty { null }

@@ -71,6 +71,14 @@ data class Settings(
     val dryRun: Boolean = true,
     val dailyLossLimitUsd: Double = 20.0,
     val maxConsecutiveLosses: Int = 6,
+    /** Park a resting sell on the position as soon as it is filled. */
+    val exitEnabled: Boolean = true,
+    /** Price of the resting sell for most of the window. */
+    val exitPriceEarly: Double = 0.97,
+    /** Price it is moved to for the closing stretch. */
+    val exitPriceLate: Double = 0.99,
+    /** Seconds before the close at which the sell is repriced. */
+    val exitSwitchSec: Int = 30,
 )
 
 data class Outcome(val label: String, val tokenId: String)
@@ -106,6 +114,15 @@ data class Decision(
     val reason: String,
 )
 
+/** A resting sell parked on the position. */
+data class ExitOrder(
+    val orderId: String,
+    val price: Double,
+    val size: Double,
+    var matched: Double = 0.0,
+    var cancelled: Boolean = false,
+)
+
 data class Entry(
     val side: String,
     val price: Double,
@@ -125,6 +142,9 @@ data class Cycle(
     var spotAtEntry: Double? = null,
     var fair: FairValue? = null,
     var entry: Entry? = null,
+    val exits: MutableList<ExitOrder> = mutableListOf(),
+    /** 0 = none placed, 1 = early sell resting, 2 = repriced for the close. */
+    var exitStage: Int = 0,
     var winner: String? = null,
     var pnlUsd: Double? = null,
     var state: CycleState = CycleState.WAITING,

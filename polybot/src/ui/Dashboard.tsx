@@ -176,6 +176,22 @@ export function Dashboard({ settings }: { settings: StrategySettings }) {
             </div>
           </>
         )}
+        {(cycle?.exits?.length ?? 0) > 0 && (
+          <div className="row">
+            <span className="label">
+              Продажа {cycle!.exitStage === 2 ? '(переставлена)' : ''}
+            </span>
+            <span className="value">
+              {cycle!.exits!
+                .filter((e) => !e.cancelled)
+                .map(
+                  (e) =>
+                    `${(e.price * 100).toFixed(0)}¢ · ${(e.size - e.matched).toFixed(2)} долей`,
+                )
+                .join(', ') || 'снята'}
+            </span>
+          </div>
+        )}
         {cycle?.note && (
           <div className="row">
             <span className="label">Комментарий</span>
@@ -188,7 +204,7 @@ export function Dashboard({ settings }: { settings: StrategySettings }) {
 
       <div className="grid2" style={{ marginBottom: 12 }}>
         <div className="stat">
-          <div className="k">Результат</div>
+          <div className="k">Результат за день</div>
           <div className={`v ${(snap.stats?.realisedPnlUsd ?? 0) >= 0 ? 'up' : 'down'}`}>
             {(snap.stats?.realisedPnlUsd ?? 0) >= 0 ? '+' : ''}
             {(snap.stats?.realisedPnlUsd ?? 0).toFixed(2)} $
@@ -216,8 +232,20 @@ export function Dashboard({ settings }: { settings: StrategySettings }) {
 
       <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
         Бот работает в фоновом сервисе — можно свернуть приложение и погасить
-        экран. Пока он запущен, в шторке висит уведомление.
+        экран. Пока он запущен, в шторке висит уведомление. Статистика
+        накапливается за календарный день{snap.statsDay ? ` (${snap.statsDay})` : ''} и
+        остановкой бота не сбрасывается.
       </p>
+
+      <button
+        className="ghost"
+        style={{ marginTop: 10 }}
+        onClick={() => {
+          void PolyBot.resetStats().then(() => PolyBot.getState()).then(setSnap);
+        }}
+      >
+        Обнулить статистику дня
+      </button>
 
       {(snap.history?.length ?? 0) > 0 && (
         <div className="card" style={{ marginTop: 12 }}>
