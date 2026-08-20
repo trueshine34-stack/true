@@ -14,3 +14,8 @@ android/app/src/main/assets/capacitor.plugins.json
 android/capacitor-cordova-android-plugins/
 *.keystore
 *.jks
+
+# Locally staged APKs
+
+# TypeScript incremental build state
+tsconfig.tsbuildinfo

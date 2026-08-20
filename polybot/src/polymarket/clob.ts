@@ -1,26 +1,21 @@
 import { Wallet } from 'ethers';
 import { CLOB_HOST } from '../core/config';
 import { createLevel1Headers, createLevel2Headers } from './auth';
-import {
-  buildAndSignOrder,
-  limitOrderAmounts,
-  marketOrderAmounts,
-  roundConfigFor,
-} from './orders';
-import type {
-  ApiCreds,
-  OrderBook,
-  OrderType,
-  PostOrderResult,
-  Side,
-  SignatureType,
-} from './types';
+import type { ApiCreds, SignatureType } from './types';
+
+/**
+ * The setup-time slice of the CLOB API.
+ *
+ * Trading itself lives in the native service, which signs and posts its own
+ * orders. What stays here is only what the UI needs before handing over: the
+ * wallet's API credentials, and a balance read that proves the wallet type and
+ * funder address line up.
+ */
 
 export class ClobError extends Error {
   constructor(
     message: string,
     readonly status?: number,
-    readonly body?: unknown,
   ) {
     super(message);
     this.name = 'ClobError';
@@ -29,7 +24,7 @@ export class ClobError extends Error {
 
 async function request<T>(
   path: string,
-  init: RequestInit & { query?: Record<string, string | number | boolean> } = {},
+  init: RequestInit & { query?: Record<string, string | number> } = {},
 ): Promise<T> {
   const url = new URL(CLOB_HOST + path);
   for (const [k, v] of Object.entries(init.query ?? {})) {
@@ -54,14 +49,9 @@ async function request<T>(
       typeof parsed === 'object' && parsed !== null
         ? JSON.stringify(parsed)
         : String(parsed).slice(0, 300);
-    throw new ClobError(`${res.status} ${path}: ${detail}`, res.status, parsed);
+    throw new ClobError(`${res.status} ${path}: ${detail}`, res.status);
   }
   return parsed as T;
-}
-
-export async function getClobVersion(): Promise<number> {
-  const r = await request<{ version: number }>('/version');
-  return r.version;
 }
 
 /** Server clock in seconds, used to keep signed timestamps inside tolerance. */
@@ -108,172 +98,12 @@ export async function createOrDeriveApiCreds(wallet: Wallet): Promise<ApiCreds> 
   return shape(r);
 }
 
-export function getBook(tokenId: string): Promise<OrderBook> {
-  return request<OrderBook>('/book', { query: { token_id: tokenId } });
-}
-
-export async function getTickSize(tokenId: string): Promise<number> {
-  const r = await request<{ minimum_tick_size: number }>('/tick-size', {
-    query: { token_id: tokenId },
-  });
-  return r.minimum_tick_size;
-}
-
-export async function getNegRisk(tokenId: string): Promise<boolean> {
-  const r = await request<{ neg_risk: boolean }>('/neg-risk', {
-    query: { token_id: tokenId },
-  });
-  return r.neg_risk;
-}
-
-export type ClobMarket = {
-  condition_id: string;
-  question: string;
-  market_slug: string;
-  accepting_orders: boolean;
-  minimum_order_size: number;
-  minimum_tick_size: number;
-  neg_risk: boolean;
-  closed: boolean;
-  tokens: { token_id: string; outcome: string; price: number; winner: boolean }[];
-};
-
-export function getMarket(conditionId: string): Promise<ClobMarket> {
-  return request<ClobMarket>(`/markets/${conditionId}`);
-}
-
-/**
- * Price at which a marketable order of `amount` fully fills, walking the book
- * from the best level inward. `amount` is USDC for a BUY, shares for a SELL.
- *
- * Returns null when the book cannot absorb the order and the order type is
- * FOK, since such an order would be rejected outright.
- */
-export function calculateMarketPrice(
-  book: OrderBook,
-  side: Side,
-  amount: number,
-  orderType: OrderType,
-): number | null {
-  const levels =
-    side === 'BUY'
-      ? [...(book.asks ?? [])].sort((a, b) => Number(a.price) - Number(b.price))
-      : [...(book.bids ?? [])].sort((a, b) => Number(b.price) - Number(a.price));
-
-  if (levels.length === 0) return null;
-
-  let total = 0;
-  for (const level of levels) {
-    const price = Number(level.price);
-    const size = Number(level.size);
-    total += side === 'BUY' ? size * price : size;
-    if (total >= amount) return price;
-  }
-
-  // Not enough depth. FAK/GTC can still rest or partially fill at the far
-  // touch; FOK would be killed, so refuse it here.
-  return orderType === 'FOK' ? null : Number(levels[levels.length - 1].price);
-}
-
-export type PostMarketOrderArgs = {
-  wallet: Wallet;
-  creds: ApiCreds;
-  funder: string;
-  signatureType: SignatureType;
-  tokenId: string;
-  side: Side;
-  /** USDC for BUY, shares for SELL. */
-  amount: number;
-  price: number;
-  tickSize: number;
-  negRisk: boolean;
-  orderType?: OrderType;
-};
-
-export async function postMarketOrder(
-  args: PostMarketOrderArgs,
-): Promise<PostOrderResult> {
-  const cfg = roundConfigFor(args.tickSize);
-  const { makerAmount, takerAmount } = marketOrderAmounts(
-    args.side,
-    args.amount,
-    args.price,
-    cfg,
-  );
-  return postSignedOrder(args, makerAmount, takerAmount, args.orderType ?? 'FOK');
-}
-
-export type PostLimitOrderArgs = Omit<PostMarketOrderArgs, 'amount'> & {
-  /** Always shares, both sides. */
-  size: number;
-};
-
-export async function postLimitOrder(
-  args: PostLimitOrderArgs,
-): Promise<PostOrderResult> {
-  const cfg = roundConfigFor(args.tickSize);
-  const { makerAmount, takerAmount } = limitOrderAmounts(
-    args.side,
-    args.size,
-    args.price,
-    cfg,
-  );
-  return postSignedOrder(args, makerAmount, takerAmount, args.orderType ?? 'GTC');
-}
-
-async function postSignedOrder(
-  args: Omit<PostMarketOrderArgs, 'amount' | 'price'>,
-  makerAmount: string,
-  takerAmount: string,
-  orderType: OrderType,
-): Promise<PostOrderResult> {
-  const order = await buildAndSignOrder({
-    wallet: args.wallet,
-    funder: args.funder,
-    signatureType: args.signatureType,
-    tokenId: args.tokenId,
-    side: args.side,
-    makerAmount,
-    takerAmount,
-    negRisk: args.negRisk,
-  });
-
-  const payload = {
-    order,
-    owner: args.creds.apiKey,
-    orderType,
-    deferExec: false,
-    postOnly: false,
-  };
-
-  // The HMAC covers the exact bytes on the wire, so serialize once and reuse.
-  const serialized = JSON.stringify(payload);
-  const headers = await createLevel2Headers(
-    args.wallet.address,
-    args.creds,
-    'POST',
-    '/order',
-    serialized,
-  );
-
-  return request<PostOrderResult>('/order', {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: serialized,
-  });
-}
-
-export type BalanceAllowance = {
-  balance: string;
-  allowances?: Record<string, string>;
-};
+export type BalanceAllowance = { balance: string };
 
 export async function getBalanceAllowance(
   wallet: Wallet,
   creds: ApiCreds,
   signatureType: SignatureType,
-  assetType: 'COLLATERAL' | 'CONDITIONAL' = 'COLLATERAL',
-  tokenId?: string,
 ): Promise<BalanceAllowance> {
   const headers = await createLevel2Headers(
     wallet.address,
@@ -281,86 +111,11 @@ export async function getBalanceAllowance(
     'GET',
     '/balance-allowance',
   );
-  const query: Record<string, string | number> = {
-    signature_type: Number(signatureType),
-    asset_type: assetType,
-  };
-  if (tokenId) query.token_id = tokenId;
-  return request<BalanceAllowance>('/balance-allowance', { headers, query });
-}
-
-export type OpenOrder = {
-  id: string;
-  status: string;
-  market: string;
-  asset_id: string;
-  side: Side;
-  price: string;
-  original_size: string;
-  size_matched: string;
-};
-
-export async function getOpenOrders(
-  wallet: Wallet,
-  creds: ApiCreds,
-  market?: string,
-): Promise<OpenOrder[]> {
-  const headers = await createLevel2Headers(
-    wallet.address,
-    creds,
-    'GET',
-    '/data/orders',
-  );
-  const query = market ? { market } : undefined;
-  const r = await request<OpenOrder[]>('/data/orders', { headers, query });
-  return Array.isArray(r) ? r : [];
-}
-
-export async function cancelMarketOrders(
-  wallet: Wallet,
-  creds: ApiCreds,
-  conditionId: string,
-): Promise<unknown> {
-  const serialized = JSON.stringify({ market: conditionId });
-  const headers = await createLevel2Headers(
-    wallet.address,
-    creds,
-    'DELETE',
-    '/cancel-market-orders',
-    serialized,
-  );
-  return request('/cancel-market-orders', {
-    method: 'DELETE',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: serialized,
+  return request<BalanceAllowance>('/balance-allowance', {
+    headers,
+    query: {
+      signature_type: Number(signatureType),
+      asset_type: 'COLLATERAL',
+    },
   });
-}
-
-export type Trade = {
-  id: string;
-  taker_order_id: string;
-  market: string;
-  asset_id: string;
-  side: Side;
-  size: string;
-  price: string;
-  status: string;
-  match_time: string;
-  outcome: string;
-};
-
-export async function getTrades(
-  wallet: Wallet,
-  creds: ApiCreds,
-  market?: string,
-): Promise<Trade[]> {
-  const headers = await createLevel2Headers(
-    wallet.address,
-    creds,
-    'GET',
-    '/data/trades',
-  );
-  const query = market ? { market } : undefined;
-  const r = await request<Trade[]>('/data/trades', { headers, query });
-  return Array.isArray(r) ? r : [];
 }

@@ -1,5 +1,5 @@
 import { Preferences } from '@capacitor/preferences';
-import { DEFAULT_SETTINGS, type StrategySettings } from '../bot/strategy';
+import { DEFAULT_SETTINGS, type StrategySettings } from './settings';
 import { SignatureType } from '../polymarket/types';
 
 /**

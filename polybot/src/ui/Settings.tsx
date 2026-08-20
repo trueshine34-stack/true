@@ -1,26 +1,30 @@
-import { useState } from 'react';
-import type { Session } from '../bot/engine';
-import type { StrategyMode, StrategySettings } from '../bot/strategy';
+import { useEffect, useState } from 'react';
+import type { StrategyMode, StrategySettings } from '../core/settings';
 import { clearVault, type AccountConfig } from '../core/storage';
-import { getBalanceAllowance } from '../polymarket/clob';
+import { PolyBot } from '../native/polybot';
 import { SignatureType } from '../polymarket/types';
 
 export function SettingsScreen({
   settings,
   account,
-  session,
   onChange,
   onForget,
 }: {
   settings: StrategySettings;
   account: AccountConfig | null;
-  session: Session | null;
   onChange: (s: StrategySettings) => void;
   onForget: () => void;
 }) {
   const [balance, setBalance] = useState<string | null>(null);
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [batteryExempt, setBatteryExempt] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    void PolyBot.isBatteryExempt()
+      .then((r) => setBatteryExempt(r.exempt))
+      .catch(() => setBatteryExempt(null));
+  }, []);
 
   const set = <K extends keyof StrategySettings>(
     key: K,
@@ -33,22 +37,21 @@ export function SettingsScreen({
   };
 
   const checkBalance = async () => {
-    if (!session) return;
     setChecking(true);
     setBalanceError(null);
     try {
-      const ba = await getBalanceAllowance(
-        session.wallet,
-        session.creds,
-        session.signatureType,
-        'COLLATERAL',
-      );
-      setBalance((Number(ba.balance ?? 0) / 1e6).toFixed(2));
+      const r = await PolyBot.getBalance();
+      setBalance(r.usdc.toFixed(2));
     } catch (err) {
       setBalanceError(err instanceof Error ? err.message : String(err));
     } finally {
       setChecking(false);
     }
+  };
+
+  const askBatteryExemption = async () => {
+    const r = await PolyBot.requestBatteryExemption();
+    setBatteryExempt(r.exempt);
   };
 
   const forget = async () => {
@@ -58,6 +61,20 @@ export function SettingsScreen({
 
   return (
     <>
+      {batteryExempt === false && (
+        <div className="banner warn">
+          Android может усыплять приложение в фоне. Отключите для него
+          оптимизацию батареи, иначе окна будут пропускаться.
+          <button
+            className="ghost"
+            style={{ marginTop: 10 }}
+            onClick={() => void askBatteryExemption()}
+          >
+            Отключить оптимизацию батареи
+          </button>
+        </div>
+      )}
+
       <div className="card">
         <h2>Торговля</h2>
 
@@ -91,7 +108,10 @@ export function SettingsScreen({
             inputMode="numeric"
             value={String(settings.entryDelaySec)}
             onChange={(e) =>
-              set('entryDelaySec', clampInt(num(e.target.value, settings.entryDelaySec), 0, 240))
+              set(
+                'entryDelaySec',
+                clampInt(num(e.target.value, settings.entryDelaySec), 0, 240),
+              )
             }
           />
         </label>
@@ -204,6 +224,16 @@ export function SettingsScreen({
             {account ? sigTypeLabel(account.signatureType) : '—'}
           </span>
         </div>
+        <div className="row">
+          <span className="label">Фоновый режим</span>
+          <span className="value">
+            {batteryExempt === null
+              ? '—'
+              : batteryExempt
+                ? 'разрешён'
+                : 'ограничен системой'}
+          </span>
+        </div>
         {balance !== null && (
           <div className="row">
             <span className="label">Баланс USDC</span>
@@ -215,7 +245,7 @@ export function SettingsScreen({
         <button
           className="ghost"
           style={{ marginTop: 10 }}
-          disabled={checking || !session}
+          disabled={checking}
           onClick={() => void checkBalance()}
         >
           {checking ? 'Проверяем…' : 'Проверить баланс'}

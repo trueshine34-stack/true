@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import { Wallet, isAddress } from 'ethers';
-import type { Session } from '../bot/engine';
-import { log } from '../core/logger';
 import {
   saveAccount,
   saveEncryptedKey,
@@ -11,7 +9,7 @@ import {
   createOrDeriveApiCreds,
   getBalanceAllowance,
 } from '../polymarket/clob';
-import { SignatureType } from '../polymarket/types';
+import { SignatureType, type ApiCreds } from '../polymarket/types';
 
 type WalletKind = 'email' | 'browser' | 'eoa';
 
@@ -24,7 +22,11 @@ const KIND_TO_SIGTYPE: Record<WalletKind, SignatureType> = {
 export function Setup({
   onDone,
 }: {
-  onDone: (account: AccountConfig, session: Session) => void;
+  onDone: (
+    privateKey: string,
+    account: AccountConfig,
+    creds: ApiCreds,
+  ) => Promise<void>;
 }) {
   const [privateKey, setPrivateKey] = useState('');
   const [kind, setKind] = useState<WalletKind>('email');
@@ -66,18 +68,12 @@ export function Setup({
       // A balance read is the cheapest proof that the signer, the funder and
       // the wallet type line up — a mismatch shows up here instead of on the
       // first live order.
-      let usdc: string | null = null;
       try {
-        const ba = await getBalanceAllowance(
-          wallet,
-          creds,
-          signatureType,
-          'COLLATERAL',
-        );
-        usdc = (Number(ba.balance ?? 0) / 1e6).toFixed(2);
-        setBalance(usdc);
-      } catch (err) {
-        log.warn('Не удалось прочитать баланс USDC', err);
+        const ba = await getBalanceAllowance(wallet, creds, signatureType);
+        setBalance((Number(ba.balance ?? 0) / 1e6).toFixed(2));
+      } catch {
+        // A balance read can fail for reasons unrelated to the wallet being
+        // valid; the connect itself is what matters here.
       }
 
       const account: AccountConfig = {
@@ -88,17 +84,7 @@ export function Setup({
 
       await saveEncryptedKey(wallet.privateKey, pin);
       await saveAccount(account);
-
-      log.info(
-        `Кошелёк подключён: ${wallet.address}${usdc !== null ? ` · ${usdc} USDC` : ''}`,
-      );
-
-      onDone(account, {
-        wallet,
-        creds,
-        funderAddress,
-        signatureType,
-      });
+      await onDone(wallet.privateKey, account, creds);
     } catch (err) {
       setError(
         `Не удалось подключиться к CLOB: ${err instanceof Error ? err.message : String(err)}`,

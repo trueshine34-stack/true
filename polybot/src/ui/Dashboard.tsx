@@ -1,19 +1,45 @@
 import { useEffect, useState } from 'react';
-import type { BotEngine, Cycle, EngineSnapshot } from '../bot/engine';
-import type { StrategySettings } from '../bot/strategy';
 import { WINDOW_SECONDS } from '../core/config';
+import type { StrategySettings } from '../core/settings';
+import { PolyBot, type NativeCycle, type NativeState } from '../native/polybot';
 
-export function Dashboard({
-  engine,
-  settings,
-}: {
-  engine: BotEngine;
-  settings: StrategySettings;
-}) {
-  const [snap, setSnap] = useState<EngineSnapshot>(() => engine.snapshot());
+const IDLE: NativeState = {
+  serviceAlive: false,
+  running: false,
+  feedStatus: 'closed',
+  clockOffsetSec: 0,
+};
+
+export function Dashboard({ settings }: { settings: StrategySettings }) {
+  const [snap, setSnap] = useState<NativeState>(IDLE);
   const [now, setNow] = useState(Date.now());
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => engine.subscribe(setSnap), [engine]);
+  useEffect(() => {
+    let handle: { remove: () => Promise<void> } | null = null;
+    let cancelled = false;
+
+    void PolyBot.getState().then((s) => {
+      if (!cancelled) setSnap(s);
+    });
+    void PolyBot.addListener('state', (s) => setSnap(s)).then((h) => {
+      if (cancelled) void h.remove();
+      else handle = h;
+    });
+
+    // The service pushes on every state change, but a poll covers the gap when
+    // the WebView was suspended and missed the events entirely.
+    const poll = setInterval(() => {
+      void PolyBot.getState().then((s) => setSnap(s));
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+      void handle?.remove();
+    };
+  }, []);
+
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
@@ -22,7 +48,8 @@ export function Dashboard({
   const cycle = snap.current;
   const price = snap.lastTick?.value ?? null;
   const strike = cycle?.strike ?? null;
-  const drift = price !== null && strike !== null ? price - strike : null;
+  const drift =
+    price !== null && strike !== null && strike !== undefined ? price - strike : null;
 
   const windowStartMs = cycle ? cycle.windowStart * 1000 : null;
   const windowEndMs = cycle ? cycle.windowEnd * 1000 : null;
@@ -36,6 +63,17 @@ export function Dashboard({
     ? cycle.windowStart * 1000 + settings.entryDelaySec * 1000 - now
     : null;
 
+  const toggle = async () => {
+    setError(null);
+    try {
+      if (snap.running) await PolyBot.stop();
+      else await PolyBot.start();
+      setSnap(await PolyBot.getState());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   return (
     <>
       {settings.dryRun && (
@@ -47,6 +85,7 @@ export function Dashboard({
       {snap.haltReason && (
         <div className="banner error">Бот остановлен: {snap.haltReason}</div>
       )}
+      {error && <div className="banner error">{error}</div>}
 
       <div className="card">
         <div
@@ -73,7 +112,7 @@ export function Dashboard({
         <div className="row">
           <span className="label">Страйк окна</span>
           <span className="value">
-            {strike !== null ? `$${strike.toFixed(2)}` : 'ждём тик…'}
+            {strike != null ? `$${strike.toFixed(2)}` : 'ждём тик…'}
           </span>
         </div>
         <div className="row">
@@ -112,7 +151,7 @@ export function Dashboard({
         <h2>Текущее окно</h2>
         <div className="row">
           <span className="label">Статус</span>
-          <span className="value">{stateLabel(cycle)}</span>
+          <span className="value">{stateLabel(snap, cycle)}</span>
         </div>
         {cycle?.state === 'armed' && entryIn !== null && entryIn > 0 && (
           <div className="row">
@@ -150,41 +189,40 @@ export function Dashboard({
       <div className="grid2" style={{ marginBottom: 12 }}>
         <div className="stat">
           <div className="k">Результат</div>
-          <div className={`v ${snap.stats.realisedPnlUsd >= 0 ? 'up' : 'down'}`}>
-            {snap.stats.realisedPnlUsd >= 0 ? '+' : ''}
-            {snap.stats.realisedPnlUsd.toFixed(2)} $
+          <div className={`v ${(snap.stats?.realisedPnlUsd ?? 0) >= 0 ? 'up' : 'down'}`}>
+            {(snap.stats?.realisedPnlUsd ?? 0) >= 0 ? '+' : ''}
+            {(snap.stats?.realisedPnlUsd ?? 0).toFixed(2)} $
           </div>
         </div>
         <div className="stat">
           <div className="k">Сделок</div>
-          <div className="v">{snap.stats.trades}</div>
+          <div className="v">{snap.stats?.trades ?? 0}</div>
         </div>
         <div className="stat">
           <div className="k">Побед / поражений</div>
           <div className="v">
-            {snap.stats.wins} / {snap.stats.losses}
+            {snap.stats?.wins ?? 0} / {snap.stats?.losses ?? 0}
           </div>
         </div>
         <div className="stat">
           <div className="k">Оборот</div>
-          <div className="v">{snap.stats.stakedUsd.toFixed(2)} $</div>
+          <div className="v">{(snap.stats?.stakedUsd ?? 0).toFixed(2)} $</div>
         </div>
       </div>
 
-      {snap.running ? (
-        <button className="danger" onClick={() => engine.stop()}>
-          Остановить бота
-        </button>
-      ) : (
-        <button className="primary" onClick={() => engine.start()}>
-          Запустить бота
-        </button>
-      )}
+      <button className={snap.running ? 'danger' : 'primary'} onClick={() => void toggle()}>
+        {snap.running ? 'Остановить бота' : 'Запустить бота'}
+      </button>
 
-      {snap.history.length > 0 && (
+      <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+        Бот работает в фоновом сервисе — можно свернуть приложение и погасить
+        экран. Пока он запущен, в шторке висит уведомление.
+      </p>
+
+      {(snap.history?.length ?? 0) > 0 && (
         <div className="card" style={{ marginTop: 12 }}>
           <h2>История окон</h2>
-          {snap.history.slice(0, 20).map((c) => (
+          {snap.history!.slice(0, 20).map((c) => (
             <div className="row" key={c.windowStart}>
               <span className="label">{windowLabel(c)}</span>
               <span className="value">
@@ -193,7 +231,7 @@ export function Dashboard({
                     <span className={c.entry.side === 'Up' ? 'up' : 'down'}>
                       {c.entry.side}
                     </span>{' '}
-                    {c.pnlUsd === null ? (
+                    {c.pnlUsd == null ? (
                       <span className="muted">ждём расчёт</span>
                     ) : (
                       <span className={c.pnlUsd >= 0 ? 'up' : 'down'}>
@@ -216,12 +254,10 @@ export function Dashboard({
   );
 }
 
-function windowLabel(c: Cycle): string {
-  const start = new Date(c.windowStart * 1000);
-  const end = new Date(c.windowEnd * 1000);
+function windowLabel(c: NativeCycle): string {
   const fmt = (d: Date) =>
     d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return `${fmt(start)}–${fmt(end)}`;
+  return `${fmt(new Date(c.windowStart * 1000))}–${fmt(new Date(c.windowEnd * 1000))}`;
 }
 
 function formatClock(seconds: number): string {
@@ -242,8 +278,9 @@ function feedLabel(status: string): string {
   }
 }
 
-function stateLabel(cycle: Cycle | null): string {
-  if (!cycle) return 'бот не запущен';
+function stateLabel(snap: NativeState, cycle?: NativeCycle): string {
+  if (!snap.running) return 'бот не запущен';
+  if (!cycle) return 'ожидание окна';
   switch (cycle.state) {
     case 'waiting':
       return 'ищем рынок';
@@ -257,5 +294,7 @@ function stateLabel(cycle: Cycle | null): string {
       return 'рассчитано';
     case 'failed':
       return 'ошибка';
+    default:
+      return cycle.state;
   }
 }

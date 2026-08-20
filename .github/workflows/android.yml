@@ -79,6 +79,12 @@ jobs:
             echo "::warning::Собрано с одноразовым ключом. Для обновлений поверх старой установки добавьте секрет POLYBOT_KEYSTORE_BASE64."
           fi
 
+      # Pins the native signing path to Polymarket's reference client. A
+      # failure here means every order would be rejected on the wire.
+      - name: Run signing tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+        working-directory: polybot/android
+
       - name: Build release APK
         run: ./gradlew assembleRelease --no-daemon
         working-directory: polybot/android
