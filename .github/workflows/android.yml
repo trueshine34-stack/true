@@ -1,0 +1,97 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - claude/polymarket-bitcoin-bot-apk-kgvinj
+    paths:
+      - 'polybot/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: polybot
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: polybot/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web bundle
+        run: npm run build
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      # Signed with a locally generated key so the artifact installs on a
+      # phone. Supply POLYBOT_KEYSTORE_* secrets to sign with a stable key
+      # instead — without one, every build is a fresh identity and Android
+      # refuses to upgrade in place.
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.POLYBOT_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.POLYBOT_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.POLYBOT_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.POLYBOT_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${KEYSTORE_BASE64:-}" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/polybot.jks"
+            {
+              echo "POLYBOT_KEYSTORE_FILE=$RUNNER_TEMP/polybot.jks"
+              echo "POLYBOT_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+              echo "POLYBOT_KEY_ALIAS=$KEY_ALIAS"
+              echo "POLYBOT_KEY_PASSWORD=$KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+          else
+            keytool -genkeypair -v \
+              -keystore "$RUNNER_TEMP/polybot.jks" \
+              -alias polybot -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass polybot -keypass polybot \
+              -dname "CN=PolyBot, OU=Dev, O=PolyBot, L=NA, S=NA, C=NA"
+            {
+              echo "POLYBOT_KEYSTORE_FILE=$RUNNER_TEMP/polybot.jks"
+              echo "POLYBOT_KEYSTORE_PASSWORD=polybot"
+              echo "POLYBOT_KEY_ALIAS=polybot"
+              echo "POLYBOT_KEY_PASSWORD=polybot"
+            } >> "$GITHUB_ENV"
+            echo "::warning::Собрано с одноразовым ключом. Для обновлений поверх старой установки добавьте секрет POLYBOT_KEYSTORE_BASE64."
+          fi
+
+      - name: Build release APK
+        run: ./gradlew assembleRelease --no-daemon
+        working-directory: polybot/android
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon
+        working-directory: polybot/android
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: polybot-apk
+          path: |
+            polybot/android/app/build/outputs/apk/release/*.apk
+            polybot/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 30

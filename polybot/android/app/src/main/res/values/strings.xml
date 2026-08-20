@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PolyBot BTC 5m</string>
+    <string name="title_activity_main">PolyBot BTC 5m</string>
+    <string name="package_name">com.polybot.btc5m</string>
+    <string name="custom_url_scheme">com.polybot.btc5m</string>
+</resources>
