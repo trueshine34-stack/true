@@ -33,6 +33,22 @@ export type StrategySettings = {
   exitDelaySec: number;
   /** Sell price by elapsed second of the window, cheapest rung first. */
   exitLadder: ExitStep[];
+
+  /** Dump part of the position at market once it has doubled. */
+  takeProfitEnabled: boolean;
+  /** Trigger multiple on the average entry price. */
+  takeProfitMultiple: number;
+  /** Share of the position to sell when it triggers. */
+  takeProfitFraction: number;
+
+  /** Buy the same amount again once the price has halved. */
+  averageDownEnabled: boolean;
+  /** Trigger multiple on the average entry price. */
+  averageDownMultiple: number;
+  /** How many times per window this may fire. */
+  averageDownMaxTimes: number;
+  /** No averaging down inside this many seconds of the close. */
+  averageDownDeadlineSec: number;
 };
 
 /** One rung: from `fromSec` into the window, rest the sell at `price`. */
@@ -57,4 +73,11 @@ export const DEFAULT_SETTINGS: StrategySettings = {
     { fromSec: 240, price: 0.96 },
     { fromSec: 270, price: 0.99 },
   ],
+  takeProfitEnabled: false,
+  takeProfitMultiple: 2,
+  takeProfitFraction: 0.5,
+  averageDownEnabled: false,
+  averageDownMultiple: 0.5,
+  averageDownMaxTimes: 1,
+  averageDownDeadlineSec: 60,
 };

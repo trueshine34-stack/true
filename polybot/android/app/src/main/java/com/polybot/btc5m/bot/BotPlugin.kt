@@ -557,6 +557,10 @@ class BotPlugin : Plugin() {
             json.put("exits", exits)
             json.put("exitFrozen", cycle.exitFrozen)
         }
+        json.put("takeProfitDone", cycle.takeProfitDone)
+        json.put("averageDownCount", cycle.averageDownCount)
+        json.put("soldAtMarket", cycle.soldAtMarket)
+        json.put("marketProceedsUsd", cycle.marketProceedsUsd)
         cycle.entry?.let {
             json.put(
                 "entry",
@@ -597,6 +601,34 @@ class BotPlugin : Plugin() {
             exitEnabled = raw.optBoolean("exitEnabled", defaults.exitEnabled),
             exitDelaySec = raw.optInt("exitDelaySec", defaults.exitDelaySec),
             exitLadder = parseLadder(raw.optJSONArray("exitLadder")) ?: defaults.exitLadder,
+            takeProfitEnabled = raw.optBoolean(
+                "takeProfitEnabled",
+                defaults.takeProfitEnabled,
+            ),
+            takeProfitMultiple = raw.optDouble(
+                "takeProfitMultiple",
+                defaults.takeProfitMultiple,
+            ),
+            takeProfitFraction = raw.optDouble(
+                "takeProfitFraction",
+                defaults.takeProfitFraction,
+            ),
+            averageDownEnabled = raw.optBoolean(
+                "averageDownEnabled",
+                defaults.averageDownEnabled,
+            ),
+            averageDownMultiple = raw.optDouble(
+                "averageDownMultiple",
+                defaults.averageDownMultiple,
+            ),
+            averageDownMaxTimes = raw.optInt(
+                "averageDownMaxTimes",
+                defaults.averageDownMaxTimes,
+            ),
+            averageDownDeadlineSec = raw.optInt(
+                "averageDownDeadlineSec",
+                defaults.averageDownDeadlineSec,
+            ),
         )
     }
 

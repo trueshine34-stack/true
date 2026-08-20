@@ -80,6 +80,26 @@ data class Settings(
     val exitDelaySec: Int = 21,
     /** Sell price by elapsed second of the window, cheapest step first. */
     val exitLadder: List<ExitStep> = DEFAULT_EXIT_LADDER,
+
+    /** Dump part of the position at market once it has doubled. */
+    val takeProfitEnabled: Boolean = false,
+    /** Trigger multiple on the average entry price. */
+    val takeProfitMultiple: Double = 2.0,
+    /** Share of the position to sell when it triggers. */
+    val takeProfitFraction: Double = 0.5,
+
+    /** Buy the same amount again once the price has halved. */
+    val averageDownEnabled: Boolean = false,
+    /** Trigger multiple on the average entry price. */
+    val averageDownMultiple: Double = 0.5,
+    /** How many times per window this may fire. */
+    val averageDownMaxTimes: Int = 1,
+    /**
+     * No averaging down inside this many seconds of the close. Late in a window
+     * a halved price usually means the outcome is nearly decided, not that the
+     * side is cheap.
+     */
+    val averageDownDeadlineSec: Int = 60,
 )
 
 /** One rung: from `fromSec` into the window, rest the sell at `price`. */
@@ -185,6 +205,15 @@ data class Cycle(
     var lastExitAttemptMs: Long = 0,
     /** Set once the ladder can no longer act, so it stops retrying. */
     var exitFrozen: Boolean = false,
+    /** Forces the ladder to rebuild its order after the position size changed. */
+    var exitNeedsResync: Boolean = false,
+    /** Cost of the first entry, which is what each average-down repeats. */
+    var baseCostUsd: Double = 0.0,
+    var takeProfitDone: Boolean = false,
+    var averageDownCount: Int = 0,
+    /** Shares sold at market rather than through the ladder, and their proceeds. */
+    var soldAtMarket: Double = 0.0,
+    var marketProceedsUsd: Double = 0.0,
     var winner: String? = null,
     var pnlUsd: Double? = null,
     var state: CycleState = CycleState.WAITING,

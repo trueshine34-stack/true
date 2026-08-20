@@ -267,6 +267,8 @@ class BotEngine(
         val entryAt = cycle.windowStart * 1000 + settings.entryDelaySec * 1000L
         val tooLate = now > cycle.windowEnd * 1000 - 30_000L
 
+        maybeTakeProfit(cycle, now)
+        maybeAverageDown(cycle, now)
         maybeSyncExit(cycle, now)
 
         if (cycle.state == CycleState.ARMED && cycle.strike != null && now >= entryAt) {
@@ -481,6 +483,7 @@ class BotEngine(
         )
 
         cycle.entryFilledAtMs = System.currentTimeMillis()
+        cycle.baseCostUsd = cost
     }
 
     /**
@@ -500,7 +503,7 @@ class BotEngine(
         val elapsedSec = (now - cycle.windowStart * 1000) / 1000
         val target = Strategy.exitPriceFor(settings.exitLadder, elapsedSec)
         val active = cycle.exits.lastOrNull { !it.cancelled }
-        if (active != null && active.price == target) return
+        if (active != null && active.price == target && !cycle.exitNeedsResync) return
 
         // Throttle retries so a rejection cannot turn the 250ms loop into a
         // hammer against the exchange.
@@ -518,54 +521,261 @@ class BotEngine(
         val market = cycle.market ?: return
         val entry = cycle.entry ?: return
 
-        var sizeToRest = entry.shares - cycle.exits.sumOf { it.matched }
+        cycle.exitNeedsResync = false
         val active = cycle.exits.lastOrNull { !it.cancelled }
 
+        // Refresh fills before sizing anything, so a partially filled order is
+        // not counted as still held.
         if (active != null) {
-            val live = ClobApi.order(creds, acct.signerAddress, active.orderId)
-            if (live != null) active.matched = live.sizeMatched
-            val remaining = (active.size - active.matched).coerceAtLeast(0.0)
-
-            if (remaining < market.minimumOrderSize) {
-                // Cancelling something we cannot re-place only throws away the
-                // chance of a fill, so leave it where it is and stop trying.
-                cycle.exitFrozen = true
-                log(
-                    "info",
-                    "Продажу оставляем на ${cents(active.price)}: остаток " +
-                        String.format("%.2f", remaining) + " долей меньше минимума",
-                )
-                return
+            try {
+                ClobApi.order(creds, acct.signerAddress, active.orderId)?.let {
+                    active.matched = it.sizeMatched
+                }
+            } catch (e: Exception) {
+                // Fall back to what we already know about this order.
             }
+        }
 
+        // The truth is the position, not the old order: an average-down grows it
+        // and a take-profit shrinks it, and either can happen between rungs.
+        val sizeToRest =
+            entry.shares - cycle.exits.sumOf { it.matched } - cycle.soldAtMarket
+
+        if (sizeToRest < market.minimumOrderSize) {
+            // Cancelling something we cannot re-place only throws away the
+            // chance of a fill, so leave it where it is and stop trying.
+            cycle.exitFrozen = true
+            log(
+                "info",
+                "Продажу оставляем как есть: остаток " +
+                    String.format("%.2f", sizeToRest) + " долей меньше минимума",
+            )
+            return
+        }
+
+        if (active != null) {
             val cancelled = try {
                 ClobApi.cancelOrder(creds, acct.signerAddress, active.orderId)
             } catch (e: Exception) {
                 log("error", "Не удалось снять продажу: ${e.message}")
                 return
             }
+            active.cancelled = true
             if (!cancelled) {
-                active.cancelled = true
                 cycle.exitFrozen = true
                 log("warn", "Ордер на продажу уже неактивен")
                 return
             }
-            active.cancelled = true
-            sizeToRest = remaining
         }
 
-        if (sizeToRest < market.minimumOrderSize) {
-            cycle.exitFrozen = true
+        val tokenId = if (entry.side == "Up") market.up.tokenId else market.down.tokenId
+        placeExit(cycle, market, tokenId, sizeToRest, targetPrice)
+    }
+
+    /** Top of book for the side we are holding, ignored once it goes stale. */
+    private fun liveQuote(side: String): Quote? {
+        val q = quotes ?: return null
+        if (System.currentTimeMillis() - q.atMs > 15_000) return null
+        return if (side == "Up") q.up else q.down
+    }
+
+    /**
+     * Bank part of the position at market once it has doubled.
+     *
+     * The resting sell is pulled first: leaving it up would let the ladder and
+     * this order compete for the same shares.
+     */
+    private suspend fun maybeTakeProfit(cycle: Cycle, now: Long) {
+        if (!settings.takeProfitEnabled || cycle.takeProfitDone) return
+        val entry = cycle.entry ?: return
+        if (entry.dryRun) return
+        if (now < cycle.entryFilledAtMs + settings.exitDelaySec * 1000L) return
+
+        val market = cycle.market ?: return
+        // We would be selling into the bid, so that is the price that counts.
+        val bid = liveQuote(entry.side)?.bestBid ?: return
+        if (bid < entry.price * settings.takeProfitMultiple) return
+
+        val held = entry.shares - cycle.exits.sumOf { it.matched } - cycle.soldAtMarket
+        val wanted = minOf(entry.shares * settings.takeProfitFraction, held)
+        if (wanted < market.minimumOrderSize) {
+            cycle.takeProfitDone = true
             log(
                 "info",
-                "Продажа не выставлена: " + String.format("%.2f", sizeToRest) +
+                "Тейк-профит пропущен: " + String.format("%.2f", wanted) +
                     " долей меньше минимума ${market.minimumOrderSize}",
             )
             return
         }
 
-        val tokenId = if (entry.side == "Up") market.up.tokenId else market.down.tokenId
-        placeExit(cycle, market, tokenId, sizeToRest, targetPrice)
+        cycle.takeProfitDone = true
+        withContext(Dispatchers.IO) {
+            val acct = account ?: return@withContext
+            val creds = this@BotEngine.creds ?: return@withContext
+
+            cancelActiveExit(cycle, acct, creds)
+
+            val tokenId =
+                if (entry.side == "Up") market.up.tokenId else market.down.tokenId
+            val sold = marketSell(market, tokenId, wanted)
+            if (sold != null) {
+                cycle.soldAtMarket += sold.first
+                cycle.marketProceedsUsd += sold.second
+                log(
+                    "trade",
+                    "Тейк-профит: продано " + String.format("%.2f", sold.first) +
+                        " долей за " + String.format("%.2f", sold.second) +
+                        " $ по рынку (бид ${cents(bid)})",
+                )
+            }
+            // Whatever is left goes back on the ladder at the current rung.
+            cycle.exitNeedsResync = true
+            cycle.exitFrozen = false
+            cycle.lastExitPriceTried = null
+        }
+        onStateChanged()
+    }
+
+    /**
+     * Buy the same amount again once the price has halved.
+     *
+     * Blocked near the close: late in a window a halved price usually means the
+     * outcome is nearly decided rather than that the side got cheap.
+     */
+    private suspend fun maybeAverageDown(cycle: Cycle, now: Long) {
+        if (!settings.averageDownEnabled) return
+        if (cycle.averageDownCount >= settings.averageDownMaxTimes) return
+        val entry = cycle.entry ?: return
+        if (entry.dryRun) return
+        if (now > cycle.windowEnd * 1000 - settings.averageDownDeadlineSec * 1000L) return
+
+        val market = cycle.market ?: return
+        val ask = liveQuote(entry.side)?.bestAsk ?: return
+        if (ask > entry.price * settings.averageDownMultiple) return
+
+        val stake = if (cycle.baseCostUsd > 0) cycle.baseCostUsd else entry.costUsd
+        val sized = sizeOrder(ask, stake, market.minimumOrderSize)
+        if (sized == null) {
+            cycle.averageDownCount = settings.averageDownMaxTimes
+            log("info", "Докупка пропущена: сумма даёт меньше минимума биржи")
+            return
+        }
+
+        cycle.averageDownCount += 1
+        withContext(Dispatchers.IO) {
+            val acct = account ?: return@withContext
+            val creds = this@BotEngine.creds ?: return@withContext
+            val keys = keyPair ?: return@withContext
+
+            val tokenId =
+                if (entry.side == "Up") market.up.tokenId else market.down.tokenId
+            val cfg = Orders.roundConfigFor(market.tickSize)
+            val amounts = Orders.marketOrderAmounts("BUY", sized.second, ask, cfg)
+            val order = Orders.buildAndSign(
+                keyPair = keys,
+                signerAddress = acct.signerAddress,
+                funder = acct.funderAddress,
+                signatureType = acct.signatureType,
+                tokenId = tokenId,
+                side = "BUY",
+                amounts = amounts,
+                negRisk = market.negRisk,
+            )
+            val result = try {
+                ClobApi.postOrder(order, creds, acct.signerAddress, "FOK")
+            } catch (e: Exception) {
+                log("error", "Докупка не прошла: ${e.message}")
+                return@withContext
+            }
+            if (!result.success) {
+                log("error", "Докупка отклонена: ${result.error ?: "отказ CLOB"}")
+                return@withContext
+            }
+
+            val addedShares = result.takingAmount ?: sized.first
+            val addedCost = result.makingAmount ?: sized.second
+            val shares = entry.shares + addedShares
+            val cost = entry.costUsd + addedCost
+            cycle.entry = entry.copy(
+                shares = shares,
+                costUsd = cost,
+                price = if (shares > 0) cost / shares else entry.price,
+            )
+            stats.trades += 1
+            stats.stakedUsd += addedCost
+            persistStats()
+
+            log(
+                "trade",
+                "Докупка ${entry.side}: " + String.format("%.2f", addedShares) +
+                    " долей за " + String.format("%.2f", addedCost) +
+                    " $ по ${cents(ask)}. Средняя " +
+                    cents(if (shares > 0) cost / shares else entry.price),
+            )
+
+            // A bigger position needs a bigger resting sell, and the doubling
+            // target now sits on the new, lower average.
+            cycle.exitNeedsResync = true
+            cycle.exitFrozen = false
+            cycle.lastExitPriceTried = null
+            cycle.takeProfitDone = false
+        }
+        onStateChanged()
+    }
+
+    private fun cancelActiveExit(cycle: Cycle, acct: Account, creds: Credentials) {
+        val active = cycle.exits.lastOrNull { !it.cancelled } ?: return
+        try {
+            ClobApi.order(creds, acct.signerAddress, active.orderId)?.let {
+                active.matched = it.sizeMatched
+            }
+            ClobApi.cancelOrder(creds, acct.signerAddress, active.orderId)
+        } catch (e: Exception) {
+            log("warn", "Не удалось снять лимитку перед продажей: ${e.message}")
+        }
+        active.cancelled = true
+    }
+
+    /** Returns (shares sold, USDC received), or null when the book is too thin. */
+    private fun marketSell(
+        market: Market,
+        tokenId: String,
+        shares: Double,
+    ): Pair<Double, Double>? {
+        val acct = account ?: return null
+        val creds = this.creds ?: return null
+        val keys = keyPair ?: return null
+
+        return try {
+            val book = ClobApi.getBook(tokenId)
+            val price = ClobApi.marketablePrice(book, "SELL", shares)
+            if (price == null) {
+                log("warn", "Продажа по рынку отменена: в стакане не хватает объёма")
+                return null
+            }
+            val cfg = Orders.roundConfigFor(market.tickSize)
+            val amounts = Orders.marketOrderAmounts("SELL", shares, price, cfg)
+            val order = Orders.buildAndSign(
+                keyPair = keys,
+                signerAddress = acct.signerAddress,
+                funder = acct.funderAddress,
+                signatureType = acct.signatureType,
+                tokenId = tokenId,
+                side = "SELL",
+                amounts = amounts,
+                negRisk = market.negRisk,
+            )
+            val result = ClobApi.postOrder(order, creds, acct.signerAddress, "FOK")
+            if (!result.success) {
+                log("error", "Продажа по рынку отклонена: ${result.error ?: "отказ CLOB"}")
+                return null
+            }
+            // A SELL makes shares and takes USDC.
+            Pair(result.makingAmount ?: shares, result.takingAmount ?: shares * price)
+        } catch (e: Exception) {
+            log("error", "Продажа по рынку не прошла: ${e.message}")
+            null
+        }
     }
 
     private fun placeExit(
@@ -687,6 +897,8 @@ class BotEngine(
             soldShares += exit.matched
             proceeds += exit.matched * exit.price
         }
+        soldShares += cycle.soldAtMarket
+        proceeds += cycle.marketProceedsUsd
 
         val heldShares = (entry.shares - soldShares).coerceAtLeast(0.0)
         val resolvedWin = resolved == entry.side

@@ -314,6 +314,132 @@ export function SettingsScreen({
       </div>
 
       <div className="card">
+        <h2>Реакции на цену</h2>
+
+        <div className="toggle" style={{ borderTop: 'none', paddingTop: 0 }}>
+          <div>
+            <div>Тейк-профит при +100%</div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Когда бид доходит до двойной средней цены — снять лимитку, продать
+              половину по рынку, остаток вернуть в лесенку.
+            </div>
+          </div>
+          <Switch
+            on={settings.takeProfitEnabled}
+            onToggle={() => set('takeProfitEnabled', !settings.takeProfitEnabled)}
+          />
+        </div>
+
+        {settings.takeProfitEnabled && (
+          <div className="grid2">
+            <label className="field">
+              <span>Во сколько раз выше входа</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={String(settings.takeProfitMultiple)}
+                onChange={(e) =>
+                  set(
+                    'takeProfitMultiple',
+                    num(e.target.value, settings.takeProfitMultiple),
+                  )
+                }
+              />
+            </label>
+            <label className="field">
+              <span>Продать долю, %</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={(settings.takeProfitFraction * 100).toFixed(0)}
+                onChange={(e) =>
+                  set(
+                    'takeProfitFraction',
+                    clampInt(
+                      num(e.target.value, settings.takeProfitFraction * 100),
+                      1,
+                      100,
+                    ) / 100,
+                  )
+                }
+              />
+            </label>
+          </div>
+        )}
+
+        <div className="toggle">
+          <div>
+            <div>Докупка при −50%</div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Когда аск падает вдвое от средней цены — купить ещё на ту же сумму,
+              что и первый вход.
+            </div>
+          </div>
+          <Switch
+            on={settings.averageDownEnabled}
+            onToggle={() => set('averageDownEnabled', !settings.averageDownEnabled)}
+          />
+        </div>
+
+        {settings.averageDownEnabled && (
+          <>
+            <div className="grid2">
+              <label className="field">
+                <span>Доля от входа</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={String(settings.averageDownMultiple)}
+                  onChange={(e) =>
+                    set(
+                      'averageDownMultiple',
+                      num(e.target.value, settings.averageDownMultiple),
+                    )
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Не больше N раз за окно</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={String(settings.averageDownMaxTimes)}
+                  onChange={(e) =>
+                    set(
+                      'averageDownMaxTimes',
+                      clampInt(num(e.target.value, settings.averageDownMaxTimes), 1, 5),
+                    )
+                  }
+                />
+              </label>
+            </div>
+            <label className="field">
+              <span>Не докупать за N секунд до конца окна</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={String(settings.averageDownDeadlineSec)}
+                onChange={(e) =>
+                  set(
+                    'averageDownDeadlineSec',
+                    clampInt(
+                      num(e.target.value, settings.averageDownDeadlineSec),
+                      0,
+                      280,
+                    ),
+                  )
+                }
+              />
+            </label>
+            <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+              Ближе к концу окна упавшая вдвое цена обычно значит, что исход уже
+              почти решён, а не что сторона подешевела.
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="card">
         <h2>Ограничение риска</h2>
         <label className="field">
           <span>Стоп по убытку за сессию, $</span>

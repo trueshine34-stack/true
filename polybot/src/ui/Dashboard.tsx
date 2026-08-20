@@ -209,6 +209,21 @@ export function Dashboard({
             </span>
           </div>
         )}
+        {(cycle?.soldAtMarket ?? 0) > 0 && (
+          <div className="row">
+            <span className="label">Продано по рынку</span>
+            <span className="value up">
+              {cycle!.soldAtMarket!.toFixed(2)} долей ·{' '}
+              {(cycle!.marketProceedsUsd ?? 0).toFixed(2)} $
+            </span>
+          </div>
+        )}
+        {(cycle?.averageDownCount ?? 0) > 0 && (
+          <div className="row">
+            <span className="label">Докупок</span>
+            <span className="value">{cycle!.averageDownCount}</span>
+          </div>
+        )}
         {cycle?.note && (
           <div className="row">
             <span className="label">Комментарий</span>

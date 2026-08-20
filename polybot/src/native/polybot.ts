@@ -107,6 +107,10 @@ export type NativeCycle = {
   market?: NativeMarket;
   exits?: NativeExit[];
   exitFrozen?: boolean;
+  takeProfitDone?: boolean;
+  averageDownCount?: number;
+  soldAtMarket?: number;
+  marketProceedsUsd?: number;
 };
 
 export type NativeStats = {
