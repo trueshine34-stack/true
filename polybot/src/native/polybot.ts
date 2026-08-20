@@ -61,19 +61,34 @@ export type NativeLog = {
   message: string;
 };
 
-export type ConfigureArgs = {
+export type ConnectArgs = {
   privateKey: string;
-  signerAddress: string;
   funderAddress: string;
   signatureType: number;
-  apiKey: string;
-  secret: string;
-  passphrase: string;
   settings: StrategySettings;
 };
 
+export type ConnectResult = {
+  /** Address derived natively from the key. */
+  address: string;
+  clockOffsetSec: number;
+  usdc?: number;
+  /** Set when credentials worked but the balance read did not. */
+  balanceError?: string;
+};
+
+export type DiagnosticCheck = {
+  name: string;
+  /** True for the neutral connectivity probe, false for Polymarket hosts. */
+  control: boolean;
+  ok: boolean;
+  ms: number;
+  error?: string;
+};
+
 export interface PolyBotPlugin {
-  configure(args: ConfigureArgs): Promise<void>;
+  connect(args: ConnectArgs): Promise<ConnectResult>;
+  diagnose(): Promise<{ checks: DiagnosticCheck[] }>;
   updateSettings(args: { settings: StrategySettings }): Promise<void>;
   start(): Promise<void>;
   stop(): Promise<void>;
@@ -105,7 +120,10 @@ const IDLE_STATE: NativeState = {
  * rather than pretending to trade — the engine genuinely does not exist here.
  */
 const webStub: PolyBotPlugin = {
-  configure: async () => {},
+  connect: async () => {
+    throw new Error('Подключение доступно только в приложении Android');
+  },
+  diagnose: async () => ({ checks: [] }),
   updateSettings: async () => {},
   start: async () => {
     throw new Error('Торговый сервис доступен только в приложении Android');

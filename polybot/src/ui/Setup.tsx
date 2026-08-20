@@ -1,15 +1,14 @@
 import { useState } from 'react';
-import { Wallet, isAddress } from 'ethers';
 import {
-  saveAccount,
-  saveEncryptedKey,
+  looksLikeAddress,
+  looksLikePrivateKey,
+  SignatureType,
   type AccountConfig,
-} from '../core/storage';
-import {
-  createOrDeriveApiCreds,
-  getBalanceAllowance,
-} from '../polymarket/clob';
-import { SignatureType, type ApiCreds } from '../polymarket/types';
+} from '../core/account';
+import type { StrategySettings } from '../core/settings';
+import { saveAccount, saveEncryptedKey } from '../core/storage';
+import { PolyBot } from '../native/polybot';
+import { Diagnostics } from './Diagnostics';
 
 type WalletKind = 'email' | 'browser' | 'eoa';
 
@@ -20,13 +19,11 @@ const KIND_TO_SIGTYPE: Record<WalletKind, SignatureType> = {
 };
 
 export function Setup({
+  settings,
   onDone,
 }: {
-  onDone: (
-    privateKey: string,
-    account: AccountConfig,
-    creds: ApiCreds,
-  ) => Promise<void>;
+  settings: StrategySettings;
+  onDone: (account: AccountConfig) => void;
 }) {
   const [privateKey, setPrivateKey] = useState('');
   const [kind, setKind] = useState<WalletKind>('email');
@@ -35,60 +32,50 @@ export function Setup({
   const [pin2, setPin2] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [balance, setBalance] = useState<string | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   const needsFunder = kind !== 'eoa';
 
   const connect = async () => {
     setError(null);
-    setBalance(null);
+    setShowDiagnostics(false);
 
     const key = privateKey.trim();
-    if (!key) return setError('Вставьте приватный ключ.');
+    if (!looksLikePrivateKey(key)) {
+      return setError('Не похоже на приватный ключ (нужны 64 hex-символа).');
+    }
     if (pin.length < 4) return setError('PIN должен быть не короче 4 символов.');
     if (pin !== pin2) return setError('PIN и подтверждение не совпадают.');
 
-    let wallet: Wallet;
-    try {
-      wallet = new Wallet(key.startsWith('0x') ? key : `0x${key}`);
-    } catch {
-      return setError('Не похоже на приватный ключ (нужны 64 hex-символа).');
-    }
-
-    const funderAddress = needsFunder ? funder.trim() : wallet.address;
-    if (needsFunder && !isAddress(funderAddress)) {
+    const funderAddress = needsFunder ? funder.trim() : '';
+    if (needsFunder && !looksLikeAddress(funderAddress)) {
       return setError('Укажите корректный адрес кошелька Polymarket.');
     }
 
+    const signatureType = KIND_TO_SIGTYPE[kind];
     setBusy(true);
     try {
-      const creds = await createOrDeriveApiCreds(wallet);
-      const signatureType = KIND_TO_SIGTYPE[kind];
-
-      // A balance read is the cheapest proof that the signer, the funder and
-      // the wallet type line up — a mismatch shows up here instead of on the
-      // first live order.
-      try {
-        const ba = await getBalanceAllowance(wallet, creds, signatureType);
-        setBalance((Number(ba.balance ?? 0) / 1e6).toFixed(2));
-      } catch {
-        // A balance read can fail for reasons unrelated to the wallet being
-        // valid; the connect itself is what matters here.
-      }
+      const result = await PolyBot.connect({
+        privateKey: key,
+        funderAddress,
+        signatureType: Number(signatureType),
+        settings,
+      });
 
       const account: AccountConfig = {
-        signerAddress: wallet.address,
-        funderAddress,
+        signerAddress: result.address,
+        funderAddress: funderAddress || result.address,
         signatureType,
       };
 
-      await saveEncryptedKey(wallet.privateKey, pin);
+      await saveEncryptedKey(key.startsWith('0x') ? key : `0x${key}`, pin);
       await saveAccount(account);
-      await onDone(wallet.privateKey, account, creds);
+      onDone(account);
     } catch (err) {
-      setError(
-        `Не удалось подключиться к CLOB: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      setError(err instanceof Error ? err.message : String(err));
+      // A transport failure here is usually the network, not the wallet —
+      // the probe tells the two apart instead of leaving the user guessing.
+      setShowDiagnostics(true);
     } finally {
       setBusy(false);
     }
@@ -104,9 +91,7 @@ export function Setup({
         </p>
 
         {error && <div className="banner error">{error}</div>}
-        {balance !== null && (
-          <div className="banner info">Баланс USDC: {balance} $</div>
-        )}
+        {showDiagnostics && <Diagnostics />}
 
         <div className="card">
           <h2>Кошелёк</h2>
@@ -183,6 +168,16 @@ export function Setup({
         <button className="primary" disabled={busy} onClick={() => void connect()}>
           {busy ? 'Подключаемся…' : 'Подключить'}
         </button>
+
+        {!showDiagnostics && (
+          <button
+            className="ghost"
+            style={{ marginTop: 10 }}
+            onClick={() => setShowDiagnostics(true)}
+          >
+            Проверить доступ к бирже
+          </button>
+        )}
 
         <p className="muted" style={{ fontSize: 12, marginTop: 14 }}>
           Бот стартует в тестовом режиме: ордера считаются и подписываются, но не

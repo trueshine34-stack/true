@@ -120,6 +120,57 @@ object ClobApi {
         return null
     }
 
+    /**
+     * Mint or recover this wallet's API credentials.
+     *
+     * Creating is idempotent-ish — the server hands back the existing key on a
+     * repeat call — and /derive is the fallback so a wallet that already has a
+     * key is never locked out.
+     */
+    fun createOrDeriveApiCreds(keyPair: Secp256k1.KeyPair): Credentials {
+        fun headers(): Map<String, String> {
+            val ts = Clock.nowSec()
+            return mapOf(
+                "POLY_ADDRESS" to keyPair.address,
+                "POLY_SIGNATURE" to Signing.clobAuthSignature(keyPair, ts, 0),
+                "POLY_TIMESTAMP" to ts.toString(),
+                "POLY_NONCE" to "0",
+            )
+        }
+
+        fun parse(text: String): Credentials? {
+            val json = JSONObject(text)
+            val apiKey = json.optString("apiKey")
+            if (apiKey.isEmpty()) return null
+            return Credentials(
+                apiKey,
+                json.optString("secret"),
+                json.optString("passphrase"),
+            )
+        }
+
+        var createError: Exception? = null
+        try {
+            val text = Http.postJson("${Endpoints.CLOB}/auth/api-key", "", headers())
+            parse(text)?.let { return it }
+        } catch (e: Exception) {
+            createError = e
+        }
+
+        try {
+            val text = Http.get("${Endpoints.CLOB}/auth/derive-api-key", headers())
+            parse(text)?.let { return it }
+        } catch (e: Exception) {
+            // Surface whichever failure is more informative rather than hiding
+            // the first one behind the fallback's.
+            throw ApiException(
+                "не удалось получить ключи CLOB: " +
+                    (e.message ?: createError?.message ?: "неизвестная ошибка"),
+            )
+        }
+        throw ApiException("CLOB не вернул ключи API")
+    }
+
     /** USDC the funder can actually spend, in whole dollars. */
     fun usdcBalance(
         creds: Credentials,

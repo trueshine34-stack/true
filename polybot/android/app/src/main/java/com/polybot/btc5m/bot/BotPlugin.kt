@@ -48,40 +48,109 @@ class BotPlugin : Plugin() {
         super.handleOnDestroy()
     }
 
+    /**
+     * Mint the wallet's CLOB credentials and stage everything the service needs.
+     *
+     * This runs natively rather than in the WebView on purpose: the WebView's
+     * fetch reports every transport failure as an opaque "Failed to fetch",
+     * which hides whether the exchange is unreachable, the TLS handshake was
+     * reset, or the request was simply refused.
+     */
     @PluginMethod
-    fun configure(call: PluginCall) {
+    fun connect(call: PluginCall) {
         val privateKey = call.getString("privateKey")
-        val signerAddress = call.getString("signerAddress")
-        val funderAddress = call.getString("funderAddress")
-        val apiKey = call.getString("apiKey")
-        val secret = call.getString("secret")
-        val passphrase = call.getString("passphrase")
-
-        if (privateKey.isNullOrEmpty() || signerAddress.isNullOrEmpty() ||
-            funderAddress.isNullOrEmpty() || apiKey.isNullOrEmpty() ||
-            secret.isNullOrEmpty() || passphrase.isNullOrEmpty()
-        ) {
-            call.reject("configure requires the wallet and CLOB credentials")
+        if (privateKey.isNullOrEmpty()) {
+            call.reject("Нужен приватный ключ")
             return
         }
+        val signatureType = SignatureType.from(call.getInt("signatureType") ?: 0)
+        val settings = call.getObject("settings")?.let { parseSettings(it) }
+            ?: BotService.pendingSettings
 
-        BotService.pendingAccount = Account(
-            privateKey = privateKey,
-            signerAddress = signerAddress,
-            funderAddress = funderAddress,
-            signatureType = SignatureType.from(call.getInt("signatureType") ?: 0),
-        )
-        BotService.pendingCreds = Credentials(apiKey, secret, passphrase)
-        call.getObject("settings")?.let { BotService.pendingSettings = parseSettings(it) }
+        Thread {
+            try {
+                val keyPair = Secp256k1.keyPairFromPrivateKey(privateKey.trim())
+                val funder = call.getString("funderAddress")
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: keyPair.address
 
-        BotService.engine?.let { engine ->
-            engine.configure(
-                BotService.pendingAccount!!,
-                BotService.pendingCreds!!,
-                BotService.pendingSettings,
+                try {
+                    Clock.sync()
+                } catch (e: Exception) {
+                    // Not fatal on its own; the signature check below will fail
+                    // loudly if the drift actually matters.
+                }
+
+                val creds = ClobApi.createOrDeriveApiCreds(keyPair)
+
+                BotService.pendingAccount = Account(
+                    privateKey = privateKey.trim(),
+                    signerAddress = keyPair.address,
+                    funderAddress = funder,
+                    signatureType = signatureType,
+                )
+                BotService.pendingCreds = creds
+                BotService.pendingSettings = settings
+                BotService.engine?.configure(
+                    BotService.pendingAccount!!,
+                    creds,
+                    settings,
+                )
+
+                val result = JSObject()
+                    .put("address", keyPair.address)
+                    .put("clockOffsetSec", Clock.offset())
+                // A balance read is the cheapest proof that signer, funder and
+                // wallet type line up; a mismatch shows here, not on the first
+                // live order.
+                try {
+                    result.put(
+                        "usdc",
+                        ClobApi.usdcBalance(creds, keyPair.address, signatureType),
+                    )
+                } catch (e: Exception) {
+                    result.put("balanceError", e.message)
+                }
+                call.resolve(result)
+            } catch (e: Exception) {
+                call.reject(e.message ?: "не удалось подключиться", e)
+            }
+        }.start()
+    }
+
+    /**
+     * Reachability probe. Polymarket is geo-restricted and commonly blocked at
+     * the ISP, which is indistinguishable from a bug unless the real transport
+     * error is surfaced.
+     */
+    @PluginMethod
+    fun diagnose(call: PluginCall) {
+        Thread {
+            val checks = listOf(
+                // The OS's own captive-portal probe, as a control: if this
+                // fails too, the phone has no working connection at all.
+                Triple("Интернет", "https://connectivitycheck.gstatic.com/generate_204", true),
+                Triple("CLOB Polymarket", "${Endpoints.CLOB}/time", false),
+                Triple("Gamma Polymarket", "${Endpoints.GAMMA}/events?slug=btc-updown-5m-0", false),
             )
-        }
-        call.resolve()
+
+            val results = JSArray()
+            for ((name, url, isControl) in checks) {
+                val started = System.currentTimeMillis()
+                val entry = JSObject().put("name", name).put("control", isControl)
+                try {
+                    Http.get(url)
+                    entry.put("ok", true)
+                } catch (e: Exception) {
+                    entry.put("ok", false)
+                    entry.put("error", "${e.javaClass.simpleName}: ${e.message}")
+                }
+                entry.put("ms", System.currentTimeMillis() - started)
+                results.put(entry)
+            }
+            call.resolve(JSObject().put("checks", results))
+        }.start()
     }
 
     @PluginMethod
@@ -100,7 +169,7 @@ class BotPlugin : Plugin() {
     @PluginMethod
     fun start(call: PluginCall) {
         if (BotService.pendingAccount == null || BotService.pendingCreds == null) {
-            call.reject("configure() must run before start()")
+            call.reject("Сначала подключите кошелёк")
             return
         }
         // Android 13+ hides the foreground notification without this grant, and

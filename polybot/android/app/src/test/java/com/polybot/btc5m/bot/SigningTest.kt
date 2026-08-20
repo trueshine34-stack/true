@@ -67,6 +67,18 @@ class SigningTest {
     }
 
     @Test
+    fun `l1 auth signatures match the reference client`() {
+        for (v in ReferenceVectors.AUTHS) {
+            assertEquals(
+                "auth for ts ${v.timestamp} nonce ${v.nonce}",
+                v.signature.lowercase(),
+                Signing.clobAuthSignature(keyPair, v.timestamp, v.nonce.toLong())
+                    .lowercase(),
+            )
+        }
+    }
+
+    @Test
     fun `l2 hmac matches the reference client`() {
         for (v in ReferenceVectors.HMACS) {
             val message = v.timestamp + v.method + v.path + v.body

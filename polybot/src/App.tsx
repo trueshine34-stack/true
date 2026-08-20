@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Wallet } from 'ethers';
-import { syncClock } from './core/clock';
+import type { AccountConfig } from './core/account';
 import { DEFAULT_SETTINGS, type StrategySettings } from './core/settings';
 import {
   hasVault,
@@ -8,11 +7,8 @@ import {
   loadEncryptedKey,
   loadSettings,
   saveSettings,
-  type AccountConfig,
 } from './core/storage';
 import { PolyBot } from './native/polybot';
-import { createOrDeriveApiCreds, getServerTime } from './polymarket/clob';
-import type { ApiCreds } from './polymarket/types';
 import { Dashboard } from './ui/Dashboard';
 import { Logs } from './ui/Logs';
 import { Lock } from './ui/Lock';
@@ -22,18 +18,10 @@ import { Setup } from './ui/Setup';
 type Phase = 'loading' | 'setup' | 'locked' | 'ready';
 type Tab = 'dashboard' | 'settings' | 'logs';
 
-/** What the UI keeps after unlocking. The private key is not among it. */
-export type Session = {
-  address: string;
-  creds: ApiCreds;
-  account: AccountConfig;
-};
-
 export function App() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [tab, setTab] = useState<Tab>('dashboard');
   const [settings, setSettings] = useState<StrategySettings>(DEFAULT_SETTINGS);
-  const [session, setSession] = useState<Session | null>(null);
   const [account, setAccount] = useState<AccountConfig | null>(null);
 
   useEffect(() => {
@@ -49,14 +37,12 @@ export function App() {
       setAccount(acct);
 
       // The service outlives the UI, so a bot started earlier is still trading;
-      // rejoin it instead of showing the lock screen over a running engine.
+      // rejoin it instead of showing a lock screen over a running engine.
       const state = await PolyBot.getState().catch(() => null);
       if (!cancelled && state?.serviceAlive && acct) {
-        setSession({ address: acct.signerAddress, creds: EMPTY_CREDS, account: acct });
         setPhase('ready');
         return;
       }
-
       if (!cancelled) setPhase(vault && acct ? 'locked' : 'setup');
     })();
     return () => {
@@ -68,30 +54,9 @@ export function App() {
     setSettings(next);
     void saveSettings(next);
     void PolyBot.updateSettings({ settings: next }).catch(() => {
-      /* service not up yet; configure() will carry these */
+      // Not connected yet; connect() carries the settings across.
     });
   }, []);
-
-  const handoff = useCallback(
-    async (
-      privateKey: string,
-      acct: AccountConfig,
-      creds: ApiCreds,
-      current: StrategySettings,
-    ) => {
-      await PolyBot.configure({
-        privateKey,
-        signerAddress: acct.signerAddress,
-        funderAddress: acct.funderAddress,
-        signatureType: Number(acct.signatureType),
-        apiKey: creds.apiKey,
-        secret: creds.secret,
-        passphrase: creds.passphrase,
-        settings: current,
-      });
-    },
-    [],
-  );
 
   const unlock = useCallback(
     async (pin: string): Promise<string | null> => {
@@ -101,48 +66,30 @@ export function App() {
       const privateKey = await loadEncryptedKey(pin);
       if (!privateKey) return 'Неверный PIN.';
 
-      let wallet: Wallet;
       try {
-        wallet = new Wallet(privateKey);
-      } catch {
-        return 'Сохранённый ключ повреждён — подключите кошелёк заново.';
-      }
-
-      try {
-        await syncClock(getServerTime);
-      } catch {
-        /* the native service syncs its own clock as well */
-      }
-
-      try {
-        const creds = await createOrDeriveApiCreds(wallet);
-        await handoff(privateKey, acct, creds, settings);
+        await PolyBot.connect({
+          privateKey,
+          funderAddress: acct.funderAddress,
+          signatureType: Number(acct.signatureType),
+          settings,
+        });
         setAccount(acct);
-        setSession({ address: wallet.address, creds, account: acct });
         setPhase('ready');
         return null;
       } catch (err) {
-        return `Не удалось получить ключи CLOB: ${
-          err instanceof Error ? err.message : String(err)
-        }`;
+        return err instanceof Error ? err.message : String(err);
       }
     },
-    [account, handoff, settings],
+    [account, settings],
   );
 
-  const onSetupDone = useCallback(
-    async (privateKey: string, acct: AccountConfig, creds: ApiCreds) => {
-      await handoff(privateKey, acct, creds, settings);
-      setAccount(acct);
-      setSession({ address: acct.signerAddress, creds, account: acct });
-      setPhase('ready');
-    },
-    [handoff, settings],
-  );
+  const onSetupDone = useCallback((acct: AccountConfig) => {
+    setAccount(acct);
+    setPhase('ready');
+  }, []);
 
   const onForget = useCallback(() => {
     void PolyBot.stop().catch(() => {});
-    setSession(null);
     setAccount(null);
     setPhase('setup');
   }, []);
@@ -156,7 +103,7 @@ export function App() {
   }
 
   if (phase === 'setup') {
-    return <Setup onDone={onSetupDone} />;
+    return <Setup settings={settings} onDone={onSetupDone} />;
   }
 
   if (phase === 'locked') {
@@ -167,7 +114,7 @@ export function App() {
     <div className="app">
       <div className="topbar">
         <h1>PolyBot · BTC 5м</h1>
-        {session && <span className="pill mono">{short(session.address)}</span>}
+        {account && <span className="pill mono">{short(account.signerAddress)}</span>}
       </div>
 
       <div className="scroll">
@@ -203,9 +150,6 @@ export function App() {
     </div>
   );
 }
-
-/** Placeholder for a rejoined session: the service already holds the real ones. */
-const EMPTY_CREDS: ApiCreds = { apiKey: '', secret: '', passphrase: '' };
 
 function short(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;

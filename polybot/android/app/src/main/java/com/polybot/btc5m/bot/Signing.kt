@@ -110,6 +110,55 @@ object Signing {
             ),
         )
 
+    // L1 auth signs a domain with no verifyingContract, so it needs its own
+    // type hash rather than the four-field one used for orders.
+    private const val AUTH_DOMAIN_TYPE_STRING =
+        "EIP712Domain(string name,string version,uint256 chainId)"
+
+    private const val AUTH_TYPE_STRING =
+        "ClobAuth(address address,string timestamp,uint256 nonce,string message)"
+
+    const val AUTH_MESSAGE = "This message attests that I control the given wallet"
+
+    private val AUTH_DOMAIN_TYPE_HASH =
+        Secp256k1.keccak256(AUTH_DOMAIN_TYPE_STRING.toByteArray(StandardCharsets.UTF_8))
+    private val AUTH_TYPE_HASH =
+        Secp256k1.keccak256(AUTH_TYPE_STRING.toByteArray(StandardCharsets.UTF_8))
+
+    /**
+     * L1 signature, which is what mints the API credentials in the first place.
+     */
+    fun clobAuthSignature(
+        keyPair: Secp256k1.KeyPair,
+        timestampSec: Long,
+        nonce: Long,
+        chainId: Long = Contracts.CHAIN_ID,
+    ): String {
+        val domain = Secp256k1.keccak256(
+            concat(
+                AUTH_DOMAIN_TYPE_HASH,
+                Secp256k1.keccak256("ClobAuthDomain".toByteArray(StandardCharsets.UTF_8)),
+                Secp256k1.keccak256("1".toByteArray(StandardCharsets.UTF_8)),
+                word(BigInteger.valueOf(chainId)),
+            ),
+        )
+        val structHash = Secp256k1.keccak256(
+            concat(
+                AUTH_TYPE_HASH,
+                word(keyPair.address),
+                Secp256k1.keccak256(
+                    timestampSec.toString().toByteArray(StandardCharsets.UTF_8),
+                ),
+                word(BigInteger.valueOf(nonce)),
+                Secp256k1.keccak256(AUTH_MESSAGE.toByteArray(StandardCharsets.UTF_8)),
+            ),
+        )
+        val digest = Secp256k1.keccak256(
+            concat(byteArrayOf(0x19, 0x01), domain, structHash),
+        )
+        return signDigest(digest, keyPair)
+    }
+
     /** 65-byte `r || s || v` signature, hex encoded. */
     fun signDigest(digest: ByteArray, keyPair: Secp256k1.KeyPair): String {
         val sig = Secp256k1.sign(digest, keyPair)

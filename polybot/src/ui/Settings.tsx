@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { StrategyMode, StrategySettings } from '../core/settings';
-import { clearVault, type AccountConfig } from '../core/storage';
+import { SignatureType, type AccountConfig } from '../core/account';
+import { clearVault } from '../core/storage';
 import { PolyBot } from '../native/polybot';
-import { SignatureType } from '../polymarket/types';
+import { Diagnostics } from './Diagnostics';
 
 export function SettingsScreen({
   settings,
@@ -19,6 +20,7 @@ export function SettingsScreen({
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [batteryExempt, setBatteryExempt] = useState<boolean | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   useEffect(() => {
     void PolyBot.isBatteryExempt()
@@ -44,6 +46,7 @@ export function SettingsScreen({
       setBalance(r.usdc.toFixed(2));
     } catch (err) {
       setBalanceError(err instanceof Error ? err.message : String(err));
+      setShowDiagnostics(true);
     } finally {
       setChecking(false);
     }
@@ -241,6 +244,7 @@ export function SettingsScreen({
           </div>
         )}
         {balanceError && <div className="banner error">{balanceError}</div>}
+        {showDiagnostics && <Diagnostics />}
 
         <button
           className="ghost"
@@ -249,6 +253,13 @@ export function SettingsScreen({
           onClick={() => void checkBalance()}
         >
           {checking ? 'Проверяем…' : 'Проверить баланс'}
+        </button>
+        <button
+          className="ghost"
+          style={{ marginTop: 10 }}
+          onClick={() => setShowDiagnostics((v) => !v)}
+        >
+          {showDiagnostics ? 'Скрыть проверку сети' : 'Проверить доступ к бирже'}
         </button>
         <button
           className="danger"

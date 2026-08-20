@@ -21,6 +21,7 @@ from py_clob_client_v2.order_utils.model.order_data_v2 import OrderDataV2
 from py_clob_client_v2.order_utils.model.side import Side
 from py_clob_client_v2.order_utils.model.signature_type_v2 import SignatureTypeV2
 from py_clob_client_v2.signer import Signer
+from py_clob_client_v2.signing.eip712 import sign_clob_auth_message
 from py_clob_client_v2.signing.hmac import build_hmac_signature
 
 # A well-known throwaway key; it holds nothing and never will.
@@ -67,6 +68,13 @@ ORDER_CASES = [
         "1",
         "1",
     ),
+]
+
+# L1 auth is what mints the API credentials; a wrong domain here means the
+# wallet can never authenticate at all.
+AUTH_CASES = [
+    (1700000000, 0),
+    (1787205600, 7),
 ]
 
 HMAC_CASES = [
@@ -121,6 +129,15 @@ def main() -> None:
                 kotlin_string(builder.build_order_signature(typed)),
             )
         )
+
+    auths = [
+        "AuthVector({}L, {}, {})".format(
+            timestamp,
+            nonce,
+            kotlin_string(sign_clob_auth_message(signer, timestamp, nonce)),
+        )
+        for timestamp, nonce in AUTH_CASES
+    ]
 
     secret = base64.urlsafe_b64encode(b"0123456789abcdef0123456789abcdef").decode()
     hmacs = [
@@ -188,6 +205,12 @@ object ReferenceVectors {{
         val signature: String,
     )
 
+    data class AuthVector(
+        val timestamp: Long,
+        val nonce: Int,
+        val signature: String,
+    )
+
     data class HmacVector(
         val timestamp: String,
         val method: String,
@@ -206,6 +229,10 @@ object ReferenceVectors {{
 
     val ORDERS = listOf(
         {joiner.join(orders)},
+    )
+
+    val AUTHS = listOf(
+        {joiner.join(auths)},
     )
 
     val HMACS = listOf(

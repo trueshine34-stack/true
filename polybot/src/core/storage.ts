@@ -1,6 +1,6 @@
 import { Preferences } from '@capacitor/preferences';
 import { DEFAULT_SETTINGS, type StrategySettings } from './settings';
-import { SignatureType } from '../polymarket/types';
+import type { AccountConfig } from './account';
 
 /**
  * Persistence.
@@ -17,14 +17,6 @@ const KEY_ACCOUNT = 'account.v1';
 const KEY_SETTINGS = 'settings.v1';
 
 const PBKDF2_ITERATIONS = 210_000;
-
-export type AccountConfig = {
-  /** Address of the signing key. */
-  signerAddress: string;
-  /** Address holding the USDC — equals signerAddress for a plain EOA. */
-  funderAddress: string;
-  signatureType: SignatureType;
-};
 
 type Vault = {
   salt: string;
