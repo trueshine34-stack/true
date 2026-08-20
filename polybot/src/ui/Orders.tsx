@@ -8,6 +8,15 @@ import {
 
 type Draft = { price: string; size: string };
 
+/** A sell handed over from tapping a position on the terminal. */
+export type SellPrefill = {
+  tokenId: string;
+  conditionId: string;
+  outcome: 'Up' | 'Down';
+  size: number;
+  price: number;
+};
+
 /**
  * Manual order desk.
  *
@@ -16,7 +25,13 @@ type Draft = { price: string; size: string };
  * natively in a single call so a cancel can never succeed while the
  * replacement silently fails to go out.
  */
-export function Orders() {
+export function Orders({
+  prefill,
+  onPrefillUsed,
+}: {
+  prefill?: SellPrefill | null;
+  onPrefillUsed?: () => void;
+}) {
   const [market, setMarket] = useState<NativeMarket | null>(null);
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [loading, setLoading] = useState(false);
@@ -32,6 +47,9 @@ export function Orders() {
   const [price, setPrice] = useState('50');
   const [size, setSize] = useState('5');
   const [placing, setPlacing] = useState(false);
+  // A tapped position targets its own token, which may belong to a window that
+  // has already rolled over — so carry the ids rather than re-deriving them.
+  const [override, setOverride] = useState<SellPrefill | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -53,6 +71,19 @@ export function Orders() {
     const poll = setInterval(() => void refresh(), 10_000);
     return () => clearInterval(poll);
   }, [refresh]);
+
+  useEffect(() => {
+    if (!prefill) return;
+    setOverride(prefill);
+    setOutcome(prefill.outcome);
+    setSide('SELL');
+    setOrderType('GTC');
+    setSize(prefill.size.toFixed(2));
+    setPrice((prefill.price * 100).toFixed(0));
+    setNotice(null);
+    setError(null);
+    onPrefillUsed?.();
+  }, [prefill, onPrefillUsed]);
 
   const run = async (id: string, fn: () => Promise<string>) => {
     setBusyId(id);
@@ -116,7 +147,13 @@ export function Orders() {
   };
 
   const place = async () => {
-    if (!market) {
+    const target = override ?? (market
+      ? {
+          tokenId: outcome === 'Up' ? market.upTokenId : market.downTokenId,
+          conditionId: market.conditionId,
+        }
+      : null);
+    if (!target) {
       setError('Рынок текущего окна ещё не загружен.');
       return;
     }
@@ -132,8 +169,8 @@ export function Orders() {
     }
 
     const args: PlaceOrderArgs = {
-      tokenId: outcome === 'Up' ? market.upTokenId : market.downTokenId,
-      conditionId: market.conditionId,
+      tokenId: target.tokenId,
+      conditionId: target.conditionId,
       side,
       price: priceValue,
       size: sizeValue,
@@ -147,6 +184,7 @@ export function Orders() {
       const r = await PolyBot.placeOrder(args);
       if (!r.success) throw new Error(r.error ?? 'CLOB отклонил ордер');
       setNotice(`Ордер отправлен${r.status ? ` · ${r.status}` : ''}`);
+      setOverride(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -154,6 +192,17 @@ export function Orders() {
       setPlacing(false);
     }
   };
+
+  // Buys lock USDC; sells lock shares. Summing them into one number would
+  // mean adding dollars to shares, so they stay side by side.
+  const live = orders.filter((o) => o.remaining > 0);
+  const buys = live.filter((o) => o.side === 'BUY');
+  const sells = live.filter((o) => o.side === 'SELL');
+  const buyExposure = buys.reduce((sum, o) => sum + o.remaining * o.price, 0);
+  const sellShares = sells.reduce((sum, o) => sum + o.remaining, 0);
+  const sellExposure = sells.reduce((sum, o) => sum + o.remaining * o.price, 0);
+  const buyOrders = buys.length;
+  const sellOrders = sells.length;
 
   const sizeHint =
     orderType === 'GTC'
@@ -166,6 +215,26 @@ export function Orders() {
     <>
       {error && <div className="banner error">{error}</div>}
       {notice && <div className="banner info">{notice}</div>}
+
+      <div className="card">
+        <h2>В активных ордерах</h2>
+        <div className="grid2">
+          <div className="stat">
+            <div className="k">Покупки</div>
+            <div className="v">{buyExposure.toFixed(2)} $</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+              {buyOrders} шт · зарезервировано
+            </div>
+          </div>
+          <div className="stat">
+            <div className="k">Продажи</div>
+            <div className="v">{sellShares.toFixed(2)}</div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+              {sellOrders} шт · на {sellExposure.toFixed(2)} $
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="card">
         <h2>Открытые ордера</h2>
@@ -314,7 +383,10 @@ export function Orders() {
             <span>Исход</span>
             <select
               value={outcome}
-              onChange={(e) => setOutcome(e.target.value as 'Up' | 'Down')}
+              onChange={(e) => {
+                setOutcome(e.target.value as 'Up' | 'Down');
+                setOverride(null);
+              }}
             >
               <option value="Up">Up</option>
               <option value="Down">Down</option>

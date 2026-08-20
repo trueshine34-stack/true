@@ -154,6 +154,15 @@ object ClobApi {
         )
     }
 
+    /** Top of book for one outcome, read straight off the order book. */
+    fun quote(tokenId: String): Quote {
+        val book = getBook(tokenId)
+        return Quote(
+            bestBid = book.bids.maxByOrNull { it.price }?.price,
+            bestAsk = book.asks.minByOrNull { it.price }?.price,
+        )
+    }
+
     /** Winning outcome once the market has resolved, or null while it is open. */
     fun resolvedWinner(conditionId: String): String? {
         val json = JSONObject(Http.get("${Endpoints.CLOB}/markets/$conditionId"))

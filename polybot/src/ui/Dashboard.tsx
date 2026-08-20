@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { WINDOW_SECONDS } from '../core/config';
 import type { StrategySettings } from '../core/settings';
-import { PolyBot, type NativeCycle, type NativeState } from '../native/polybot';
+import {
+  PolyBot,
+  type NativeCycle,
+  type NativePosition,
+  type NativeQuote,
+  type NativeState,
+} from '../native/polybot';
 
 const IDLE: NativeState = {
   serviceAlive: false,
@@ -10,7 +16,13 @@ const IDLE: NativeState = {
   clockOffsetSec: 0,
 };
 
-export function Dashboard({ settings }: { settings: StrategySettings }) {
+export function Dashboard({
+  settings,
+  onSellPosition,
+}: {
+  settings: StrategySettings;
+  onSellPosition: (position: NativePosition) => void;
+}) {
   const [snap, setSnap] = useState<NativeState>(IDLE);
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +142,12 @@ export function Dashboard({ settings }: { settings: StrategySettings }) {
           </span>
         </div>
 
-        <div className="bar">
+        <div className="grid2" style={{ marginTop: 12 }}>
+          <OutcomeQuote label="Up" quote={snap.quotes?.up} up />
+          <OutcomeQuote label="Down" quote={snap.quotes?.down} up={false} />
+        </div>
+
+        <div className="bar" style={{ marginTop: 12 }}>
           <i style={{ width: `${progress}%` }} />
         </div>
         <div
@@ -179,7 +196,7 @@ export function Dashboard({ settings }: { settings: StrategySettings }) {
         {(cycle?.exits?.length ?? 0) > 0 && (
           <div className="row">
             <span className="label">
-              Продажа {cycle!.exitStage === 2 ? '(переставлена)' : ''}
+              Продажа
             </span>
             <span className="value">
               {cycle!.exits!
@@ -201,6 +218,36 @@ export function Dashboard({ settings }: { settings: StrategySettings }) {
           </div>
         )}
       </div>
+
+      {(snap.positions?.length ?? 0) > 0 && (
+        <div className="card">
+          <h2>Позиции</h2>
+          {snap.positions!.map((p) => (
+            <button
+              key={p.asset}
+              className="position"
+              onClick={() => onSellPosition(p)}
+            >
+              <div className="position-main">
+                <span className={p.outcome === 'Up' ? 'up' : 'down'}>{p.outcome}</span>
+                <span className="value">
+                  {p.size.toFixed(2)} долей · средняя {(p.avgPrice * 100).toFixed(0)}¢
+                </span>
+              </div>
+              <div className="position-sub muted">
+                <span>{p.title}</span>
+                <span className={p.cashPnl >= 0 ? 'up' : 'down'}>
+                  {p.cashPnl >= 0 ? '+' : ''}
+                  {p.cashPnl.toFixed(2)} $ · сейчас {(p.curPrice * 100).toFixed(0)}¢
+                </span>
+              </div>
+            </button>
+          ))}
+          <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>
+            Нажмите на позицию, чтобы открыть продажу с её размером.
+          </p>
+        </div>
+      )}
 
       <div className="grid2" style={{ marginBottom: 12 }}>
         <div className="stat">
@@ -279,6 +326,28 @@ export function Dashboard({ settings }: { settings: StrategySettings }) {
         </div>
       )}
     </>
+  );
+}
+
+function OutcomeQuote({
+  label,
+  quote,
+  up,
+}: {
+  label: string;
+  quote?: NativeQuote | null;
+  up: boolean;
+}) {
+  const cents = (v?: number | null) =>
+    v === null || v === undefined ? '—' : `${(v * 100).toFixed(0)}¢`;
+  return (
+    <div className="stat">
+      <div className="k">{label}</div>
+      <div className={`v ${up ? 'up' : 'down'}`}>{cents(quote?.mid)}</div>
+      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+        бид {cents(quote?.bestBid)} · аск {cents(quote?.bestAsk)}
+      </div>
+    </div>
   );
 }
 

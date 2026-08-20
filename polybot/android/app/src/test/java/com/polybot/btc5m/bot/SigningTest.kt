@@ -107,6 +107,41 @@ class SigningTest {
     }
 
     @Test
+    fun `exit ladder picks the rung the clock calls for`() {
+        val ladder = DEFAULT_EXIT_LADDER
+        val cases = listOf(
+            0L to 0.89,
+            20L to 0.89,
+            179L to 0.89,
+            180L to 0.93,
+            239L to 0.93,
+            240L to 0.96,
+            269L to 0.96,
+            270L to 0.99,
+            299L to 0.99,
+            600L to 0.99,
+        )
+        for ((elapsed, expected) in cases) {
+            assertEquals(
+                "price at ${elapsed}s",
+                expected,
+                Strategy.exitPriceFor(ladder, elapsed),
+                1e-9,
+            )
+        }
+    }
+
+    @Test
+    fun `exit ladder tolerates an unsorted or empty list`() {
+        val shuffled = DEFAULT_EXIT_LADDER.reversed()
+        assertEquals(0.93, Strategy.exitPriceFor(shuffled, 200), 1e-9)
+        // A rung that starts later than the first tick still covers the start,
+        // so a position opened early always has a sell to rest.
+        assertEquals(0.5, Strategy.exitPriceFor(listOf(ExitStep(100, 0.5)), 0), 1e-9)
+        assertEquals(0.99, Strategy.exitPriceFor(emptyList(), 0), 1e-9)
+    }
+
+    @Test
     fun `tick sizes map to the right rounding config`() {
         assertEquals(Orders.RoundConfig(2, 2, 4), Orders.roundConfigFor(0.01))
         assertEquals(Orders.RoundConfig(1, 2, 3), Orders.roundConfigFor(0.1))

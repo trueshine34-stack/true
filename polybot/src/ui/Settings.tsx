@@ -201,54 +201,113 @@ export function SettingsScreen({
 
         {settings.exitEnabled && (
           <>
-            <div className="grid2">
-              <label className="field">
-                <span>Первая цена, ¢</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={(settings.exitPriceEarly * 100).toFixed(0)}
-                  onChange={(e) =>
-                    set(
-                      'exitPriceEarly',
-                      num(e.target.value, settings.exitPriceEarly * 100) / 100,
-                    )
-                  }
-                />
-              </label>
-              <label className="field">
-                <span>Вторая цена, ¢</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={(settings.exitPriceLate * 100).toFixed(0)}
-                  onChange={(e) =>
-                    set(
-                      'exitPriceLate',
-                      num(e.target.value, settings.exitPriceLate * 100) / 100,
-                    )
-                  }
-                />
-              </label>
-            </div>
             <label className="field">
-              <span>Переставить за N секунд до конца окна</span>
+              <span>Ставить продажу через N секунд после покупки</span>
               <input
                 type="text"
                 inputMode="numeric"
-                value={String(settings.exitSwitchSec)}
+                value={String(settings.exitDelaySec)}
                 onChange={(e) =>
                   set(
-                    'exitSwitchSec',
-                    clampInt(num(e.target.value, settings.exitSwitchSec), 5, 280),
+                    'exitDelaySec',
+                    clampInt(num(e.target.value, settings.exitDelaySec), 0, 120),
                   )
                 }
               />
             </label>
-            <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-              Если к моменту перестановки неисполненный остаток меньше минимума
-              биржи, ордер остаётся на первой цене — снимать его было бы хуже,
-              чем оставить шанс на исполнение.
+            <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
+              Сразу после покупки доли ещё нельзя продать — биржа отклонит ордер.
+            </p>
+
+            <div className="muted" style={{ fontSize: 12, margin: '12px 0 6px' }}>
+              Лесенка: с какой секунды окна какая цена продажи.
+            </div>
+
+            {settings.exitLadder.map((step, i) => (
+              <div className="grid2" key={i}>
+                <label className="field">
+                  <span>С секунды</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={String(step.fromSec)}
+                    onChange={(e) =>
+                      set(
+                        'exitLadder',
+                        settings.exitLadder.map((s, j) =>
+                          j === i
+                            ? {
+                                ...s,
+                                fromSec: clampInt(num(e.target.value, s.fromSec), 0, 299),
+                              }
+                            : s,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>Цена, ¢</span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={(step.price * 100).toFixed(0)}
+                      onChange={(e) =>
+                        set(
+                          'exitLadder',
+                          settings.exitLadder.map((s, j) =>
+                            j === i
+                              ? {
+                                  ...s,
+                                  price:
+                                    clampInt(num(e.target.value, s.price * 100), 1, 99) /
+                                    100,
+                                }
+                              : s,
+                          ),
+                        )
+                      }
+                    />
+                    {settings.exitLadder.length > 1 && (
+                      <button
+                        className="ghost"
+                        style={{ width: 46, padding: 0 }}
+                        onClick={() =>
+                          set(
+                            'exitLadder',
+                            settings.exitLadder.filter((_, j) => j !== i),
+                          )
+                        }
+                      >
+                        −
+                      </button>
+                    )}
+                  </div>
+                </label>
+              </div>
+            ))}
+
+            <button
+              className="ghost"
+              onClick={() => {
+                const last = settings.exitLadder[settings.exitLadder.length - 1];
+                set('exitLadder', [
+                  ...settings.exitLadder,
+                  {
+                    fromSec: Math.min(299, (last?.fromSec ?? 0) + 30),
+                    price: Math.min(0.99, (last?.price ?? 0.9) + 0.03),
+                  },
+                ]);
+              }}
+            >
+              Добавить ступень
+            </button>
+
+            <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
+              Если к моменту перехода на следующую ступень неисполненный остаток
+              меньше минимума биржи, ордер остаётся на прежней цене — снимать
+              его было бы хуже, чем оставить шанс на исполнение.
             </p>
           </>
         )}

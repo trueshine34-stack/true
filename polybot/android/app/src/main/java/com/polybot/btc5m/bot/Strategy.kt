@@ -29,6 +29,21 @@ object Strategy {
     fun clamp(x: Double, lo: Double, hi: Double): Double = minOf(hi, maxOf(lo, x))
 
     /**
+     * Sell price for a point in the window.
+     *
+     * Rungs are absolute offsets from the window open, so the ladder walks
+     * itself up as the window runs down: cheap while the outcome can still
+     * flip, near par once the TWAP has almost no room left. Before the first
+     * rung's offset the first price applies, so a position opened early is
+     * never left without a resting sell.
+     */
+    fun exitPriceFor(ladder: List<ExitStep>, elapsedSec: Long): Double {
+        if (ladder.isEmpty()) return 0.99
+        val sorted = ladder.sortedBy { it.fromSec }
+        return (sorted.lastOrNull { it.fromSec <= elapsedSec } ?: sorted.first()).price
+    }
+
+    /**
      * Per-second volatility of log returns. Ticks arrive roughly once a second
      * but the spacing is not exact, so each return is normalised by its own
      * elapsed time before being pooled.

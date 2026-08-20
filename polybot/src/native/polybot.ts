@@ -31,6 +31,30 @@ export type NativeMarket = {
   windowEnd?: number;
 };
 
+export type NativeQuote = {
+  bestBid?: number | null;
+  bestAsk?: number | null;
+  mid?: number | null;
+};
+
+export type NativeQuotes = {
+  up?: NativeQuote | null;
+  down?: NativeQuote | null;
+  atMs: number;
+};
+
+export type NativePosition = {
+  asset: string;
+  conditionId: string;
+  title: string;
+  outcome: string;
+  size: number;
+  avgPrice: number;
+  curPrice: number;
+  cashPnl: number;
+  redeemable: boolean;
+};
+
 export type NativeExit = {
   orderId: string;
   price: number;
@@ -82,7 +106,7 @@ export type NativeCycle = {
   entry?: NativeEntry;
   market?: NativeMarket;
   exits?: NativeExit[];
-  exitStage?: number;
+  exitFrozen?: boolean;
 };
 
 export type NativeStats = {
@@ -103,6 +127,8 @@ export type NativeState = {
   /** Local calendar day the stats belong to, yyyy-MM-dd. */
   statsDay?: string;
   lastTick?: NativeTick;
+  quotes?: NativeQuotes;
+  positions?: NativePosition[];
   stats?: NativeStats;
   current?: NativeCycle;
   history?: NativeCycle[];

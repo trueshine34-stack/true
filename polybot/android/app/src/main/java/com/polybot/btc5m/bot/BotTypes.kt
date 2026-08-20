@@ -71,14 +71,25 @@ data class Settings(
     val dryRun: Boolean = true,
     val dailyLossLimitUsd: Double = 20.0,
     val maxConsecutiveLosses: Int = 6,
-    /** Park a resting sell on the position as soon as it is filled. */
+    /** Park a resting sell on the position once it is filled. */
     val exitEnabled: Boolean = true,
-    /** Price of the resting sell for most of the window. */
-    val exitPriceEarly: Double = 0.97,
-    /** Price it is moved to for the closing stretch. */
-    val exitPriceLate: Double = 0.99,
-    /** Seconds before the close at which the sell is repriced. */
-    val exitSwitchSec: Int = 30,
+    /**
+     * Delay between the buy filling and the sell going out. The shares are not
+     * sellable the instant the buy matches, so an immediate sell is rejected.
+     */
+    val exitDelaySec: Int = 21,
+    /** Sell price by elapsed second of the window, cheapest step first. */
+    val exitLadder: List<ExitStep> = DEFAULT_EXIT_LADDER,
+)
+
+/** One rung: from `fromSec` into the window, rest the sell at `price`. */
+data class ExitStep(val fromSec: Int, val price: Double)
+
+val DEFAULT_EXIT_LADDER = listOf(
+    ExitStep(0, 0.89),
+    ExitStep(180, 0.93),
+    ExitStep(240, 0.96),
+    ExitStep(270, 0.99),
 )
 
 data class Outcome(val label: String, val tokenId: String)
@@ -98,6 +109,30 @@ data class Market(
 )
 
 data class Tick(val timestamp: Long, val value: Double)
+
+/** Live top of book for one outcome. */
+data class Quote(
+    val bestBid: Double?,
+    val bestAsk: Double?,
+) {
+    val mid: Double? get() =
+        if (bestBid != null && bestAsk != null) (bestBid + bestAsk) / 2 else bestBid ?: bestAsk
+}
+
+data class Quotes(val up: Quote?, val down: Quote?, val atMs: Long)
+
+/** An open position as Polymarket's data API reports it. */
+data class Position(
+    val asset: String,
+    val conditionId: String,
+    val title: String,
+    val outcome: String,
+    val size: Double,
+    val avgPrice: Double,
+    val curPrice: Double,
+    val cashPnl: Double,
+    val redeemable: Boolean,
+)
 
 data class FairValue(
     val pUp: Double,
@@ -142,9 +177,14 @@ data class Cycle(
     var spotAtEntry: Double? = null,
     var fair: FairValue? = null,
     var entry: Entry? = null,
+    /** When the buy filled, which is what the sell delay counts from. */
+    var entryFilledAtMs: Long = 0,
     val exits: MutableList<ExitOrder> = mutableListOf(),
-    /** 0 = none placed, 1 = early sell resting, 2 = repriced for the close. */
-    var exitStage: Int = 0,
+    /** Price of the last sell we tried to rest, for retry throttling. */
+    var lastExitPriceTried: Double? = null,
+    var lastExitAttemptMs: Long = 0,
+    /** Set once the ladder can no longer act, so it stops retrying. */
+    var exitFrozen: Boolean = false,
     var winner: String? = null,
     var pnlUsd: Double? = null,
     var state: CycleState = CycleState.WAITING,

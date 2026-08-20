@@ -451,6 +451,39 @@ class BotPlugin : Plugin() {
             .put("clockOffsetSec", Clock.offset())
             .put("statsDay", bot.statsDay)
 
+        bot.quotes?.let { q ->
+            fun quoteJson(quote: Quote?) = quote?.let {
+                JSObject()
+                    .put("bestBid", it.bestBid)
+                    .put("bestAsk", it.bestAsk)
+                    .put("mid", it.mid)
+            }
+            state.put(
+                "quotes",
+                JSObject()
+                    .put("up", quoteJson(q.up))
+                    .put("down", quoteJson(q.down))
+                    .put("atMs", q.atMs),
+            )
+        }
+
+        val positions = JSArray()
+        bot.positions.forEach {
+            positions.put(
+                JSObject()
+                    .put("asset", it.asset)
+                    .put("conditionId", it.conditionId)
+                    .put("title", it.title)
+                    .put("outcome", it.outcome)
+                    .put("size", it.size)
+                    .put("avgPrice", it.avgPrice)
+                    .put("curPrice", it.curPrice)
+                    .put("cashPnl", it.cashPnl)
+                    .put("redeemable", it.redeemable),
+            )
+        }
+        state.put("positions", positions)
+
         bot.feed.last?.let {
             state.put(
                 "lastTick",
@@ -522,7 +555,7 @@ class BotPlugin : Plugin() {
                 )
             }
             json.put("exits", exits)
-            json.put("exitStage", cycle.exitStage)
+            json.put("exitFrozen", cycle.exitFrozen)
         }
         cycle.entry?.let {
             json.put(
@@ -562,9 +595,22 @@ class BotPlugin : Plugin() {
                 defaults.maxConsecutiveLosses,
             ),
             exitEnabled = raw.optBoolean("exitEnabled", defaults.exitEnabled),
-            exitPriceEarly = raw.optDouble("exitPriceEarly", defaults.exitPriceEarly),
-            exitPriceLate = raw.optDouble("exitPriceLate", defaults.exitPriceLate),
-            exitSwitchSec = raw.optInt("exitSwitchSec", defaults.exitSwitchSec),
+            exitDelaySec = raw.optInt("exitDelaySec", defaults.exitDelaySec),
+            exitLadder = parseLadder(raw.optJSONArray("exitLadder")) ?: defaults.exitLadder,
         )
+    }
+
+    /** An empty or malformed ladder falls back to the default rather than
+     *  leaving the bot with no way to exit a position. */
+    private fun parseLadder(raw: org.json.JSONArray?): List<ExitStep>? {
+        if (raw == null || raw.length() == 0) return null
+        val steps = ArrayList<ExitStep>(raw.length())
+        for (i in 0 until raw.length()) {
+            val o = raw.optJSONObject(i) ?: continue
+            val price = o.optDouble("price", Double.NaN)
+            if (price.isNaN() || price <= 0.0 || price >= 1.0) continue
+            steps.add(ExitStep(o.optInt("fromSec", 0), price))
+        }
+        return steps.sortedBy { it.fromSec }.ifEmpty { null }
     }
 }

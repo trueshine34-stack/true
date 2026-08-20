@@ -8,10 +8,10 @@ import {
   loadSettings,
   saveSettings,
 } from './core/storage';
-import { PolyBot } from './native/polybot';
+import { PolyBot, type NativePosition } from './native/polybot';
 import { Dashboard } from './ui/Dashboard';
 import { Logs } from './ui/Logs';
-import { Orders } from './ui/Orders';
+import { Orders, type SellPrefill } from './ui/Orders';
 import { Lock } from './ui/Lock';
 import { SettingsScreen } from './ui/Settings';
 import { Setup } from './ui/Setup';
@@ -24,6 +24,7 @@ export function App() {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [settings, setSettings] = useState<StrategySettings>(DEFAULT_SETTINGS);
   const [account, setAccount] = useState<AccountConfig | null>(null);
+  const [sellPrefill, setSellPrefill] = useState<SellPrefill | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +90,18 @@ export function App() {
     setPhase('ready');
   }, []);
 
+  /** Tapping a position opens the order desk with that position teed up. */
+  const onSellPosition = useCallback((position: NativePosition) => {
+    setSellPrefill({
+      tokenId: position.asset,
+      conditionId: position.conditionId,
+      outcome: position.outcome === 'Up' ? 'Up' : 'Down',
+      size: position.size,
+      price: 0.9,
+    });
+    setTab('orders');
+  }, []);
+
   const onForget = useCallback(() => {
     void PolyBot.stop().catch(() => {});
     setAccount(null);
@@ -119,8 +132,12 @@ export function App() {
       </div>
 
       <div className="scroll">
-        {tab === 'dashboard' && <Dashboard settings={settings} />}
-        {tab === 'orders' && <Orders />}
+        {tab === 'dashboard' && (
+          <Dashboard settings={settings} onSellPosition={onSellPosition} />
+        )}
+        {tab === 'orders' && (
+          <Orders prefill={sellPrefill} onPrefillUsed={() => setSellPrefill(null)} />
+        )}
         {tab === 'settings' && (
           <SettingsScreen
             settings={settings}

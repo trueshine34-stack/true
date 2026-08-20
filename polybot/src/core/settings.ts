@@ -24,15 +24,19 @@ export type StrategySettings = {
   dailyLossLimitUsd: number;
   /** Stop trading after this many losing settlements in a row. */
   maxConsecutiveLosses: number;
-  /** Park a resting sell on the position as soon as it is filled. */
+  /** Park a resting sell on the position once it is filled. */
   exitEnabled: boolean;
-  /** Price of the resting sell for most of the window. */
-  exitPriceEarly: number;
-  /** Price it is moved to for the closing stretch. */
-  exitPriceLate: number;
-  /** Seconds before the close at which the sell is repriced. */
-  exitSwitchSec: number;
+  /**
+   * Delay between the buy filling and the sell going out. Shares are not
+   * sellable the instant the buy matches, so an immediate sell is rejected.
+   */
+  exitDelaySec: number;
+  /** Sell price by elapsed second of the window, cheapest rung first. */
+  exitLadder: ExitStep[];
 };
+
+/** One rung: from `fromSec` into the window, rest the sell at `price`. */
+export type ExitStep = { fromSec: number; price: number };
 
 export const DEFAULT_SETTINGS: StrategySettings = {
   mode: 'edge',
@@ -46,7 +50,11 @@ export const DEFAULT_SETTINGS: StrategySettings = {
   dailyLossLimitUsd: 20,
   maxConsecutiveLosses: 6,
   exitEnabled: true,
-  exitPriceEarly: 0.97,
-  exitPriceLate: 0.99,
-  exitSwitchSec: 30,
+  exitDelaySec: 21,
+  exitLadder: [
+    { fromSec: 0, price: 0.89 },
+    { fromSec: 180, price: 0.93 },
+    { fromSec: 240, price: 0.96 },
+    { fromSec: 270, price: 0.99 },
+  ],
 };
