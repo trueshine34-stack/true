@@ -154,8 +154,71 @@ data class Position(
     val redeemable: Boolean,
 )
 
+/**
+ * What the model has learned about its own confidence.
+ *
+ * Every settled window contributes one point: how far the model leaned from
+ * 50/50, and whether the lean was right. The least-squares shrinkage that
+ * minimises Brier score over those points needs only two running sums, so the
+ * whole history compresses into a handful of numbers.
+ */
+data class Calibration(
+    val sumXY: Double = 0.0,
+    val sumXX: Double = 0.0,
+    val samples: Int = 0,
+    val brierSum: Double = 0.0,
+) {
+    /** Mean Brier score, lower is better; 0.25 is a coin flip. */
+    val brier: Double? get() = if (samples > 0) brierSum / samples else null
+
+    fun plus(modelledPUp: Double, upWon: Boolean): Calibration {
+        val x = modelledPUp - 0.5
+        val y = (if (upWon) 1.0 else 0.0) - 0.5
+        val error = modelledPUp - (if (upWon) 1.0 else 0.0)
+        return Calibration(
+            sumXY = sumXY + x * y,
+            sumXX = sumXX + x * x,
+            samples = samples + 1,
+            brierSum = brierSum + error * error,
+        )
+    }
+
+    /**
+     * Shrinkage applied to the model's lean, in [0, 1].
+     *
+     * The least-squares fit is `sumXY / sumXX`; it is blended against a
+     * deliberately timid prior with the weight of thirty windows, so a short
+     * lucky streak cannot talk the bot into trusting itself. Weighting by
+     * sample count rather than by a fixed constant matters: a handful of
+     * strongly-leaning calls would otherwise swamp a prior scaled for ordinary
+     * ones. Never above 1 — the model may be discounted, never amplified.
+     */
+    fun shrinkage(): Double {
+        if (samples <= 0 || sumXX <= 0.0) return PRIOR_LAMBDA
+        val fitted = sumXY / sumXX
+        val blended = (samples * fitted + PRIOR_SAMPLES * PRIOR_LAMBDA) /
+            (samples + PRIOR_SAMPLES)
+        return blended.coerceIn(0.0, 1.0)
+    }
+
+    private companion object {
+        const val PRIOR_SAMPLES = 30.0
+        const val PRIOR_LAMBDA = 0.5
+    }
+}
+
+/** Forecast mean and standard deviation of the settlement TWAP, in price units. */
+data class TwapForecast(val mean: Double, val sd: Double)
+
 data class FairValue(
+    /** Probability actually traded on, after shrinkage. */
     val pUp: Double,
+    /**
+     * The model's unshrunk output. Calibration must be fitted against this, not
+     * against pUp — grading the already-shrunk number would compose one
+     * shrinkage on top of another and slowly forget the correction.
+     */
+    val rawPUp: Double,
     val sigmaPerSec: Double,
     val sigmaHorizon: Double,
     val drift: Double,

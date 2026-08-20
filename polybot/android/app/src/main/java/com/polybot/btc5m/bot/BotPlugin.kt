@@ -450,6 +450,13 @@ class BotPlugin : Plugin() {
             .put("feedStatus", bot.feed.status.name.lowercase())
             .put("clockOffsetSec", Clock.offset())
             .put("statsDay", bot.statsDay)
+            .put(
+                "calibration",
+                JSObject()
+                    .put("samples", bot.calibration.samples)
+                    .put("shrinkage", bot.calibration.shrinkage())
+                    .put("brier", bot.calibration.brier),
+            )
 
         bot.quotes?.let { q ->
             fun quoteJson(quote: Quote?) = quote?.let {
@@ -526,6 +533,7 @@ class BotPlugin : Plugin() {
                 "fair",
                 JSObject()
                     .put("pUp", it.pUp)
+                    .put("rawPUp", it.rawPUp)
                     .put("sigmaHorizon", it.sigmaHorizon)
                     .put("drift", it.drift),
             )

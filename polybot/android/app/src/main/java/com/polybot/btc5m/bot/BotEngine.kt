@@ -61,6 +61,18 @@ class BotEngine(
     var statsDay: String = statsStore.today()
         private set
 
+    /** What the model has learned about its own confidence, across all days. */
+    @Volatile
+    var calibration: Calibration = statsStore.loadCalibration()
+        private set
+
+    /** Fee parameters for the current market, read once per window. */
+    @Volatile
+    private var feeRate: Double = 0.0
+
+    @Volatile
+    private var feeExponent: Double = 1.0
+
     val logs = CopyOnWriteArrayList<LogEntry>()
 
     /** Top of book for both outcomes, refreshed whether or not the bot trades. */
@@ -85,6 +97,7 @@ class BotEngine(
         const val SETTLE_RETRIES = 12
         const val SETTLE_RETRY_MS = 10_000L
         const val STRIKE_GRACE_MS = 15_000L
+        const val STALE_TICK_MS = 5_000L
         const val MAX_HISTORY = 200
         const val MAX_LOGS = 400
     }
@@ -303,6 +316,7 @@ class BotEngine(
                 else -> {
                     cycle.market = market
                     cycle.state = CycleState.ARMED
+                    loadFeeParams(market.conditionId)
                 }
             }
         } catch (e: Exception) {
@@ -312,11 +326,42 @@ class BotEngine(
         }
     }
 
+    /**
+     * Mean of the feed inside the settlement averaging window so far, or null
+     * while the window has not opened. This is the part of the answer that is
+     * already fixed.
+     */
+    private fun observedWindowMean(cycle: Cycle, now: Long): Double? {
+        val windowOpensMs = cycle.windowEnd * 1000 - (TWAP_WINDOW_SECONDS * 1000).toLong()
+        if (now <= windowOpensMs) return null
+        val ticks = feed.ticksBetween(windowOpensMs, now)
+        if (ticks.isEmpty()) return null
+        return ticks.sumOf { it.value } / ticks.size
+    }
+
+    /** Fee parameters change rarely, but they are per market, so read them once. */
+    private fun loadFeeParams(conditionId: String) {
+        try {
+            val fees = ClobApi.feeParams(conditionId)
+            feeRate = fees.first
+            feeExponent = fees.second
+        } catch (e: Exception) {
+            // Leaving the previous values is safer than assuming zero fees.
+        }
+    }
+
     private fun preTradeBlock(): String? {
         if (account == null || creds == null) return "кошелёк не подключён"
         if (settings.mode == StrategyMode.OFF) return "режим \"не торговать\""
         if (feed.status != ChainlinkFeed.Status.LIVE) {
             return "фид Chainlink: ${feed.status.name.lowercase()}"
+        }
+        // Acting on a price the book has already repriced against is not edge,
+        // it is being picked off.
+        val tickAge = feed.last?.let { System.currentTimeMillis() - it.timestamp }
+            ?: Long.MAX_VALUE
+        if (tickAge > STALE_TICK_MS) {
+            return "цена Chainlink устарела на ${tickAge / 1000} с"
         }
         if (stats.realisedPnlUsd <= -kotlin.math.abs(settings.dailyLossLimitUsd)) {
             return "достигнут лимит убытка ${settings.dailyLossLimitUsd} $"
@@ -356,6 +401,8 @@ class BotEngine(
             spot = spot,
             msToClose = cycle.windowEnd * 1000 - now,
             ticks = feed.ticksBetween(now - 600_000, now),
+            observedWindowMean = observedWindowMean(cycle, now),
+            calibration = calibration.shrinkage(),
         )
 
         try {
@@ -365,7 +412,9 @@ class BotEngine(
             val upAsk = ClobApi.marketablePrice(upBook, "BUY", stake)
             val downAsk = ClobApi.marketablePrice(downBook, "BUY", stake)
 
-            val decision = Strategy.decide(settings, cycle.fair, upAsk, downAsk)
+            val decision = Strategy.decide(
+                settings, cycle.fair, upAsk, downAsk, feeRate, feeExponent,
+            )
             if (!decision.act || decision.side == null) {
                 cycle.state = CycleState.SKIPPED
                 cycle.note = decision.reason
@@ -841,7 +890,10 @@ class BotEngine(
     private fun rollOver(cycle: Cycle) {
         history.add(0, cycle)
         while (history.size > MAX_HISTORY) history.removeAt(history.size - 1)
-        if (cycle.entry != null) {
+        // Grade every window that produced a forecast, not only the ones that
+        // were traded: a skipped window is still evidence about the model, and
+        // scoring only the traded ones would bias the calibration.
+        if (cycle.entry != null || cycle.fair != null) {
             scope?.launch { settle(cycle) }
         }
         onStateChanged()
@@ -849,7 +901,6 @@ class BotEngine(
 
     private suspend fun settle(cycle: Cycle) {
         val market = cycle.market ?: return
-        val entry = cycle.entry ?: return
 
         val waitMs = cycle.windowEnd * 1000 + SETTLE_DELAY_MS - System.currentTimeMillis()
         if (waitMs > 0) delay(waitMs)
@@ -882,16 +933,38 @@ class BotEngine(
             return
         }
 
-        // Whatever the resting sells filled is already cash; only the unsold
-        // remainder rides on the resolution.
+        cycle.winner = resolved
+
+        // Grade the forecast before anything else, and grade it whether or not
+        // the window was traded.
+        cycle.fair?.let { fair ->
+            calibration = calibration.plus(fair.rawPUp, resolved == "Up")
+            statsStore.saveCalibration(calibration)
+        }
+
+        val entry = cycle.entry
+        if (entry == null) {
+            onStateChanged()
+            return
+        }
+
+        settlePosition(cycle, entry, resolved)
+    }
+
+    /** Money side of a settlement: what the sells realised, what rode to the end. */
+    private fun settlePosition(cycle: Cycle, entry: Entry, resolved: String) {
         var soldShares = 0.0
         var proceeds = 0.0
         val acct = account
         val creds = this.creds
         for (exit in cycle.exits) {
             if (acct != null && creds != null) {
-                ClobApi.order(creds, acct.signerAddress, exit.orderId)?.let {
-                    exit.matched = it.sizeMatched
+                try {
+                    ClobApi.order(creds, acct.signerAddress, exit.orderId)?.let {
+                        exit.matched = it.sizeMatched
+                    }
+                } catch (e: Exception) {
+                    // Keep the last known fill rather than dropping the order.
                 }
             }
             soldShares += exit.matched
@@ -904,7 +977,6 @@ class BotEngine(
         val resolvedWin = resolved == entry.side
         val pnl = proceeds + (if (resolvedWin) heldShares else 0.0) - entry.costUsd
 
-        cycle.winner = resolved
         cycle.pnlUsd = pnl
         cycle.state = CycleState.SETTLED
 

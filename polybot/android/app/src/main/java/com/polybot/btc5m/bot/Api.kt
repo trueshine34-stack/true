@@ -139,6 +139,16 @@ object ClobApi {
         return null
     }
 
+    /**
+     * Taker fee parameters: `rate` and `exponent` in `rate·(p(1−p))^exponent`
+     * per share. Returned under the compact `fd` object.
+     */
+    fun feeParams(conditionId: String): Pair<Double, Double> {
+        val json = JSONObject(Http.get("${Endpoints.CLOB}/clob-markets/$conditionId"))
+        val fd = json.optJSONObject("fd") ?: return Pair(0.0, 1.0)
+        return Pair(fd.optDouble("r", 0.0), fd.optDouble("e", 1.0))
+    }
+
     data class MarketMeta(
         val tickSize: Double,
         val negRisk: Boolean,

@@ -102,7 +102,7 @@ export type NativeCycle = {
   winner?: 'Up' | 'Down' | null;
   pnlUsd?: number | null;
   note?: string | null;
-  fair?: { pUp: number; sigmaHorizon: number; drift: number };
+  fair?: { pUp: number; rawPUp?: number; sigmaHorizon: number; drift: number };
   entry?: NativeEntry;
   market?: NativeMarket;
   exits?: NativeExit[];
@@ -130,6 +130,14 @@ export type NativeState = {
   clockOffsetSec: number;
   /** Local calendar day the stats belong to, yyyy-MM-dd. */
   statsDay?: string;
+  /** What the model has learned about its own confidence. */
+  calibration?: {
+    samples: number;
+    /** How much of the model's lean is actually traded on, 0–1. */
+    shrinkage: number;
+    /** Mean Brier score; 0.25 is a coin flip, lower is better. */
+    brier?: number | null;
+  };
   lastTick?: NativeTick;
   quotes?: NativeQuotes;
   positions?: NativePosition[];

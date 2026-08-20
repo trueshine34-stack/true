@@ -25,6 +25,13 @@ class StatsStore(context: Context) {
         private const val KEY_STREAK = "consecutiveLosses"
         private const val KEY_PNL = "realisedPnlUsd"
         private const val KEY_STAKED = "stakedUsd"
+
+        // Calibration lives outside the daily bucket: it is what the model has
+        // learned about itself, and that should not reset at midnight.
+        private const val KEY_CAL_XY = "calSumXY"
+        private const val KEY_CAL_XX = "calSumXX"
+        private const val KEY_CAL_N = "calSamples"
+        private const val KEY_CAL_BRIER = "calBrierSum"
     }
 
     fun today(): String =
@@ -56,6 +63,40 @@ class StatsStore(context: Context) {
     }
 
     fun clear() {
-        prefs.edit().clear().apply()
+        // Only the day's counters; the calibration it learned is kept.
+        prefs.edit()
+            .remove(KEY_DAY)
+            .remove(KEY_TRADES)
+            .remove(KEY_WINS)
+            .remove(KEY_LOSSES)
+            .remove(KEY_STREAK)
+            .remove(KEY_PNL)
+            .remove(KEY_STAKED)
+            .apply()
+    }
+
+    fun loadCalibration(): Calibration = Calibration(
+        sumXY = prefs.getFloat(KEY_CAL_XY, 0f).toDouble(),
+        sumXX = prefs.getFloat(KEY_CAL_XX, 0f).toDouble(),
+        samples = prefs.getInt(KEY_CAL_N, 0),
+        brierSum = prefs.getFloat(KEY_CAL_BRIER, 0f).toDouble(),
+    )
+
+    fun saveCalibration(calibration: Calibration) {
+        prefs.edit()
+            .putFloat(KEY_CAL_XY, calibration.sumXY.toFloat())
+            .putFloat(KEY_CAL_XX, calibration.sumXX.toFloat())
+            .putInt(KEY_CAL_N, calibration.samples)
+            .putFloat(KEY_CAL_BRIER, calibration.brierSum.toFloat())
+            .apply()
+    }
+
+    fun clearCalibration() {
+        prefs.edit()
+            .remove(KEY_CAL_XY)
+            .remove(KEY_CAL_XX)
+            .remove(KEY_CAL_N)
+            .remove(KEY_CAL_BRIER)
+            .apply()
     }
 }

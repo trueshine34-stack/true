@@ -138,7 +138,20 @@ export function Dashboard({
         <div className="row">
           <span className="label">Модель: вероятность Up</span>
           <span className="value">
-            {cycle?.fair ? `${(cycle.fair.pUp * 100).toFixed(1)}%` : '—'}
+            {cycle?.fair ? (
+              <>
+                {(cycle.fair.pUp * 100).toFixed(1)}%
+                {cycle.fair.rawPUp !== undefined &&
+                  Math.abs(cycle.fair.rawPUp - cycle.fair.pUp) > 0.005 && (
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      {' '}
+                      (сырая {(cycle.fair.rawPUp * 100).toFixed(1)}%)
+                    </span>
+                  )}
+              </>
+            ) : (
+              '—'
+            )}
           </span>
         </div>
 
@@ -291,6 +304,36 @@ export function Dashboard({
           <div className="v">{(snap.stats?.stakedUsd ?? 0).toFixed(2)} $</div>
         </div>
       </div>
+
+      {snap.calibration && (
+        <div className="card">
+          <h2>Калибровка модели</h2>
+          <div className="row">
+            <span className="label">Доверие к прогнозу</span>
+            <span className="value">
+              {(snap.calibration.shrinkage * 100).toFixed(0)}%
+            </span>
+          </div>
+          <div className="row">
+            <span className="label">Оценённых окон</span>
+            <span className="value">{snap.calibration.samples}</span>
+          </div>
+          <div className="row">
+            <span className="label">Brier</span>
+            <span className="value">
+              {snap.calibration.brier == null
+                ? '—'
+                : snap.calibration.brier.toFixed(4)}
+            </span>
+          </div>
+          <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>
+            Каждое закрытое окно оценивает прогноз, даже если сделки не было.
+            Доверие — какая доля отклонения модели от 50/50 идёт в решение: оно
+            падает, если модель самоуверенна. Brier 0,25 — это монетка, меньше
+            лучше.
+          </p>
+        </div>
+      )}
 
       <button className={snap.running ? 'danger' : 'primary'} onClick={() => void toggle()}>
         {snap.running ? 'Остановить бота' : 'Запустить бота'}
