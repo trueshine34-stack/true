@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_top">#FF07130F</color>
+    <color name="bg_bottom">#FF0C221B</color>
+    <color name="surface">#FF12241E</color>
+    <color name="surface_high">#FF173027</color>
+    <color name="stroke">#FF1F3D33</color>
+    <color name="stroke_soft">#33FFFFFF</color>
+    <color name="gold">#FFE9B949</color>
+    <color name="gold_dim">#66E9B949</color>
+    <color name="green">#FF34D399</color>
+    <color name="red">#FFF87171</color>
+    <color name="text">#FFECF6F1</color>
+    <color name="text_muted">#FF89A69B</color>
+    <color name="text_faint">#FF5B7169</color>
+    <color name="ripple">#22E9B949</color>
+    <color name="transparent">#00000000</color>
+</resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Poker Tracker</string>
+    <string name="checkin_question">Какой результат в покере?</string>
+    <string name="suit_spade">♠︎</string>
+    <string name="suit_heart">♥︎</string>
+    <string name="suit_diamond">♦︎</string>
+    <string name="suit_club">♣︎</string>
+    <string name="suit_row">♠︎ ♥︎ ♦︎ ♣︎</string>
+</resources>
