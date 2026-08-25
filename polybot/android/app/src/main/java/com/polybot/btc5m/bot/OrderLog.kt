@@ -142,6 +142,37 @@ object OrderLog {
      */
     fun hasWorkingBuys(windowStart: Long): Boolean = working("BUY", windowStart)
 
+    /**
+     * Shares bought in a recent window that no sell covers yet, per outcome.
+     *
+     * The app's own record of what it did, which is the only thing that can
+     * answer "did every purchase get an exit?" without asking the exchange.
+     * A buy counts once it has matched; a sell counts whether it has filled or
+     * is merely resting, since a resting sell *is* the exit.
+     *
+     * This is what keeps the rule looking. Attention used to be a one-minute
+     * timer from the moment of purchase, and a sell blocked for that minute —
+     * by a rate limit, by the trade not being indexed yet, by a refusal — was
+     * then never attempted again: the position dropped out of the sweep and the
+     * panel said only that it was waiting for a purchase.
+     */
+    fun uncovered(windowStart: Long): Map<String, Double> {
+        val recent = entries.filter { it.windowStart >= windowStart - WINDOW_SECONDS }
+        val out = HashMap<String, Double>()
+        for (entry in recent) {
+            val covered = when {
+                entry.action == "BUY" -> entry.matched
+                entry.status == "cancelled" -> -entry.matched
+                // A resting sell is an exit already arranged.
+                else -> -maxOf(entry.matched, entry.size)
+            }
+            out[entry.asset] = (out[entry.asset] ?: 0.0) + covered
+        }
+        return out.filterValues { it > 1e-6 }
+    }
+
+    fun hasUncovered(windowStart: Long): Boolean = uncovered(windowStart).isNotEmpty()
+
     /** Is one particular asset's buy still working? */
     fun hasWorkingBuy(asset: String): Boolean = entries.any {
         it.asset == asset &&

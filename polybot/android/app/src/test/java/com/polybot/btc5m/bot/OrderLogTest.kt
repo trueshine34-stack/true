@@ -24,6 +24,12 @@ class OrderLogTest {
     @After
     fun tidy() = OrderLog.clear()
 
+    /** The window record() stamps an entry with when none is given. */
+    private fun nowWindow(): Long {
+        val nowSec = System.currentTimeMillis() / 1000
+        return nowSec - (nowSec % WINDOW_SECONDS)
+    }
+
     private fun record(
         action: String,
         price: Double,
@@ -163,6 +169,64 @@ class OrderLogTest {
 
         assertFalse(OrderLog.hasWorkingBuys(window))
         assertFalse(OrderLog.hasWorkingBuy("token-a"))
+    }
+
+    @Test
+    fun aBoughtLotWithNoSellIsUncovered() {
+        record("BUY", 0.43, 5.0, matched = 5.0)
+
+        assertEquals(5.0, OrderLog.uncovered(nowWindow())["token-a"]!!, 1e-9)
+        assertTrue(OrderLog.hasUncovered(nowWindow()))
+    }
+
+    @Test
+    fun aRestingSellCountsAsTheExit() {
+        record("BUY", 0.43, 5.0, matched = 5.0)
+        record("SELL", 0.72, 5.0, matched = 0.0)
+
+        // The exit is arranged even though no money has moved yet.
+        assertFalse(OrderLog.hasUncovered(nowWindow()))
+    }
+
+    @Test
+    fun aFilledSellCoversItToo() {
+        record("BUY", 0.43, 5.0, matched = 5.0)
+        val sell = record("SELL", 0.72, 5.0, matched = 5.0)
+        sell.status = "filled"
+
+        assertFalse(OrderLog.hasUncovered(nowWindow()))
+    }
+
+    @Test
+    fun aPulledSellLeavesTheLotUncoveredAgain() {
+        record("BUY", 0.43, 5.0, matched = 5.0)
+        val sell = record("SELL", 0.72, 5.0, matched = 0.0)
+        sell.status = "cancelled"
+
+        assertEquals(5.0, OrderLog.uncovered(nowWindow())["token-a"]!!, 1e-9)
+    }
+
+    @Test
+    fun onlyThePartOfAPositionWithNoSellCounts() {
+        record("BUY", 0.43, 10.0, matched = 10.0)
+        record("SELL", 0.72, 4.0, matched = 0.0)
+
+        assertEquals(6.0, OrderLog.uncovered(nowWindow())["token-a"]!!, 1e-9)
+    }
+
+    @Test
+    fun aBuyThatNeverFilledIsNotAPosition() {
+        record("BUY", 0.43, 5.0, matched = 0.0)
+
+        assertFalse(OrderLog.hasUncovered(nowWindow()))
+    }
+
+    @Test
+    fun uncoveredLotsFromClosedWindowsAreLetGo() {
+        val entry = record("BUY", 0.43, 5.0, matched = 5.0)
+
+        // Two windows on, the market has settled and there is nothing to sell.
+        assertFalse(OrderLog.hasUncovered(entry.windowStart + WINDOW_SECONDS * 2))
     }
 
     @Test

@@ -1523,6 +1523,10 @@ function RuleBar({
   );
 
   const covered = state.rows.filter((r) => r.status === 'покрыто').length;
+  /** A position the rule has not managed to cover, if there is one. */
+  const stuck = state.rows.find(
+    (r) => r.status !== 'покрыто' && r.status !== 'выставлено' && r.status !== 'ждёт шага',
+  );
   const rung = state.rows.length > 0 ? Math.max(...state.rows.map((r) => r.target)) : null;
   // What a click really spends: the fee comes on top of the order, so the last
   // slice of the balance is never available to buy with. Priced off the cheaper
@@ -1561,10 +1565,15 @@ function RuleBar({
               ? state.lastFault
               : !state.running
                 ? 'запускается…'
-                : (state.watching ?? 0) === 0
+                : state.rows.length === 0
                   ? 'ждём покупку'
-                  : `${rung != null ? `${Math.round(rung * 100)}¢ · ` : ''}` +
-                    `покрыто ${covered}/${state.rows.length} · ${ago(state.lastSweepAt)}`}
+                  : stuck
+                    ? // A position the rule cannot cover says why, right here.
+                      // "Ждём покупку" while a bought lot sat with no sell was
+                      // the least useful thing this line could have said.
+                      `${stuck.outcome}: ${stuck.status}`
+                    : `${rung != null ? `${Math.round(rung * 100)}¢ · ` : ''}` +
+                      `покрыто ${covered}/${state.rows.length} · ${ago(state.lastSweepAt)}`}
         </span>
       </div>
 

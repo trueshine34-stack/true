@@ -257,7 +257,13 @@ class AutoSell(
                     watching.isNotEmpty() ||
                     rebuys.isNotEmpty() ||
                     OrderLog.hasWorkingSells(windowNow) ||
-                    OrderLog.hasWorkingBuys(windowNow)
+                    OrderLog.hasWorkingBuys(windowNow) ||
+                    // A purchase with no exit arranged is unfinished business,
+                    // and stays unfinished until its market closes. This is what
+                    // makes "every buy gets a sell" a guarantee rather than a
+                    // hope: it is read from the app's own log, so it survives a
+                    // refusal, a rate limit and an unindexed trade alike.
+                    (settings.enabled && OrderLog.hasUncovered(windowNow))
                 val due = now - lastFullMs >= settings.retryEverySec.coerceAtLeast(1) * 1000L
 
                 if (busy && due && backoffMs <= 0L) {
@@ -353,6 +359,15 @@ class AutoSell(
         val nowMs = System.currentTimeMillis()
         val nowSec = Clock.nowSec()
 
+        // Positions the log says are still without an exit. They are looked at
+        // on every pass, watch or no watch — the watch is a timer, and a timer
+        // is exactly what let a blocked sell be forgotten.
+        val uncoveredAssets = if (settings.enabled) {
+            OrderLog.uncovered(nowSec - SellLadder.elapsedInWindow(nowSec)).keys
+        } else {
+            emptySet()
+        }
+
         // Fills and buy-backs read the exchange, not the data API. Doing them
         // first means a rate-limited position lookup — which is a different
         // host with its own limits — can no longer take them down with it. That
@@ -382,7 +397,12 @@ class AutoSell(
         // not start selling on its own.
         for (position in if (settings.enabled) positions else emptyList()) {
             if (position.redeemable || position.size <= 0.0) continue
-            if (!fullSweep && !watching.containsKey(position.asset)) continue
+            if (!fullSweep &&
+                !watching.containsKey(position.asset) &&
+                position.asset !in uncoveredAssets
+            ) {
+                continue
+            }
 
             // Only the part of the position no bot is holding.
             val mine = position.size - botShares(position.asset)
@@ -409,7 +429,14 @@ class AutoSell(
             val status = when {
                 meta == null -> "нет данных рынка"
                 meta.closed || !meta.acceptingOrders -> "рынок закрыт"
-                mine < meta.minimumOrderSize -> "у бота"
+                // Held by a running strategy, which arranges its own exit.
+                botShares(position.asset) > 1e-9 && mine < meta.minimumOrderSize - 1e-6 ->
+                    "у бота"
+                // Not the bot's, just too small for the venue to take an order
+                // for. Saying "у бота" here dropped the position out of the
+                // sweep for good; it is now kept and named for what it is.
+                mine < meta.minimumOrderSize - 1e-6 ->
+                    "меньше минимума " + String.format("%.1f", meta.minimumOrderSize)
                 // Waiting for the average, not failing: data-api reports a fresh
                 // position with its size already right and its cost basis still
                 // at zero, and pricing a margin off zero asks a cent.
@@ -421,13 +448,13 @@ class AutoSell(
             // Covered, settled, or the bot's: nothing left to chase here.
             if (status == "покрыто" || status == "рынок закрыт" || status == "у бота") {
                 watching.remove(position.asset)
-            } else if (fullSweep) {
-                // Found on the opening pass; give it the same window of
-                // attention a fresh purchase would get.
-                watching.putIfAbsent(
-                    position.asset,
-                    System.currentTimeMillis() + settings.watchSec.coerceAtLeast(5) * 1000L,
-                )
+            } else {
+                // Anything else is unfinished, and the attention renews until
+                // it is finished or the market closes. A minute's grace from
+                // the moment of purchase was the whole bug: whatever blocked
+                // the sell for that minute blocked it forever.
+                watching[position.asset] =
+                    System.currentTimeMillis() + settings.watchSec.coerceAtLeast(5) * 1000L
             }
             next.add(rowFor(position, open, status, rung.step, target))
         }
