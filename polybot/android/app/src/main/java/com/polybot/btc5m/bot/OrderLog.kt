@@ -31,8 +31,6 @@ object OrderLog {
         var matched: Double,
         var status: String,
         var auto: Boolean = false,
-        /** Matched volume already turned into a buy-back, so it counts once. */
-        var rebuyAccounted: Double = 0.0,
     )
 
     private val entries = CopyOnWriteArrayList<Entry>()
@@ -113,29 +111,15 @@ object OrderLog {
             } catch (e: Exception) {
                 continue
             }
-            entry.matched = resolved?.sizeMatched ?: entry.matched
+            // Nothing back means the venue no longer knows this order — which
+            // is what both a fill and a cancel look like. Calling it cancelled
+            // marked filled sells as cancels and silently killed the buy-back,
+            // so an unresolved order is left alone and settled by the trade
+            // feed instead.
+            if (resolved == null) continue
+            entry.matched = resolved.sizeMatched
             entry.status = statusFor(entry.matched, entry.size, resting = false)
         }
-    }
-
-    /**
-     * Sell volume that has matched since the last time this was asked.
-     *
-     * Keyed off every sell the app sent, not just the ones a rule placed: a
-     * limit sell put on by hand fills exactly the same way, and a buy-back that
-     * only reacted to the rule's own orders ignored the case the user actually
-     * meant.
-     */
-    @Synchronized
-    fun takeSellFills(): List<Entry> {
-        val out = ArrayList<Entry>()
-        for (entry in entries) {
-            if (entry.action != "SELL") continue
-            if (entry.matched - entry.rebuyAccounted <= 1e-9) continue
-            out.add(entry.copy(matched = entry.matched - entry.rebuyAccounted))
-            entry.rebuyAccounted = entry.matched
-        }
-        return out
     }
 
     /**
@@ -150,6 +134,32 @@ object OrderLog {
         it.action == "SELL" &&
             (it.status == "resting" || it.status == "partial") &&
             it.windowStart >= windowStart - WINDOW_SECONDS
+    }
+
+    /**
+     * Mark volume against a still-working order from a trade that happened.
+     *
+     * Matched by outcome, side and price, oldest first — that is everything the
+     * trade feed carries in common with an order. A trade with no order to
+     * match (sold from the Polymarket app, say) simply finds nothing here; the
+     * buy-back works off the trade itself, not off this.
+     */
+    @Synchronized
+    fun applyTrade(asset: String, action: String, price: Double, size: Double, tick: Double) {
+        var left = size
+        for (entry in entries.sortedBy { it.placedAt }) {
+            if (left <= 1e-9) break
+            if (entry.asset != asset || entry.action != action) continue
+            if (entry.status != "resting" && entry.status != "partial") continue
+            if (kotlin.math.abs(entry.price - price) > tick) continue
+
+            val room = entry.size - entry.matched
+            if (room <= 1e-9) continue
+            val take = minOf(room, left)
+            entry.matched += take
+            entry.status = statusFor(entry.matched, entry.size, resting = true)
+            left -= take
+        }
     }
 
     /**

@@ -47,4 +47,50 @@ object DataApi {
         }
         return out
     }
+
+    /**
+     * Trades that actually happened, newest first.
+     *
+     * This is the only unambiguous answer to "did my sell fill". Asking the
+     * exchange about a single order cannot tell a fill from a cancel once the
+     * order has left the book — both come back as nothing — and treating that
+     * nothing as a cancel is what kept the buy-back from ever triggering.
+     */
+    data class Trade(
+        val hash: String,
+        val asset: String,
+        val conditionId: String,
+        val side: String,
+        val size: Double,
+        val price: Double,
+        val at: Long,
+        val outcome: String,
+    ) {
+        /** A transaction can settle several outcomes; the asset separates them. */
+        val key: String get() = "$hash:$asset:$side:$size"
+    }
+
+    fun trades(user: String, limit: Int = 25): List<Trade> {
+        val array = JSONArray(Http.get("$HOST/trades?user=$user&limit=$limit"))
+        val out = ArrayList<Trade>(array.length())
+        for (i in 0 until array.length()) {
+            val o = array.optJSONObject(i) ?: continue
+            val size = o.optDouble("size", 0.0)
+            val price = o.optDouble("price", 0.0)
+            if (size <= 0.0 || price <= 0.0) continue
+            out.add(
+                Trade(
+                    hash = o.optString("transactionHash"),
+                    asset = o.optString("asset"),
+                    conditionId = o.optString("conditionId"),
+                    side = o.optString("side").uppercase(),
+                    size = size,
+                    price = price,
+                    at = o.optLong("timestamp"),
+                    outcome = o.optString("outcome"),
+                ),
+            )
+        }
+        return out
+    }
 }

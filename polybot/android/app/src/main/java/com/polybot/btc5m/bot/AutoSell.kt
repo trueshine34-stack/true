@@ -110,6 +110,15 @@ class AutoSell(
     private val rungs = HashMap<String, Rung>()
 
     /**
+     * Trades already turned into buy-backs, by transaction. The venue can only
+     * be asked what trades happened, not what is new since last time.
+     */
+    private val seenTrades = HashSet<String>()
+
+    @Volatile
+    private var tradesSeeded = false
+
+    /**
      * Outcomes bought recently, with the moment to stop chasing them.
      *
      * The rule used to sweep on a timer forever, which meant polling the data
@@ -248,6 +257,8 @@ class AutoSell(
         rungs.clear()
         rebuys.clear()
         watching.clear()
+        seenTrades.clear()
+        tradesSeeded = false
         engine.log("info", "Автопродажа выключена")
         onStateChanged()
     }
@@ -291,7 +302,7 @@ class AutoSell(
         OrderLog.reconcile(open) { id ->
             ClobApi.order(session.creds, session.account.signerAddress, id)
         }
-        noteFills(nowSec - SellLadder.elapsedInWindow(nowSec))
+        noteFills(session, nowSec - SellLadder.elapsedInWindow(nowSec))
         runRebuys()
 
         val positions = try {
@@ -387,45 +398,59 @@ class AutoSell(
      * sell put on by hand — the ordinary way of taking profit here — filled
      * without the buy-back ever hearing about it.
      */
-    private fun noteFills(windowStart: Long) {
-        val fills = OrderLog.takeSellFills()
-        if (fills.isEmpty() || !settings.rebuyEnabled) return
+    private fun noteFills(session: BotEngine.Session, windowStart: Long) {
+        val trades = try {
+            DataApi.trades(session.account.funderAddress)
+        } catch (e: Exception) {
+            lastFault = e.message ?: "сделки недоступны"
+            return
+        }
 
-        for (fill in fills) {
+        // The first pass only learns what already happened. Without it, turning
+        // the rule on would queue a buy-back for every sale in recent history.
+        if (!tradesSeeded) {
+            trades.forEach { seenTrades.add(it.key) }
+            tradesSeeded = true
+            return
+        }
+
+        // Oldest first, so several fills of one order land in order.
+        for (trade in trades.sortedBy { it.at }) {
+            if (!seenTrades.add(trade.key)) continue
+
+            val tick = metaFor(trade.conditionId)?.tickSize ?: 0.01
+            OrderLog.applyTrade(trade.asset, trade.side, trade.price, trade.size, tick)
+            if (trade.side != "SELL" || !settings.rebuyEnabled) continue
+
             val drop = settings.rebuyDropPct.coerceIn(0.0, 0.95)
-            val lot = OrderLog.buyLotFor(fill.asset)?.coerceAtMost(fill.matched)
-                ?: fill.matched
+            val lot = OrderLog.buyLotFor(trade.asset)?.coerceAtMost(trade.size) ?: trade.size
             rebuys.add(
                 Rebuy(
-                    asset = fill.asset,
-                    conditionId = fill.conditionId,
-                    shares = fill.matched,
-                    soldAt = fill.price,
-                    trigger = fill.price * (1.0 - drop),
+                    asset = trade.asset,
+                    conditionId = trade.conditionId,
+                    shares = trade.size,
+                    soldAt = trade.price,
+                    trigger = trade.price * (1.0 - drop),
                     windowStart = windowStart,
                     lot = lot,
-                    remaining = fill.matched,
+                    remaining = trade.size,
                 ),
             )
             engine.log(
                 "trade",
-                "Продано " + String.format("%.1f", fill.matched) + " по " +
-                    "${(fill.price * 100).toInt()}¢ · докуп при " +
-                    "${(fill.price * (1.0 - drop) * 100).toInt()}¢",
+                "Продано " + String.format("%.1f", trade.size) + " по " +
+                    "${(trade.price * 100).toInt()}¢ · докуп при " +
+                    "${(trade.price * (1.0 - drop) * 100).toInt()}¢",
             )
+        }
+
+        // The key set only needs to outlive the newest page it can see.
+        if (seenTrades.size > 400) {
+            seenTrades.retainAll(trades.map { it.key }.toSet())
         }
         onStateChanged()
     }
 
-    /**
-     * Buy back what was sold, once it is cheap enough again.
-     *
-     * The only deadline is the market itself. A pending buy-back used to be
-     * dropped when the five-minute window turned, which is the same thing said
-     * worse: it cut the chance short before the market had actually closed, and
-     * on a sale made late in a window that left barely a minute for the price
-     * to fall. The market-closed check below says it exactly.
-     */
     private fun runRebuys() {
         if (rebuys.isEmpty()) return
         if (!settings.rebuyEnabled) {

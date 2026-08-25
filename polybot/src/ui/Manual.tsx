@@ -468,6 +468,43 @@ export function Manual() {
     [books],
   );
 
+  /**
+   * Sell the whole draft at market.
+   *
+   * Priced through the bids rather than at the top of them: the top is rarely
+   * deep enough for a whole position, and an order that only fills against it
+   * leaves the rest resting — which is not what "sell at market" means. Walking
+   * the book gives a price that clears the size, and anything that does not
+   * fill rests harmlessly at the bottom of it.
+   */
+  const marketSell = useCallback(
+    async (d: Draft) => {
+      const shares = Number(d.shares.replace(',', '.'));
+      if (!Number.isFinite(shares) || shares <= 0) {
+        setNote('Нет объёма для продажи');
+        return;
+      }
+      const bids = books[d.side].bids;
+      if (bids.length === 0) {
+        setNote(`Нет спроса по ${d.side}`);
+        return;
+      }
+
+      let left = shares;
+      let price = bids[0].price;
+      for (const level of bids) {
+        price = level.price;
+        left -= level.size;
+        if (left <= 0) break;
+      }
+      // A tick under the level that clears it, so rounding cannot leave the
+      // last shares hanging above the book.
+      const tick = market?.tickSize ?? 0.01;
+      void place(d.side, 'SELL', Math.max(tick, price - tick), shares);
+    },
+    [books, market, place],
+  );
+
   const cancel = useCallback(async (orderId: string) => {
     setBusy(true);
     try {
@@ -733,6 +770,14 @@ export function Manual() {
                   }
                 >
                   Продать
+                </button>
+                <button
+                  className="danger compact"
+                  disabled={busy}
+                  onClick={() => void marketSell(draft)}
+                  title="Продать всё по рынку"
+                >
+                  Рынок
                 </button>
                 <button className="ghost compact narrow" onClick={() => setDraft(null)}>
                   ✕

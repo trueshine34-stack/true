@@ -45,57 +45,83 @@ class OrderLogTest {
     )
 
     @Test
-    fun aHandPlacedSellCountsJustLikeARuleOne() {
-        record("SELL", 0.93, 5.0, matched = 5.0, auto = false)
-        record("SELL", 0.84, 5.0, matched = 5.0, auto = true)
+    fun aTradeMarksTheOrderItFilled() {
+        val entry = record("SELL", 0.77, 5.0)
+        OrderLog.applyTrade("token-a", "SELL", 0.77, 5.0, tick = 0.01)
 
-        val fills = OrderLog.takeSellFills()
-        assertEquals(2, fills.size)
-        assertEquals(10.0, fills.sumOf { it.matched }, 1e-9)
+        assertEquals(5.0, entry.matched, 1e-9)
+        assertEquals("filled", entry.status)
     }
 
     @Test
-    fun matchedVolumeIsOnlyEverCountedOnce() {
-        record("SELL", 0.93, 5.0, matched = 5.0)
+    fun aPartialTradeLeavesTheOrderWorking() {
+        val entry = record("SELL", 0.77, 10.0)
+        OrderLog.applyTrade("token-a", "SELL", 0.77, 4.0, tick = 0.01)
 
-        assertEquals(5.0, OrderLog.takeSellFills().sumOf { it.matched }, 1e-9)
-        // A second sweep must not register the same sale again, or one sell
-        // would queue a buy-back on every pass.
-        assertTrue(OrderLog.takeSellFills().isEmpty())
+        assertEquals(4.0, entry.matched, 1e-9)
+        assertEquals("partial", entry.status)
     }
 
     @Test
-    fun aPartialFillCountsTheIncrementAndThenTheRest() {
-        val entry = record("SELL", 0.84, 10.0, matched = 4.0)
-        assertEquals(4.0, OrderLog.takeSellFills().single().matched, 1e-9)
+    fun aTradeAtAnotherPriceIsNotThisOrder() {
+        val entry = record("SELL", 0.77, 5.0)
+        OrderLog.applyTrade("token-a", "SELL", 0.93, 5.0, tick = 0.01)
 
-        entry.matched = 10.0
-        assertEquals(6.0, OrderLog.takeSellFills().single().matched, 1e-9)
-        assertTrue(OrderLog.takeSellFills().isEmpty())
+        assertEquals(0.0, entry.matched, 1e-9)
+        assertEquals("resting", entry.status)
     }
 
     @Test
-    fun buysAreNotSales() {
-        record("BUY", 0.42, 5.0, matched = 5.0)
-        assertTrue(OrderLog.takeSellFills().isEmpty())
+    fun aBuyTradeDoesNotFillASell() {
+        val entry = record("SELL", 0.77, 5.0)
+        OrderLog.applyTrade("token-a", "BUY", 0.77, 5.0, tick = 0.01)
+        assertEquals(0.0, entry.matched, 1e-9)
     }
 
     @Test
-    fun anUnfilledSellYieldsNothing() {
-        record("SELL", 0.97, 5.0, matched = 0.0)
-        assertTrue(OrderLog.takeSellFills().isEmpty())
+    fun volumeSpillsOntoTheNextOrderAtTheSamePrice() {
+        val first = record("SELL", 0.77, 5.0)
+        val second = record("SELL", 0.77, 5.0)
+        OrderLog.applyTrade("token-a", "SELL", 0.77, 8.0, tick = 0.01)
+
+        assertEquals(5.0, first.matched, 1e-9)
+        assertEquals(3.0, second.matched, 1e-9)
     }
 
     @Test
-    fun theFillCarriesThePriceTheBuyBackIsMeasuredFrom() {
-        record("SELL", 0.93, 5.0, matched = 5.0)
-        val fill = OrderLog.takeSellFills().single()
+    fun aTradeWithNoOrderOfOursIsHarmless() {
+        // Sold from the Polymarket app: nothing here to mark, and the buy-back
+        // works off the trade itself rather than off this.
+        OrderLog.applyTrade("token-z", "SELL", 0.77, 5.0, tick = 0.01)
+    }
 
-        assertEquals(0.93, fill.price, 1e-9)
-        assertEquals("token-a", fill.asset)
-        assertEquals("cond-a", fill.conditionId)
-        // 20% below where it sold.
-        assertEquals(0.744, fill.price * 0.8, 1e-9)
+    @Test
+    fun anUnresolvableOrderIsLeftAloneRatherThanCalledCancelled() {
+        val entry = record("SELL", 0.97, 5.0, orderId = "gone")
+        // The venue answers nothing, which is what a fill and a cancel both
+        // look like. Guessing "cancelled" is what killed the buy-back.
+        OrderLog.reconcile(emptyList()) { null }
+
+        assertEquals("resting", entry.status)
+    }
+
+    @Test
+    fun aVenueAnswerIsStillBelieved() {
+        val entry = record("SELL", 0.97, 5.0, orderId = "gone")
+        OrderLog.reconcile(emptyList()) {
+            ClobApi.OpenOrder(
+                id = "gone",
+                status = "matched",
+                market = "cond-a",
+                assetId = "token-a",
+                side = "SELL",
+                price = 0.97,
+                originalSize = 5.0,
+                sizeMatched = 5.0,
+                outcome = "Up",
+            )
+        }
+        assertEquals("filled", entry.status)
     }
 
     @Test
@@ -121,56 +147,6 @@ class OrderLogTest {
         // Two windows on, its market has closed and nothing more will happen.
         assertFalse(OrderLog.hasWorkingSells(entry.windowStart + WINDOW_SECONDS * 2))
     }
-
-    @Test
-    fun aVanishedOrderIsAskedAboutRatherThanAssumedFilled() {
-        val entry = record("SELL", 0.97, 5.0, matched = 0.0, orderId = "gone")
-
-        // Not in the open listing, and the venue says nothing matched: that is
-        // a cancel, and calling it a fill would queue a buy-back for a sale
-        // that never happened.
-        OrderLog.reconcile(emptyList()) { null }
-
-        assertEquals("cancelled", entry.status)
-        assertTrue(OrderLog.takeSellFills().isEmpty())
-    }
-
-    @Test
-    fun aVanishedOrderThatDidMatchIsAFill() {
-        val entry = record("SELL", 0.97, 5.0, matched = 0.0, orderId = "gone")
-        OrderLog.reconcile(emptyList()) {
-            ClobApi.OpenOrder(
-                id = "gone",
-                status = "matched",
-                market = "cond-a",
-                assetId = "token-a",
-                side = "SELL",
-                price = 0.97,
-                originalSize = 5.0,
-                sizeMatched = 5.0,
-                outcome = "Up",
-            )
-        }
-
-        assertEquals("filled", entry.status)
-        assertEquals(5.0, OrderLog.takeSellFills().single().matched, 1e-9)
-    }
-}
-
-/**
- * The clip a buy-back is made in.
- *
- * A position built as three lots of five should be bought back five at a time:
- * taking the whole fifteen at the first price that clears the trigger hands
- * back the rest of the dip.
- */
-class BuyLotTest {
-
-    @Before
-    fun reset() = OrderLog.clear()
-
-    @After
-    fun tidy() = OrderLog.clear()
 
     private fun buy(size: Double, asset: String = "token-a") = OrderLog.record(
         orderId = "b$size$asset",

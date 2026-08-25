@@ -10,12 +10,12 @@ import { SettingsScreen } from './ui/Settings';
 import { Setup } from './ui/Setup';
 
 type Phase = 'loading' | 'setup' | 'ready';
-type Tab = 'auto' | 'manual' | 'settings';
+type Tab = 'manual' | 'auto' | 'settings';
 type AutoPane = 'terminal' | 'pair';
 
 export function App() {
   const [phase, setPhase] = useState<Phase>('loading');
-  const [tab, setTab] = useState<Tab>('auto');
+  const [tab, setTab] = useState<Tab>('manual');
   const [autoPane, setAutoPane] = useState<AutoPane>('terminal');
   const [settings, setSettings] = useState<StrategySettings>(DEFAULT_SETTINGS);
   const [account, setAccount] = useState<AccountConfig | null>(null);
@@ -182,14 +182,14 @@ export function App() {
       </div>
 
       <nav className="tabs">
-        <button className={tab === 'auto' ? 'active' : ''} onClick={() => setTab('auto')}>
-          Авто
-        </button>
         <button
           className={tab === 'manual' ? 'active' : ''}
           onClick={() => setTab('manual')}
         >
           Руки
+        </button>
+        <button className={tab === 'auto' ? 'active' : ''} onClick={() => setTab('auto')}>
+          Авто
         </button>
         <button
           className={tab === 'settings' ? 'active' : ''}
