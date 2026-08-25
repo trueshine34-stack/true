@@ -1147,8 +1147,23 @@ function RuleBar({
             onChange({ ...settings, useBalanceShare: !settings.useBalanceShare })
           }
         />
-        <span className="rule-name">
-          {Math.round(settings.balanceSharePct * 100)}% баланса
+        {/*
+          The share is the whole point of this rule, so it is picked here rather
+          than typed in settings. The switch still decides whether the mode is
+          on at all.
+        */}
+        <span className="pcts">
+          {[25, 50, 100].map((pct) => (
+            <button
+              key={pct}
+              className={
+                Math.round(settings.balanceSharePct * 100) === pct ? 'on' : undefined
+              }
+              onClick={() => onChange({ ...settings, balanceSharePct: pct / 100 })}
+            >
+              {pct}%
+            </button>
+          ))}
         </span>
         <span className="rule-note muted">
           {settings.useBalanceShare

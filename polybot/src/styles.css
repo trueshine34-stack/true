@@ -1249,3 +1249,30 @@ button.compact.narrow {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Quick picks for the balance share, sized to be hit without looking. */
+.pcts {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.pcts button {
+  min-width: 42px;
+  padding: 5px 6px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.pcts button.on {
+  border-color: var(--accent);
+  background: rgba(76, 141, 255, 0.16);
+  color: var(--accent);
+  font-weight: 600;
+}
