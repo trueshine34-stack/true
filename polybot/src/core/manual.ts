@@ -59,6 +59,33 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   balanceSharePct: 0.25,
 };
 
+/** Never spend the last of the balance, whatever the fee works out to. */
+export const BALANCE_HEADROOM = 0.02;
+
+/** Polymarket's taker fee: rate x p x (1 - p) per share, charged to the taker. */
+const TAKER_FEE_RATE = 0.07;
+
+/**
+ * How much of the wallet an order may actually be worth.
+ *
+ * The taker fee is charged *on top of* the order amount, not out of it, so an
+ * order for the whole balance leaves nothing to pay the fee with and is simply
+ * refused — which is why 100% never worked, and why 50% failed too whenever
+ * something else was already reserving collateral.
+ *
+ * Two percent is the floor. The real fee is `rate x (1 - p)` of the order's
+ * value, which at 20c is nearly six percent — reserving a flat two there would
+ * fail exactly the same way, so the larger of the two wins.
+ */
+export function spendableBalance(balanceUsd: number, price: number): number {
+  if (!Number.isFinite(balanceUsd) || balanceUsd <= 0) return 0;
+  const feeShare =
+    Number.isFinite(price) && price > 0 && price < 1
+      ? TAKER_FEE_RATE * (1 - price)
+      : BALANCE_HEADROOM;
+  return balanceUsd * (1 - Math.max(BALANCE_HEADROOM, feeShare));
+}
+
 /**
  * Shares a click buys when sizing off the wallet.
  *
@@ -76,7 +103,7 @@ export function balanceShares(
   if (!Number.isFinite(price) || price <= 0) return null;
   if (!Number.isFinite(balanceUsd) || balanceUsd <= 0) return null;
 
-  const shares = (balanceUsd * sharePct) / price;
+  const shares = (spendableBalance(balanceUsd, price) * sharePct) / price;
   return shares >= minShares(price, minimumOrderSize) ? shares : null;
 }
 

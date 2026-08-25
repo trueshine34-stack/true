@@ -5,6 +5,7 @@ import {
   limitShares,
   minShares,
   sharesFor,
+  spendableBalance,
   type ManualSettings,
 } from '../core/manual';
 import { findLevels } from '../core/levels';
@@ -798,6 +799,11 @@ export function Manual() {
               state={autoSell}
               settings={settings}
               balance={balance}
+              ask={
+                quickUp && quickDown
+                  ? Math.min(quickUp.ask, quickDown.ask)
+                  : (quickUp?.ask ?? quickDown?.ask ?? null)
+              }
               onChange={apply}
               onNote={setNote}
             />
@@ -1056,12 +1062,15 @@ function RuleBar({
   state,
   settings,
   balance,
+  ask,
   onChange,
   onNote,
 }: {
   state: AutoSellState;
   settings: ManualSettings;
   balance: number | null;
+  /** Price a click would pay, for showing what the share works out to. */
+  ask: number | null;
   onChange: (next: ManualSettings) => void;
   onNote: (text: string | null) => void;
 }) {
@@ -1084,7 +1093,13 @@ function RuleBar({
 
   const covered = state.rows.filter((r) => r.status === 'покрыто').length;
   const rung = state.rows.length > 0 ? Math.max(...state.rows.map((r) => r.target)) : null;
-  const stake = balance != null ? balance * settings.balanceSharePct : null;
+  // What a click really spends: the fee comes on top of the order, so the last
+  // slice of the balance is never available to buy with. Priced off the cheaper
+  // side, which is the one size questions are usually about.
+  const stake =
+    balance != null && ask != null
+      ? spendableBalance(balance, ask) * settings.balanceSharePct
+      : null;
 
   return (
     <div className="card tight">

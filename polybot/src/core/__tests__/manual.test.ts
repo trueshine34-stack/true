@@ -5,6 +5,7 @@ import {
   limitShares,
   minShares,
   sharesFor,
+  spendableBalance,
   type ManualSettings,
 } from '../manual';
 
@@ -112,18 +113,22 @@ describe('limitShares', () => {
 });
 
 describe('balanceShares', () => {
-  it('spends the set share of the wallet', () => {
-    // 25% of $40 is $10, which at 50c is twenty shares.
-    expect(balanceShares(0.5, 40, 0.25)).toBe(20);
-    expect(balanceShares(0.25, 40, 0.25)).toBe(40);
+  it('spends the set share of what is actually spendable', () => {
+    // 25% of $40 is $10, but the taker fee comes on top of the order, so the
+    // share is taken of the wallet less that reserve: 3.5% at 50c.
+    expect(balanceShares(0.5, 40, 0.25)).toBeCloseTo((40 * 0.965 * 0.25) / 0.5, 9);
+    expect(balanceShares(0.25, 40, 0.25)).toBeCloseTo((40 * 0.9475 * 0.25) / 0.25, 9);
   });
 
-  it('buys more of a cheap side for the same money', () => {
+  it('buys far more of a cheap side for roughly the same money', () => {
     const dear = balanceShares(0.8, 40, 0.25)!;
     const cheap = balanceShares(0.2, 40, 0.25)!;
-    expect(cheap).toBe(dear * 4);
-    // The money spent is the same either way — that is the point.
-    expect(dear * 0.8).toBeCloseTo(cheap * 0.2, 9);
+
+    expect(cheap / dear).toBeGreaterThan(3.5);
+    // Not identical any more: the cheap side reserves a bigger fee, because at
+    // 20c the fee really is a bigger slice of the order.
+    expect(cheap * 0.2).toBeLessThan(dear * 0.8);
+    expect(cheap * 0.2).toBeGreaterThan(dear * 0.8 * 0.9);
   });
 
   it('refuses rather than quietly overspending the share', () => {
@@ -140,7 +145,7 @@ describe('balanceShares', () => {
 
   it('honours a different floor', () => {
     expect(balanceShares(0.5, 40, 0.25, 25)).toBeNull();
-    expect(balanceShares(0.5, 40, 0.25, 20)).toBe(20);
+    expect(balanceShares(0.5, 40, 0.25, 15)).toBeCloseTo(19.3, 9);
   });
 });
 
@@ -186,7 +191,49 @@ describe('sizing respects the dollar floor', () => {
 
   it('a balance share too small for the dollar floor is refused', () => {
     // 25% of $40 is $10 — fine at 5c. 25% of $2 is 50c — not.
-    expect(balanceShares(0.05, 40, 0.25)).toBe(200);
+    expect(balanceShares(0.05, 40, 0.25)).toBeCloseTo((40 * 0.9335 * 0.25) / 0.05, 9);
     expect(balanceShares(0.05, 2, 0.25)).toBeNull();
+  });
+});
+
+describe('spendableBalance', () => {
+  it('holds back at least two percent', () => {
+    expect(spendableBalance(100, 0.9)).toBeCloseTo(98, 9);
+    expect(spendableBalance(100, 0.95)).toBeCloseTo(98, 9);
+  });
+
+  it('holds back the real fee where it is larger than two percent', () => {
+    // At 20c the taker fee is 5.6% of the order's value; two would not cover it.
+    expect(spendableBalance(100, 0.2)).toBeCloseTo(94.4, 9);
+    expect(spendableBalance(100, 0.5)).toBeCloseTo(96.5, 9);
+  });
+
+  it('always leaves enough to pay the fee it will be charged', () => {
+    for (const price of [0.05, 0.2, 0.5, 0.8, 0.95]) {
+      const spend = spendableBalance(100, price);
+      const shares = spend / price;
+      const fee = 0.07 * price * (1 - price) * shares;
+      expect(spend + fee).toBeLessThanOrEqual(100 + 1e-9);
+    }
+  });
+
+  it('has nothing to offer from an empty wallet', () => {
+    expect(spendableBalance(0, 0.5)).toBe(0);
+    expect(spendableBalance(-5, 0.5)).toBe(0);
+  });
+});
+
+describe('balance sizing leaves room for the fee', () => {
+  it('a hundred percent no longer asks for the whole wallet', () => {
+    const shares = balanceShares(0.5, 100, 1)!;
+    const spend = shares * 0.5;
+    const fee = 0.07 * 0.5 * 0.5 * shares;
+    expect(spend).toBeLessThan(100);
+    expect(spend + fee).toBeLessThanOrEqual(100);
+  });
+
+  it('half the wallet still leaves the other half alone', () => {
+    const shares = balanceShares(0.5, 100, 0.5)!;
+    expect(shares * 0.5).toBeCloseTo(48.25, 9);
   });
 });
