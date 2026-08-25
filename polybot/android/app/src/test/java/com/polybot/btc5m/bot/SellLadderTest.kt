@@ -86,3 +86,36 @@ class SellLadderTest {
         assertEquals(299, SellLadder.elapsedInWindow(1_787_625_299L))
     }
 }
+
+/**
+ * Buying into a window that has not opened yet.
+ *
+ * The desk can point one window ahead, so a position can exist before its own
+ * window starts. Its ladder must begin at the first rung — reading the clock's
+ * current window instead started it four rungs up, selling at 93¢ what should
+ * have been offered at 77¢.
+ */
+class SellLadderBeforeStartTest {
+
+    private val ladder = SellLadder.DEFAULT
+
+    @Test
+    fun aWindowThatHasNotOpenedIsOnTheFirstRung() {
+        // Ninety seconds before the window opens.
+        assertEquals(0, SellLadder.stepFor(-90, null, ladder))
+        assertEquals(0.77, SellLadder.priceFor(-90, null, ladder), 1e-9)
+    }
+
+    @Test
+    fun theRungStillClimbsOnceItOpens() {
+        assertEquals(0.77, SellLadder.priceFor(-1, null, ladder), 1e-9)
+        assertEquals(0.77, SellLadder.priceFor(0, null, ladder), 1e-9)
+        assertEquals(0.84, SellLadder.priceFor(60, null, ladder), 1e-9)
+    }
+
+    @Test
+    fun priceStillOverridesTheClockBeforeTheStart() {
+        // A pre-open position whose price already cleared the first rung.
+        assertEquals(0.84, SellLadder.priceFor(-30, 0.80, ladder), 1e-9)
+    }
+}

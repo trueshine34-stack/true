@@ -49,6 +49,12 @@ object OrderLog {
         size: Double,
         matched: Double,
         auto: Boolean,
+        /**
+         * The window this order's market belongs to. Stamping it from the clock
+         * instead put an order placed into the next window under the current
+         * one, where the desk could never show it.
+         */
+        windowStart: Long,
     ): Entry {
         val now = System.currentTimeMillis()
         val nowSec = now / 1000
@@ -62,7 +68,7 @@ object OrderLog {
             price = price,
             size = size,
             placedAt = now,
-            windowStart = nowSec - (nowSec % WINDOW_SECONDS),
+            windowStart = if (windowStart > 0L) windowStart else nowSec - (nowSec % WINDOW_SECONDS),
             matched = matched,
             status = statusFor(matched, size, resting = true),
             auto = auto,

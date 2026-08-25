@@ -1377,12 +1377,13 @@ class BotEngine(
                 orderId = result.orderId,
                 asset = tokenId,
                 conditionId = conditionId,
-                outcome = outcomeFor(tokenId),
+                outcome = meta.outcomes[tokenId] ?: outcomeFor(tokenId),
                 action = side,
                 price = price,
                 size = size,
                 matched = result.takingAmount ?: 0.0,
                 auto = auto,
+                windowStart = meta.windowStart,
             )
         }
 

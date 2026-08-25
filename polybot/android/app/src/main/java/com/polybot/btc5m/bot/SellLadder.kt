@@ -36,7 +36,11 @@ object SellLadder {
         if (ladder.isEmpty()) return 0
         val last = ladder.size - 1
 
-        val byClock = (elapsedSec / 60L).toInt().coerceIn(0, last)
+        // Before the window opens the elapsed time is negative, and integer
+        // division truncates toward zero — so -30s would land on rung 0 either
+        // way, but -90s would land on -1 and clamp wrong on some inputs. Floor
+        // it first and let the range clamp do the rest.
+        val byClock = (elapsedSec.coerceAtLeast(0L) / 60L).toInt().coerceIn(0, last)
         // Every rung the price has already cleared is behind us; the next one up
         // is where the order belongs.
         val byPrice = if (highWater == null) 0 else ladder.count { highWater > it }

@@ -312,13 +312,18 @@ class AutoSell(
             if (position.redeemable || position.size <= 0.0) continue
             if (!fullSweep && !watching.containsKey(position.asset)) continue
 
-            val rung = trackRung(position, windowStart, now)
-            val target = settings.ladder.getOrElse(rung.step) { settings.ladder.last() }
-
             // Only the part of the position no bot is holding.
             val mine = position.size - botShares(position.asset)
 
             val meta = metaFor(position.conditionId)
+
+            // The ladder counts minutes of *this position's* window, not of
+            // whatever window the clock is in. Buying into the next window
+            // before it opens used to read the current window's elapsed time
+            // and start four rungs up.
+            val rung = trackRung(position, meta?.windowStart ?: windowStart, now)
+            val target = settings.ladder.getOrElse(rung.step) { settings.ladder.last() }
+
             val status = when {
                 meta == null -> "нет данных рынка"
                 meta.closed || !meta.acceptingOrders -> "рынок закрыт"
@@ -531,7 +536,8 @@ class AutoSell(
         }
         if (position.curPrice > rung.highWater) rung.highWater = position.curPrice
         rung.step = SellLadder.stepFor(
-            elapsedSec = now - windowStart,
+            // Negative before the window opens: the first rung, not the last.
+            elapsedSec = (now - windowStart).coerceAtLeast(0L),
             highWater = rung.highWater,
             ladder = settings.ladder,
             floor = rung.step,

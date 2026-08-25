@@ -156,16 +156,42 @@ object ClobApi {
         /** False once the window has closed; the venue rejects orders then. */
         val acceptingOrders: Boolean,
         val closed: Boolean,
+        /**
+         * When this market's own five-minute window opened.
+         *
+         * Everything time-based about an order belongs to *its* market, not to
+         * whatever window the clock happens to be in — an order placed into the
+         * next window before it starts is the case that makes the difference.
+         */
+        val windowStart: Long,
+        /** Token id to outcome, so an order can be labelled without guessing. */
+        val outcomes: Map<String, String>,
     )
+
+    /** `btc-updown-5m-1787640600` — the slug carries the window it belongs to. */
+    private fun windowFromSlug(slug: String): Long =
+        slug.substringAfterLast('-').toLongOrNull() ?: 0L
 
     fun marketMeta(conditionId: String): MarketMeta {
         val json = JSONObject(Http.get("${Endpoints.CLOB}/markets/$conditionId"))
+
+        val outcomes = HashMap<String, String>()
+        json.optJSONArray("tokens")?.let { tokens ->
+            for (i in 0 until tokens.length()) {
+                val token = tokens.optJSONObject(i) ?: continue
+                val id = token.optString("token_id")
+                if (id.isNotEmpty()) outcomes[id] = token.optString("outcome")
+            }
+        }
+
         return MarketMeta(
             tickSize = json.optDouble("minimum_tick_size", 0.01),
             negRisk = json.optBoolean("neg_risk", false),
             minimumOrderSize = json.optDouble("minimum_order_size", 5.0),
             acceptingOrders = json.optBoolean("accepting_orders", true),
             closed = json.optBoolean("closed", false),
+            windowStart = windowFromSlug(json.optString("market_slug")),
+            outcomes = outcomes,
         )
     }
 

@@ -41,6 +41,7 @@ class OrderLogTest {
         size = size,
         matched = matched,
         auto = auto,
+        windowStart = 0L,
     )
 
     @Test
@@ -181,6 +182,7 @@ class BuyLotTest {
         size = size,
         matched = size,
         auto = false,
+        windowStart = 0L,
     )
 
     @Test
@@ -217,6 +219,7 @@ class BuyLotTest {
             size = 5.0,
             matched = 5.0,
             auto = false,
+            windowStart = 0L,
         )
         assertNull(OrderLog.buyLotFor("token-a"))
     }
@@ -224,5 +227,64 @@ class BuyLotTest {
     @Test
     fun nothingBoughtMeansNoClipToCopy() {
         assertNull(OrderLog.buyLotFor("never-seen"))
+    }
+}
+
+/**
+ * An order belongs to its market's window, not to the clock's.
+ *
+ * The desk can buy into the next window before it opens. Stamping such an order
+ * with the current window filed it where the desk would never look for it —
+ * neither while pointed at the next window, nor after that window began.
+ */
+class OrderWindowTest {
+
+    @Before
+    fun reset() = OrderLog.clear()
+
+    @After
+    fun tidy() = OrderLog.clear()
+
+    private val now = System.currentTimeMillis() / 1000
+    private val current = now - now % WINDOW_SECONDS
+    private val next = current + WINDOW_SECONDS
+
+    private fun place(windowStart: Long) = OrderLog.record(
+        orderId = "o$windowStart",
+        asset = "token-a",
+        conditionId = "cond-a",
+        outcome = "Up",
+        action = "SELL",
+        price = 0.77,
+        size = 5.0,
+        matched = 0.0,
+        auto = false,
+        windowStart = windowStart,
+    )
+
+    @Test
+    fun anOrderForTheNextWindowIsFiledUnderIt() {
+        place(next)
+        assertTrue(OrderLog.forWindow(next).isNotEmpty())
+        assertTrue(OrderLog.forWindow(current).isEmpty())
+    }
+
+    @Test
+    fun itIsStillThereOnceThatWindowBegins() {
+        place(next)
+        // The clock moves on; the order does not move with it.
+        assertEquals(1, OrderLog.forWindow(next).size)
+    }
+
+    @Test
+    fun withoutAMarketItFallsBackToTheClock() {
+        place(0L)
+        assertEquals(1, OrderLog.forWindow(current).size)
+    }
+
+    @Test
+    fun aPreOpenSellStillKeepsTheRuleAwake() {
+        place(next)
+        assertTrue(OrderLog.hasWorkingSells(current))
     }
 }
