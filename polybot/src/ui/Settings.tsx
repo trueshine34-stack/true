@@ -4,6 +4,7 @@ import { SignatureType, type AccountConfig } from '../core/account';
 import { clearVault } from '../core/storage';
 import { PolyBot } from '../native/polybot';
 import { Diagnostics } from './Diagnostics';
+import { Logs } from './Logs';
 
 export function SettingsScreen({
   settings,
@@ -21,6 +22,7 @@ export function SettingsScreen({
   const [checking, setChecking] = useState(false);
   const [batteryExempt, setBatteryExempt] = useState<boolean | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [pane, setPane] = useState<'settings' | 'journal'>('settings');
 
   useEffect(() => {
     void PolyBot.isBatteryExempt()
@@ -58,12 +60,34 @@ export function SettingsScreen({
   };
 
   const forget = async () => {
+    await PolyBot.vaultClear();
     await clearVault();
     onForget();
   };
 
   return (
     <>
+      <div className="card tight">
+        <div className="segmented">
+          <button
+            className={pane === 'settings' ? 'active' : ''}
+            onClick={() => setPane('settings')}
+          >
+            Настройки
+          </button>
+          <button
+            className={pane === 'journal' ? 'active' : ''}
+            onClick={() => setPane('journal')}
+          >
+            Журнал
+          </button>
+        </div>
+      </div>
+
+      {pane === 'journal' ? (
+        <Logs />
+      ) : (
+        <>
       {batteryExempt === false && (
         <div className="banner warn">
           Android может усыплять приложение в фоне. Отключите для него
@@ -561,6 +585,8 @@ export function SettingsScreen({
           Отключить кошелёк
         </button>
       </div>
+        </>
+      )}
     </>
   );
 }

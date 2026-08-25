@@ -1350,6 +1350,18 @@ class BotEngine(
             negRisk = meta.negRisk,
         )
         val result = ClobApi.postOrder(order, creds, acct.signerAddress, orderType)
+
+        // Remember what actually filled. The data API needs a moment to index a
+        // trade, and until it does it reports the position with no cost basis.
+        val filledShares = result.takingAmount ?: 0.0
+        if (result.success && filledShares > 1e-9) {
+            if (side == "BUY") {
+                LocalFills.bought(tokenId, filledShares, result.makingAmount ?: (filledShares * price))
+            } else {
+                LocalFills.sold(tokenId, filledShares)
+            }
+        }
+
         log(
             if (result.success) "trade" else "error",
             if (result.success) {

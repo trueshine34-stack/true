@@ -27,12 +27,16 @@ import kotlinx.coroutines.launch
 class AutoSell(
     private val engine: BotEngine,
     /**
-     * Markets a bot is trading right now. Their positions are left alone: the
-     * terminal bot's ladder and the pair bot's legs are part of strategies that
-     * decide their own exits, and blanketing them with a sell at one price
-     * would quietly break both.
+     * Shares of an outcome a running bot is holding right now.
+     *
+     * Those are left alone: the terminal bot's ladder and the pair bot's legs
+     * are part of strategies that decide their own exits, and blanketing them
+     * with a sell at one price would break both. Everything else in the same
+     * position is the user's and gets sold — the wallet is shared, so a
+     * market-wide skip would silently ignore a hand-placed buy for as long as a
+     * bot happened to be trading that window.
      */
-    private val busyMarkets: () -> Set<String>,
+    private val botShares: (String) -> Double,
     private val onStateChanged: () -> Unit,
 ) {
     data class Settings(
@@ -174,7 +178,6 @@ class AutoSell(
         val session = engine.session() ?: return
         val positions = DataApi.positions(session.account.funderAddress)
         val open = ClobApi.openOrders(session.creds, session.account.signerAddress)
-        val busy = busyMarkets()
         val now = Clock.nowSec()
         val windowStart = now - SellLadder.elapsedInWindow(now)
         lastSweepAt = System.currentTimeMillis()
@@ -186,16 +189,15 @@ class AutoSell(
             val rung = trackRung(position, windowStart, now)
             val target = settings.ladder.getOrElse(rung.step) { settings.ladder.last() }
 
-            if (position.conditionId in busy) {
-                next.add(rowFor(position, open, "у бота", rung.step, target))
-                continue
-            }
+            // Only the part of the position no bot is holding.
+            val mine = position.size - botShares(position.asset)
 
             val meta = metaFor(position.conditionId)
             val status = when {
                 meta == null -> "нет данных рынка"
                 meta.closed || !meta.acceptingOrders -> "рынок закрыт"
-                else -> reconcile(position, open, meta, target)
+                mine < meta.minimumOrderSize -> "у бота"
+                else -> reconcile(position, open, meta, target, mine)
             }
             next.add(rowFor(position, open, status, rung.step, target))
         }
@@ -360,6 +362,7 @@ class AutoSell(
         open: List<ClobApi.OpenOrder>,
         meta: ClobApi.MarketMeta,
         target: Double,
+        mine: Double,
     ): String {
         val price = snapToTick(target, meta.tickSize)
         val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
@@ -381,7 +384,7 @@ class AutoSell(
         // sweep would leave the position naked for a whole retry interval.
         val covered = sells.filter { abs(it.price - price) <= meta.tickSize / 2 }
             .sumOf { it.remaining }
-        val uncovered = position.size - covered
+        val uncovered = mine - covered
         if (uncovered < meta.minimumOrderSize) return "покрыто"
 
         return tryPlace(position, uncovered, price)

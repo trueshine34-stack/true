@@ -1,54 +1,64 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AccountConfig } from './core/account';
 import { DEFAULT_SETTINGS, type StrategySettings } from './core/settings';
-import {
-  hasVault,
-  loadAccount,
-  loadEncryptedKey,
-  loadSettings,
-  saveSettings,
-} from './core/storage';
-import { PolyBot, type NativePosition } from './native/polybot';
+import { loadAccount, loadSettings, saveSettings } from './core/storage';
+import { PolyBot } from './native/polybot';
 import { Dashboard } from './ui/Dashboard';
-import { Logs } from './ui/Logs';
-import { Orders, type SellPrefill } from './ui/Orders';
 import { Manual } from './ui/Manual';
 import { Pair } from './ui/Pair';
-import { Lock } from './ui/Lock';
 import { SettingsScreen } from './ui/Settings';
 import { Setup } from './ui/Setup';
 
-type Phase = 'loading' | 'setup' | 'locked' | 'ready';
-type Tab = 'dashboard' | 'manual' | 'pair' | 'orders' | 'settings' | 'logs';
+type Phase = 'loading' | 'setup' | 'ready';
+type Tab = 'dashboard' | 'manual' | 'pair' | 'settings';
 
 export function App() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [tab, setTab] = useState<Tab>('dashboard');
   const [settings, setSettings] = useState<StrategySettings>(DEFAULT_SETTINGS);
   const [account, setAccount] = useState<AccountConfig | null>(null);
-  const [sellPrefill, setSellPrefill] = useState<SellPrefill | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [stored, acct, vault] = await Promise.all([
-        loadSettings(),
-        loadAccount(),
-        hasVault(),
-      ]);
+      const [stored, acct] = await Promise.all([loadSettings(), loadAccount()]);
       if (cancelled) return;
       setSettings(stored);
       setAccount(acct);
 
       // The service outlives the UI, so a bot started earlier is still trading;
-      // rejoin it instead of showing a lock screen over a running engine.
+      // rejoin it rather than reconnecting over a running engine.
       const state = await PolyBot.getState().catch(() => null);
       if (!cancelled && state?.serviceAlive && acct) {
         setPhase('ready');
         return;
       }
-      if (!cancelled) setPhase(vault && acct ? 'locked' : 'setup');
+      if (!acct) {
+        if (!cancelled) setPhase('setup');
+        return;
+      }
+
+      // The key is sealed by the Android Keystore, so it opens without anything
+      // from the user. A vault that cannot be opened — reinstalled app, cleared
+      // keystore — means the key is genuinely gone and has to be entered again.
+      const vault = await PolyBot.vaultLoad().catch(() => ({ privateKey: null }));
+      if (cancelled) return;
+      if (!vault.privateKey) {
+        setPhase('setup');
+        return;
+      }
+      try {
+        await PolyBot.connect({
+          privateKey: vault.privateKey,
+          funderAddress: acct.funderAddress,
+          signatureType: Number(acct.signatureType),
+          settings: stored,
+        });
+        if (!cancelled) setPhase('ready');
+      } catch {
+        if (!cancelled) setPhase('setup');
+      }
     })();
     return () => {
       cancelled = true;
@@ -87,46 +97,14 @@ export function App() {
     });
   }, []);
 
-  const unlock = useCallback(
-    async (pin: string): Promise<string | null> => {
-      const acct = account ?? (await loadAccount());
-      if (!acct) return 'Настройки аккаунта не найдены — подключите кошелёк заново.';
-
-      const privateKey = await loadEncryptedKey(pin);
-      if (!privateKey) return 'Неверный PIN.';
-
-      try {
-        await PolyBot.connect({
-          privateKey,
-          funderAddress: acct.funderAddress,
-          signatureType: Number(acct.signatureType),
-          settings,
-        });
-        setAccount(acct);
-        setPhase('ready');
-        return null;
-      } catch (err) {
-        return err instanceof Error ? err.message : String(err);
-      }
-    },
-    [account, settings],
-  );
-
   const onSetupDone = useCallback((acct: AccountConfig) => {
     setAccount(acct);
     setPhase('ready');
   }, []);
 
-  /** Tapping a position opens the order desk with that position teed up. */
-  const onSellPosition = useCallback((position: NativePosition) => {
-    setSellPrefill({
-      tokenId: position.asset,
-      conditionId: position.conditionId,
-      outcome: position.outcome === 'Up' ? 'Up' : 'Down',
-      size: position.size,
-      price: 0.9,
-    });
-    setTab('orders');
+  /** Tapping a position on the terminal hands it to the manual desk. */
+  const onSellPosition = useCallback(() => {
+    setTab('manual');
   }, []);
 
   const onForget = useCallback(() => {
@@ -147,10 +125,6 @@ export function App() {
     return <Setup settings={settings} onDone={onSetupDone} />;
   }
 
-  if (phase === 'locked') {
-    return <Lock onUnlock={unlock} onForget={onForget} />;
-  }
-
   return (
     <div className="app">
       <div className="topbar">
@@ -169,9 +143,6 @@ export function App() {
         )}
         {tab === 'manual' && <Manual />}
         {tab === 'pair' && <Pair />}
-        {tab === 'orders' && (
-          <Orders prefill={sellPrefill} onPrefillUsed={() => setSellPrefill(null)} />
-        )}
         {tab === 'settings' && (
           <SettingsScreen
             settings={settings}
@@ -180,7 +151,6 @@ export function App() {
             onForget={onForget}
           />
         )}
-        {tab === 'logs' && <Logs />}
       </div>
 
       <nav className="tabs">
@@ -200,19 +170,10 @@ export function App() {
           Пара
         </button>
         <button
-          className={tab === 'orders' ? 'active' : ''}
-          onClick={() => setTab('orders')}
-        >
-          Ордера
-        </button>
-        <button
           className={tab === 'settings' ? 'active' : ''}
           onClick={() => setTab('settings')}
         >
           Настройки
-        </button>
-        <button className={tab === 'logs' ? 'active' : ''} onClick={() => setTab('logs')}>
-          Журнал
         </button>
       </nav>
     </div>

@@ -6,7 +6,7 @@ import {
   type AccountConfig,
 } from '../core/account';
 import type { StrategySettings } from '../core/settings';
-import { saveAccount, saveEncryptedKey } from '../core/storage';
+import { saveAccount } from '../core/storage';
 import { PolyBot } from '../native/polybot';
 import { Diagnostics } from './Diagnostics';
 
@@ -28,8 +28,6 @@ export function Setup({
   const [privateKey, setPrivateKey] = useState('');
   const [kind, setKind] = useState<WalletKind>('email');
   const [funder, setFunder] = useState('');
-  const [pin, setPin] = useState('');
-  const [pin2, setPin2] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -44,9 +42,6 @@ export function Setup({
     if (!looksLikePrivateKey(key)) {
       return setError('Не похоже на приватный ключ (нужны 64 hex-символа).');
     }
-    if (pin.length < 4) return setError('PIN должен быть не короче 4 символов.');
-    if (pin !== pin2) return setError('PIN и подтверждение не совпадают.');
-
     const funderAddress = needsFunder ? funder.trim() : '';
     if (needsFunder && !looksLikeAddress(funderAddress)) {
       return setError('Укажите корректный адрес кошелька Polymarket.');
@@ -68,7 +63,9 @@ export function Setup({
         signatureType,
       };
 
-      await saveEncryptedKey(key.startsWith('0x') ? key : `0x${key}`, pin);
+      await PolyBot.vaultStore({
+        privateKey: key.startsWith('0x') ? key : `0x${key}`,
+      });
       await saveAccount(account);
       onDone(account);
     } catch (err) {
@@ -140,28 +137,12 @@ export function Setup({
         </div>
 
         <div className="card">
-          <h2>PIN для шифрования</h2>
-          <label className="field">
-            <span>PIN</span>
-            <input
-              type="password"
-              inputMode="numeric"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>Повторите PIN</span>
-            <input
-              type="password"
-              inputMode="numeric"
-              value={pin2}
-              onChange={(e) => setPin2(e.target.value)}
-            />
-          </label>
+          <h2>Как хранится ключ</h2>
           <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-            PIN нигде не сохраняется. Если забудете — просто импортируйте ключ
-            заново.
+            Ключ шифруется хранилищем Android: сам ключ шифрования держит
+            система, приложению он не выдаётся. Из бэкапа или другого
+            приложения достать его нельзя, но и PIN на входе больше нет — кто
+            держит разблокированный телефон, тот и торгует.
           </p>
         </div>
 

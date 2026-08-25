@@ -213,6 +213,9 @@ export interface PolyBotPlugin {
   }>;
   getBookLevels(args: { tokenId: string; depth?: number }): Promise<BookLevels>;
   getPositions(): Promise<{ positions: NativePosition[] }>;
+  vaultStore(args: { privateKey: string }): Promise<void>;
+  vaultLoad(): Promise<{ privateKey?: string | null }>;
+  vaultClear(): Promise<void>;
   autoSellUpdate(args: {
     enabled?: boolean;
     ladder?: number[];
@@ -474,6 +477,11 @@ const webStub: PolyBotPlugin = {
   },
   getBookLevels: async () => ({ bids: [], asks: [] }),
   getPositions: async () => ({ positions: [] }),
+  vaultStore: async () => {
+    throw new Error('Хранилище ключа доступно только в приложении Android');
+  },
+  vaultLoad: async () => ({ privateKey: null }),
+  vaultClear: async () => {},
   autoSellUpdate: async () => {},
   autoSellState: async () => ({
     enabled: false,

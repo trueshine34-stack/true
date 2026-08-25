@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DEFAULT_MANUAL_SETTINGS,
+  balanceShares,
   limitShares,
   sharesFor,
   type ManualSettings,
@@ -73,6 +74,7 @@ export function Manual() {
   const [now, setNow] = useState(() => Date.now());
   const [limitPrice, setLimitPrice] = useState('');
   const [limitSize, setLimitSize] = useState('');
+  const [balance, setBalance] = useState<number | null>(null);
 
   useEffect(() => {
     void loadManualSettings().then(setSettings);
@@ -166,6 +168,25 @@ export function Manual() {
     };
   }, [tokenFor]);
 
+  // Sizing off the wallet needs the wallet. It only moves when an order fills,
+  // so a slow poll is enough.
+  useEffect(() => {
+    let cancelled = false;
+    const read = () => {
+      void PolyBot.getBalance()
+        .then((r) => {
+          if (!cancelled) setBalance(r.usdc);
+        })
+        .catch(() => {});
+    };
+    read();
+    const timer = window.setInterval(read, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   // The desk's own book: what is held and what is working.
   useEffect(() => {
     let cancelled = false;
@@ -212,9 +233,23 @@ export function Manual() {
   }, []);
 
   const minSize = market?.minimumOrderSize ?? 5;
+
+  /**
+   * What one tap on a buy button does, worked out once so the label and the
+   * order can never disagree. `short` marks the case where the wallet share
+   * cannot reach the venue's floor: the order is still possible, but it spends
+   * more than the rule allows and the button says so.
+   */
   const quickFor = (which: 'Up' | 'Down') => {
     const ask = books[which].asks[0]?.price ?? null;
-    return ask == null ? null : { ask, shares: sharesFor(ask, settings, minSize) };
+    if (ask == null) return null;
+
+    if (settings.useBalanceShare && balance != null) {
+      const shares = balanceShares(ask, balance, settings.balanceSharePct, minSize);
+      if (shares != null) return { ask, shares, short: false };
+      return { ask, shares: minSize, short: true };
+    }
+    return { ask, shares: sharesFor(ask, settings, minSize), short: false };
   };
 
   /**
@@ -319,20 +354,23 @@ export function Manual() {
     }
   }, []);
 
-  const quickBuy = useCallback(
-    (which: 'Up' | 'Down') => {
-      const ask = books[which].asks[0]?.price ?? null;
-      if (ask == null) {
-        setNote(`Стакан ${which} пуст`);
-        return;
-      }
-      void place(which, 'BUY', ask, sharesFor(ask, settings, minSize));
-    },
-    [books, place, settings, minSize],
-  );
-
   const quickUp = quickFor('Up');
   const quickDown = quickFor('Down');
+
+  const quickBuy = (which: 'Up' | 'Down') => {
+    const quick = which === 'Up' ? quickUp : quickDown;
+    if (!quick) {
+      setNote(`Стакан ${which} пуст`);
+      return;
+    }
+    if (quick.short) {
+      setNote(
+        `Минимум биржи — ${minSize} долей, это больше ` +
+          `${Math.round(settings.balanceSharePct * 100)}% баланса`,
+      );
+    }
+    void place(which, 'BUY', quick.ask, quick.shares);
+  };
 
   /**
    * The limit row seeds itself from whichever side is on the button, and the
@@ -405,7 +443,7 @@ export function Manual() {
       </div>
 
       {tab === 'settings' ? (
-        <ManualSettingsForm settings={settings} onChange={apply} />
+        <ManualSettingsForm settings={settings} onChange={apply} onNote={setNote} />
       ) : (
         <>
           <div className="card tight">
@@ -426,14 +464,24 @@ export function Manual() {
                     {p.outcome}
                   </span>
                   <span className="listrow-main">
-                    {p.size.toFixed(1)} × {cents(p.avgPrice)}
+                    {/*
+                      A zero average means the trade is not indexed yet, not
+                      that it was free. Showing a dash beats showing a price
+                      that never happened — and the P&L built on it too.
+                    */}
+                    {p.size.toFixed(1)} × {p.avgPrice > 0 ? cents(p.avgPrice) : '…'}
                   </span>
                   <span className="listrow-now">
                     {p.curPrice != null ? cents(p.curPrice) : '—'}
                   </span>
-                  <span className={`listrow-pnl ${p.cashPnl >= 0 ? 'up' : 'down'}`}>
-                    {p.cashPnl >= 0 ? '+' : '−'}
-                    {Math.abs(p.cashPnl).toFixed(2)}
+                  <span
+                    className={`listrow-pnl ${
+                      p.avgPrice > 0 ? (p.cashPnl >= 0 ? 'up' : 'down') : 'muted'
+                    }`}
+                  >
+                    {p.avgPrice > 0
+                      ? `${p.cashPnl >= 0 ? '+' : '−'}${Math.abs(p.cashPnl).toFixed(2)}`
+                      : '…'}
                   </span>
                 </button>
               ))
@@ -538,9 +586,10 @@ export function Manual() {
           )}
 
           {!draft && (
-            <AutoSellBar
+            <RuleBar
               state={autoSell}
               settings={settings}
+              balance={balance}
               onChange={apply}
               onNote={setNote}
             />
@@ -749,14 +798,23 @@ function Chart({
   );
 }
 
-function AutoSellBar({
+/**
+ * The rules, as switches only.
+ *
+ * What each rule *is* — the rungs, the retry interval, the percentages — lives
+ * in the settings tab. Those are set once and left; the switches are flipped
+ * while trading, so they are the only part that earns space on the desk.
+ */
+function RuleBar({
   state,
   settings,
+  balance,
   onChange,
   onNote,
 }: {
   state: AutoSellState;
   settings: ManualSettings;
+  balance: number | null;
   onChange: (next: ManualSettings) => void;
   onNote: (text: string | null) => void;
 }) {
@@ -774,85 +832,62 @@ function AutoSellBar({
     [onChange, onNote],
   );
 
-  const setRung = (index: number, value: string) => {
-    const cents = Number(value.replace(',', '.'));
-    if (!Number.isFinite(cents)) return;
-    const ladder = settings.autoSellLadder.map((r, i) => (i === index ? cents / 100 : r));
-    push({ ...settings, autoSellLadder: ladder });
-  };
-
   const covered = state.rows.filter((r) => r.status === 'покрыто').length;
-  // The rung the positions are actually on — the ladder can be ahead of the
-  // clock, so this is not simply the minute of the window.
-  const activeStep = state.rows.length > 0 ? Math.max(...state.rows.map((r) => r.step)) : null;
+  const rung = state.rows.length > 0 ? Math.max(...state.rows.map((r) => r.target)) : null;
+  const stake = balance != null ? balance * settings.balanceSharePct : null;
 
   return (
     <div className="card tight">
-      <div className="autosell">
+      <div className="rule">
         <button
           className={`switch ${settings.autoSellEnabled ? 'on' : ''}`}
           onClick={() =>
             push({ ...settings, autoSellEnabled: !settings.autoSellEnabled })
           }
         />
-        <div className="autosell-label">
-          <div>Автопродажа лесенкой</div>
-          <div className="muted" style={{ fontSize: 10 }}>
-            рунг за минуту, но не ниже рынка · позиции ботов не трогает
-          </div>
-        </div>
+        <span className="rule-name">Автопродажа</span>
+        <span className="rule-note muted">
+          {rung != null ? `${Math.round(rung * 100)}¢` : 'лесенка'}
+          {state.rows.length > 0 ? ` · покрыто ${covered}/${state.rows.length}` : ''}
+        </span>
       </div>
 
-      <div className="rungs">
-        {settings.autoSellLadder.map((price, i) => (
-          <label className={`rung${activeStep === i ? ' on' : ''}`} key={i}>
-            <span>{i + 1}м</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={String(Math.round(price * 100))}
-              onChange={(e) => setRung(i, e.target.value)}
-            />
-          </label>
-        ))}
-      </div>
-
-      <div className="autosell rebuy">
+      <div className="rule">
         <button
           className={`switch ${settings.autoRebuyEnabled ? 'on' : ''}`}
           onClick={() =>
             push({ ...settings, autoRebuyEnabled: !settings.autoRebuyEnabled })
           }
         />
-        <div className="autosell-label">
-          <div>Автодокуп после продажи</div>
-          <div className="muted" style={{ fontSize: 10 }}>
-            {state.rebuys.length > 0
-              ? `ждём ${state.rebuys.map((r) => `${Math.round(r.trigger * 100)}¢`).join(', ')}`
-              : 'тем же объёмом, когда цена упадёт'}
-          </div>
-        </div>
-        <label className="mini narrow">
-          <span>на, %</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            value={String(Math.round(settings.autoRebuyDropPct * 100))}
-            onChange={(e) =>
-              push({
-                ...settings,
-                autoRebuyDropPct: Number(e.target.value.replace(',', '.')) / 100,
-              })
-            }
-          />
-        </label>
+        <span className="rule-name">Автодокуп</span>
+        <span className="rule-note muted">
+          {state.rebuys.length > 0
+            ? `ждём ${state.rebuys.map((r) => `${Math.round(r.trigger * 100)}¢`).join(', ')}`
+            : `−${Math.round(settings.autoRebuyDropPct * 100)}%`}
+        </span>
+      </div>
+
+      <div className="rule">
+        <button
+          className={`switch ${settings.useBalanceShare ? 'on' : ''}`}
+          onClick={() =>
+            onChange({ ...settings, useBalanceShare: !settings.useBalanceShare })
+          }
+        />
+        <span className="rule-name">
+          {Math.round(settings.balanceSharePct * 100)}% баланса
+        </span>
+        <span className="rule-note muted">
+          {settings.useBalanceShare
+            ? stake != null
+              ? `${stake.toFixed(2)} $ за клик`
+              : 'баланс не прочитан'
+            : 'вместо лесенки размера'}
+        </span>
       </div>
 
       {state.rows.length > 0 && (
         <div className="autosell-rows">
-          <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>
-            покрыто {covered} из {state.rows.length}
-          </div>
           {state.rows.map((r) => (
             <div className="ledger" key={r.asset}>
               <span className={r.outcome === 'Up' ? 'up' : 'down'}>{r.outcome}</span>
@@ -882,18 +917,62 @@ function AutoSellBar({
 function ManualSettingsForm({
   settings,
   onChange,
+  onNote,
 }: {
   settings: ManualSettings;
   onChange: (next: ManualSettings) => void;
+  onNote: (text: string | null) => void;
 }) {
   const setRule = (index: number, patch: Partial<{ maxPrice: number; shares: number }>) => {
     const rules = settings.sizeRules.map((r, i) => (i === index ? { ...r, ...patch } : r));
     onChange({ ...settings, sizeRules: rules });
   };
 
+  /** Rule settings have to reach the native side, not just the store. */
+  const push = (next: ManualSettings) => {
+    onChange(next);
+    void PolyBot.autoSellUpdate({
+      enabled: next.autoSellEnabled,
+      ladder: next.autoSellLadder,
+      retryEverySec: next.autoSellRetrySec,
+      rebuyEnabled: next.autoRebuyEnabled,
+      rebuyDropPct: next.autoRebuyDropPct,
+    }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
+  };
+
+  const setRung = (index: number, value: string) => {
+    const cents = Number(value.replace(',', '.'));
+    if (!Number.isFinite(cents)) return;
+    push({
+      ...settings,
+      autoSellLadder: settings.autoSellLadder.map((r, i) =>
+        i === index ? cents / 100 : r,
+      ),
+    });
+  };
+
   return (
+    <>
     <div className="card">
       <h2>Покупка по клику</h2>
+
+      <label className="field">
+        <span>Доля баланса на клик, %</span>
+        <input
+          type="number"
+          value={String(Math.round(settings.balanceSharePct * 100))}
+          onChange={(e) =>
+            onChange({
+              ...settings,
+              balanceSharePct: Number(e.target.value.replace(',', '.')) / 100,
+            })
+          }
+        />
+        <span className="muted" style={{ fontSize: 11 }}>
+          Работает, когда включён тумблер на панели. Заменяет лесенку размера:
+          сколько бы ни стоила сторона, клик тратит одну и ту же долю кошелька.
+        </span>
+      </label>
 
       <label className="field">
         <span>Сумма по умолчанию, $</span>
@@ -959,13 +1038,35 @@ function ManualSettingsForm({
         </div>
       )}
 
+    </div>
+
+    <div className="card">
+      <h2>Автопродажа</h2>
+      <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
+        Цена продажи по минуте окна. Лесенка перепрыгивает вперёд, если рынок
+        уже прошёл ступень, и никогда не спускается обратно.
+      </div>
+      <div className="rungs">
+        {settings.autoSellLadder.map((price, i) => (
+          <label className="rung" key={i}>
+            <span>{i + 1}м</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={String(Math.round(price * 100))}
+              onChange={(e) => setRung(i, e.target.value)}
+            />
+          </label>
+        ))}
+      </div>
+
       <label className="field" style={{ marginTop: 12 }}>
-        <span>Повтор автопродажи, сек</span>
+        <span>Повтор, сек</span>
         <input
           type="number"
           value={String(settings.autoSellRetrySec)}
           onChange={(e) =>
-            onChange({
+            push({
               ...settings,
               autoSellRetrySec: Number(e.target.value.replace(',', '.')),
             })
@@ -976,6 +1077,26 @@ function ManualSettingsForm({
           попытку, пока биржа не примет ордер.
         </span>
       </label>
+
+      <label className="field">
+        <span>Автодокуп при падении на, %</span>
+        <input
+          type="number"
+          value={String(Math.round(settings.autoRebuyDropPct * 100))}
+          onChange={(e) =>
+            push({
+              ...settings,
+              autoRebuyDropPct: Number(e.target.value.replace(',', '.')) / 100,
+            })
+          }
+        />
+        <span className="muted" style={{ fontSize: 11 }}>
+          Считаются только продажи, выставленные самим правилом: позиция
+          уменьшается и когда вы продаёте руками, а выкупать это обратно —
+          противоположное тому, что вы имели в виду.
+        </span>
+      </label>
     </div>
+    </>
   );
 }

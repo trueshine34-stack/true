@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_MANUAL_SETTINGS,
+  balanceShares,
   limitShares,
   sharesFor,
   type ManualSettings,
@@ -106,5 +107,38 @@ describe('limitShares', () => {
   it('does not divide by a nonsense price', () => {
     expect(limitShares(0)).toBe(5);
     expect(limitShares(Number.NaN)).toBe(5);
+  });
+});
+
+describe('balanceShares', () => {
+  it('spends the set share of the wallet', () => {
+    // 25% of $40 is $10, which at 50c is twenty shares.
+    expect(balanceShares(0.5, 40, 0.25)).toBe(20);
+    expect(balanceShares(0.25, 40, 0.25)).toBe(40);
+  });
+
+  it('buys more of a cheap side for the same money', () => {
+    const dear = balanceShares(0.8, 40, 0.25)!;
+    const cheap = balanceShares(0.2, 40, 0.25)!;
+    expect(cheap).toBe(dear * 4);
+    // The money spent is the same either way — that is the point.
+    expect(dear * 0.8).toBeCloseTo(cheap * 0.2, 9);
+  });
+
+  it('refuses rather than quietly overspending the share', () => {
+    // 25% of $4 is $1, which at 50c is two shares — under the venue floor.
+    // Rounding up to five would spend $2.50, more than double the rule.
+    expect(balanceShares(0.5, 4, 0.25)).toBeNull();
+  });
+
+  it('has nothing to say without a balance or a price', () => {
+    expect(balanceShares(0.5, 0, 0.25)).toBeNull();
+    expect(balanceShares(0, 40, 0.25)).toBeNull();
+    expect(balanceShares(Number.NaN, 40, 0.25)).toBeNull();
+  });
+
+  it('honours a different floor', () => {
+    expect(balanceShares(0.5, 40, 0.25, 25)).toBeNull();
+    expect(balanceShares(0.5, 40, 0.25, 20)).toBe(20);
   });
 });

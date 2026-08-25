@@ -26,6 +26,10 @@ export type ManualSettings = {
   autoRebuyEnabled: boolean;
   /** How far below the sale price the buy-back triggers, as a fraction. */
   autoRebuyDropPct: number;
+  /** Size a click off the wallet instead of the price ladder. */
+  useBalanceShare: boolean;
+  /** Share of the balance one click spends, as a fraction. */
+  balanceSharePct: number;
 };
 
 export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
@@ -42,7 +46,30 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellRetrySec: 7,
   autoRebuyEnabled: false,
   autoRebuyDropPct: 0.2,
+  useBalanceShare: false,
+  balanceSharePct: 0.25,
 };
+
+/**
+ * Shares a click buys when sizing off the wallet.
+ *
+ * Returns null when the share of the balance cannot even reach the venue's
+ * floor — the caller has to decide whether to round up and say so or refuse,
+ * and silently spending more than the set share would be the wrong call to make
+ * here.
+ */
+export function balanceShares(
+  price: number,
+  balanceUsd: number,
+  sharePct: number,
+  minimumOrderSize = 5,
+): number | null {
+  if (!Number.isFinite(price) || price <= 0) return null;
+  if (!Number.isFinite(balanceUsd) || balanceUsd <= 0) return null;
+
+  const shares = (balanceUsd * sharePct) / price;
+  return shares >= minimumOrderSize ? shares : null;
+}
 
 /**
  * Default size for a hand-placed limit buy.

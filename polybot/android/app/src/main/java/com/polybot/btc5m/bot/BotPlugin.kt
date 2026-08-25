@@ -780,6 +780,34 @@ class BotPlugin : Plugin() {
         )
     }
 
+    // ---------------------------------------------------------------- vault
+
+    @PluginMethod
+    fun vaultStore(call: PluginCall) {
+        val privateKey = call.getString("privateKey")
+        if (privateKey.isNullOrEmpty()) {
+            call.reject("privateKey required")
+            return
+        }
+        try {
+            KeyVault.store(context, privateKey)
+            call.resolve()
+        } catch (e: Exception) {
+            call.reject(e.message ?: "не удалось сохранить ключ")
+        }
+    }
+
+    @PluginMethod
+    fun vaultLoad(call: PluginCall) {
+        call.resolve(JSObject().put("privateKey", KeyVault.load(context)))
+    }
+
+    @PluginMethod
+    fun vaultClear(call: PluginCall) {
+        KeyVault.clear(context)
+        call.resolve()
+    }
+
     // --------------------------------------------------------- manual desk
 
     /**
@@ -838,6 +866,16 @@ class BotPlugin : Plugin() {
                 }
                 val out = JSArray()
                 DataApi.positions(session.account.funderAddress).forEach {
+                    // While the data API is still indexing a fresh trade it
+                    // reports the size but no cost basis, which would show as a
+                    // purchase at zero and a profit equal to the whole position.
+                    val local = if (it.avgPrice > 0.0) null else LocalFills.avgFor(it.asset)
+                    val avg = local ?: it.avgPrice
+                    val pnl = if (local != null) {
+                        (it.curPrice - local) * it.size
+                    } else {
+                        it.cashPnl
+                    }
                     out.put(
                         JSObject()
                             .put("asset", it.asset)
@@ -845,9 +883,9 @@ class BotPlugin : Plugin() {
                             .put("title", it.title)
                             .put("outcome", it.outcome)
                             .put("size", it.size)
-                            .put("avgPrice", it.avgPrice)
+                            .put("avgPrice", avg)
                             .put("curPrice", it.curPrice)
-                            .put("cashPnl", it.cashPnl)
+                            .put("cashPnl", pnl)
                             .put("redeemable", it.redeemable),
                     )
                 }

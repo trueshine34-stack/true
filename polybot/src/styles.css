@@ -1176,3 +1176,30 @@ button.compact.narrow {
   padding-top: 8px;
   border-top: 1px solid var(--line);
 }
+
+/* One rule per line: switch, name, and what it is currently doing. */
+.rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+
+.rule + .rule {
+  border-top: 1px solid var(--line);
+}
+
+.rule-name {
+  flex: 0 0 auto;
+}
+
+.rule-note {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
