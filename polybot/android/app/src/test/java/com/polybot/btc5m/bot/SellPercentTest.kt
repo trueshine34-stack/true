@@ -102,6 +102,16 @@ class SellPercentTest {
     }
 
     @Test
+    fun aPositionWithNoKnownCostAsksForACent() {
+        // This is why the rule must not call it at all until the average is
+        // known: data-api reports a fresh position with its size already right
+        // and its cost basis still at zero, and a margin over zero is the tick
+        // floor — which sells the position for nothing.
+        assertEquals(tick, SellPercent.targetPrice(0.0, 0.2, tick), 1e-9)
+        assertEquals(tick, SellPercent.breakEven(0.0, tick), 1e-9)
+    }
+
+    @Test
     fun slicesFollowTheClipsThePositionWasBuiltFrom() {
         assertEquals(5.0, SellPercent.sliceSize(15.0, 5.0, 5.0), 1e-9)
         // Nothing is left behind that the venue would refuse to sell.

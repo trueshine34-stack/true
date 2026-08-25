@@ -397,18 +397,25 @@ class AutoSell(
             val ladderTarget = settings.ladder.getOrElse(rung.step) { settings.ladder.last() }
 
             // In percent mode the price comes from what the position cost, so
-            // it is worked out per position rather than per minute.
-            val target = if (settings.percentMode && meta != null) {
+            // it is worked out per position rather than per minute. Null means
+            // the cost is not known yet, and a price cannot be invented.
+            val percentPrice = if (settings.percentMode && meta != null) {
                 percentTarget(position, open, meta, windowStart)
             } else {
-                ladderTarget
+                null
             }
+            val target = if (settings.percentMode) percentPrice ?: 0.0 else ladderTarget
 
             val status = when {
                 meta == null -> "нет данных рынка"
                 meta.closed || !meta.acceptingOrders -> "рынок закрыт"
                 mine < meta.minimumOrderSize -> "у бота"
-                settings.percentMode -> reconcilePercent(position, open, meta, target, mine)
+                // Waiting for the average, not failing: data-api reports a fresh
+                // position with its size already right and its cost basis still
+                // at zero, and pricing a margin off zero asks a cent.
+                settings.percentMode && percentPrice == null -> "ждём среднюю цену"
+                settings.percentMode ->
+                    reconcilePercent(position, open, meta, percentPrice!!, mine)
                 else -> reconcile(position, open, meta, target, mine)
             }
             // Covered, settled, or the bot's: nothing left to chase here.
@@ -685,7 +692,15 @@ class AutoSell(
         open: List<ClobApi.OpenOrder>,
         meta: ClobApi.MarketMeta,
         windowStart: Long,
-    ): Double {
+    ): Double? {
+        // Everything here is measured from what the position cost, so without
+        // that number there is no price to ask — least of all the tick floor,
+        // which is what solving for a margin over zero produces. The app's own
+        // record of its fills covers the gap while data-api indexes the trade.
+        val avgPrice = position.avgPrice.takeIf { it > 0.0 }
+            ?: LocalFills.avgFor(position.asset)
+            ?: return null
+
         val resting = open
             .filter { it.assetId == position.asset && it.side == "SELL" }
             .maxByOrNull { it.price }
@@ -706,7 +721,7 @@ class AutoSell(
         }
 
         return SellPercent.priceFor(
-            avgPrice = position.avgPrice,
+            avgPrice = avgPrice,
             gain = settings.profitPct,
             tick = meta.tickSize,
             resting = resting,

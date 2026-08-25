@@ -11,6 +11,7 @@ import {
   type ManualSettings,
 } from '../core/manual';
 import { findLevels } from '../core/levels';
+import { pairOrders, realised } from '../core/trades';
 import {
   SELL_GAINS,
   positionPnl,
@@ -40,6 +41,13 @@ import {
 } from '../native/polybot';
 
 const cents = (p: number) => `${Math.round(p * 100)}¢`;
+
+/** A window's opening time, which is how an event is named on this screen. */
+const clockOf = (windowStart: number) =>
+  new Date(windowStart * 1000).toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
 /** "12с назад" — enough to tell a working poll from a stalled one. */
 const ago = (at: number) => {
@@ -225,6 +233,10 @@ export function Manual() {
   useEffect(() => {
     setViewWindow(null);
   }, [windowStart]);
+
+  /** The window's orders, paired into trades: a buy and the sell that closed it. */
+  const trades = useMemo(() => pairOrders(logged), [logged]);
+  const realisedPnl = useMemo(() => realised(trades), [trades]);
 
   /** The window the desk is trading: this one, or the one after it. */
   const deskWindow = lookAhead ? windowStart + WINDOW_SEC : windowStart;
@@ -694,15 +706,30 @@ export function Manual() {
         <>
           <div className="card tight">
             <div className="listhead">
-              <span>Позиции</span>
-              <button
-                className="linkbtn"
-                onClick={() => setShowHistory((v) => !v)}
-              >
-                {showHistory ? 'скрыть' : `история ${history.length || ''}`}
-              </button>
+              <span>{viewWindow != null ? `Событие ${clockOf(viewWindow)}` : 'Позиции'}</span>
+              {viewWindow != null ? (
+                <button className="linkbtn" onClick={() => setViewWindow(null)}>
+                  к текущему
+                </button>
+              ) : (
+                <button
+                  className="linkbtn"
+                  onClick={() => setShowHistory((v) => !v)}
+                >
+                  {showHistory ? 'скрыть' : `история ${history.length || ''}`}
+                </button>
+              )}
             </div>
-            {showHistory ? (
+            {/*
+              A closed window's positions are gone from the exchange; what is
+              left is what was archived when it closed. Showing the live ones
+              under a past event would attribute this window's money to it.
+            */}
+            {viewWindow != null ? (
+              <PositionHistory
+                records={history.filter((r) => r.windowStart === viewWindow)}
+              />
+            ) : showHistory ? (
               <PositionHistory records={history} />
             ) : livePositions.length === 0 ? (
               <div className="muted empty">Открытых позиций нет</div>
@@ -758,36 +785,64 @@ export function Manual() {
             )}
 
             <div className="listhead second">
-              <span>Ордера окна</span>
-              <span className="muted">
-                {logged.length > 0
-                  ? `${logged.filter((o) => o.status === 'filled').length} из ${logged.length}`
-                  : ''}
+              <span>Сделки окна</span>
+              <span className={realisedPnl >= 0 ? 'up sessum' : 'down sessum'}>
+                {trades.some((t) => t.status === 'closed') ? signedUsd(realisedPnl) : ''}
               </span>
             </div>
-            {logged.length === 0 ? (
-              <div className="muted empty">В этом окне ордеров не было</div>
+            {trades.length === 0 ? (
+              <div className="muted empty">В этом окне сделок не было</div>
             ) : (
-              logged.slice(0, 6).map((o) => {
-                const pending = o.status === 'resting' || o.status === 'partial';
-                const live = orders.find((x) => x.id === o.orderId);
+              trades.slice(0, 8).map((t) => {
+                const live = t.orderId
+                  ? orders.find((x) => x.id === t.orderId)
+                  : undefined;
                 return (
-                  <div className={`listrow static order-${o.status}`} key={o.id}>
-                    <span className={o.action === 'BUY' ? 'up tag-side' : 'down tag-side'}>
-                      {o.action === 'BUY' ? 'ПОК' : 'ПРО'}
+                  <div className={`listrow static trade trade-${t.status}`} key={t.key}>
+                    <span className={t.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
+                      {t.outcome}
+                      {t.auto && <span className="muted"> а</span>}
                     </span>
                     <span className="listrow-main">
-                      {usd(o.size * o.price)}
+                      {/*
+                        The round on one line: what it cost, what it fetched.
+                        An arrow with nothing after it is a buy still looking
+                        for its exit, which is a state worth seeing at a glance.
+                      */}
+                      {t.buyPrice != null ? usd(t.shares * t.buyPrice) : '—'}
+                      <span className="arrow">→</span>
+                      {t.sellPrice != null ? (
+                        usd(t.shares * t.sellPrice)
+                      ) : (
+                        <span className="muted">
+                          {t.status === 'buying' ? 'ждёт' : '…'}
+                        </span>
+                      )}
                       <span className="sub muted">
-                        {o.size.toFixed(1)} × {cents(o.price)}
-                        {o.status === 'partial'
-                          ? ` · ${usd(o.matched * o.price)}`
-                          : ''}
+                        {t.shares.toFixed(1)} ·{' '}
+                        {t.buyPrice != null ? cents(t.buyPrice) : '—'}
+                        {t.sellPrice != null ? ` → ${cents(t.sellPrice)}` : ''}
                       </span>
                     </span>
-                    <span className="muted listrow-now">
-                      {o.outcome}
-                      {o.auto ? ' ·а' : ''}
+                    <span
+                      className={`listrow-pnl ${
+                        t.pnl == null
+                          ? 'muted'
+                          : t.pnl >= 0
+                            ? 'up'
+                            : 'down'
+                      }`}
+                    >
+                      {t.pnl == null ? '—' : signedUsd(t.pnl)}
+                      <span className="sub">
+                        {t.pnl == null || t.pct == null
+                          ? t.status === 'buying'
+                            ? 'лимитка'
+                            : 'открыта'
+                          : t.status === 'pending'
+                            ? 'ждёт'
+                            : signedPct(t.pct)}
+                      </span>
                     </span>
                     {live ? (
                       <button
@@ -801,7 +856,6 @@ export function Manual() {
                     ) : (
                       <span className="orderdot" aria-hidden />
                     )}
-                    {!live && !pending && <span className="sr-only">{o.status}</span>}
                   </div>
                 );
               })
@@ -1063,12 +1117,6 @@ function EventStrip({
   selected: number | null;
   onSelect: (windowStart: number | null) => void;
 }) {
-  const clock = (at: number) =>
-    new Date(at * 1000).toLocaleTimeString('ru-RU', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
   const past = events.filter((e) => e.windowStart !== windowStart);
   const live = events.find((e) => e.windowStart === windowStart);
 
@@ -1101,10 +1149,10 @@ function EventStrip({
               e.winner === 'Up' ? ' win-up' : e.winner === 'Down' ? ' win-down' : ''
             }`}
             onClick={() => onSelect(selected === e.windowStart ? null : e.windowStart)}
-            title={`${clock(e.windowStart)} · закрытие ${e.winner || '—'}`}
+            title={`${clockOf(e.windowStart)} · закрытие ${e.winner || '—'}`}
           >
             <span className="eventchip-time">
-              {clock(e.windowStart)}
+              {clockOf(e.windowStart)}
               {e.winner && <b>{e.winner === 'Up' ? '↑' : '↓'}</b>}
             </span>
             <span className={e.pnl >= 0 ? 'up' : 'down'}>{signedUsd(e.pnl)}</span>

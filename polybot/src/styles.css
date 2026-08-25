@@ -1606,3 +1606,44 @@ button.pill.balance {
 .spanrow button {
   flex: 1;
 }
+
+/*
+ * A trade is a buy and the sell that closed it, on one line. Four rows for two
+ * round trips left the arithmetic — did that make anything? — to be done in
+ * your head from prices that were not next to each other.
+ */
+.listrow.trade {
+  align-items: center;
+}
+
+.listrow.trade .arrow {
+  color: var(--muted);
+  margin: 0 5px;
+  font-size: 12px;
+}
+
+/* Still offered, not yet paid: the amber of a pending order elsewhere. */
+.listrow.trade-pending .listrow-pnl {
+  opacity: 0.75;
+}
+
+.listrow.trade-pending {
+  border-left: 2px solid var(--warn);
+  padding-left: 6px;
+}
+
+.listrow.trade-closed {
+  border-left: 2px solid var(--up);
+  padding-left: 6px;
+}
+
+.listrow.trade-open,
+.listrow.trade-buying {
+  border-left: 2px solid var(--line);
+  padding-left: 6px;
+}
+
+/* The side never wraps: it is one word and a marker, and it names the row. */
+.listrow.trade .tag-side {
+  white-space: nowrap;
+}
