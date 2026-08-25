@@ -199,6 +199,19 @@ export function Manual() {
     return ask == null ? null : { ask, shares: sharesFor(ask, settings, minSize) };
   };
 
+  /**
+   * Where the current five-minute window opened, in GMX's own series. It is
+   * the level the window turns on, so it belongs in the header next to the
+   * price rather than only as a line on the chart.
+   */
+  const windowOpen = useMemo(() => {
+    if (candles.length === 0) return null;
+    const start = Math.floor(candles[candles.length - 1].time / WINDOW_SEC) * WINDOW_SEC;
+    return candles.find((c) => c.time >= start)?.open ?? null;
+  }, [candles]);
+
+  const drift = spot != null && windowOpen != null ? spot - windowOpen : null;
+
   const secondsLeft = market?.windowEnd
     ? Math.max(0, market.windowEnd - Math.floor(now / 1000))
     : null;
@@ -309,9 +322,24 @@ export function Manual() {
               {spot != null ? `$${spot.toFixed(0)}` : '—'}
             </div>
           </div>
+          <div style={{ textAlign: 'center' }}>
+            <div className="muted" style={{ fontSize: 10 }}>
+              открытие 5м
+            </div>
+            <div className="deskprice small">
+              {windowOpen != null ? windowOpen.toFixed(0) : '—'}
+              {drift != null && (
+                <span className={drift >= 0 ? 'up' : 'down'}>
+                  {' '}
+                  {drift >= 0 ? '+' : '−'}
+                  {Math.abs(drift).toFixed(0)}
+                </span>
+              )}
+            </div>
+          </div>
           <div style={{ textAlign: 'right' }}>
             <div className="muted" style={{ fontSize: 10 }}>
-              до конца окна
+              до конца
             </div>
             <div className="deskprice">
               {secondsLeft == null
@@ -327,7 +355,7 @@ export function Manual() {
             ⚙
           </button>
         </div>
-        <Chart candles={candles} spot={spot} />
+        <Chart candles={candles} spot={spot} windowOpen={windowOpen} />
       </div>
 
       {tab === 'settings' ? (
@@ -506,7 +534,15 @@ export function Manual() {
  * after it is the move that decides Up or Down. The price itself is GMX's own
  * oracle — close to the settlement feed but not it, so nothing here is a strike.
  */
-function Chart({ candles, spot }: { candles: GmxCandle[]; spot: number | null }) {
+function Chart({
+  candles,
+  spot,
+  windowOpen,
+}: {
+  candles: GmxCandle[];
+  spot: number | null;
+  windowOpen: number | null;
+}) {
   const levels = useMemo(() => findLevels(candles), [candles]);
 
   const view = useMemo(() => {
@@ -529,15 +565,15 @@ function Chart({ candles, spot }: { candles: GmxCandle[]; spot: number | null })
     const windowStart =
       Math.floor(candles[candles.length - 1].time / WINDOW_SEC) * WINDOW_SEC;
     const openIndex = candles.findIndex((c) => c.time >= windowStart);
-    const openPrice = openIndex >= 0 ? candles[openIndex].open : null;
 
-    return { W, H, lo, hi, step, y, openIndex, openPrice };
+    return { W, H, lo, hi, step, y, openIndex };
   }, [candles, spot]);
 
   if (!view) {
     return <div className="chart-empty muted">График загружается…</div>;
   }
-  const { W, H, lo, hi, step, y, openIndex, openPrice } = view;
+  const { W, H, lo, hi, step, y, openIndex } = view;
+  const openPrice = windowOpen;
   const inView = (p: number) => p > lo && p < hi;
 
   const visible = levels.filter((l) => inView(l.price));
@@ -620,6 +656,13 @@ function Chart({ candles, spot }: { candles: GmxCandle[]; spot: number | null })
       {openPrice != null && inView(openPrice) && (
         <span className="chart-tag open" style={{ top: `${(y(openPrice) / H) * 100}%` }}>
           окно {openPrice.toFixed(0)}
+          {spot != null && (
+            <b className={spot >= openPrice ? 'up' : 'down'}>
+              {' '}
+              {spot >= openPrice ? '+' : '−'}
+              {Math.abs(spot - openPrice).toFixed(0)}
+            </b>
+          )}
         </span>
       )}
     </div>

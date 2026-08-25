@@ -682,6 +682,15 @@ button.stat.quote:active {
   border-color: var(--accent);
 }
 
+.deskprice.small {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.chart-tag.open b {
+  font-weight: 600;
+}
+
 .deskprice {
   font-size: 19px;
   font-weight: 700;
