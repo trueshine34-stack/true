@@ -24,6 +24,8 @@ export type ManualSettings = {
   autoSellRetrySec: number;
   /** How long to keep trying on one purchase before giving up. */
   autoSellWatchSec: number;
+  /** How far ahead of each minute the next rung takes over. */
+  autoSellLeadSec: number;
   /** Buy the same size back if the price falls far enough after a sale. */
   autoRebuyEnabled: boolean;
   /** How far below the sale price the buy-back triggers, as a fraction. */
@@ -49,6 +51,7 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellLadder: [0.77, 0.84, 0.89, 0.93, 0.97],
   autoSellRetrySec: 7,
   autoSellWatchSec: 60,
+  autoSellLeadSec: 15,
   autoRebuyEnabled: false,
   autoRebuyDropPct: 0.2,
   autoRebuySlicePauseSec: 3,

@@ -121,6 +121,7 @@ export function Manual() {
           rebuyDropPct: stored.autoRebuyDropPct,
           watchSec: stored.autoSellWatchSec,
           rebuySlicePauseSec: stored.autoRebuySlicePauseSec,
+          ladderLeadSec: stored.autoSellLeadSec,
         }).catch(() => {});
       }
     });
@@ -315,6 +316,7 @@ export function Manual() {
               rebuyDropPct: settingsRef.current.autoRebuyDropPct,
               watchSec: settingsRef.current.autoSellWatchSec,
               rebuySlicePauseSec: settingsRef.current.autoRebuySlicePauseSec,
+              ladderLeadSec: settingsRef.current.autoSellLeadSec,
             }).catch(() => {});
           }
         })
@@ -1022,6 +1024,7 @@ function RuleBar({
         rebuyDropPct: next.autoRebuyDropPct,
         watchSec: next.autoSellWatchSec,
         rebuySlicePauseSec: next.autoRebuySlicePauseSec,
+        ladderLeadSec: next.autoSellLeadSec,
       }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
     },
     [onChange, onNote],
@@ -1265,9 +1268,30 @@ function ManualSettingsForm({
     <div className="card">
       <h2>Автопродажа</h2>
       <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
-        Цена продажи по минуте окна. Лесенка перепрыгивает вперёд, если рынок
-        уже прошёл ступень, и никогда не спускается обратно.
+        Цена продажи по минуте окна: ступень встаёт на {settings.autoSellLeadSec}{' '}
+        секунд раньше самой минуты. Лесенка перепрыгивает вперёд, если рынок уже
+        прошёл ступень, и никогда не спускается обратно.
       </div>
+      <label className="field">
+        <span>Переключать ступень за, сек до минуты</span>
+        <input
+          type="number"
+          value={String(settings.autoSellLeadSec)}
+          onChange={(e) =>
+            push({
+              ...settings,
+              autoSellLeadSec: Number(e.target.value.replace(',', '.')),
+            })
+          }
+        />
+        <span className="muted" style={{ fontSize: 11 }}>
+          Ступень, меняющаяся ровно на минуте, выставляет заявку в стакан ровно
+          тогда, когда он переворачивается. Пятнадцать секунд форы ставят
+          предложение раньше. Шаг между ступенями остаётся минутным — сдвигается
+          вся последовательность.
+        </span>
+      </label>
+
       <div className="rungs">
         {settings.autoSellLadder.map((price, i) => (
           <label className="rung" key={i}>

@@ -232,6 +232,7 @@ export interface PolyBotPlugin {
     rebuyDropPct?: number;
     watchSec?: number;
     rebuySlicePauseSec?: number;
+    ladderLeadSec?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
   addListener(

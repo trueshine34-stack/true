@@ -12,8 +12,9 @@ class SellLadderTest {
 
     @Test
     fun theClockWalksItUpOneRungAMinute() {
+        // Each rung takes over fifteen seconds before its minute, so by the
+        // minute itself it is already in place.
         assertEquals(0.77, SellLadder.priceFor(0, null, ladder), 1e-9)
-        assertEquals(0.77, SellLadder.priceFor(59, null, ladder), 1e-9)
         assertEquals(0.84, SellLadder.priceFor(60, null, ladder), 1e-9)
         assertEquals(0.89, SellLadder.priceFor(120, null, ladder), 1e-9)
         assertEquals(0.93, SellLadder.priceFor(180, null, ladder), 1e-9)
@@ -32,6 +33,13 @@ class SellLadderTest {
         // next sell goes out at 84 rather than waiting for the clock.
         assertEquals(0.84, SellLadder.priceFor(10, 0.78, ladder), 1e-9)
         assertEquals(1, SellLadder.stepFor(10, 0.78, ladder))
+    }
+
+    @Test
+    fun theCustomLadderBoundariesAlsoLeadTheMinute() {
+        val short = listOf(0.50, 0.90)
+        assertEquals(0.50, SellLadder.priceFor(44, null, short), 1e-9)
+        assertEquals(0.90, SellLadder.priceFor(45, null, short), 1e-9)
     }
 
     @Test
@@ -117,5 +125,57 @@ class SellLadderBeforeStartTest {
     fun priceStillOverridesTheClockBeforeTheStart() {
         // A pre-open position whose price already cleared the first rung.
         assertEquals(0.84, SellLadder.priceFor(-30, 0.80, ladder), 1e-9)
+    }
+}
+
+/**
+ * The rung changes a little before the minute, not on it.
+ *
+ * Flipping exactly on the boundary puts the replacement order into the book at
+ * the moment it turns; arriving fifteen seconds early gets the offer in place
+ * first. Spacing stays one minute — the whole sequence just shifts.
+ */
+class SellLadderLeadTest {
+
+    private val ladder = SellLadder.DEFAULT
+
+    @Test
+    fun eachRungArrivesFifteenSecondsEarly() {
+        assertEquals(0.77, SellLadder.priceFor(44, null, ladder), 1e-9)
+        assertEquals(0.84, SellLadder.priceFor(45, null, ladder), 1e-9)
+
+        assertEquals(0.84, SellLadder.priceFor(104, null, ladder), 1e-9)
+        assertEquals(0.89, SellLadder.priceFor(105, null, ladder), 1e-9)
+
+        assertEquals(0.93, SellLadder.priceFor(224, null, ladder), 1e-9)
+        assertEquals(0.97, SellLadder.priceFor(225, null, ladder), 1e-9)
+    }
+
+    @Test
+    fun theSpacingIsStillAMinute() {
+        val changes = (0..300).filter {
+            SellLadder.stepFor(it.toLong(), null, ladder) !=
+                SellLadder.stepFor((it - 1).toLong(), null, ladder)
+        }
+        assertEquals(listOf(45, 105, 165, 225), changes)
+    }
+
+    @Test
+    fun theLeadIsAdjustable() {
+        assertEquals(0.77, SellLadder.priceFor(59, null, ladder, leadSec = 0), 1e-9)
+        assertEquals(0.84, SellLadder.priceFor(60, null, ladder, leadSec = 0), 1e-9)
+        assertEquals(0.84, SellLadder.priceFor(30, null, ladder, leadSec = 30), 1e-9)
+    }
+
+    @Test
+    fun theLeadDoesNotOpenTheLadderEarlyBeforeTheWindow() {
+        // Fifteen seconds before the window opens is still the first rung.
+        assertEquals(0.77, SellLadder.priceFor(-15, null, ladder), 1e-9)
+        assertEquals(0.77, SellLadder.priceFor(-60, null, ladder), 1e-9)
+    }
+
+    @Test
+    fun itStillStopsAtTheTopRung() {
+        assertEquals(0.97, SellLadder.priceFor(299, null, ladder), 1e-9)
     }
 }

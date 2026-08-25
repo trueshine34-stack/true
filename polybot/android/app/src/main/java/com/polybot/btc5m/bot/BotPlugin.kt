@@ -1047,6 +1047,7 @@ class BotPlugin : Plugin() {
             watchSec = call.getInt("watchSec") ?: defaults.watchSec,
             rebuySlicePauseSec = call.getInt("rebuySlicePauseSec")
                 ?: defaults.rebuySlicePauseSec,
+            ladderLeadSec = call.getInt("ladderLeadSec") ?: defaults.ladderLeadSec,
         )
         if (next.enabled && !engine.isConfigured()) {
             call.reject("Сначала подключите кошелёк")
