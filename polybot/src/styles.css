@@ -1203,3 +1203,16 @@ button.compact.narrow {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* A text button that reads as a link, for secondary actions in list headers. */
+.linkbtn {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 0;
+  cursor: pointer;
+}

@@ -61,6 +61,9 @@ class AutoSell(
         val restingPrice: Double?,
         val status: String,
         val attempts: Int,
+        /** When the last attempt on this position ran, and what came back. */
+        val lastTryAt: Long,
+        val lastError: String?,
         /** Rung the ladder is on for this position, and its price. */
         val step: Int,
         val target: Double,
@@ -78,11 +81,18 @@ class AutoSell(
     var lastSweepAt: Long = 0
         private set
 
+    /** Why the last sweep could not run at all, if it could not. */
+    @Volatile
+    var lastFault: String? = null
+        private set
+
     val rows = CopyOnWriteArrayList<Row>()
 
     private var scope: CoroutineScope? = null
     private var job: Job? = null
     private val attempts = HashMap<String, Int>()
+    private val lastTry = HashMap<String, Long>()
+    private val lastError = HashMap<String, String?>()
     private val metaCache = HashMap<String, Pair<Long, ClobApi.MarketMeta>>()
 
     /** Per-outcome ladder state, reset when the window rolls. */
@@ -133,7 +143,9 @@ class AutoSell(
                 try {
                     sweep()
                 } catch (e: Exception) {
+                    lastFault = e.message ?: "сбой обхода"
                     engine.log("error", "Автопродажа: ${e.message}")
+                    onStateChanged()
                 }
                 delay(settings.retryEverySec.coerceAtLeast(1) * 1000L)
             }
@@ -175,12 +187,19 @@ class AutoSell(
     }
 
     private fun sweep() {
-        val session = engine.session() ?: return
+        val session = engine.session()
+        if (session == null) {
+            lastFault = "кошелёк не подключён"
+            rows.clear()
+            onStateChanged()
+            return
+        }
         val positions = DataApi.positions(session.account.funderAddress)
         val open = ClobApi.openOrders(session.creds, session.account.signerAddress)
         val now = Clock.nowSec()
         val windowStart = now - SellLadder.elapsedInWindow(now)
         lastSweepAt = System.currentTimeMillis()
+        lastFault = null
 
         val next = ArrayList<Row>()
         for (position in positions) {
@@ -208,6 +227,8 @@ class AutoSell(
         val live = next.map { it.asset }.toSet()
         attempts.keys.retainAll(live)
         rungs.keys.retainAll(live)
+        lastTry.keys.retainAll(live)
+        lastError.keys.retainAll(live)
         rows.clear()
         rows.addAll(next)
         onStateChanged()
@@ -407,6 +428,8 @@ class AutoSell(
             restingPrice = sells.firstOrNull()?.price,
             status = status,
             attempts = attempts[position.asset] ?: 0,
+            lastTryAt = lastTry[position.asset] ?: 0L,
+            lastError = lastError[position.asset],
             step = step,
             target = target,
         )
@@ -414,6 +437,7 @@ class AutoSell(
 
     private fun tryPlace(position: Position, size: Double, price: Double): String {
         attempts[position.asset] = (attempts[position.asset] ?: 0) + 1
+        lastTry[position.asset] = System.currentTimeMillis()
 
         return try {
             val result = engine.placeManualOrder(
@@ -426,16 +450,21 @@ class AutoSell(
             )
             if (result.success) {
                 attempts.remove(position.asset)
+                lastError.remove(position.asset)
                 result.orderId?.let {
                     placed[it] = Placed(position.asset, position.conditionId, price, size)
                 }
                 "выставлено"
             } else {
                 // Almost always "shares not sellable yet"; the next sweep retries.
-                result.error ?: "отказ CLOB"
+                val reason = result.error ?: "отказ CLOB"
+                lastError[position.asset] = reason
+                reason
             }
         } catch (e: Exception) {
-            e.message ?: "ошибка сети"
+            val reason = e.message ?: "ошибка сети"
+            lastError[position.asset] = reason
+            reason
         }
     }
 

@@ -258,6 +258,9 @@ export type AutoSellRow = {
   restingPrice?: number | null;
   status: string;
   attempts: number;
+  /** When the last attempt on this position ran, and what came back. */
+  lastTryAt: number;
+  lastError?: string | null;
   /** Rung of the ladder this position is on, and the price it asks. */
   step: number;
   target: number;
@@ -276,6 +279,8 @@ export type AutoSellState = {
   ladder: number[];
   retryEverySec: number;
   lastSweepAt: number;
+  /** Why the last sweep could not run at all, if it could not. */
+  lastFault?: string | null;
   rebuyEnabled: boolean;
   rebuyDropPct: number;
   rebuys: AutoSellRebuy[];

@@ -966,6 +966,8 @@ class BotPlugin : Plugin() {
                     .put("restingPrice", it.restingPrice)
                     .put("status", it.status)
                     .put("attempts", it.attempts)
+                    .put("lastTryAt", it.lastTryAt)
+                    .put("lastError", it.lastError)
                     .put("step", it.step)
                     .put("target", it.target),
             )
@@ -990,6 +992,7 @@ class BotPlugin : Plugin() {
                 .put("ladder", ladder)
                 .put("retryEverySec", bot.settings.retryEverySec)
                 .put("lastSweepAt", bot.lastSweepAt)
+                .put("lastFault", bot.lastFault)
                 .put("rebuyEnabled", bot.settings.rebuyEnabled)
                 .put("rebuyDropPct", bot.settings.rebuyDropPct)
                 .put("rebuys", waiting)

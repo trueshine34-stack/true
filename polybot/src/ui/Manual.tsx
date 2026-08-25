@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_MANUAL_SETTINGS,
   balanceShares,
@@ -7,6 +7,11 @@ import {
   type ManualSettings,
 } from '../core/manual';
 import { findLevels } from '../core/levels';
+import {
+  appendPositionHistory,
+  loadPositionHistory,
+  type PositionRecord,
+} from '../core/history';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
 import {
   PolyBot,
@@ -19,6 +24,13 @@ import {
 } from '../native/polybot';
 
 const cents = (p: number) => `${Math.round(p * 100)}¢`;
+
+/** "12с назад" — enough to tell a working poll from a stalled one. */
+const ago = (at: number) => {
+  if (!at) return 'ещё не было';
+  const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
+  return secs < 90 ? `${secs}с назад` : `${Math.round(secs / 60)}м назад`;
+};
 const WINDOW_SEC = 300;
 
 /**
@@ -67,6 +79,8 @@ export function Manual() {
   });
   const [draft, setDraft] = useState<Draft | null>(null);
   const [positions, setPositions] = useState<NativePosition[]>([]);
+  const [history, setHistory] = useState<PositionRecord[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [autoSell, setAutoSell] = useState<AutoSellState>(IDLE_AUTOSELL);
   const [note, setNote] = useState<string | null>(null);
@@ -76,8 +90,26 @@ export function Manual() {
   const [limitSize, setLimitSize] = useState('');
   const [balance, setBalance] = useState<number | null>(null);
 
+  // Read inside pollers that must not re-subscribe every time a setting changes.
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+
   useEffect(() => {
-    void loadManualSettings().then(setSettings);
+    void loadManualSettings().then((stored) => {
+      setSettings(stored);
+      // The rules live in the native service, which starts every process with
+      // them off. Without this the switch would read as on from the store while
+      // nothing was actually sweeping — the toggle looked armed and was not.
+      if (stored.autoSellEnabled) {
+        void PolyBot.autoSellUpdate({
+          enabled: true,
+          ladder: stored.autoSellLadder,
+          retryEverySec: stored.autoSellRetrySec,
+          rebuyEnabled: stored.autoRebuyEnabled,
+          rebuyDropPct: stored.autoRebuyDropPct,
+        }).catch(() => {});
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -87,6 +119,19 @@ export function Manual() {
 
   /** Which five-minute window the clock is in. Changes on the boundary. */
   const windowStart = Math.floor(now / 1000 / WINDOW_SEC) * WINDOW_SEC;
+
+  /**
+   * Only the window being traded. Anything from an earlier one is settled — it
+   * cannot be sold and its price no longer means anything — so it leaves the
+   * list the moment the window turns rather than lingering until the data API
+   * marks it redeemable, which can take minutes.
+   */
+  const livePositions = market
+    ? positions.filter((p) => p.conditionId === market.conditionId)
+    : [];
+  const closedPositions = market
+    ? positions.filter((p) => p.conditionId !== market.conditionId)
+    : positions;
 
   // Chart. Candles are a slow-moving thing between windows, but the moment one
   // rolls the whole picture changes — a new open, a new shaded stretch, levels
@@ -215,7 +260,20 @@ export function Manual() {
     const read = () => {
       void PolyBot.autoSellState()
         .then((s) => {
-          if (!cancelled) setAutoSell(s);
+          if (cancelled) return;
+          setAutoSell(s);
+          // The foreground service can be killed by the system. If the setting
+          // says the rule should be on and the service says it is not, arm it
+          // again rather than leaving a switch that lies.
+          if (s.enabled !== settingsRef.current.autoSellEnabled || (s.enabled && !s.running)) {
+            void PolyBot.autoSellUpdate({
+              enabled: settingsRef.current.autoSellEnabled,
+              ladder: settingsRef.current.autoSellLadder,
+              retryEverySec: settingsRef.current.autoSellRetrySec,
+              rebuyEnabled: settingsRef.current.autoRebuyEnabled,
+              rebuyDropPct: settingsRef.current.autoRebuyDropPct,
+            }).catch(() => {});
+          }
         })
         .catch(() => {});
     };
@@ -226,6 +284,29 @@ export function Manual() {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    void loadPositionHistory().then(setHistory);
+  }, []);
+
+  // Archive what has dropped out of the current window. Keyed by window, so a
+  // position seen on several polls is recorded once.
+  useEffect(() => {
+    if (closedPositions.length === 0) return;
+    const records: PositionRecord[] = closedPositions.map((p) => ({
+      windowStart: windowStart - WINDOW_SEC,
+      conditionId: p.conditionId,
+      outcome: p.outcome,
+      size: p.size,
+      avgPrice: p.avgPrice,
+      lastPrice: p.curPrice,
+      pnlUsd: p.cashPnl,
+    }));
+    void appendPositionHistory(records).then(setHistory);
+    // Only the identity of what closed matters here; re-running on every price
+    // tick would rewrite the same rows continuously.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closedPositions.map((p) => p.asset).join(','), windowStart]);
 
   const apply = useCallback((next: ManualSettings) => {
     setSettings(next);
@@ -449,12 +530,19 @@ export function Manual() {
           <div className="card tight">
             <div className="listhead">
               <span>Позиции</span>
-              <span className="muted">нажать — продать</span>
+              <button
+                className="linkbtn"
+                onClick={() => setShowHistory((v) => !v)}
+              >
+                {showHistory ? 'скрыть' : `история ${history.length || ''}`}
+              </button>
             </div>
-            {positions.length === 0 ? (
+            {showHistory ? (
+              <PositionHistory records={history} />
+            ) : livePositions.length === 0 ? (
               <div className="muted empty">Открытых позиций нет</div>
             ) : (
-              positions.map((p) => (
+              livePositions.map((p) => (
                 <button
                   className="listrow"
                   key={p.asset}
@@ -665,6 +753,38 @@ export function Manual() {
   );
 }
 
+/** Closed positions, newest first, stamped with the window they belonged to. */
+function PositionHistory({ records }: { records: PositionRecord[] }) {
+  if (records.length === 0) {
+    return <div className="muted empty">История пуста</div>;
+  }
+  return (
+    <>
+      {records.slice(0, 20).map((r) => (
+        <div className="listrow static" key={`${r.windowStart}${r.outcome}`}>
+          <span className={r.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
+            {r.outcome}
+          </span>
+          <span className="listrow-main">
+            {r.size.toFixed(1)} × {r.avgPrice > 0 ? cents(r.avgPrice) : '…'}
+          </span>
+          <span className="muted listrow-now">
+            {new Date(r.windowStart * 1000).toLocaleTimeString('ru-RU', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
+          <span className={`listrow-pnl ${r.pnlUsd >= 0 ? 'up' : 'down'}`}>
+            {r.pnlUsd >= 0 ? '+' : '−'}
+            {Math.abs(r.pnlUsd).toFixed(2)}
+          </span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+
 /**
  * One-minute candles from GMX.
  *
@@ -846,9 +966,21 @@ function RuleBar({
           }
         />
         <span className="rule-name">Автопродажа</span>
-        <span className="rule-note muted">
-          {rung != null ? `${Math.round(rung * 100)}¢` : 'лесенка'}
-          {state.rows.length > 0 ? ` · покрыто ${covered}/${state.rows.length}` : ''}
+        <span className={`rule-note ${state.lastFault ? 'down' : 'muted'}`}>
+          {/*
+            A rule that is on but not sweeping used to look identical to one
+            with nothing to do. It now says which it is.
+          */}
+          {!settings.autoSellEnabled
+            ? 'выключена'
+            : state.lastFault
+              ? state.lastFault
+              : !state.running
+                ? 'запускается…'
+                : state.rows.length === 0
+                  ? `нет позиций · проверка ${ago(state.lastSweepAt)}`
+                  : `${rung != null ? `${Math.round(rung * 100)}¢ · ` : ''}` +
+                    `покрыто ${covered}/${state.rows.length} · ${ago(state.lastSweepAt)}`}
         </span>
       </div>
 
@@ -902,9 +1034,13 @@ function RuleBar({
                       ? 'muted'
                       : 'warn'
                 }`}
+                title={r.lastError ?? undefined}
               >
                 {r.status}
-                {r.attempts > 0 && r.status !== 'покрыто' ? ` · ${r.attempts}` : ''}
+                {r.attempts > 0 && r.status !== 'покрыто' ? ` ×${r.attempts}` : ''}
+                {r.lastTryAt > 0 && r.status !== 'покрыто'
+                  ? ` · ${ago(r.lastTryAt)}`
+                  : ''}
               </span>
             </div>
           ))}
