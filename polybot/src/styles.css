@@ -1216,3 +1216,36 @@ button.compact.narrow {
   padding: 0;
   cursor: pointer;
 }
+
+/*
+ * Order log colouring: green once matched, amber while it is still working.
+ * The tint sits on the left edge rather than the whole row — a row of solid
+ * colour per order is a traffic light, not a list you can read.
+ */
+.listrow.order-filled {
+  box-shadow: inset 2px 0 0 var(--up);
+  padding-left: 8px;
+}
+
+.listrow.order-resting,
+.listrow.order-partial {
+  box-shadow: inset 2px 0 0 var(--warn);
+  padding-left: 8px;
+}
+
+.listrow.order-cancelled {
+  opacity: 0.45;
+}
+
+.orderdot {
+  flex: 0 0 30px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

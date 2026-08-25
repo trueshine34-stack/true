@@ -18,6 +18,7 @@ import {
   type AutoSellState,
   type BookLevels,
   type GmxCandle,
+  type LoggedOrder,
   type NativeMarket,
   type NativePosition,
   type OpenOrder,
@@ -82,6 +83,8 @@ export function Manual() {
   const [history, setHistory] = useState<PositionRecord[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [orders, setOrders] = useState<OpenOrder[]>([]);
+  const [logged, setLogged] = useState<LoggedOrder[]>([]);
+  const [lookAhead, setLookAhead] = useState(false);
   const [autoSell, setAutoSell] = useState<AutoSellState>(IDLE_AUTOSELL);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -168,8 +171,11 @@ export function Manual() {
     };
   }, [windowStart]);
 
-  /** True while the loaded market is not the one the clock says we are in. */
-  const marketStale = market?.windowStart != null && market.windowStart !== windowStart;
+  /** The window the desk is trading: this one, or the one after it. */
+  const deskWindow = lookAhead ? windowStart + WINDOW_SEC : windowStart;
+
+  /** True while the loaded market is not the one the desk is pointed at. */
+  const marketStale = market?.windowStart != null && market.windowStart !== deskWindow;
 
   // The market must never lag the clock: its token ids are what orders are sent
   // against, so a stale one would place a buy in the window that just ended.
@@ -178,11 +184,15 @@ export function Manual() {
   useEffect(() => {
     let cancelled = false;
     const read = () => {
-      void PolyBot.getCurrentMarket()
+      void PolyBot.getMarketForWindow({ windowStart: deskWindow })
         .then((m) => {
           if (!cancelled) setMarket(m);
         })
-        .catch(() => {});
+        .catch(() => {
+          // The next window is published shortly before it opens; until then
+          // there is nothing to show and the desk says so.
+          if (!cancelled && lookAhead) setMarket(null);
+        });
     };
     read();
     const timer = window.setInterval(read, marketStale ? 2000 : 20_000);
@@ -190,7 +200,13 @@ export function Manual() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [windowStart, marketStale]);
+  }, [deskWindow, lookAhead, marketStale]);
+
+  // A look-ahead is only meaningful until that window becomes the current one.
+  useEffect(() => {
+    if (lookAhead) setLookAhead(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowStart]);
 
   const tokenFor = useCallback(
     (which: 'Up' | 'Down') =>
@@ -256,6 +272,11 @@ export function Manual() {
           if (!cancelled) setOrders(r.orders);
         })
         .catch(() => {});
+      void PolyBot.getOrderLog({ windowStart: deskWindow })
+        .then((r) => {
+          if (!cancelled) setLogged(r.orders);
+        })
+        .catch(() => {});
     };
     read();
     const timer = window.setInterval(read, 4000);
@@ -263,7 +284,7 @@ export function Manual() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [deskWindow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -377,7 +398,7 @@ export function Manual() {
         setNote('Рынок окна ещё не загружен');
         return;
       }
-      if (market.windowStart != null && market.windowStart !== windowStart) {
+      if (market.windowStart != null && market.windowStart !== deskWindow) {
         // The window rolled and the new market has not arrived yet. Sending
         // this would buy into the window that just closed.
         setNote('Окно сменилось — ждём новый рынок');
@@ -415,7 +436,7 @@ export function Manual() {
         setBusy(false);
       }
     },
-    [market, windowStart],
+    [market, deskWindow],
   );
 
   /**
@@ -520,13 +541,21 @@ export function Manual() {
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div className="muted" style={{ fontSize: 10 }}>
-              до конца
+            <div className={`${lookAhead ? 'warn' : 'muted'}`} style={{ fontSize: 10 }}>
+              {lookAhead ? 'до старта' : 'до конца'}
             </div>
             <div className="deskprice">
               {`${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}
             </div>
           </div>
+          <button
+            className={`gear${lookAhead ? ' on' : ''}`}
+            onClick={() => setLookAhead((v) => !v)}
+            aria-label="Следующее окно"
+            title="Следующее окно"
+          >
+            {lookAhead ? '↩' : '»'}
+          </button>
           <button
             className={`gear${tab === 'settings' ? ' on' : ''}`}
             onClick={() => setTab(tab === 'settings' ? 'desk' : 'settings')}
@@ -591,33 +620,48 @@ export function Manual() {
             )}
 
             <div className="listhead second">
-              <span>Ордера</span>
+              <span>Ордера окна</span>
               <span className="muted">
-                {orders.length > 0 ? `${orders.length} шт` : ''}
+                {logged.length > 0
+                  ? `${logged.filter((o) => o.status === 'filled').length} из ${logged.length}`
+                  : ''}
               </span>
             </div>
-            {orders.length === 0 ? (
-              <div className="muted empty">Активных ордеров нет</div>
+            {logged.length === 0 ? (
+              <div className="muted empty">В этом окне ордеров не было</div>
             ) : (
-              orders.slice(0, 4).map((o) => (
-                <div className="listrow static" key={o.id}>
-                  <span className={o.side === 'BUY' ? 'up tag-side' : 'down tag-side'}>
-                    {o.side === 'BUY' ? 'ПОК' : 'ПРО'}
-                  </span>
-                  <span className="listrow-main">
-                    {o.remaining.toFixed(1)} × {cents(o.price)}
-                  </span>
-                  <span className="muted listrow-now">{o.outcome ?? ''}</span>
-                  <button
-                    className="xbtn"
-                    disabled={busy}
-                    onClick={() => void cancel(o.id)}
-                    aria-label="Снять ордер"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))
+              logged.slice(0, 6).map((o) => {
+                const pending = o.status === 'resting' || o.status === 'partial';
+                const live = orders.find((x) => x.id === o.orderId);
+                return (
+                  <div className={`listrow static order-${o.status}`} key={o.id}>
+                    <span className={o.action === 'BUY' ? 'up tag-side' : 'down tag-side'}>
+                      {o.action === 'BUY' ? 'ПОК' : 'ПРО'}
+                    </span>
+                    <span className="listrow-main">
+                      {o.size.toFixed(1)} × {cents(o.price)}
+                      {o.status === 'partial' ? ` · ${o.matched.toFixed(1)}` : ''}
+                    </span>
+                    <span className="muted listrow-now">
+                      {o.outcome}
+                      {o.auto ? ' ·а' : ''}
+                    </span>
+                    {live ? (
+                      <button
+                        className="xbtn"
+                        disabled={busy}
+                        onClick={() => void cancel(live.id)}
+                        aria-label="Снять ордер"
+                      >
+                        ✕
+                      </button>
+                    ) : (
+                      <span className="orderdot" aria-hidden />
+                    )}
+                    {!live && !pending && <span className="sr-only">{o.status}</span>}
+                  </div>
+                );
+              })
             )}
           </div>
 
@@ -698,6 +742,13 @@ export function Manual() {
             />
           )}
         </>
+      )}
+
+      {lookAhead && !market && (
+        <div className="banner warn">
+          Следующее окно ещё не опубликовано — оно появляется незадолго до
+          старта.
+        </div>
       )}
 
       {note && <div className="banner info">{note}</div>}

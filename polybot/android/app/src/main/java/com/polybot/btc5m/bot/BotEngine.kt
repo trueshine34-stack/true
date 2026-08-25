@@ -1292,6 +1292,21 @@ class BotEngine(
         }
     }
 
+    /**
+     * The market for any window, not just the current one.
+     *
+     * Gamma publishes the next window shortly before it opens, so this returns
+     * null until then rather than inventing something.
+     */
+    fun marketForWindow(windowStart: Long): Market? {
+        currentMarket()?.let { if (it.windowStart == windowStart) return it }
+        return try {
+            GammaApi.marketForWindow(windowStart)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun openOrders(market: String? = null): List<ClobApi.OpenOrder> {
         val acct = account ?: error("кошелёк не подключён")
         val creds = this.creds ?: error("нет ключей CLOB")
@@ -1330,6 +1345,8 @@ class BotEngine(
         price: Double,
         size: Double,
         orderType: String,
+        /** Placed by a rule rather than by a tap; only the log cares. */
+        auto: Boolean = false,
     ): ClobApi.OrderResult {
         val acct = account ?: error("кошелёк не подключён")
         val creds = this.creds ?: error("нет ключей CLOB")
@@ -1355,6 +1372,20 @@ class BotEngine(
         )
         val result = ClobApi.postOrder(order, creds, acct.signerAddress, orderType)
 
+        if (result.success) {
+            OrderLog.record(
+                orderId = result.orderId,
+                asset = tokenId,
+                conditionId = conditionId,
+                outcome = outcomeFor(tokenId),
+                action = side,
+                price = price,
+                size = size,
+                matched = result.takingAmount ?: 0.0,
+                auto = auto,
+            )
+        }
+
         // Remember what actually filled. The data API needs a moment to index a
         // trade, and until it does it reports the position with no cost basis.
         val filledShares = result.takingAmount ?: 0.0
@@ -1378,6 +1409,16 @@ class BotEngine(
         )
         onStateChanged()
         return result
+    }
+
+    /** Which side of the current market a token is, for the order log. */
+    private fun outcomeFor(tokenId: String): String {
+        val market = currentMarket() ?: return ""
+        return when (tokenId) {
+            market.up.tokenId -> "Up"
+            market.down.tokenId -> "Down"
+            else -> ""
+        }
     }
 
     /** Reads the funder's USDC balance using the credentials held here. */

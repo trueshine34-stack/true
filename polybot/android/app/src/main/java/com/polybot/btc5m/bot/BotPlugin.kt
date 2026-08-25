@@ -265,19 +265,19 @@ class BotPlugin : Plugin() {
                 call.reject("Рынок текущего окна не найден")
                 return@Thread
             }
-            call.resolve(
-                JSObject()
-                    .put("conditionId", market.conditionId)
-                    .put("question", market.question)
-                    .put("upTokenId", market.up.tokenId)
-                    .put("downTokenId", market.down.tokenId)
-                    .put("tickSize", market.tickSize)
-                    .put("minimumOrderSize", market.minimumOrderSize)
-                    .put("windowStart", market.windowStart)
-                    .put("windowEnd", market.windowEnd),
-            )
+            call.resolve(marketJson(market))
         }.start()
     }
+
+    private fun marketJson(market: Market): JSObject = JSObject()
+        .put("conditionId", market.conditionId)
+        .put("question", market.question)
+        .put("upTokenId", market.up.tokenId)
+        .put("downTokenId", market.down.tokenId)
+        .put("tickSize", market.tickSize)
+        .put("minimumOrderSize", market.minimumOrderSize)
+        .put("windowStart", market.windowStart)
+        .put("windowEnd", market.windowEnd)
 
     @PluginMethod
     fun placeOrder(call: PluginCall) {
@@ -893,6 +893,65 @@ class BotPlugin : Plugin() {
             } catch (e: Exception) {
                 call.reject(e.message ?: "не удалось прочитать позиции")
             }
+        }.start()
+    }
+
+    /**
+     * Orders sent this window and what became of them.
+     *
+     * The open-orders listing drops an order the moment it fills, which is the
+     * one you most want to see afterwards, so the log keeps the whole round.
+     */
+    @PluginMethod
+    fun getOrderLog(call: PluginCall) {
+        val windowStart = call.getInt("windowStart")?.toLong()
+            ?: GammaApi.windowStartFor()
+        Thread {
+            try {
+                engine.session()?.let { session ->
+                    val open = ClobApi.openOrders(session.creds, session.account.signerAddress)
+                    OrderLog.reconcile(open) { id ->
+                        ClobApi.order(session.creds, session.account.signerAddress, id)
+                    }
+                }
+                val out = JSArray()
+                OrderLog.forWindow(windowStart).forEach {
+                    out.put(
+                        JSObject()
+                            .put("id", it.id)
+                            .put("orderId", it.orderId)
+                            .put("outcome", it.outcome)
+                            .put("action", it.action)
+                            .put("price", it.price)
+                            .put("size", it.size)
+                            .put("matched", it.matched)
+                            .put("status", it.status)
+                            .put("placedAt", it.placedAt)
+                            .put("auto", it.auto),
+                    )
+                }
+                call.resolve(JSObject().put("orders", out))
+            } catch (e: Exception) {
+                call.reject(e.message ?: "журнал ордеров недоступен")
+            }
+        }.start()
+    }
+
+    /** The market for a given window, so the desk can look one ahead. */
+    @PluginMethod
+    fun getMarketForWindow(call: PluginCall) {
+        val windowStart = call.getInt("windowStart")?.toLong()
+        if (windowStart == null) {
+            call.reject("windowStart required")
+            return
+        }
+        Thread {
+            val market = engine.marketForWindow(windowStart)
+            if (market == null) {
+                call.reject("Окно ещё не открыто")
+                return@Thread
+            }
+            call.resolve(marketJson(market))
         }.start()
     }
 

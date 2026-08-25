@@ -213,6 +213,8 @@ export interface PolyBotPlugin {
   }>;
   getBookLevels(args: { tokenId: string; depth?: number }): Promise<BookLevels>;
   getPositions(): Promise<{ positions: NativePosition[] }>;
+  getOrderLog(args?: { windowStart?: number }): Promise<{ orders: LoggedOrder[] }>;
+  getMarketForWindow(args: { windowStart: number }): Promise<NativeMarket>;
   vaultStore(args: { privateKey: string }): Promise<void>;
   vaultLoad(): Promise<{ privateKey?: string | null }>;
   vaultClear(): Promise<void>;
@@ -246,6 +248,21 @@ export type GmxCandle = {
 };
 
 export type GmxTicker = { min: number; max: number; mid: number; at: number };
+
+/** An order this app sent, and what became of it. */
+export type LoggedOrder = {
+  id: number;
+  orderId?: string | null;
+  outcome: string;
+  action: 'BUY' | 'SELL';
+  price: number;
+  size: number;
+  matched: number;
+  /** resting | partial | filled | cancelled */
+  status: string;
+  placedAt: number;
+  auto: boolean;
+};
 
 export type BookLevel = { price: number; size: number };
 export type BookLevels = { bids: BookLevel[]; asks: BookLevel[] };
@@ -486,6 +503,10 @@ const webStub: PolyBotPlugin = {
   },
   getBookLevels: async () => ({ bids: [], asks: [] }),
   getPositions: async () => ({ positions: [] }),
+  getOrderLog: async () => ({ orders: [] }),
+  getMarketForWindow: async () => {
+    throw new Error('Рынок доступен только в приложении Android');
+  },
   vaultStore: async () => {
     throw new Error('Хранилище ключа доступно только в приложении Android');
   },

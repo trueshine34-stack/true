@@ -263,8 +263,30 @@ class AutoSell(
             onStateChanged()
             return
         }
-        val positions = DataApi.positions(session.account.funderAddress)
+
         val open = ClobApi.openOrders(session.creds, session.account.signerAddress)
+        val nowMs = System.currentTimeMillis()
+        val nowSec = Clock.nowSec()
+
+        // Fills and buy-backs read the exchange, not the data API. Doing them
+        // first means a rate-limited position lookup — which is a different
+        // host with its own limits — can no longer take them down with it. That
+        // is exactly what happened: every 429 on positions threw before either
+        // of these ran, so sales went unnoticed and buy-backs never triggered.
+        noteFills(session, open, nowSec - SellLadder.elapsedInWindow(nowSec))
+        OrderLog.reconcile(open) { id ->
+            ClobApi.order(session.creds, session.account.signerAddress, id)
+        }
+        runRebuys()
+
+        val positions = try {
+            DataApi.positions(session.account.funderAddress)
+        } catch (e: Exception) {
+            lastFault = e.message ?: "позиции недоступны"
+            lastSweepAt = nowMs
+            onStateChanged()
+            throw e
+        }
         val now = Clock.nowSec()
         val windowStart = now - SellLadder.elapsedInWindow(now)
         lastSweepAt = System.currentTimeMillis()
@@ -301,9 +323,6 @@ class AutoSell(
             }
             next.add(rowFor(position, open, status, rung.step, target))
         }
-
-        noteFills(session, open, windowStart)
-        runRebuys(windowStart)
 
         val live = next.map { it.asset }.toSet()
         attempts.keys.retainAll(live)
@@ -397,11 +416,13 @@ class AutoSell(
     /**
      * Buy back what was sold, once it is cheap enough again.
      *
-     * A buy-back only makes sense inside the window it was sold in: after the
-     * close the outcome is settled and the price means something else entirely,
-     * so anything left over is dropped rather than carried across.
+     * The only deadline is the market itself. A pending buy-back used to be
+     * dropped when the five-minute window turned, which is the same thing said
+     * worse: it cut the chance short before the market had actually closed, and
+     * on a sale made late in a window that left barely a minute for the price
+     * to fall. The market-closed check below says it exactly.
      */
-    private fun runRebuys(windowStart: Long) {
+    private fun runRebuys() {
         if (rebuys.isEmpty()) return
         if (!settings.rebuyEnabled) {
             rebuys.clear()
@@ -410,10 +431,6 @@ class AutoSell(
 
         val done = ArrayList<Rebuy>()
         for (rebuy in rebuys) {
-            if (rebuy.windowStart != windowStart) {
-                done.add(rebuy)
-                continue
-            }
             val ask = try {
                 ClobApi.quote(rebuy.asset).bestAsk
             } catch (e: Exception) {
@@ -423,6 +440,13 @@ class AutoSell(
 
             val meta = metaFor(rebuy.conditionId) ?: continue
             if (meta.closed || !meta.acceptingOrders) {
+                // The only real deadline: an outcome whose market has closed
+                // cannot be bought at any price.
+                engine.log(
+                    "warn",
+                    "Автодокуп отменён: рынок закрылся раньше, чем цена дошла до " +
+                        "${(rebuy.trigger * 100).toInt()}¢",
+                )
                 done.add(rebuy)
                 continue
             }
@@ -435,6 +459,7 @@ class AutoSell(
                     price = ask,
                     size = size,
                     orderType = "GTC",
+                    auto = true,
                 )
             } catch (e: Exception) {
                 engine.log("error", "Автодокуп не прошёл: ${e.message}")
@@ -551,6 +576,7 @@ class AutoSell(
                 price = price,
                 size = size,
                 orderType = "GTC",
+                auto = true,
             )
             if (result.success) {
                 attempts.remove(position.asset)
