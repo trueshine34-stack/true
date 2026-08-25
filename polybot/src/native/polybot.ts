@@ -212,6 +212,7 @@ export interface PolyBotPlugin {
     ticker?: GmxTicker;
   }>;
   getBookLevels(args: { tokenId: string; depth?: number }): Promise<BookLevels>;
+  getPositions(): Promise<{ positions: NativePosition[] }>;
   autoSellUpdate(args: {
     enabled?: boolean;
     price?: number;
@@ -457,6 +458,7 @@ const webStub: PolyBotPlugin = {
     throw new Error('График доступен только в приложении Android');
   },
   getBookLevels: async () => ({ bids: [], asks: [] }),
+  getPositions: async () => ({ positions: [] }),
   autoSellUpdate: async () => {},
   autoSellState: async () => ({
     enabled: false,

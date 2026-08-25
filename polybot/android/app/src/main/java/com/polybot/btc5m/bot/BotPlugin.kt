@@ -821,6 +821,43 @@ class BotPlugin : Plugin() {
         }.start()
     }
 
+    /**
+     * Positions, read fresh.
+     *
+     * The engine's own list is screen data on a slow ambient poll; a desk being
+     * traded by hand needs to see a fill sooner than that.
+     */
+    @PluginMethod
+    fun getPositions(call: PluginCall) {
+        Thread {
+            try {
+                val session = engine.session()
+                if (session == null) {
+                    call.reject("Кошелёк не подключён")
+                    return@Thread
+                }
+                val out = JSArray()
+                DataApi.positions(session.account.funderAddress).forEach {
+                    out.put(
+                        JSObject()
+                            .put("asset", it.asset)
+                            .put("conditionId", it.conditionId)
+                            .put("title", it.title)
+                            .put("outcome", it.outcome)
+                            .put("size", it.size)
+                            .put("avgPrice", it.avgPrice)
+                            .put("curPrice", it.curPrice)
+                            .put("cashPnl", it.cashPnl)
+                            .put("redeemable", it.redeemable),
+                    )
+                }
+                call.resolve(JSObject().put("positions", out))
+            } catch (e: Exception) {
+                call.reject(e.message ?: "не удалось прочитать позиции")
+            }
+        }.start()
+    }
+
     /** Full depth for one outcome, for the manual order book. */
     @PluginMethod
     fun getBookLevels(call: PluginCall) {

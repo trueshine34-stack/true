@@ -1,21 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DEFAULT_MANUAL_SETTINGS,
   sharesFor,
   type ManualSettings,
 } from '../core/manual';
+import { findLevels } from '../core/levels';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
 import {
   PolyBot,
   type AutoSellState,
-  type BookLevel,
   type BookLevels,
   type GmxCandle,
   type NativeMarket,
+  type NativePosition,
+  type OpenOrder,
 } from '../native/polybot';
 
 const cents = (p: number) => `${Math.round(p * 100)}¢`;
 const WINDOW_SEC = 300;
+
+/**
+ * Forty minutes on screen. Ninety made every candle two pixels wide, which is a
+ * price history rather than something you can read a turn off; forty leaves
+ * eight windows of context and candles wide enough to have shape.
+ */
+const CHART_MINUTES = 40;
 
 type Draft = {
   side: 'Up' | 'Down';
@@ -47,19 +56,17 @@ export function Manual() {
   const [candles, setCandles] = useState<GmxCandle[]>([]);
   const [spot, setSpot] = useState<number | null>(null);
   const [market, setMarket] = useState<NativeMarket | null>(null);
-  const [side, setSide] = useState<'Up' | 'Down'>('Up');
   const [books, setBooks] = useState<Record<'Up' | 'Down', BookLevels>>({
     Up: { bids: [], asks: [] },
     Down: { bids: [], asks: [] },
   });
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [positions, setPositions] = useState<NativePosition[]>([]);
+  const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [autoSell, setAutoSell] = useState<AutoSellState>(IDLE_AUTOSELL);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-
-  const sideRef = useRef(side);
-  sideRef.current = side;
 
   useEffect(() => {
     void loadManualSettings().then(setSettings);
@@ -75,7 +82,7 @@ export function Manual() {
   useEffect(() => {
     let cancelled = false;
     const read = () => {
-      void PolyBot.gmxCandles({ symbol: 'BTC', period: '1m', limit: 90 })
+      void PolyBot.gmxCandles({ symbol: 'BTC', period: '1m', limit: CHART_MINUTES })
         .then((r) => {
           if (cancelled) return;
           setCandles(r.candles);
@@ -141,6 +148,29 @@ export function Manual() {
     };
   }, [tokenFor]);
 
+  // The desk's own book: what is held and what is working.
+  useEffect(() => {
+    let cancelled = false;
+    const read = () => {
+      void PolyBot.getPositions()
+        .then((r) => {
+          if (!cancelled) setPositions(r.positions.filter((p) => !p.redeemable));
+        })
+        .catch(() => {});
+      void PolyBot.getOpenOrders()
+        .then((r) => {
+          if (!cancelled) setOrders(r.orders);
+        })
+        .catch(() => {});
+    };
+    read();
+    const timer = window.setInterval(read, 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const read = () => {
@@ -162,10 +192,6 @@ export function Manual() {
     setSettings(next);
     void saveManualSettings(next);
   }, []);
-
-  const book = books[side];
-  const bestAsk = book.asks[0]?.price ?? null;
-  const bestBid = book.bids[0]?.price ?? null;
 
   const minSize = market?.minimumOrderSize ?? 5;
   const quickFor = (which: 'Up' | 'Down') => {
@@ -224,23 +250,37 @@ export function Manual() {
     [market],
   );
 
-  /** One tap on a level: price comes from the book, size from the ladder. */
-  const openDraft = useCallback(
-    (level: BookLevel, action: 'BUY' | 'SELL') => {
-      const shares =
-        action === 'BUY'
-          ? sharesFor(level.price, settings, market?.minimumOrderSize ?? 5)
-          : Math.max(level.size, market?.minimumOrderSize ?? 5);
+  /**
+   * One tap on a position opens a sell for the whole of it, priced at the bid
+   * that is there right now. The price stays editable — the tap is meant to
+   * save the typing, not to decide the trade.
+   */
+  const sellPosition = useCallback(
+    (position: NativePosition) => {
+      const which: 'Up' | 'Down' = position.outcome === 'Up' ? 'Up' : 'Down';
+      const bid = books[which].bids[0]?.price ?? position.curPrice ?? 0.5;
       setDraft({
-        side: sideRef.current,
-        action,
-        price: String(Math.round(level.price * 100)),
-        shares: shares.toFixed(1),
+        side: which,
+        action: 'SELL',
+        price: String(Math.round(bid * 100)),
+        shares: position.size.toFixed(1),
       });
       setNote(null);
     },
-    [settings, market],
+    [books],
   );
+
+  const cancel = useCallback(async (orderId: string) => {
+    setBusy(true);
+    try {
+      const r = await PolyBot.cancelOrder({ orderId });
+      setNote(r.cancelled ? 'Ордер снят' : 'Ордер уже неактивен');
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
 
   const quickBuy = useCallback(
     (which: 'Up' | 'Down') => {
@@ -295,54 +335,65 @@ export function Manual() {
       ) : (
         <>
           <div className="card tight">
-            <div className="segmented">
-              <button
-                className={side === 'Up' ? 'active up' : ''}
-                onClick={() => setSide('Up')}
-              >
-                Up {quickUp ? cents(quickUp.ask) : ''}
-              </button>
-              <button
-                className={side === 'Down' ? 'active down' : ''}
-                onClick={() => setSide('Down')}
-              >
-                Down {quickDown ? cents(quickDown.ask) : ''}
-              </button>
+            <div className="listhead">
+              <span>Позиции</span>
+              <span className="muted">нажать — продать</span>
             </div>
+            {positions.length === 0 ? (
+              <div className="muted empty">Открытых позиций нет</div>
+            ) : (
+              positions.map((p) => (
+                <button
+                  className="listrow"
+                  key={p.asset}
+                  onClick={() => sellPosition(p)}
+                >
+                  <span className={p.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
+                    {p.outcome}
+                  </span>
+                  <span className="listrow-main">
+                    {p.size.toFixed(1)} × {cents(p.avgPrice)}
+                  </span>
+                  <span className="listrow-now">
+                    {p.curPrice != null ? cents(p.curPrice) : '—'}
+                  </span>
+                  <span className={`listrow-pnl ${p.cashPnl >= 0 ? 'up' : 'down'}`}>
+                    {p.cashPnl >= 0 ? '+' : '−'}
+                    {Math.abs(p.cashPnl).toFixed(2)}
+                  </span>
+                </button>
+              ))
+            )}
 
-            <div className="dom">
-              {[...book.asks].reverse().map((l) => (
-                <button
-                  className="dom-row ask"
-                  key={`a${l.price}`}
-                  onClick={() => openDraft(l, 'BUY')}
-                >
-                  <span className="dom-size">{l.size.toFixed(0)}</span>
-                  <span className="dom-bar">
-                    <i style={{ width: `${barWidth(l, book)}%` }} />
-                  </span>
-                  <span className="dom-price">{cents(l.price)}</span>
-                </button>
-              ))}
-              <div className="dom-spread">
-                {bestBid != null && bestAsk != null
-                  ? `спред ${Math.round((bestAsk - bestBid) * 100)}¢`
-                  : 'стакан пуст'}
-              </div>
-              {book.bids.map((l) => (
-                <button
-                  className="dom-row bid"
-                  key={`b${l.price}`}
-                  onClick={() => openDraft(l, 'SELL')}
-                >
-                  <span className="dom-size">{l.size.toFixed(0)}</span>
-                  <span className="dom-bar">
-                    <i style={{ width: `${barWidth(l, book)}%` }} />
-                  </span>
-                  <span className="dom-price">{cents(l.price)}</span>
-                </button>
-              ))}
+            <div className="listhead second">
+              <span>Ордера</span>
+              <span className="muted">
+                {orders.length > 0 ? `${orders.length} шт` : ''}
+              </span>
             </div>
+            {orders.length === 0 ? (
+              <div className="muted empty">Активных ордеров нет</div>
+            ) : (
+              orders.slice(0, 4).map((o) => (
+                <div className="listrow static" key={o.id}>
+                  <span className={o.side === 'BUY' ? 'up tag-side' : 'down tag-side'}>
+                    {o.side === 'BUY' ? 'ПОК' : 'ПРО'}
+                  </span>
+                  <span className="listrow-main">
+                    {o.remaining.toFixed(1)} × {cents(o.price)}
+                  </span>
+                  <span className="muted listrow-now">{o.outcome ?? ''}</span>
+                  <button
+                    className="xbtn"
+                    disabled={busy}
+                    onClick={() => void cancel(o.id)}
+                    aria-label="Снять ордер"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))
+            )}
           </div>
 
           {draft && (
@@ -431,38 +482,20 @@ export function Manual() {
           disabled={busy || !quickUp}
           onClick={() => quickBuy('Up')}
         >
-          <b>Купить Up</b>
-          <s>
-            {quickUp
-              ? `${cents(quickUp.ask)} · ${quickUp.shares.toFixed(0)} долей`
-              : 'стакан пуст'}
-          </s>
+          <b>{quickUp ? cents(quickUp.ask) : '—'}</b>
+          <s>{quickUp ? `${quickUp.shares.toFixed(0)} долей` : 'стакан пуст'}</s>
         </button>
         <button
           className="buy down"
           disabled={busy || !quickDown}
           onClick={() => quickBuy('Down')}
         >
-          <b>Купить Down</b>
-          <s>
-            {quickDown
-              ? `${cents(quickDown.ask)} · ${quickDown.shares.toFixed(0)} долей`
-              : 'стакан пуст'}
-          </s>
+          <b>{quickDown ? cents(quickDown.ask) : '—'}</b>
+          <s>{quickDown ? `${quickDown.shares.toFixed(0)} долей` : 'стакан пуст'}</s>
         </button>
       </div>
     </>
   );
-}
-
-/** Depth bar width, scaled to the biggest level on screen. */
-function barWidth(level: BookLevel, book: BookLevels): number {
-  const peak = Math.max(
-    ...book.asks.map((l) => l.size),
-    ...book.bids.map((l) => l.size),
-    1,
-  );
-  return Math.min(100, (level.size / peak) * 100);
 }
 
 /**
@@ -474,14 +507,14 @@ function barWidth(level: BookLevel, book: BookLevels): number {
  * oracle — close to the settlement feed but not it, so nothing here is a strike.
  */
 function Chart({ candles, spot }: { candles: GmxCandle[]; spot: number | null }) {
+  const levels = useMemo(() => findLevels(candles), [candles]);
+
   const view = useMemo(() => {
     if (candles.length === 0) return null;
     const W = 340;
-    const H = 118;
-    const lows = candles.map((c) => c.low);
-    const highs = candles.map((c) => c.high);
-    let lo = Math.min(...lows);
-    let hi = Math.max(...highs);
+    const H = 82;
+    let lo = Math.min(...candles.map((c) => c.low));
+    let hi = Math.max(...candles.map((c) => c.high));
     if (spot != null) {
       lo = Math.min(lo, spot);
       hi = Math.max(hi, spot);
@@ -493,59 +526,103 @@ function Chart({ candles, spot }: { candles: GmxCandle[]; spot: number | null })
     const step = W / candles.length;
     const y = (p: number) => H - ((p - lo) / (hi - lo)) * H;
 
-    const windowStart = Math.floor(candles[candles.length - 1].time / WINDOW_SEC) * WINDOW_SEC;
+    const windowStart =
+      Math.floor(candles[candles.length - 1].time / WINDOW_SEC) * WINDOW_SEC;
     const openIndex = candles.findIndex((c) => c.time >= windowStart);
     const openPrice = openIndex >= 0 ? candles[openIndex].open : null;
 
-    return { W, H, lo, hi, step, y, windowStart, openIndex, openPrice };
+    return { W, H, lo, hi, step, y, openIndex, openPrice };
   }, [candles, spot]);
 
   if (!view) {
     return <div className="chart-empty muted">График загружается…</div>;
   }
-  const { W, H, step, y, openIndex, openPrice } = view;
+  const { W, H, lo, hi, step, y, openIndex, openPrice } = view;
+  const inView = (p: number) => p > lo && p < hi;
+
+  const visible = levels.filter((l) => inView(l.price));
+  const labelled: typeof visible = [];
+  for (const l of visible) {
+    // Eleven pixels of chart is about one line of the label's own text.
+    if (labelled.every((k) => Math.abs(y(k.price) - y(l.price)) > 11)) labelled.push(l);
+  }
 
   return (
-    <svg className="chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-      {openIndex >= 0 && (
-        <rect
-          x={openIndex * step}
-          y={0}
-          width={W - openIndex * step}
-          height={H}
-          className="chart-window"
-        />
+    <div className="chartwrap">
+      <svg className="chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        {openIndex >= 0 && (
+          <rect
+            x={openIndex * step}
+            y={0}
+            width={W - openIndex * step}
+            height={H}
+            className="chart-window"
+          />
+        )}
+        {visible.map((l) => (
+          <line
+            key={`${l.kind}${l.price}`}
+            x1={0}
+            x2={W}
+            y1={y(l.price)}
+            y2={y(l.price)}
+            className={`chart-level ${l.kind}`}
+            strokeWidth={l.touches >= 3 ? 1.4 : 0.8}
+          />
+        ))}
+        {candles.map((c, i) => {
+          const x = i * step + step / 2;
+          const up = c.close >= c.open;
+          const top = y(Math.max(c.open, c.close));
+          const bottom = y(Math.min(c.open, c.close));
+          return (
+            <g key={c.time} className={up ? 'c-up' : 'c-down'}>
+              <line x1={x} x2={x} y1={y(c.high)} y2={y(c.low)} strokeWidth={0.9} />
+              <rect
+                x={i * step + 0.8}
+                width={Math.max(step - 1.6, 1)}
+                y={top}
+                height={Math.max(bottom - top, 1)}
+              />
+            </g>
+          );
+        })}
+        {openPrice != null && inView(openPrice) && (
+          <line
+            x1={0}
+            x2={W}
+            y1={y(openPrice)}
+            y2={y(openPrice)}
+            className="chart-open"
+          />
+        )}
+        {spot != null && inView(spot) && (
+          <line x1={0} x2={W} y1={y(spot)} y2={y(spot)} className="chart-spot" />
+        )}
+      </svg>
+
+      {/*
+        Labels sit outside the SVG: the chart is stretched to fill its box, so
+        text drawn inside it would be squashed with the candles. Levels close
+        together get one label between them — two overlapping numbers are less
+        readable than one, and the lines themselves are still both drawn.
+      */}
+      {labelled.map((l) => (
+        <span
+          key={`t${l.kind}${l.price}`}
+          className={`chart-tag ${l.kind}`}
+          style={{ top: `${(y(l.price) / H) * 100}%` }}
+        >
+          {l.price.toFixed(0)}
+          <i>{'·'.repeat(Math.min(l.touches, 4))}</i>
+        </span>
+      ))}
+      {openPrice != null && inView(openPrice) && (
+        <span className="chart-tag open" style={{ top: `${(y(openPrice) / H) * 100}%` }}>
+          окно {openPrice.toFixed(0)}
+        </span>
       )}
-      {candles.map((c, i) => {
-        const x = i * step + step / 2;
-        const up = c.close >= c.open;
-        const top = y(Math.max(c.open, c.close));
-        const bottom = y(Math.min(c.open, c.close));
-        return (
-          <g key={c.time} className={up ? 'c-up' : 'c-down'}>
-            <line x1={x} x2={x} y1={y(c.high)} y2={y(c.low)} strokeWidth={1} />
-            <rect
-              x={i * step + 0.6}
-              width={Math.max(step - 1.2, 0.8)}
-              y={top}
-              height={Math.max(bottom - top, 1)}
-            />
-          </g>
-        );
-      })}
-      {openPrice != null && (
-        <line
-          x1={0}
-          x2={W}
-          y1={y(openPrice)}
-          y2={y(openPrice)}
-          className="chart-open"
-        />
-      )}
-      {spot != null && (
-        <line x1={0} x2={W} y1={y(spot)} y2={y(spot)} className="chart-spot" />
-      )}
-    </svg>
+    </div>
   );
 }
 
