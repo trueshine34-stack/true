@@ -455,3 +455,49 @@ class PairLevelTrackTest {
         assertEquals(0.53, minOf(budgeted, anchored), 1e-9)
     }
 }
+
+/**
+ * The venue's real order floor.
+ *
+ * It is not only a share count: an order also has to be worth a dollar. At a
+ * few cents a share those two say very different things, and sizing by the
+ * share count alone is rejected at exactly the prices where a cheap side is
+ * worth buying.
+ */
+class MinOrderTest {
+
+    @Test
+    fun theShareCountRulesAtOrdinaryPrices() {
+        assertEquals(5.0, Orders.minShares(0.50, 5.0), 1e-9)
+        assertEquals(5.0, Orders.minShares(0.20, 5.0), 1e-9)
+    }
+
+    @Test
+    fun theDollarRulesOnceSharesStopReachingIt() {
+        assertEquals(20.0, Orders.minShares(0.05, 5.0), 1e-9)
+        assertEquals(10.0, Orders.minShares(0.10, 5.0), 1e-9)
+        assertEquals(100.0, Orders.minShares(0.01, 5.0), 1e-9)
+    }
+
+    @Test
+    fun everyFlooredOrderIsWorthAtLeastADollar() {
+        for (price in listOf(0.01, 0.03, 0.05, 0.1, 0.19, 0.2, 0.5, 0.9)) {
+            val value = Orders.minShares(price, 5.0) * price
+            assertTrue(
+                "at $price the floor is only $value",
+                value >= Orders.MIN_ORDER_VALUE_USD - 1e-9,
+            )
+        }
+    }
+
+    @Test
+    fun aNonsensePriceFallsBackToTheShareCount() {
+        assertEquals(5.0, Orders.minShares(0.0, 5.0), 1e-9)
+        assertEquals(5.0, Orders.minShares(Double.NaN, 5.0), 1e-9)
+    }
+
+    @Test
+    fun aLargerVenueMinimumStillWins() {
+        assertEquals(25.0, Orders.minShares(0.50, 25.0), 1e-9)
+    }
+}

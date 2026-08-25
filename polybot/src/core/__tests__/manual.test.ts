@@ -3,6 +3,7 @@ import {
   DEFAULT_MANUAL_SETTINGS,
   balanceShares,
   limitShares,
+  minShares,
   sharesFor,
   type ManualSettings,
 } from '../manual';
@@ -140,5 +141,52 @@ describe('balanceShares', () => {
   it('honours a different floor', () => {
     expect(balanceShares(0.5, 40, 0.25, 25)).toBeNull();
     expect(balanceShares(0.5, 40, 0.25, 20)).toBe(20);
+  });
+});
+
+describe('minShares', () => {
+  it('is the venue share count at ordinary prices', () => {
+    expect(minShares(0.5)).toBe(5);
+    expect(minShares(0.2)).toBe(5);
+  });
+
+  it('becomes the dollar floor once shares stop reaching it', () => {
+    // Five shares at 5c is 25c — simply rejected. A dollar is twenty shares.
+    expect(minShares(0.05)).toBe(20);
+    expect(minShares(0.1)).toBe(10);
+    expect(minShares(0.02)).toBe(50);
+  });
+
+  it('crosses over exactly where a dollar buys the share minimum', () => {
+    expect(minShares(0.2)).toBe(5);
+    expect(minShares(0.19)).toBeCloseTo(1 / 0.19, 9);
+  });
+
+  it('never asks for a nonsense size', () => {
+    expect(minShares(0)).toBe(5);
+    expect(minShares(Number.NaN)).toBe(5);
+  });
+});
+
+describe('sizing respects the dollar floor', () => {
+  it('the ladder cannot ask for less than a dollar', () => {
+    const cheapBand: ManualSettings = {
+      ...DEFAULT_MANUAL_SETTINGS,
+      sizeRules: [{ maxPrice: 1, shares: 5 }],
+    };
+    // Five shares at 5c would be rejected; the floor lifts it to a dollar.
+    expect(sharesFor(0.05, cheapBand)).toBe(20);
+    expect(sharesFor(0.5, cheapBand)).toBe(5);
+  });
+
+  it('a limit at a cheap price is sized by money', () => {
+    expect(limitShares(0.05)).toBe(20);
+    expect(limitShares(0.02)).toBe(50);
+  });
+
+  it('a balance share too small for the dollar floor is refused', () => {
+    // 25% of $40 is $10 — fine at 5c. 25% of $2 is 50c — not.
+    expect(balanceShares(0.05, 40, 0.25)).toBe(200);
+    expect(balanceShares(0.05, 2, 0.25)).toBeNull();
   });
 });

@@ -77,7 +77,7 @@ export function balanceShares(
   if (!Number.isFinite(balanceUsd) || balanceUsd <= 0) return null;
 
   const shares = (balanceUsd * sharePct) / price;
-  return shares >= minimumOrderSize ? shares : null;
+  return shares >= minShares(price, minimumOrderSize) ? shares : null;
 }
 
 /**
@@ -90,7 +90,25 @@ export function balanceShares(
 export function limitShares(price: number, minimumOrderSize = 5, cheapStakeUsd = 1): number {
   if (!Number.isFinite(price) || price <= 0) return minimumOrderSize;
   const base = price < 0.2 ? cheapStakeUsd / price : 5;
-  return Math.max(base, minimumOrderSize);
+  return Math.max(base, minShares(price, minimumOrderSize));
+}
+
+/**
+ * The smallest order the venue will take at this price.
+ *
+ * Two floors apply and the larger wins. The venue has a share count — five —
+ * and an order value of a dollar. Under 20c the value floor is the binding one
+ * and it bites hard: five shares at 5c is 25c, which is simply rejected. Sizing
+ * by share count alone therefore fails silently at exactly the prices where the
+ * cheap side is worth buying.
+ */
+export function minShares(
+  price: number,
+  venueMinShares = 5,
+  minValueUsd = 1,
+): number {
+  if (!Number.isFinite(price) || price <= 0) return venueMinShares;
+  return Math.max(venueMinShares, minValueUsd / price);
 }
 
 /**
@@ -104,10 +122,11 @@ export function sharesFor(
 ): number {
   if (!Number.isFinite(price) || price <= 0) return 0;
 
+  const floor = minShares(price, minimumOrderSize);
   const fromStake = settings.defaultStakeUsd / price;
-  if (!settings.useSizeLadder) return Math.max(fromStake, minimumOrderSize);
+  if (!settings.useSizeLadder) return Math.max(fromStake, floor);
 
   const bands = [...settings.sizeRules].sort((a, b) => a.maxPrice - b.maxPrice);
   const band = bands.find((r) => price <= r.maxPrice + 1e-9);
-  return Math.max(band ? band.shares : fromStake, minimumOrderSize);
+  return Math.max(band ? band.shares : fromStake, floor);
 }

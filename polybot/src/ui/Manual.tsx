@@ -3,6 +3,7 @@ import {
   DEFAULT_MANUAL_SETTINGS,
   balanceShares,
   limitShares,
+  minShares,
   sharesFor,
   type ManualSettings,
 } from '../core/manual';
@@ -373,7 +374,7 @@ export function Manual() {
     if (settings.useBalanceShare && balance != null) {
       const shares = balanceShares(ask, balance, settings.balanceSharePct, minSize);
       if (shares != null) return { ask, shares, short: false };
-      return { ask, shares: minSize, short: true };
+      return { ask, shares: minShares(ask, minSize), short: true };
     }
     return { ask, shares: sharesFor(ask, settings, minSize), short: false };
   };
@@ -417,8 +418,14 @@ export function Manual() {
         setNote('Цена вне диапазона');
         return;
       }
-      if (!Number.isFinite(shares) || shares < market.minimumOrderSize) {
-        setNote(`Минимум биржи — ${market.minimumOrderSize} долей`);
+      // The venue floors an order by share count and by value; at low prices
+      // the dollar is the one that bites, and five shares at 5c is rejected.
+      const floor = minShares(price, market.minimumOrderSize);
+      if (!Number.isFinite(shares) || shares < floor - 1e-9) {
+        setNote(
+          `Минимум — ${floor.toFixed(floor % 1 ? 1 : 0)} долей ` +
+            `(биржа не берёт заявку дешевле 1 $)`,
+        );
         return;
       }
       setBusy(true);
@@ -528,7 +535,7 @@ export function Manual() {
     }
     if (quick.short) {
       setNote(
-        `Минимум биржи — ${minSize} долей, это больше ` +
+        `Минимум — ${minShares(quick.ask, minSize).toFixed(0)} долей, это больше ` +
           `${Math.round(settings.balanceSharePct * 100)}% баланса`,
       );
     }

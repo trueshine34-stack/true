@@ -499,9 +499,12 @@ class AutoSell(
                 continue
             }
 
+            // Buying at a few cents, five shares is well under the venue's
+            // dollar floor and would simply be refused.
+            val floor = Orders.minShares(ask, meta.minimumOrderSize)
             val slice = minOf(rebuy.lot, rebuy.remaining)
-                .coerceAtLeast(meta.minimumOrderSize)
-                .coerceAtMost(maxOf(rebuy.remaining, meta.minimumOrderSize))
+                .coerceAtLeast(floor)
+                .coerceAtMost(maxOf(rebuy.remaining, floor))
 
             // Crossing rather than resting: this is meant to be taken now. Two
             // ticks through the offer covers the top of book moving between the

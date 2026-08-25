@@ -15,6 +15,23 @@ import kotlin.math.roundToLong
  */
 object Orders {
 
+    /** Smallest order value the venue accepts, in USDC. */
+    const val MIN_ORDER_VALUE_USD = 1.0
+
+    /**
+     * The smallest order the venue will take at this price.
+     *
+     * Two floors apply and the larger wins: a share count, and an order value
+     * of a dollar. Below 20¢ the value floor is the binding one — five shares
+     * at 5¢ is 25¢ and is simply rejected — so sizing by share count alone
+     * fails at exactly the prices where a cheap side is worth buying.
+     */
+    fun minShares(price: Double, venueMinShares: Double): Double {
+        if (price <= 0.0 || price.isNaN()) return venueMinShares
+        return maxOf(venueMinShares, MIN_ORDER_VALUE_USD / price)
+    }
+
+
     data class RoundConfig(val price: Int, val size: Int, val amount: Int)
 
     private val ROUNDING = mapOf(
