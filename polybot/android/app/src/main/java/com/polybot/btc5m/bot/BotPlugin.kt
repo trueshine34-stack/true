@@ -228,60 +228,6 @@ class BotPlugin : Plugin() {
         }.start()
     }
 
-    /**
-     * What the funding wallet can send, read from the chain rather than from
-     * the exchange: collateral behind a resting order is still the exchange's.
-     */
-    @PluginMethod
-    fun walletInfo(call: PluginCall) {
-        Thread {
-            try {
-                val session = engine.session()
-                if (session == null) {
-                    call.reject("кошелёк не подключён")
-                    return@Thread
-                }
-                val info = Wallet.info(session.account)
-                call.resolve(
-                    JSObject()
-                        .put("address", info.address)
-                        .put("usdc", info.usdc)
-                        .put("gas", info.gas)
-                        .put("fee", info.fee)
-                        .put("canSend", info.canSend)
-                        .put("note", info.note),
-                )
-            } catch (e: Exception) {
-                call.reject(e.message ?: "сеть Polygon недоступна")
-            }
-        }.start()
-    }
-
-    /** Send USDC to an address on Polygon. Nothing here bridges to a chain. */
-    @PluginMethod
-    fun walletWithdraw(call: PluginCall) {
-        val to = call.getString("to").orEmpty()
-        val amount = call.getDouble("amount") ?: 0.0
-        Thread {
-            try {
-                val session = engine.session()
-                if (session == null) {
-                    call.reject("кошелёк не подключён")
-                    return@Thread
-                }
-                val sent = Wallet.send(session.keys, session.account, to, amount)
-                engine.log(
-                    "trade",
-                    "Вывод " + String.format("%.2f", amount) + " USDC на " +
-                        to.take(6) + "…" + to.takeLast(4) + " · " + sent.hash.take(10),
-                )
-                call.resolve(JSObject().put("hash", sent.hash))
-            } catch (e: Exception) {
-                call.reject(e.message ?: "перевод не прошёл")
-            }
-        }.start()
-    }
-
     @PluginMethod
     fun getOpenOrders(call: PluginCall) {
         val market = call.getString("market")
@@ -1001,6 +947,42 @@ class BotPlugin : Plugin() {
      * The open-orders listing drops an order the moment it fills, which is the
      * one you most want to see afterwards, so the log keeps the whole round.
      */
+    /**
+     * How each five-minute event went: which side it closed on and what the
+     * round made. The window is the unit this app trades, so it is the unit
+     * worth scoring.
+     */
+    @PluginMethod
+    fun getEvents(call: PluginCall) {
+        val limit = call.getInt("limit") ?: 12
+        Thread {
+            try {
+                val out = JSArray()
+                EventStats.recent(limit).forEach {
+                    out.put(
+                        JSObject()
+                            .put("windowStart", it.windowStart)
+                            .put("winner", it.winner)
+                            .put("settled", it.settled)
+                            .put("spent", it.spent)
+                            .put("got", it.got)
+                            .put("held", it.held)
+                            .put("settlement", it.settlement)
+                            .put("pnl", it.pnl)
+                            .put("trades", it.trades),
+                    )
+                }
+                call.resolve(
+                    JSObject()
+                        .put("events", out)
+                        .put("session", EventStats.sessionPnl()),
+                )
+            } catch (e: Exception) {
+                call.reject(e.message ?: "итоги недоступны")
+            }
+        }.start()
+    }
+
     @PluginMethod
     fun getOrderLog(call: PluginCall) {
         val windowStart = call.getInt("windowStart")?.toLong()
@@ -1102,6 +1084,10 @@ class BotPlugin : Plugin() {
             rebuySlicePauseSec = call.getInt("rebuySlicePauseSec")
                 ?: defaults.rebuySlicePauseSec,
             ladderLeadSec = call.getInt("ladderLeadSec") ?: defaults.ladderLeadSec,
+            percentMode = call.getBoolean("percentMode") ?: defaults.percentMode,
+            profitPct = call.getDouble("profitPct") ?: defaults.profitPct,
+            sliceGapSec = call.getInt("sliceGapSec") ?: defaults.sliceGapSec,
+            panicSec = call.getInt("panicSec") ?: defaults.panicSec,
         )
         if (next.enabled && !engine.isConfigured()) {
             call.reject("Сначала подключите кошелёк")
@@ -1171,6 +1157,10 @@ class BotPlugin : Plugin() {
                 .put("watchSec", bot.settings.watchSec)
                 .put("rebuyEnabled", bot.settings.rebuyEnabled)
                 .put("rebuyDropPct", bot.settings.rebuyDropPct)
+                .put("percentMode", bot.settings.percentMode)
+                .put("profitPct", bot.settings.profitPct)
+                .put("sliceGapSec", bot.settings.sliceGapSec)
+                .put("panicSec", bot.settings.panicSec)
                 .put("rebuys", waiting)
                 .put("rebuysDone", JSArray().also { arr ->
                     bot.recentRebuys.forEach {

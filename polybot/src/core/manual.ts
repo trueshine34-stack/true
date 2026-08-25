@@ -26,6 +26,14 @@ export type ManualSettings = {
   autoSellWatchSec: number;
   /** How far ahead of each minute the next rung takes over. */
   autoSellLeadSec: number;
+  /** Price the exit off what the position cost rather than off the clock. */
+  autoSellPercentMode: boolean;
+  /** The margin to hold out for, net of the fee. */
+  autoSellProfitPct: number;
+  /** Pause between slices when a position was built out of several buys. */
+  autoSellSliceGapSec: number;
+  /** Inside this much of the close, any profit will do. */
+  autoSellPanicSec: number;
   /** Buy the same size back if the price falls far enough after a sale. */
   autoRebuyEnabled: boolean;
   /** How far below the sale price the buy-back triggers, as a fraction. */
@@ -52,6 +60,10 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellRetrySec: 7,
   autoSellWatchSec: 60,
   autoSellLeadSec: 15,
+  autoSellPercentMode: false,
+  autoSellProfitPct: 0.2,
+  autoSellSliceGapSec: 2,
+  autoSellPanicSec: 60,
   autoRebuyEnabled: false,
   autoRebuyDropPct: 0.2,
   autoRebuySlicePauseSec: 3,

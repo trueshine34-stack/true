@@ -196,5 +196,8 @@ object OrderLog {
     fun forWindow(windowStart: Long): List<Entry> =
         entries.filter { it.windowStart == windowStart }.sortedByDescending { it.placedAt }
 
+    /** Everything still remembered, for scoring windows that have closed. */
+    fun all(): List<Entry> = entries.toList()
+
     fun clear() = entries.clear()
 }

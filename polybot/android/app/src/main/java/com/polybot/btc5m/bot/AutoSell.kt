@@ -55,6 +55,14 @@ class AutoSell(
         val rebuyDropPct: Double = 0.20,
         /** Pause between buy-back slices, so a deeper dip can still be caught. */
         val rebuySlicePauseSec: Int = 3,
+        /** Price off what the position cost instead of off the clock. */
+        val percentMode: Boolean = false,
+        /** The margin to hold out for, net of the fee. */
+        val profitPct: Double = SellPercent.DEFAULT_GAIN,
+        /** Seconds between slices when a position was built out of several buys. */
+        val sliceGapSec: Int = SellPercent.DEFAULT_SLICE_GAP_SEC,
+        /** Inside this much of the close, any profit will do. */
+        val panicSec: Int = SellPercent.DEFAULT_PANIC_SEC,
     )
 
     /** One position and what the rule has managed to do about it. */
@@ -108,6 +116,9 @@ class AutoSell(
     private data class Rung(val windowStart: Long, var highWater: Double, var step: Int)
 
     private val rungs = HashMap<String, Rung>()
+
+    /** When the last percent-mode slice went out, per outcome. */
+    private val lastSlice = HashMap<String, Long>()
 
     /**
      * Trades already turned into buy-backs, by transaction. The venue can only
@@ -301,6 +312,7 @@ class AutoSell(
         scope = null
         attempts.clear()
         rungs.clear()
+        lastSlice.clear()
         rebuys.clear()
         recentRebuys.clear()
         watching.clear()
@@ -382,12 +394,21 @@ class AutoSell(
             // before it opens used to read the current window's elapsed time
             // and start four rungs up.
             val rung = trackRung(position, meta?.windowStart ?: windowStart, now)
-            val target = settings.ladder.getOrElse(rung.step) { settings.ladder.last() }
+            val ladderTarget = settings.ladder.getOrElse(rung.step) { settings.ladder.last() }
+
+            // In percent mode the price comes from what the position cost, so
+            // it is worked out per position rather than per minute.
+            val target = if (settings.percentMode && meta != null) {
+                percentTarget(position, open, meta, windowStart)
+            } else {
+                ladderTarget
+            }
 
             val status = when {
                 meta == null -> "нет данных рынка"
                 meta.closed || !meta.acceptingOrders -> "рынок закрыт"
                 mine < meta.minimumOrderSize -> "у бота"
+                settings.percentMode -> reconcilePercent(position, open, meta, target, mine)
                 else -> reconcile(position, open, meta, target, mine)
             }
             // Covered, settled, or the bot's: nothing left to chase here.
@@ -407,6 +428,7 @@ class AutoSell(
         val live = next.map { it.asset }.toSet()
         attempts.keys.retainAll(live)
         rungs.keys.retainAll(live)
+        lastSlice.keys.retainAll(live)
         lastTry.keys.retainAll(live)
         lastError.keys.retainAll(live)
         rows.clear()
@@ -648,6 +670,107 @@ class AutoSell(
             leadSec = settings.ladderLeadSec,
         )
         return rung
+    }
+
+    /**
+     * The price percent mode is asking for, right now.
+     *
+     * Off the position's own cost, raised a tick above whatever is already
+     * resting — a slice that filled proves the market was there — and dropped
+     * to what the book will pay once the window is nearly out, provided that
+     * still clears the cost after the fee.
+     */
+    private fun percentTarget(
+        position: Position,
+        open: List<ClobApi.OpenOrder>,
+        meta: ClobApi.MarketMeta,
+        windowStart: Long,
+    ): Double {
+        val resting = open
+            .filter { it.assetId == position.asset && it.side == "SELL" }
+            .maxByOrNull { it.price }
+            ?.price
+        val closesAt = (meta.windowStart.takeIf { it > 0 } ?: windowStart) + WINDOW_SECONDS
+        val secondsLeft = closesAt - Clock.nowSec()
+
+        // The book is only worth a request when the answer can change what we
+        // do — that is, in the last minute.
+        val bid = if (!SellPercent.holdingOut(secondsLeft, settings.panicSec)) {
+            try {
+                ClobApi.bestBid(position.asset)
+            } catch (e: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+
+        return SellPercent.priceFor(
+            avgPrice = position.avgPrice,
+            gain = settings.profitPct,
+            tick = meta.tickSize,
+            resting = resting,
+            secondsLeft = secondsLeft,
+            panicSec = settings.panicSec,
+            bestBid = bid,
+        )
+    }
+
+    /**
+     * Offer one slice at a time, a few seconds apart.
+     *
+     * Unlike the ladder, a resting sell here is never stale: it was placed at a
+     * price the position was worth then, and the next slice goes above it
+     * rather than replacing it. The one exception is the last minute, where
+     * everything left is repriced onto what the book will actually pay.
+     */
+    private fun reconcilePercent(
+        position: Position,
+        open: List<ClobApi.OpenOrder>,
+        meta: ClobApi.MarketMeta,
+        target: Double,
+        mine: Double,
+    ): String {
+        val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
+        val covered = sells.sumOf { it.remaining }
+        val uncovered = mine - covered
+
+        val closesAt = (meta.windowStart.takeIf { it > 0 } ?: 0L) + WINDOW_SECONDS
+        val lastMinute = closesAt > 0 &&
+            !SellPercent.holdingOut(closesAt - Clock.nowSec(), settings.panicSec)
+
+        // Out of time: whatever is resting above what the book pays will not
+        // fill, so it is pulled and re-offered at a price that will.
+        if (lastMinute && sells.any { it.price > target + meta.tickSize / 2 }) {
+            val session = engine.session() ?: return "нет сессии"
+            for (order in sells.filter { it.price > target + meta.tickSize / 2 }) {
+                try {
+                    ClobApi.cancelOrder(session.creds, session.account.signerAddress, order.id)
+                } catch (e: Exception) {
+                    return e.message ?: "не снять старый ордер"
+                }
+            }
+            return tryPlace(position, mine, target)
+        }
+
+        if (uncovered < meta.minimumOrderSize) return "покрыто"
+
+        // A pause between slices is the whole point: it gives the price room to
+        // carry the next one higher.
+        val now = System.currentTimeMillis()
+        val since = now - (lastSlice[position.asset] ?: 0L)
+        if (covered > 0.0 && since < settings.sliceGapSec.coerceAtLeast(0) * 1000L) {
+            return "ждёт шага"
+        }
+
+        val slice = SellPercent.sliceSize(
+            uncovered = uncovered,
+            lot = OrderLog.buyLotFor(position.asset),
+            minimum = meta.minimumOrderSize,
+        )
+        val status = tryPlace(position, slice, target)
+        if (status == "выставлено") lastSlice[position.asset] = now
+        return status
     }
 
     /**

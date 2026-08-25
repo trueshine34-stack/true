@@ -3,25 +3,28 @@ import type { AccountConfig } from './core/account';
 import { DEFAULT_SETTINGS, type StrategySettings } from './core/settings';
 import { loadAccount, loadSettings, saveSettings } from './core/storage';
 import { PolyBot } from './native/polybot';
-import { Dashboard } from './ui/Dashboard';
 import { Manual } from './ui/Manual';
-import { Pair } from './ui/Pair';
 import { SettingsScreen } from './ui/Settings';
 import { Setup } from './ui/Setup';
-import { Withdraw } from './ui/Withdraw';
+import { BalanceSheet } from './ui/BalanceSheet';
+import {
+  appendBalance,
+  loadBalanceHistory,
+  saveBalanceHistory,
+  type BalancePoint,
+} from './core/balance';
 
 type Phase = 'loading' | 'setup' | 'ready';
-type Tab = 'manual' | 'auto' | 'settings';
-type AutoPane = 'terminal' | 'pair';
+type Tab = 'manual' | 'settings';
 
 export function App() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [tab, setTab] = useState<Tab>('manual');
-  const [autoPane, setAutoPane] = useState<AutoPane>('terminal');
   const [settings, setSettings] = useState<StrategySettings>(DEFAULT_SETTINGS);
   const [account, setAccount] = useState<AccountConfig | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
-  const [withdrawing, setWithdrawing] = useState(false);
+  const [showBalance, setShowBalance] = useState(false);
+  const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,7 +81,16 @@ export function App() {
     const read = () => {
       void PolyBot.getBalance()
         .then((r) => {
-          if (!cancelled) setBalance(r.usdc);
+          if (cancelled) return;
+          setBalance(r.usdc);
+          // Every reading is a point on the line. Repeats are dropped inside
+          // appendBalance, which returns the same array — so an unchanged
+          // balance costs neither a render nor a write.
+          setBalanceHistory((current) => {
+            const next = appendBalance(current, r.usdc);
+            if (next !== current) void saveBalanceHistory(next);
+            return next;
+          });
         })
         .catch(() => {
           // Offline or not connected yet; keep the last known figure.
@@ -93,6 +105,10 @@ export function App() {
     };
   }, [phase]);
 
+  useEffect(() => {
+    void loadBalanceHistory().then(setBalanceHistory);
+  }, []);
+
   const applySettings = useCallback((next: StrategySettings) => {
     setSettings(next);
     void saveSettings(next);
@@ -104,11 +120,6 @@ export function App() {
   const onSetupDone = useCallback((acct: AccountConfig) => {
     setAccount(acct);
     setPhase('ready');
-  }, []);
-
-  /** Tapping a position on the terminal hands it to the manual desk. */
-  const onSellPosition = useCallback(() => {
-    setTab('manual');
   }, []);
 
   const onForget = useCallback(() => {
@@ -131,13 +142,19 @@ export function App() {
 
   return (
     <div className="app">
-      {withdrawing && <Withdraw onClose={() => setWithdrawing(false)} />}
+      {showBalance && (
+        <BalanceSheet
+          history={balanceHistory}
+          balance={balance}
+          onClose={() => setShowBalance(false)}
+        />
+      )}
       <div className="topbar">
         <h1>PolyBot · BTC 5м</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          {/* The balance is the natural place to reach for when taking money
-              out, so it is the button that opens the withdrawal. */}
-          <button className="pill balance" onClick={() => setWithdrawing(true)}>
+          {/* The number says how much; tapping it says which way it has been
+              going, which is the question the number provokes. */}
+          <button className="pill balance" onClick={() => setShowBalance(true)}>
             {balance === null ? '— $' : `${balance.toFixed(2)} $`}
           </button>
           {account && <span className="pill mono">{short(account.signerAddress)}</span>}
@@ -145,36 +162,6 @@ export function App() {
       </div>
 
       <div className="scroll">
-        {tab === 'auto' && (
-          <>
-            {/*
-              Two automated strategies, one tab. They are never watched at the
-              same time, and as separate tabs they crowded out the two screens
-              that are.
-            */}
-            <div className="card tight">
-              <div className="segmented">
-                <button
-                  className={autoPane === 'terminal' ? 'active' : ''}
-                  onClick={() => setAutoPane('terminal')}
-                >
-                  Терминал
-                </button>
-                <button
-                  className={autoPane === 'pair' ? 'active' : ''}
-                  onClick={() => setAutoPane('pair')}
-                >
-                  Пара
-                </button>
-              </div>
-            </div>
-            {autoPane === 'terminal' ? (
-              <Dashboard settings={settings} onSellPosition={onSellPosition} />
-            ) : (
-              <Pair />
-            )}
-          </>
-        )}
         {tab === 'manual' && <Manual />}
         {tab === 'settings' && (
           <SettingsScreen
@@ -192,9 +179,6 @@ export function App() {
           onClick={() => setTab('manual')}
         >
           Руки
-        </button>
-        <button className={tab === 'auto' ? 'active' : ''} onClick={() => setTab('auto')}>
-          Авто
         </button>
         <button
           className={tab === 'settings' ? 'active' : ''}

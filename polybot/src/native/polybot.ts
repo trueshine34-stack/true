@@ -55,16 +55,18 @@ export type NativePosition = {
   redeemable: boolean;
 };
 
-/** The funding wallet as the chain sees it, not as the exchange reports it. */
-export type WalletInfo = {
-  address: string;
-  /** USDC.e held on Polygon, in dollars. */
-  usdc: number;
-  /** POL held, and what one transfer costs at the fees quoted right now. */
-  gas: number;
-  fee: number;
-  canSend: boolean;
-  note?: string | null;
+/** How one five-minute event went: which side it closed on, and the money. */
+export type EventSummary = {
+  windowStart: number;
+  /** "Up", "Down", or empty while the window is still running. */
+  winner: string;
+  settled: boolean;
+  spent: number;
+  got: number;
+  held: number;
+  settlement: number;
+  pnl: number;
+  trades: number;
 };
 
 export type NativeExit = {
@@ -203,8 +205,6 @@ export interface PolyBotPlugin {
   getState(): Promise<NativeState>;
   getLogs(): Promise<{ entries: NativeLog[] }>;
   getBalance(): Promise<{ usdc: number }>;
-  walletInfo(): Promise<WalletInfo>;
-  walletWithdraw(args: { to: string; amount: number }): Promise<{ hash: string }>;
   exportJournal(): Promise<{ file: string; bytes: number }>;
   clearJournal(): Promise<void>;
   getJournalSize(): Promise<{ bytes: number }>;
@@ -234,6 +234,7 @@ export interface PolyBotPlugin {
   getBookLevels(args: { tokenId: string; depth?: number }): Promise<BookLevels>;
   getPositions(): Promise<{ positions: NativePosition[] }>;
   getOrderLog(args?: { windowStart?: number }): Promise<{ orders: LoggedOrder[] }>;
+  getEvents(args?: { limit?: number }): Promise<{ events: EventSummary[]; session: number }>;
   getMarketForWindow(args: { windowStart: number }): Promise<NativeMarket>;
   vaultStore(args: { privateKey: string }): Promise<void>;
   vaultLoad(): Promise<{ privateKey?: string | null }>;
@@ -247,6 +248,10 @@ export interface PolyBotPlugin {
     watchSec?: number;
     rebuySlicePauseSec?: number;
     ladderLeadSec?: number;
+    percentMode?: boolean;
+    profitPct?: number;
+    sliceGapSec?: number;
+    panicSec?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
   addListener(
@@ -516,12 +521,6 @@ const webStub: PolyBotPlugin = {
   getBalance: async () => {
     throw new Error('Баланс доступен только в приложении Android');
   },
-  walletInfo: async () => {
-    throw new Error('Кошелёк доступен только в приложении Android');
-  },
-  walletWithdraw: async () => {
-    throw new Error('Вывод доступен только в приложении Android');
-  },
   exportJournal: async () => {
     throw new Error('Экспорт доступен только в приложении Android');
   },
@@ -557,6 +556,7 @@ const webStub: PolyBotPlugin = {
   getBookLevels: async () => ({ bids: [], asks: [] }),
   getPositions: async () => ({ positions: [] }),
   getOrderLog: async () => ({ orders: [] }),
+  getEvents: async () => ({ events: [], session: 0 }),
   getMarketForWindow: async () => {
     throw new Error('Рынок доступен только в приложении Android');
   },

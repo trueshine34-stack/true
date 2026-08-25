@@ -207,6 +207,12 @@ object ClobApi {
         return json.optString("price").toDoubleOrNull()
     }
 
+    /** Best bid — what a sale would fetch right now, at the same cost of one request. */
+    fun bestBid(tokenId: String): Double? {
+        val json = JSONObject(Http.get("${Endpoints.CLOB}/price?token_id=$tokenId&side=buy"))
+        return json.optString("price").toDoubleOrNull()
+    }
+
     /** Top of book for one outcome, read straight off the order book. */
     fun quote(tokenId: String): Quote {
         val book = getBook(tokenId)

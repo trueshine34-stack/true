@@ -12,6 +12,14 @@ import {
 } from '../core/manual';
 import { findLevels } from '../core/levels';
 import {
+  SELL_GAINS,
+  positionPnl,
+  signedPct,
+  signedUsd,
+  targetPrice,
+  usd,
+} from '../core/money';
+import {
   appendPositionHistory,
   loadPositionHistory,
   type PositionRecord,
@@ -24,6 +32,7 @@ import {
   type GmxCandle,
   type AutoSellRebuy,
   type AutoSellRebuyDone,
+  type EventSummary,
   type LoggedOrder,
   type NativeMarket,
   type NativePosition,
@@ -52,6 +61,8 @@ type Draft = {
   action: 'BUY' | 'SELL';
   price: string;
   shares: string;
+  /** What the position being sold cost, so a gain can be priced off it. */
+  avg?: number;
 };
 
 const IDLE_AUTOSELL: AutoSellState = {
@@ -92,6 +103,10 @@ export function Manual() {
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [logged, setLogged] = useState<LoggedOrder[]>([]);
   const [lookAhead, setLookAhead] = useState(false);
+  const [events, setEvents] = useState<EventSummary[]>([]);
+  const [sessionPnl, setSessionPnl] = useState(0);
+  /** A closed window being looked at, instead of the one being traded. */
+  const [viewWindow, setViewWindow] = useState<number | null>(null);
   const [autoSell, setAutoSell] = useState<AutoSellState>(IDLE_AUTOSELL);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -129,6 +144,10 @@ export function Manual() {
           watchSec: stored.autoSellWatchSec,
           rebuySlicePauseSec: stored.autoRebuySlicePauseSec,
           ladderLeadSec: stored.autoSellLeadSec,
+          percentMode: stored.autoSellPercentMode,
+          profitPct: stored.autoSellProfitPct,
+          sliceGapSec: stored.autoSellSliceGapSec,
+          panicSec: stored.autoSellPanicSec,
         }).catch(() => {});
       }
     });
@@ -178,6 +197,33 @@ export function Manual() {
       cancelled = true;
       window.clearInterval(timer);
     };
+  }, [windowStart]);
+
+  // How each five-minute event went. Slow on purpose: a window's result cannot
+  // change once it has closed, and the running one only moves when an order does.
+  useEffect(() => {
+    let cancelled = false;
+    const read = () => {
+      void PolyBot.getEvents({ limit: 10 })
+        .then((r) => {
+          if (cancelled) return;
+          setEvents(r.events);
+          setSessionPnl(r.session);
+        })
+        .catch(() => {});
+    };
+    read();
+    const timer = window.setInterval(read, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [windowStart]);
+
+  // A window that has closed is history; looking at one is not a mode to be
+  // stuck in when the next one opens.
+  useEffect(() => {
+    setViewWindow(null);
   }, [windowStart]);
 
   /** The window the desk is trading: this one, or the one after it. */
@@ -284,7 +330,7 @@ export function Manual() {
           if (!cancelled) setOrders(r.orders);
         })
         .catch(() => {});
-      void PolyBot.getOrderLog({ windowStart: deskWindow })
+      void PolyBot.getOrderLog({ windowStart: viewWindow ?? deskWindow })
         .then((r) => {
           if (!cancelled) setLogged(r.orders);
         })
@@ -296,7 +342,7 @@ export function Manual() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [deskWindow]);
+  }, [deskWindow, viewWindow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -327,6 +373,10 @@ export function Manual() {
               watchSec: settingsRef.current.autoSellWatchSec,
               rebuySlicePauseSec: settingsRef.current.autoRebuySlicePauseSec,
               ladderLeadSec: settingsRef.current.autoSellLeadSec,
+              percentMode: settingsRef.current.autoSellPercentMode,
+              profitPct: settingsRef.current.autoSellProfitPct,
+              sliceGapSec: settingsRef.current.autoSellSliceGapSec,
+              panicSec: settingsRef.current.autoSellPanicSec,
             }).catch(() => {});
           }
         })
@@ -478,6 +528,7 @@ export function Manual() {
         action: 'SELL',
         price: String(Math.round(bid * 100)),
         shares: sellableShares(position.size, bid).toFixed(1),
+        avg: position.avgPrice > 0 ? position.avgPrice : undefined,
       });
       setNote(null);
     },
@@ -577,6 +628,14 @@ export function Manual() {
 
   return (
     <>
+      <EventStrip
+        events={events}
+        session={sessionPnl}
+        windowStart={windowStart}
+        selected={viewWindow}
+        onSelect={setViewWindow}
+      />
+
       <div className="card tight">
         <div className="deskbar">
           <div>
@@ -659,24 +718,41 @@ export function Manual() {
                   </span>
                   <span className="listrow-main">
                     {/*
-                      A zero average means the trade is not indexed yet, not
-                      that it was free. Showing a dash beats showing a price
-                      that never happened — and the P&L built on it too.
+                      Money first. A share count means something different at
+                      10¢ than at 90¢, and nothing at all at a glance — while a
+                      zero average means the trade is not indexed yet, not that
+                      it was free, so it shows a dash rather than a price that
+                      never happened.
                     */}
-                    {p.size.toFixed(1)} × {p.avgPrice > 0 ? cents(p.avgPrice) : '…'}
+                    {p.avgPrice > 0 ? usd(p.size * p.avgPrice) : '…'}
+                    <span className="sub muted">
+                      {p.size.toFixed(1)} × {p.avgPrice > 0 ? cents(p.avgPrice) : '…'}
+                    </span>
                   </span>
                   <span className="listrow-now">
-                    {p.curPrice != null ? cents(p.curPrice) : '—'}
+                    {p.curPrice != null ? usd(p.size * p.curPrice) : '—'}
+                    <span className="sub muted">
+                      {p.curPrice != null ? cents(p.curPrice) : '—'}
+                    </span>
                   </span>
-                  <span
-                    className={`listrow-pnl ${
-                      p.avgPrice > 0 ? (p.cashPnl >= 0 ? 'up' : 'down') : 'muted'
-                    }`}
-                  >
-                    {p.avgPrice > 0
-                      ? `${p.cashPnl >= 0 ? '+' : '−'}${Math.abs(p.cashPnl).toFixed(2)}`
-                      : '…'}
-                  </span>
+                  {(() => {
+                    // What selling right now would actually pay, fee included —
+                    // the exchange's own figure is the mark, which is a bigger
+                    // number than the money.
+                    const pnl = positionPnl(p.size, p.avgPrice, p.curPrice ?? 0);
+                    return (
+                      <span
+                        className={`listrow-pnl ${
+                          p.avgPrice > 0 ? (pnl.pnl >= 0 ? 'up' : 'down') : 'muted'
+                        }`}
+                      >
+                        {p.avgPrice > 0 ? signedUsd(pnl.pnl) : '…'}
+                        <span className="sub">
+                          {p.avgPrice > 0 ? signedPct(pnl.pct) : ''}
+                        </span>
+                      </span>
+                    );
+                  })()}
                 </button>
               ))
             )}
@@ -701,8 +777,13 @@ export function Manual() {
                       {o.action === 'BUY' ? 'ПОК' : 'ПРО'}
                     </span>
                     <span className="listrow-main">
-                      {o.size.toFixed(1)} × {cents(o.price)}
-                      {o.status === 'partial' ? ` · ${o.matched.toFixed(1)}` : ''}
+                      {usd(o.size * o.price)}
+                      <span className="sub muted">
+                        {o.size.toFixed(1)} × {cents(o.price)}
+                        {o.status === 'partial'
+                          ? ` · ${usd(o.matched * o.price)}`
+                          : ''}
+                      </span>
                     </span>
                     <span className="muted listrow-now">
                       {o.outcome}
@@ -758,7 +839,38 @@ export function Manual() {
                   </div>
                 </div>
               </div>
-              {balance != null && balance > 0 && (
+              {/*
+                Selling asks a different question from buying. Not "what price"
+                — the price is a means — but "how much more than it cost". The
+                fee comes out of the proceeds, so each chip solves for the price
+                whose *net* is the gain it names.
+              */}
+              {draft.action === 'SELL' && draft.avg != null && (
+                <div className="draftpcts pcts">
+                  {SELL_GAINS.map((gain) => {
+                    const price = targetPrice(draft.avg as number, gain, market?.tickSize ?? 0.01);
+                    return (
+                      <button
+                        key={gain}
+                        className={
+                          Math.round(price * 100) === Math.round(Number(draft.price))
+                            ? 'on'
+                            : undefined
+                        }
+                        onClick={() =>
+                          setDraft({ ...draft, price: String(Math.round(price * 100)) })
+                        }
+                        title={`${cents(price)} · ${usd(
+                          Number(draft.shares.replace(',', '.')) * price || 0,
+                        )}`}
+                      >
+                        +{Math.round(gain * 100)}%
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {draft.action !== 'SELL' && balance != null && balance > 0 && (
                 <div className="draftpcts pcts">
                   {[25, 50, 100].map((pct) => {
                     const price = Number(draft.price) / 100;
@@ -927,6 +1039,85 @@ export function Manual() {
 }
 
 /** Closed positions, newest first, stamped with the window they belonged to. */
+/**
+ * How the last few five-minute events went.
+ *
+ * A window is the unit this app trades, so it is the unit worth scoring: which
+ * side it closed on, and what the round made. The colour is the side — green
+ * for Up, red for Down — and the money keeps its own sign, because a round can
+ * be lost on the side that won and won on the side that lost.
+ *
+ * Tapping one shows that window's orders below. The running window is the way
+ * back, and the strip scrolls itself there whenever it changes.
+ */
+function EventStrip({
+  events,
+  session,
+  windowStart,
+  selected,
+  onSelect,
+}: {
+  events: EventSummary[];
+  session: number;
+  windowStart: number;
+  selected: number | null;
+  onSelect: (windowStart: number | null) => void;
+}) {
+  const clock = (at: number) =>
+    new Date(at * 1000).toLocaleTimeString('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+  const past = events.filter((e) => e.windowStart !== windowStart);
+  const live = events.find((e) => e.windowStart === windowStart);
+
+  return (
+    <div className="card tight eventcard">
+      <div className="listhead">
+        <span>Сессия</span>
+        <span className={session >= 0 ? 'up sessum' : 'down sessum'}>
+          {signedUsd(session)}
+        </span>
+      </div>
+      <div className="eventstrip">
+        <button
+          className={`eventchip now${selected === null ? ' on' : ''}`}
+          onClick={() => onSelect(null)}
+        >
+          <span className="eventchip-time">сейчас</span>
+          <span
+            className={
+              live == null ? 'muted' : live.pnl >= 0 ? 'up' : 'down'
+            }
+          >
+            {live == null ? '—' : signedUsd(live.pnl)}
+          </span>
+        </button>
+        {past.map((e) => (
+          <button
+            key={e.windowStart}
+            className={`eventchip${selected === e.windowStart ? ' on' : ''}${
+              e.winner === 'Up' ? ' win-up' : e.winner === 'Down' ? ' win-down' : ''
+            }`}
+            onClick={() => onSelect(selected === e.windowStart ? null : e.windowStart)}
+            title={`${clock(e.windowStart)} · закрытие ${e.winner || '—'}`}
+          >
+            <span className="eventchip-time">
+              {clock(e.windowStart)}
+              {e.winner && <b>{e.winner === 'Up' ? '↑' : '↓'}</b>}
+            </span>
+            <span className={e.pnl >= 0 ? 'up' : 'down'}>{signedUsd(e.pnl)}</span>
+          </button>
+        ))}
+        {past.length === 0 && (
+          <span className="muted empty">Сыгранных событий ещё нет</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PositionHistory({ records }: { records: PositionRecord[] }) {
   if (records.length === 0) {
     return <div className="muted empty">История пуста</div>;
@@ -1231,6 +1422,10 @@ function RuleBar({
         watchSec: next.autoSellWatchSec,
         rebuySlicePauseSec: next.autoRebuySlicePauseSec,
         ladderLeadSec: next.autoSellLeadSec,
+        percentMode: next.autoSellPercentMode,
+        profitPct: next.autoSellProfitPct,
+        sliceGapSec: next.autoSellSliceGapSec,
+        panicSec: next.autoSellPanicSec,
       }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
     },
     [onChange, onNote],
@@ -1255,7 +1450,15 @@ function RuleBar({
             push({ ...settings, autoSellEnabled: !settings.autoSellEnabled })
           }
         />
-        <span className="rule-name">Автопродажа</span>
+        <span className="rule-name">
+          Автопродажа
+          {settings.autoSellPercentMode && (
+            <span className="muted">
+              {' '}
+              +{Math.round(settings.autoSellProfitPct * 100)}%
+            </span>
+          )}
+        </span>
         <span className={`rule-note ${state.lastFault ? 'down' : 'muted'}`}>
           {/*
             A rule that is on but not sweeping used to look identical to one
@@ -1378,6 +1581,13 @@ function ManualSettingsForm({
       retryEverySec: next.autoSellRetrySec,
       rebuyEnabled: next.autoRebuyEnabled,
       rebuyDropPct: next.autoRebuyDropPct,
+      watchSec: next.autoSellWatchSec,
+      rebuySlicePauseSec: next.autoRebuySlicePauseSec,
+      ladderLeadSec: next.autoSellLeadSec,
+      percentMode: next.autoSellPercentMode,
+      profitPct: next.autoSellProfitPct,
+      sliceGapSec: next.autoSellSliceGapSec,
+      panicSec: next.autoSellPanicSec,
     }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
   };
 
@@ -1483,6 +1693,94 @@ function ManualSettingsForm({
 
     <div className="card">
       <h2>Автопродажа</h2>
+
+      {/*
+        Two ways to price an exit. The ladder asks a fixed price at a fixed
+        minute, which ignores what the position cost — 84¢ is a good sale bought
+        at 60¢ and a poor one bought at 82¢. Percent prices off the buy instead.
+      */}
+      <div className="segmented" style={{ marginBottom: 10 }}>
+        <button
+          className={settings.autoSellPercentMode ? '' : 'active'}
+          onClick={() => push({ ...settings, autoSellPercentMode: false })}
+        >
+          Лесенкой
+        </button>
+        <button
+          className={settings.autoSellPercentMode ? 'active' : ''}
+          onClick={() => push({ ...settings, autoSellPercentMode: true })}
+        >
+          По проценту
+        </button>
+      </div>
+
+      {settings.autoSellPercentMode ? (
+        <>
+          <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
+            Продажа выставляется от цены покупки: столько сверху, сколько указано
+            — уже за вычетом комиссии, которая снимается с выручки. Несколько
+            покупок продаются по частям, каждая следующая дороже предыдущей.
+          </div>
+
+          <label className="field">
+            <span>Продавать при плюсе, %</span>
+            <input
+              type="number"
+              value={String(Math.round(settings.autoSellProfitPct * 100))}
+              onChange={(e) =>
+                push({
+                  ...settings,
+                  autoSellProfitPct: Number(e.target.value.replace(',', '.')) / 100,
+                })
+              }
+            />
+            <span className="muted" style={{ fontSize: 11 }}>
+              Считается по тому, что сделка реально заплатит. Заявка на «avg ×
+              1,2» приносит меньше двадцати процентов — комиссия берётся с
+              выручки, а на дешёвой стороне она заметная.
+            </span>
+          </label>
+
+          <label className="field">
+            <span>Пауза между частями, сек</span>
+            <input
+              type="number"
+              value={String(settings.autoSellSliceGapSec)}
+              onChange={(e) =>
+                push({
+                  ...settings,
+                  autoSellSliceGapSec: Number(e.target.value.replace(',', '.')),
+                })
+              }
+            />
+            <span className="muted" style={{ fontSize: 11 }}>
+              Если первая часть исполнилась — рынок идёт вверх, и остальное имеет
+              смысл отдавать дороже, а не по той же цене.
+            </span>
+          </label>
+
+          <label className="field">
+            <span>Добирать любой плюс за, сек до конца</span>
+            <input
+              type="number"
+              value={String(settings.autoSellPanicSec)}
+              onChange={(e) =>
+                push({
+                  ...settings,
+                  autoSellPanicSec: Number(e.target.value.replace(',', '.')),
+                })
+              }
+            />
+            <span className="muted" style={{ fontSize: 11 }}>
+              В последнюю минуту, если нужный процент так и не набрался, позиция
+              уходит по тому, что даёт стакан, — но только пока это плюс после
+              комиссии. Убыток не фиксируется: пятиминутка досиживается до
+              расчёта.
+            </span>
+          </label>
+        </>
+      ) : (
+        <>
       <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
         Цена продажи по минуте окна: ступень встаёт на {settings.autoSellLeadSec}{' '}
         секунд раньше самой минуты. Лесенка перепрыгивает вперёд, если рынок уже
@@ -1521,6 +1819,8 @@ function ManualSettingsForm({
           </label>
         ))}
       </div>
+        </>
+      )}
 
       <label className="field" style={{ marginTop: 12 }}>
         <span>Сколько добиваться после покупки, сек</span>
