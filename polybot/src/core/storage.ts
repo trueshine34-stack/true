@@ -1,6 +1,7 @@
 import { Preferences } from '@capacitor/preferences';
 import { DEFAULT_SETTINGS, type StrategySettings } from './settings';
 import { DEFAULT_PAIR_SETTINGS } from './pair';
+import { DEFAULT_MANUAL_SETTINGS, type ManualSettings } from './manual';
 import type { PairSettings } from '../native/polybot';
 import type { AccountConfig } from './account';
 
@@ -18,6 +19,7 @@ const KEY_VAULT = 'vault.v1';
 const KEY_ACCOUNT = 'account.v1';
 const KEY_SETTINGS = 'settings.v1';
 const KEY_PAIR = 'pair.v1';
+const KEY_MANUAL = 'manual.v1';
 
 const PBKDF2_ITERATIONS = 210_000;
 
@@ -152,5 +154,22 @@ export async function loadPairSettings(): Promise<PairSettings> {
     return { ...DEFAULT_PAIR_SETTINGS, ...(JSON.parse(value) as PairSettings) };
   } catch {
     return { ...DEFAULT_PAIR_SETTINGS };
+  }
+}
+
+export async function saveManualSettings(settings: ManualSettings): Promise<void> {
+  await Preferences.set({ key: KEY_MANUAL, value: JSON.stringify(settings) });
+}
+
+export async function loadManualSettings(): Promise<ManualSettings> {
+  const { value } = await Preferences.get({ key: KEY_MANUAL });
+  if (!value) return { ...DEFAULT_MANUAL_SETTINGS };
+  try {
+    return {
+      ...DEFAULT_MANUAL_SETTINGS,
+      ...(JSON.parse(value) as ManualSettings),
+    };
+  } catch {
+    return { ...DEFAULT_MANUAL_SETTINGS };
   }
 }

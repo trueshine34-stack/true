@@ -207,6 +207,17 @@ export interface PolyBotPlugin {
   pairReset(): Promise<void>;
   pairUpdateSettings(args: { settings: PairSettings }): Promise<void>;
   pairGetState(): Promise<PairState>;
+  gmxCandles(args?: { symbol?: string; period?: string; limit?: number }): Promise<{
+    candles: GmxCandle[];
+    ticker?: GmxTicker;
+  }>;
+  getBookLevels(args: { tokenId: string; depth?: number }): Promise<BookLevels>;
+  autoSellUpdate(args: {
+    enabled?: boolean;
+    price?: number;
+    retryEverySec?: number;
+  }): Promise<void>;
+  autoSellState(): Promise<AutoSellState>;
   addListener(
     event: 'state',
     fn: (state: NativeState) => void,
@@ -216,6 +227,41 @@ export interface PolyBotPlugin {
     fn: (entry: NativeLog) => void,
   ): Promise<PluginListenerHandle>;
 }
+
+// ---------------------------------------------------------- manual desk
+
+export type GmxCandle = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+};
+
+export type GmxTicker = { min: number; max: number; mid: number; at: number };
+
+export type BookLevel = { price: number; size: number };
+export type BookLevels = { bids: BookLevel[]; asks: BookLevel[] };
+
+export type AutoSellRow = {
+  asset: string;
+  title: string;
+  outcome: string;
+  size: number;
+  resting: number;
+  restingPrice?: number | null;
+  status: string;
+  attempts: number;
+};
+
+export type AutoSellState = {
+  enabled: boolean;
+  running: boolean;
+  price: number;
+  retryEverySec: number;
+  lastSweepAt: number;
+  rows: AutoSellRow[];
+};
 
 // ------------------------------------------------------------ pair strategy
 
@@ -407,6 +453,19 @@ const webStub: PolyBotPlugin = {
   pairReset: async () => {},
   pairUpdateSettings: async () => {},
   pairGetState: async () => IDLE_PAIR_STATE,
+  gmxCandles: async () => {
+    throw new Error('График доступен только в приложении Android');
+  },
+  getBookLevels: async () => ({ bids: [], asks: [] }),
+  autoSellUpdate: async () => {},
+  autoSellState: async () => ({
+    enabled: false,
+    running: false,
+    price: 0.97,
+    retryEverySec: 7,
+    lastSweepAt: 0,
+    rows: [],
+  }),
   addListener: async () => ({ remove: async () => {} }) as PluginListenerHandle,
 };
 

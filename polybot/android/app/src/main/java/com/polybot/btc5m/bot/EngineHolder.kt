@@ -19,6 +19,9 @@ object EngineHolder {
     private var pair: PairEngine? = null
 
     @Volatile
+    private var autoSell: AutoSell? = null
+
+    @Volatile
     var onState: (() -> Unit)? = null
 
     @Volatile
@@ -72,8 +75,34 @@ object EngineHolder {
         }
     }
 
+    /** Standing sell rule for hand trading, sharing the engine's session. */
+    fun autoSell(context: Context): AutoSell {
+        autoSell?.let { return it }
+        val host = get(context)
+        return synchronized(this) {
+            autoSell ?: AutoSell(
+                engine = host,
+                busyMarkets = {
+                    val markets = HashSet<String>()
+                    if (host.running) {
+                        host.current?.market?.conditionId?.let { markets.add(it) }
+                    }
+                    pair?.takeIf { it.running }?.book?.market?.conditionId
+                        ?.let { markets.add(it) }
+                    markets
+                },
+                onStateChanged = {
+                    onState?.invoke()
+                    onServiceState?.invoke()
+                },
+            ).also { autoSell = it }
+        }
+    }
+
     /** Null when nothing has touched the engine yet this process. */
     fun peek(): BotEngine? = engine
+
+    fun peekAutoSell(): AutoSell? = autoSell
 
     fun peekPair(): PairEngine? = pair
 }

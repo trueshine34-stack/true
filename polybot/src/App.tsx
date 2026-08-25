@@ -12,13 +12,14 @@ import { PolyBot, type NativePosition } from './native/polybot';
 import { Dashboard } from './ui/Dashboard';
 import { Logs } from './ui/Logs';
 import { Orders, type SellPrefill } from './ui/Orders';
+import { Manual } from './ui/Manual';
 import { Pair } from './ui/Pair';
 import { Lock } from './ui/Lock';
 import { SettingsScreen } from './ui/Settings';
 import { Setup } from './ui/Setup';
 
 type Phase = 'loading' | 'setup' | 'locked' | 'ready';
-type Tab = 'dashboard' | 'pair' | 'orders' | 'settings' | 'logs';
+type Tab = 'dashboard' | 'manual' | 'pair' | 'orders' | 'settings' | 'logs';
 
 export function App() {
   const [phase, setPhase] = useState<Phase>('loading');
@@ -166,6 +167,7 @@ export function App() {
         {tab === 'dashboard' && (
           <Dashboard settings={settings} onSellPosition={onSellPosition} />
         )}
+        {tab === 'manual' && <Manual />}
         {tab === 'pair' && <Pair />}
         {tab === 'orders' && (
           <Orders prefill={sellPrefill} onPrefillUsed={() => setSellPrefill(null)} />
@@ -187,6 +189,12 @@ export function App() {
           onClick={() => setTab('dashboard')}
         >
           Терминал
+        </button>
+        <button
+          className={tab === 'manual' ? 'active' : ''}
+          onClick={() => setTab('manual')}
+        >
+          Руки
         </button>
         <button className={tab === 'pair' ? 'active' : ''} onClick={() => setTab('pair')}>
           Пара

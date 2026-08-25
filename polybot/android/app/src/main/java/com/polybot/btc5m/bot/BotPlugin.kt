@@ -45,6 +45,9 @@ class BotPlugin : Plugin() {
     /** The pair strategy, sharing this engine's feed and signing session. */
     private val pair: PairEngine get() = EngineHolder.pair(context)
 
+    /** Standing sell rule for the manual desk. */
+    private val autoSell: AutoSell get() = EngineHolder.autoSell(context)
+
     override fun load() {
         EngineHolder.onState = { notifyState() }
         EngineHolder.onLogEntry = { entry -> notifyLog(entry) }
@@ -774,6 +777,128 @@ class BotPlugin : Plugin() {
                 "averageDownDeadlineSec",
                 defaults.averageDownDeadlineSec,
             ),
+        )
+    }
+
+    // --------------------------------------------------------- manual desk
+
+    /**
+     * GMX candles for the chart. This runs natively for the same reason every
+     * other request does: the WebView reports transport failures as an opaque
+     * "Failed to fetch", which is impossible to act on.
+     */
+    @PluginMethod
+    fun gmxCandles(call: PluginCall) {
+        val symbol = call.getString("symbol") ?: "BTC"
+        val period = call.getString("period") ?: "1m"
+        val limit = call.getInt("limit") ?: 120
+        Thread {
+            try {
+                val candles = JSArray()
+                // Oldest first: a chart is drawn left to right.
+                GmxApi.candles(symbol, period, limit).asReversed().forEach {
+                    candles.put(
+                        JSObject()
+                            .put("time", it.time)
+                            .put("open", it.open)
+                            .put("high", it.high)
+                            .put("low", it.low)
+                            .put("close", it.close),
+                    )
+                }
+                val result = JSObject().put("candles", candles)
+                GmxApi.ticker(symbol)?.let {
+                    result.put(
+                        "ticker",
+                        JSObject().put("min", it.min).put("max", it.max)
+                            .put("mid", it.mid).put("at", it.at),
+                    )
+                }
+                call.resolve(result)
+            } catch (e: Exception) {
+                call.reject(e.message ?: "GMX недоступен")
+            }
+        }.start()
+    }
+
+    /** Full depth for one outcome, for the manual order book. */
+    @PluginMethod
+    fun getBookLevels(call: PluginCall) {
+        val tokenId = call.getString("tokenId")
+        if (tokenId == null) {
+            call.reject("tokenId required")
+            return
+        }
+        val depth = call.getInt("depth") ?: 12
+        Thread {
+            try {
+                val book = ClobApi.getBook(tokenId)
+                fun levels(side: List<ClobApi.Level>, best: Boolean): JSArray {
+                    val sorted = if (best) {
+                        side.sortedByDescending { it.price }
+                    } else {
+                        side.sortedBy { it.price }
+                    }
+                    val out = JSArray()
+                    sorted.take(depth).forEach {
+                        out.put(JSObject().put("price", it.price).put("size", it.size))
+                    }
+                    return out
+                }
+                call.resolve(
+                    JSObject()
+                        .put("bids", levels(book.bids, best = true))
+                        .put("asks", levels(book.asks, best = false)),
+                )
+            } catch (e: Exception) {
+                call.reject(e.message ?: "стакан недоступен")
+            }
+        }.start()
+    }
+
+    @PluginMethod
+    fun autoSellUpdate(call: PluginCall) {
+        val defaults = autoSell.settings
+        val next = AutoSell.Settings(
+            enabled = call.getBoolean("enabled") ?: defaults.enabled,
+            price = call.getDouble("price") ?: defaults.price,
+            retryEverySec = call.getInt("retryEverySec") ?: defaults.retryEverySec,
+        )
+        if (next.enabled && !engine.isConfigured()) {
+            call.reject("Сначала подключите кошелёк")
+            return
+        }
+        autoSell.update(next)
+        // The service keeps it alive while the app is backgrounded.
+        if (next.enabled) BotService.startAutoSell(context) else BotService.stopAutoSell(context)
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun autoSellState(call: PluginCall) {
+        val bot = autoSell
+        val rows = JSArray()
+        bot.rows.forEach {
+            rows.put(
+                JSObject()
+                    .put("asset", it.asset)
+                    .put("title", it.title)
+                    .put("outcome", it.outcome)
+                    .put("size", it.size)
+                    .put("resting", it.resting)
+                    .put("restingPrice", it.restingPrice)
+                    .put("status", it.status)
+                    .put("attempts", it.attempts),
+            )
+        }
+        call.resolve(
+            JSObject()
+                .put("enabled", bot.settings.enabled)
+                .put("running", bot.running)
+                .put("price", bot.settings.price)
+                .put("retryEverySec", bot.settings.retryEverySec)
+                .put("lastSweepAt", bot.lastSweepAt)
+                .put("rows", rows),
         )
     }
 

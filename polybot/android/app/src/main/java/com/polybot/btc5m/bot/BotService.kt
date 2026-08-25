@@ -34,6 +34,8 @@ class BotService : Service() {
         const val ACTION_STOP = "com.polybot.btc5m.STOP"
         const val ACTION_START_PAIR = "com.polybot.btc5m.START_PAIR"
         const val ACTION_STOP_PAIR = "com.polybot.btc5m.STOP_PAIR"
+        const val ACTION_START_AUTOSELL = "com.polybot.btc5m.START_AUTOSELL"
+        const val ACTION_STOP_AUTOSELL = "com.polybot.btc5m.STOP_AUTOSELL"
 
         private const val CHANNEL_ID = "polybot_engine"
         private const val NOTIFICATION_ID = 4201
@@ -42,7 +44,9 @@ class BotService : Service() {
 
         /** True while either strategy is trading. */
         fun anyRunning(): Boolean =
-            EngineHolder.peek()?.running == true || EngineHolder.peekPair()?.running == true
+            EngineHolder.peek()?.running == true ||
+                EngineHolder.peekPair()?.running == true ||
+                EngineHolder.peekAutoSell()?.running == true
 
         fun start(context: Context) = send(context, ACTION_START, foreground = true)
 
@@ -51,6 +55,12 @@ class BotService : Service() {
         fun startPair(context: Context) = send(context, ACTION_START_PAIR, foreground = true)
 
         fun stopPair(context: Context) = send(context, ACTION_STOP_PAIR, foreground = false)
+
+        fun startAutoSell(context: Context) =
+            send(context, ACTION_START_AUTOSELL, foreground = true)
+
+        fun stopAutoSell(context: Context) =
+            send(context, ACTION_STOP_AUTOSELL, foreground = false)
 
         private fun send(context: Context, action: String, foreground: Boolean) {
             val intent = Intent(context, BotService::class.java).setAction(action)
@@ -91,7 +101,20 @@ class BotService : Service() {
                 return START_NOT_STICKY
             }
 
+            ACTION_STOP_AUTOSELL -> {
+                EngineHolder.peekAutoSell()?.stop()
+                releaseUnlessBusy()
+                return START_NOT_STICKY
+            }
+
             ACTION_START_PAIR -> startPairEngine()
+
+            ACTION_START_AUTOSELL -> {
+                startForeground(NOTIFICATION_ID, buildNotification("Автопродажа…"))
+                acquireWakeLock()
+                EngineHolder.autoSell(this).start()
+                updateNotification()
+            }
 
             else -> startEngine()
         }
@@ -143,6 +166,7 @@ class BotService : Service() {
         if (EngineHolder.onServiceState === stateHook) EngineHolder.onServiceState = null
         EngineHolder.peek()?.shutdown()
         EngineHolder.peekPair()?.stop()
+        EngineHolder.peekAutoSell()?.stop()
         releaseWakeLock()
         super.onDestroy()
     }
@@ -226,6 +250,11 @@ class BotService : Service() {
                 "пара · $pairMode · пар " +
                     String.format("%.0f", pairBot.stats.pairsLocked) + " · $pnl $"
             }
+
+            EngineHolder.peekAutoSell()?.running == true ->
+                "автопродажа по " +
+                    String.format("%.0f", (EngineHolder.peekAutoSell()?.settings?.price ?: 0.0) * 100) +
+                    "¢ · позиций ${EngineHolder.peekAutoSell()?.rows?.size ?: 0}"
 
             else -> bot.haltReason?.let { "остановлен: $it" } ?: "остановлен"
         }

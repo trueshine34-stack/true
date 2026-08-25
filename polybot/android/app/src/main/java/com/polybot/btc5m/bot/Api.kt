@@ -153,6 +153,9 @@ object ClobApi {
         val tickSize: Double,
         val negRisk: Boolean,
         val minimumOrderSize: Double,
+        /** False once the window has closed; the venue rejects orders then. */
+        val acceptingOrders: Boolean,
+        val closed: Boolean,
     )
 
     fun marketMeta(conditionId: String): MarketMeta {
@@ -161,6 +164,8 @@ object ClobApi {
             tickSize = json.optDouble("minimum_tick_size", 0.01),
             negRisk = json.optBoolean("neg_risk", false),
             minimumOrderSize = json.optDouble("minimum_order_size", 5.0),
+            acceptingOrders = json.optBoolean("accepting_orders", true),
+            closed = json.optBoolean("closed", false),
         )
     }
 

@@ -5,6 +5,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -124,5 +125,39 @@ class FeedTest {
 
         assertEquals(4_000L, feed.firstTickAtOrAfter(3_500L)!!.timestamp)
         assertEquals(3, feed.ticksBetween(4_000L, 6_000L).size)
+    }
+}
+
+/**
+ * GMX quotes prices scaled to thirty decimals minus the token's own, which for
+ * BTC is a twenty-seven digit integer — far past what a double holds exactly.
+ * Getting the shift wrong shows a plausible-looking but wrong price on the
+ * chart, so it is worth a test.
+ */
+class GmxScalingTest {
+
+    private fun scale(raw: String, decimals: Int): Double =
+        java.math.BigDecimal(raw).movePointLeft(30 - decimals).toDouble()
+
+    @Test
+    fun btcScalesByTwentyTwoPlaces() {
+        // A real reading from the tickers endpoint.
+        assertEquals(80825.05043986825, scale("808250504398682500000000000", 8), 1e-6)
+    }
+
+    @Test
+    fun ethScalesByTwelve() {
+        assertEquals(2518.684201636812, scale("2518684201636812", 18), 1e-9)
+    }
+
+    @Test
+    fun theIntegerIsWiderThanADoubleHoldsExactly() {
+        val raw = "808250504398682512345678901"
+        // Parsing straight to double first would lose the tail; going through
+        // BigDecimal keeps every digit that matters at cent resolution.
+        val viaBigDecimal = scale(raw, 8)
+        val viaDouble = raw.toDouble() / 1e22
+        assertEquals(viaBigDecimal, viaDouble, 1e-2)
+        assertTrue("the price must land in a sane range", viaBigDecimal in 1.0..1e7)
     }
 }
