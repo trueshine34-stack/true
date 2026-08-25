@@ -236,7 +236,10 @@ export function Manual() {
         .catch(() => {});
     };
     read();
-    const timer = window.setInterval(read, 2000);
+    // Two full books every two seconds is a lot of requests for a number that
+    // moves in cents, and the venue's patience is shared with the rules — the
+    // buy-back was being refused a price while this polled.
+    const timer = window.setInterval(read, 3000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);

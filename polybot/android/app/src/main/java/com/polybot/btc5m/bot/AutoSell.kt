@@ -159,6 +159,9 @@ class AutoSell(
 
         /** How long to sit still when there is nothing to watch. */
         const val IDLE_MS = 5_000L
+
+        /** How often to check the price while a buy-back is waiting for a dip. */
+        const val REBUY_POLL_MS = 2_000L
     }
 
     /**
@@ -202,15 +205,31 @@ class AutoSell(
         scope = newScope
         job = newScope.launch {
             var backoffMs = 0L
+            var lastFullMs = 0L
             while (isActive && running) {
+                val now = System.currentTimeMillis()
                 val nowSec = Clock.nowSec()
+
+                // Watching a price is one small request; a full sweep asks the
+                // data API for positions and trades. Running the second at the
+                // cadence the first needs is what earns a rate limit, so they
+                // are paced apart.
+                if (rebuys.isNotEmpty()) {
+                    try {
+                        runRebuys()
+                    } catch (e: Exception) {
+                        lastFault = e.message ?: "сбой докупа"
+                    }
+                }
+
                 val busy = sweepRequested ||
                     watching.isNotEmpty() ||
                     rebuys.isNotEmpty() ||
-                    // A resting sell is the only thing a buy-back can start
-                    // from, so its fill has to be watched for.
                     OrderLog.hasWorkingSells(nowSec - SellLadder.elapsedInWindow(nowSec))
-                if (busy) {
+                val due = now - lastFullMs >= settings.retryEverySec.coerceAtLeast(1) * 1000L
+
+                if (busy && due && backoffMs <= 0L) {
+                    lastFullMs = now
                     try {
                         sweep()
                         backoffMs = 0L
@@ -222,18 +241,24 @@ class AutoSell(
                         // limit; back off and let it clear.
                         backoffMs = if (backoffMs == 0L) 15_000L else minOf(backoffMs * 2, 120_000L)
                     }
+                } else if (backoffMs > 0L && now - lastFullMs >= backoffMs) {
+                    backoffMs = 0L
+                    lastFullMs = 0L
                 }
+
                 delay(
                     when {
-                        backoffMs > 0L -> backoffMs
-                        busy -> settings.retryEverySec.coerceAtLeast(1) * 1000L
-                        // Nothing bought and nothing pending: no reason to ask
-                        // the venue anything at all.
+                        // A dip can come and go inside one retry interval, so a
+                        // pending buy-back keeps the loop ticking fast — but only
+                        // the price check runs at that pace.
+                        rebuys.isNotEmpty() -> REBUY_POLL_MS
+                        busy -> 1_000L
                         else -> IDLE_MS
                     },
                 )
             }
         }
+
         engine.log(
             "info",
             if (!settings.enabled) {
@@ -468,14 +493,16 @@ class AutoSell(
             // like one that was still patiently waiting.
             if (now < rebuy.nextAtMs) continue
 
-            val book = try {
-                ClobApi.getBook(rebuy.asset)
+            // Just the price. The whole book was more than watching a price
+            // needs, and pulling it on a timer is what got the request refused
+            // at the moment the buy-back depended on it.
+            val ask = try {
+                ClobApi.bestAsk(rebuy.asset)
             } catch (e: Exception) {
-                rebuy.note = "стакан недоступен"
+                rebuy.note = "цена недоступна"
                 continue
             }
-            val ask = book.asks.minByOrNull { it.price }?.price
-            if (ask == null) {
+            if (ask == null || ask <= 0.0) {
                 rebuy.note = "нет предложений"
                 continue
             }

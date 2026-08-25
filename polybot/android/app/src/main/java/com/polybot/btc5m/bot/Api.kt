@@ -195,6 +195,18 @@ object ClobApi {
         )
     }
 
+    /**
+     * Best offer for one outcome — what a buy would pay right now.
+     *
+     * A single number instead of the whole book. Watching a price does not need
+     * every level, and pulling the full book on a timer is what got the request
+     * refused just when the buy-back needed it.
+     */
+    fun bestAsk(tokenId: String): Double? {
+        val json = JSONObject(Http.get("${Endpoints.CLOB}/price?token_id=$tokenId&side=sell"))
+        return json.optString("price").toDoubleOrNull()
+    }
+
     /** Top of book for one outcome, read straight off the order book. */
     fun quote(tokenId: String): Quote {
         val book = getBook(tokenId)
