@@ -1659,3 +1659,65 @@ button.pill.balance {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * The doubling reminder. It sits under the header rather than inside the
+ * scroll, because the moment it matters is the moment it is easiest to scroll
+ * past — and it carries the figure, not the advice.
+ */
+.banner.goalbanner {
+  margin: 10px 14px 0;
+  background: rgba(35, 192, 123, 0.1);
+  border-color: rgba(35, 192, 123, 0.4);
+  color: var(--text);
+}
+
+.goalbanner-acts {
+  display: flex;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.goalbanner-acts button {
+  width: auto;
+  flex: 1;
+}
+
+/* Progress toward the goal, inside the balance sheet. */
+.goal {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 10px 11px;
+  margin-bottom: 10px;
+}
+
+.goal-hit {
+  border-color: rgba(35, 192, 123, 0.45);
+  background: rgba(35, 192, 123, 0.08);
+}
+
+.goal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.goal .bar {
+  margin: 8px 0;
+}
+
+.goal-hit .bar > i {
+  background: var(--up);
+}
+
+.goal-call {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.goal button.ghost {
+  width: 100%;
+}

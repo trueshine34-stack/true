@@ -7,6 +7,7 @@ import {
   type BalancePoint,
 } from '../core/balance';
 import { signedPct, signedUsd, usd } from '../core/money';
+import { GOAL_GAIN, WITHDRAW_SHARE, goalProgress, type GoalState } from '../core/goal';
 
 const W = 320;
 const H = 132;
@@ -21,10 +22,15 @@ const H = 132;
 export function BalanceSheet({
   history,
   balance,
+  goal,
+  onRestart,
   onClose,
 }: {
   history: BalancePoint[];
   balance: number | null;
+  goal: GoalState | null;
+  /** The money is out: start the run again from what is left. */
+  onRestart: () => void;
   onClose: () => void;
 }) {
   const [span, setSpan] = useState(2);
@@ -96,6 +102,8 @@ export function BalanceSheet({
           </div>
         )}
 
+        {goal && balance != null && <GoalCard goal={goal} balance={balance} onRestart={onRestart} />}
+
         <div className="pcts spanrow">
           {SPANS.map((s, i) => (
             <button
@@ -127,6 +135,63 @@ export function BalanceSheet({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * How the run is doing against its goal, and what to take out when it gets
+ * there. The figure is the point — "withdraw some" is advice nobody acts on,
+ * "вывести 8.03 $" is a decision already made.
+ */
+function GoalCard({
+  goal,
+  balance,
+  onRestart,
+}: {
+  goal: GoalState;
+  balance: number;
+  onRestart: () => void;
+}) {
+  const p = goalProgress(goal, balance);
+  const share = Math.round((p.gain / GOAL_GAIN) * 100);
+
+  return (
+    <div className={`goal${p.reached ? ' goal-hit' : ''}`}>
+      <div className="goal-head">
+        <span>
+          Цель ×2 от {usd(p.baseline)}
+          {goal.rounds > 0 && <span className="muted"> · круг {goal.rounds + 1}</span>}
+        </span>
+        <span className={p.profit >= 0 ? 'up' : 'down'}>{signedUsd(p.profit)}</span>
+      </div>
+
+      <div className="bar">
+        <i style={{ width: `${Math.max(0, Math.min(100, share))}%` }} />
+      </div>
+
+      {p.reached ? (
+        <>
+          <div className="goal-call">
+            Баланс удвоился. Вывести <b>{usd(p.suggested)}</b> —{' '}
+            {Math.round(WITHDRAW_SHARE * 100)}% профита. Останется{' '}
+            {usd(p.leftAfter)}, всё ещё больше, чем в начале круга.
+          </div>
+          <button className="ghost compact" onClick={onRestart}>
+            Вывел — считать заново
+          </button>
+        </>
+      ) : (
+        <div className="muted goal-call">
+          До цели {usd(p.remaining)} — это {usd(p.target)} на балансе. Тогда
+          напомню вывести {Math.round(WITHDRAW_SHARE * 100)}% профита.{' '}
+          {/* Money can leave the wallet without the goal being reached, and a
+              baseline that no longer matches reality measures nothing. */}
+          <button className="linkbtn" onClick={onRestart}>
+            считать от текущего
+          </button>
+        </div>
+      )}
     </div>
   );
 }

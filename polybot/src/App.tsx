@@ -13,6 +13,18 @@ import {
   saveBalanceHistory,
   type BalancePoint,
 } from './core/balance';
+import {
+  WITHDRAW_SHARE,
+  goalProgress,
+  loadGoal,
+  restartRun,
+  saveGoal,
+  shouldRemind,
+  snoozeGoal,
+  startRun,
+  type GoalState,
+} from './core/goal';
+import { usd } from './core/money';
 
 type Phase = 'loading' | 'setup' | 'ready';
 type Tab = 'manual' | 'settings';
@@ -25,6 +37,7 @@ export function App() {
   const [balance, setBalance] = useState<number | null>(null);
   const [showBalance, setShowBalance] = useState(false);
   const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
+  const [goal, setGoal] = useState<GoalState | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,7 +120,36 @@ export function App() {
 
   useEffect(() => {
     void loadBalanceHistory().then(setBalanceHistory);
+    void loadGoal().then(setGoal);
   }, []);
+
+  // The run starts at the first balance the app ever sees. Doing it here rather
+  // than at connect time means a reinstall picks up where the money is, not at
+  // zero.
+  useEffect(() => {
+    if (goal != null || balance == null || balance <= 0) return;
+    const started = startRun(balance);
+    setGoal(started);
+    void saveGoal(started);
+  }, [goal, balance]);
+
+  const putOff = useCallback(() => {
+    if (!goal || balance == null) return;
+    const next = snoozeGoal(goal, balance);
+    setGoal(next);
+    void saveGoal(next);
+  }, [goal, balance]);
+
+  /** The money is out: the next run starts from what is left. */
+  const restart = useCallback(() => {
+    if (!goal || balance == null) return;
+    const next = restartRun(goal, balance);
+    setGoal(next);
+    void saveGoal(next);
+  }, [goal, balance]);
+
+  const remind = balance != null && shouldRemind(goal, balance);
+  const progress = goal && balance != null ? goalProgress(goal, balance) : null;
 
   const applySettings = useCallback((next: StrategySettings) => {
     setSettings(next);
@@ -146,6 +188,11 @@ export function App() {
         <BalanceSheet
           history={balanceHistory}
           balance={balance}
+          goal={goal}
+          onRestart={() => {
+            restart();
+            setShowBalance(false);
+          }}
           onClose={() => setShowBalance(false)}
         />
       )}
@@ -160,6 +207,31 @@ export function App() {
           {account && <span className="pill mono">{short(account.signerAddress)}</span>}
         </div>
       </div>
+
+      {/*
+        The one moment a run is most worth protecting is the one it is least
+        likely to be protected in, so the app says it out loud — with the figure
+        already worked out, because "take some off the table" is advice nobody
+        acts on and "вывести 8.03 $" is a decision already made.
+      */}
+      {remind && progress && (
+        <div className="banner goalbanner">
+          <div>
+            Баланс удвоился: <b>{usd(progress.balance)}</b> от{' '}
+            {usd(progress.baseline)}. Пора вывести{' '}
+            <b>{usd(progress.suggested)}</b> —{' '}
+            {Math.round(WITHDRAW_SHARE * 100)}% профита.
+          </div>
+          <div className="goalbanner-acts">
+            <button className="ghost compact" onClick={() => setShowBalance(true)}>
+              Подробнее
+            </button>
+            <button className="ghost compact" onClick={putOff}>
+              Позже
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="scroll">
         {tab === 'manual' && <Manual />}
