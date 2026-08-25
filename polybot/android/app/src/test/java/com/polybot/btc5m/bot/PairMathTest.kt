@@ -362,3 +362,96 @@ class PairLeadCapTest {
         assertEquals(12, bought)
     }
 }
+
+/**
+ * The window's price history, and the bids drawn from it.
+ */
+class PairLevelTrackTest {
+
+    private fun q(bid: Double?, ask: Double?) = Quote(bid, ask)
+
+    @Test
+    fun aLevelSatOnForAWhileCountsAsOneVisit() {
+        val track = LevelTrack()
+        repeat(20) { track.record(q(0.41, 0.43), 0.01) }
+
+        // Twenty samples, one arrival: the ladder answers "how often does the
+        // market come back here", not "how long did it stay".
+        assertEquals(1, track.visits[42])
+        assertEquals(1, track.visits.size)
+    }
+
+    @Test
+    fun leavingAndReturningCountsTwice() {
+        val track = LevelTrack()
+        track.record(q(0.41, 0.43), 0.01)
+        track.record(q(0.44, 0.46), 0.01)
+        track.record(q(0.41, 0.43), 0.01)
+
+        assertEquals(2, track.visits[42])
+        assertEquals(1, track.visits[45])
+    }
+
+    @Test
+    fun itRemembersTheCheapestOfferNotTheCheapestMid() {
+        val track = LevelTrack()
+        track.record(q(0.41, 0.43), 0.01)
+        track.record(q(0.36, 0.38), 0.01)
+        track.record(q(0.44, 0.46), 0.01)
+
+        // What a buy could have paid is the ask, not the mid.
+        assertEquals(0.38, track.lowAsk!!, 1e-9)
+        assertEquals(0.37, track.lowMid!!, 1e-9)
+        assertEquals(0.45, track.highMid!!, 1e-9)
+    }
+
+    @Test
+    fun aQuoteWithNoMidIsIgnored() {
+        val track = LevelTrack()
+        track.record(q(null, null), 0.01)
+
+        assertTrue(track.visits.isEmpty())
+        assertNull(track.lowAsk)
+    }
+
+    @Test
+    fun aOneSidedQuoteStillCounts() {
+        val track = LevelTrack()
+        // Only a bid: mid falls back to it, and there is no ask to record.
+        track.record(q(0.41, null), 0.01)
+
+        assertEquals(1, track.visits[41])
+        assertNull(track.lowAsk)
+    }
+
+    @Test
+    fun patientBidsSitUnderTheWindowLowAndUrgentOnesOverIt() {
+        val low = 0.38
+        assertEquals(0.35, PairMath.anchoredBid(low, 3.0, urgent = false), 1e-9)
+        assertEquals(0.41, PairMath.anchoredBid(low, 3.0, urgent = true), 1e-9)
+    }
+
+    @Test
+    fun theAnchorIsThreeCentsEitherWay() {
+        val low = 0.50
+        val patient = PairMath.anchoredBid(low, 3.0, urgent = false)
+        val urgent = PairMath.anchoredBid(low, 3.0, urgent = true)
+
+        assertEquals(0.06, urgent - patient, 1e-9)
+        assertTrue(patient < low && urgent > low)
+    }
+
+    /**
+     * The anchor may only ever make a bid cheaper than the budget allows — it
+     * is one of three ceilings, never a licence to pay more.
+     */
+    @Test
+    fun theAnchorCannotOutbidTheBudget() {
+        val budget = PairMath.maxPairCost(0.03, 0.95)
+        val budgeted = PairMath.completionLimit(0.42, budget, false, 0.07, 1.0)
+        val anchored = PairMath.anchoredBid(0.70, 3.0, urgent = true)
+
+        // Window low far above what the pair can afford; the budget still wins.
+        assertEquals(0.53, minOf(budgeted, anchored), 1e-9)
+    }
+}

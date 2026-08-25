@@ -872,6 +872,27 @@ class BotPlugin : Plugin() {
             )
         }
 
+        bot.book?.let { b ->
+            fun trackJson(track: LevelTrack): JSObject {
+                val levels = JSArray()
+                track.visits.entries.sortedByDescending { it.key }.forEach { (level, n) ->
+                    levels.put(JSObject().put("level", level).put("visits", n))
+                }
+                return JSObject()
+                    .put("levels", levels)
+                    .put("lowAsk", track.lowAsk)
+                    .put("lowMid", track.lowMid)
+                    .put("highMid", track.highMid)
+            }
+            state.put(
+                "profile",
+                JSObject()
+                    .put("tickSize", b.market?.tickSize ?: 0.01)
+                    .put("up", trackJson(b.trackUp))
+                    .put("down", trackJson(b.trackDown)),
+            )
+        }
+
         val orders = JSArray()
         bot.orders.filter { it.live }.forEach {
             orders.put(
@@ -959,6 +980,7 @@ class BotPlugin : Plugin() {
             maxImbalanceShares = raw.optDouble("maxImbalanceShares", d.maxImbalanceShares),
             flattenSec = raw.optInt("flattenSec", d.flattenSec),
             paperStartUsd = raw.optDouble("paperStartUsd", d.paperStartUsd),
+            lowBiasCents = raw.optDouble("lowBiasCents", d.lowBiasCents),
         )
     }
 

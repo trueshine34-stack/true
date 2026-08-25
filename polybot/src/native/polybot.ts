@@ -238,6 +238,8 @@ export type PairSettings = {
   maxImbalanceShares: number;
   flattenSec: number;
   paperStartUsd: number;
+  /** How far from the window low to bid, in cents. */
+  lowBiasCents: number;
 };
 
 export type PairOrder = {
@@ -290,12 +292,30 @@ export type PairWindow = {
   feesUsd: number;
 };
 
+/** One price level and how many times the window's price arrived there. */
+export type PairLevel = { level: number; visits: number };
+
+export type PairTrack = {
+  levels: PairLevel[];
+  /** Cheapest offer seen this window — what the bot anchors its bids to. */
+  lowAsk?: number | null;
+  lowMid?: number | null;
+  highMid?: number | null;
+};
+
+export type PairProfile = {
+  tickSize: number;
+  up: PairTrack;
+  down: PairTrack;
+};
+
 export type PairState = {
   running: boolean;
   dryRun: boolean;
   haltReason?: string | null;
   quotes?: NativeQuotes;
   book?: PairBook;
+  profile?: PairProfile;
   orders: PairOrder[];
   fills: PairFill[];
   windows: PairWindow[];

@@ -5,6 +5,7 @@ import {
   PolyBot,
   type NativeQuote,
   type PairFill,
+  type PairProfile,
   type PairOrder,
   type PairSettings,
   type PairState,
@@ -115,6 +116,7 @@ export function Pair() {
     a != null && b != null ? a + b : null;
   const pairAtBid = sum(upQ?.bestBid, downQ?.bestBid);
   const pairAtAsk = sum(upQ?.bestAsk, downQ?.bestAsk);
+  const profile = state.profile;
 
   return (
     <>
@@ -177,6 +179,43 @@ export function Pair() {
             <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
               Пара гасится в 1 $. Прибыль есть, только пока её удаётся собрать
               дешевле потолка в {cents(settings.maxPairAvg)}.
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Стакан окна</h2>
+            <div className="row">
+              <span className="label">Минимальный аск за окно</span>
+              <span className="value">
+                Up {profile?.up.lowAsk != null ? cents(profile.up.lowAsk) : '—'} ·
+                Down {profile?.down.lowAsk != null ? cents(profile.down.lowAsk) : '—'}
+              </span>
+            </div>
+            <div className="row">
+              <span className="label">Диапазон Up</span>
+              <span className="value">
+                {profile?.up.lowMid != null && profile.up.highMid != null
+                  ? `${cents(profile.up.lowMid)} — ${cents(profile.up.highMid)}`
+                  : '—'}
+              </span>
+            </div>
+            <div style={{ height: 10 }} />
+            {profile ? (
+              <Ladder
+                profile={profile}
+                upMid={upQ?.mid}
+                upAvg={book && book.upShares > 0 ? book.upAvg : undefined}
+                downAvg={book && book.downShares > 0 ? book.downAvg : undefined}
+                orders={state.orders}
+              />
+            ) : (
+              <div className="muted" style={{ fontSize: 13 }}>
+                Профиль появится, когда бот начнёт следить за окном.
+              </div>
+            )}
+            <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
+              Полоса — сколько раз цена приходила на уровень за эти 5 минут.
+              Слева цена Up, справа Down: сумма строки всегда 100.
             </div>
           </div>
 
@@ -398,6 +437,126 @@ export function Pair() {
  * bid and ask sit under it because the gap between them is where the margin
  * comes from.
  */
+/**
+ * Where the price has been during this window.
+ *
+ * Up and Down are complements, so one ladder in Up-price space describes both:
+ * the row labelled 42¢ is the row where Down was 58¢. The two tracks are read
+ * with `max` rather than summed — they record the same moves from opposite
+ * sides, so summing would double every count, while `max` still keeps the row
+ * alive when one side's quote briefly goes missing.
+ *
+ * Bars are visits, not time. A price that parked on one level for a minute
+ * visited it once; what matters for a resting bid is how often the market comes
+ * back, not how long it stayed away.
+ */
+function Ladder({
+  profile,
+  upMid,
+  upAvg,
+  downAvg,
+  orders,
+}: {
+  profile: PairProfile;
+  upMid?: number | null;
+  upAvg?: number;
+  downAvg?: number;
+  orders: PairOrder[];
+}) {
+  const tick = profile.tickSize || 0.01;
+  const perDollar = Math.round(1 / tick);
+
+  const merged = new Map<number, number>();
+  for (const l of profile.up.levels) {
+    merged.set(l.level, Math.max(merged.get(l.level) ?? 0, l.visits));
+  }
+  for (const l of profile.down.levels) {
+    const mirrored = perDollar - l.level;
+    merged.set(mirrored, Math.max(merged.get(mirrored) ?? 0, l.visits));
+  }
+  if (merged.size === 0) {
+    return (
+      <div className="muted" style={{ fontSize: 13 }}>
+        Ждём котировки — профиль строится с начала окна.
+      </div>
+    );
+  }
+
+  const levels = [...merged.keys()].sort((a, b) => a - b);
+  let lo = levels[0];
+  let hi = levels[levels.length - 1];
+
+  // A whole window can wander further than a phone screen holds. Keep the rows
+  // around where the price is now, since that is the part being traded.
+  const MAX_ROWS = 24;
+  if (hi - lo + 1 > MAX_ROWS) {
+    const centre = upMid != null ? Math.round(upMid / tick) : Math.round((lo + hi) / 2);
+    lo = Math.max(lo, centre - Math.floor(MAX_ROWS / 2));
+    hi = Math.min(hi, lo + MAX_ROWS - 1);
+    lo = Math.max(levels[0], hi - MAX_ROWS + 1);
+  }
+
+  const peak = Math.max(...merged.values());
+  const nowLevel = upMid != null ? Math.round(upMid / tick) : null;
+  const upAvgLevel = upAvg ? Math.round(upAvg / tick) : null;
+  const downAvgLevel = downAvg ? perDollar - Math.round(downAvg / tick) : null;
+
+  const bidLevels = new Map<number, string>();
+  for (const o of orders) {
+    if (o.action !== 'BUY') continue;
+    const level = o.side === 'Up' ? Math.round(o.price / tick) : perDollar - Math.round(o.price / tick);
+    bidLevels.set(level, o.side);
+  }
+
+  const rows = [];
+  for (let level = hi; level >= lo; level--) {
+    const visits = merged.get(level) ?? 0;
+    const delta = nowLevel === null ? null : level - nowLevel;
+    const marks: string[] = [];
+    if (upAvgLevel === level) marks.push('Up ср.');
+    if (downAvgLevel === level) marks.push('Down ср.');
+    const bid = bidLevels.get(level);
+    if (bid) marks.push(`бид ${bid}`);
+
+    rows.push(
+      <div
+        className={`ladder-row${nowLevel === level ? ' now' : ''}${
+          visits === 0 ? ' empty' : ''
+        }`}
+        key={level}
+      >
+        <span className="ladder-price">
+          <b className="up">{level}</b>
+          <s>/</s>
+          <b className="down">{perDollar - level}</b>
+        </span>
+        <span className="ladder-track">
+          <i
+            className={visits === peak ? 'peak' : undefined}
+            style={{ width: `${peak > 0 ? (visits / peak) * 100 : 0}%` }}
+          />
+          {marks.length > 0 && <em>{marks.join(' · ')}</em>}
+        </span>
+        <span className="ladder-count">{visits > 0 ? visits : ''}</span>
+        <span className="ladder-delta muted">
+          {delta === null || delta === 0 ? '' : `${delta > 0 ? '+' : ''}${delta}`}
+        </span>
+      </div>,
+    );
+  }
+  return (
+    <div className="ladder">
+      <div className="ladder-head">
+        <span className="ladder-price">Up/Down</span>
+        <span className="ladder-track">касаний за окно</span>
+        <span className="ladder-count">n</span>
+        <span className="ladder-delta">Δ¢</span>
+      </div>
+      {rows}
+    </div>
+  );
+}
+
 function PriceTile({
   label,
   quote,
@@ -569,6 +728,12 @@ function PairSettingsForm({
       {num('maxExposureUsd', 'Потолок вложенного, $', '1')}
       {num('maxImbalanceShares', 'Потолок перекоса, долей', '1', 'Единственный риск направления.')}
       {num('flattenSec', 'Сводить книгу за (сек до закрытия)', '5')}
+      {num(
+        'lowBiasCents',
+        'Отступ от минимума окна, ¢',
+        '1',
+        'Вычитается при спокойном наборе, прибавляется когда нога отстала и добирает пару.',
+      )}
       {num(
         'paperStartUsd',
         'Стартовый тестовый баланс, $',

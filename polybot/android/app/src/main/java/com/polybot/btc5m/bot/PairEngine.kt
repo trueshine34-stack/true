@@ -237,7 +237,13 @@ class PairEngine(
                 up = ClobApi.quote(market.up.tokenId),
                 down = ClobApi.quote(market.down.tokenId),
                 atMs = now,
-            ).also { recordTrail(it, now) }
+            ).also {
+                recordTrail(it, now)
+                book?.let { b ->
+                    it.up?.let { q -> b.trackUp.record(q, market.tickSize) }
+                    it.down?.let { q -> b.trackDown.record(q, market.tickSize) }
+                }
+            }
         } catch (e: Exception) {
             quotes
         }
@@ -399,11 +405,11 @@ class PairEngine(
         }
 
         val size = min(lot, allowance)
-        val price = bidFor(bookNow, market, side) ?: return
         val mine = legOf(bookNow, side).shares
         val theirs = legOf(bookNow, other(side)).shares
         val behind = mine < theirs - 1e-9
         val ahead = mine > theirs + 1e-9
+        val price = bidFor(bookNow, market, side, urgent = behind) ?: return
 
         // Behind means this order completes a pair: it goes up at once, and the
         // pair budget is already its price ceiling.
@@ -455,7 +461,12 @@ class PairEngine(
      * Once one leg is held the budget side is exact: whatever is left of the
      * ceiling after what that leg actually cost.
      */
-    private fun bidFor(bookNow: PairBook, market: Market, side: String): Double? {
+    private fun bidFor(
+        bookNow: PairBook,
+        market: Market,
+        side: String,
+        urgent: Boolean,
+    ): Double? {
         val quote = quoteFor(side) ?: return null
         val budget = PairMath.maxPairCost(settings.minPairProfitPct, settings.maxPairAvg)
         val opposite = legOf(bookNow, other(side))
@@ -484,7 +495,18 @@ class PairEngine(
             // Strictly inside the offer: at the ask we would be the taker.
             (quote.bestAsk?.minus(market.tickSize)) ?: quote.bestBid ?: return null
         }
-        val price = PairMath.snapDown(min(budgeted, ceiling), market.tickSize)
+        // Anchor to where the price has actually been this window. A bid set
+        // only from the budget either sits under everything that traded all
+        // window or pays up for no reason; the cheapest offer seen is the one
+        // price we know a buy could have been done at.
+        val anchored = bookNow.track(side).lowAsk?.let { low ->
+            PairMath.anchoredBid(low, settings.lowBiasCents, urgent)
+        }
+
+        val price = PairMath.snapDown(
+            minOf(budgeted, ceiling, anchored ?: budgeted),
+            market.tickSize,
+        )
         return if (price >= market.tickSize) price else null
     }
 
@@ -881,7 +903,8 @@ class PairEngine(
         if (allowance < market.minimumOrderSize) return
 
         val size = min(maxOf(shares, market.minimumOrderSize), allowance)
-        val price = bidFor(bookNow, market, side) ?: return
+        // A recycle is filling the gap a sale just opened, so it is urgent.
+        val price = bidFor(bookNow, market, side, urgent = true) ?: return
         if (!withinCaps(bookNow, side, price, size)) return
 
         place(market, side, "BUY", price, size, "перекладка из ${sold.side}")

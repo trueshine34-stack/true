@@ -529,3 +529,122 @@ button.stat.quote:active {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/*
+ * Window ladder. Rows are price levels, high at the top, the way a depth
+ * display reads. The bar is the row's weight, so it starts at the same left
+ * edge on every row and only its width carries meaning.
+ */
+.ladder {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.ladder-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 22px;
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.ladder-row.empty {
+  opacity: 0.4;
+}
+
+.ladder-row.now {
+  background: rgba(76, 141, 255, 0.14);
+  outline: 1px solid rgba(76, 141, 255, 0.4);
+}
+
+.ladder-price {
+  width: 54px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.ladder-price b {
+  font-weight: 600;
+}
+
+.ladder-price s {
+  color: var(--line);
+  text-decoration: none;
+}
+
+.ladder-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 4px 5px;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+
+.ladder-head .ladder-price {
+  justify-content: flex-end;
+}
+
+.ladder-head .ladder-track {
+  background: none;
+  height: auto;
+  padding-left: 2px;
+}
+
+/* The busiest level of the window: where the market kept coming back. */
+.ladder-track > i.peak {
+  background: linear-gradient(90deg, var(--accent), rgba(76, 141, 255, 0.5));
+}
+
+.ladder-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 12px;
+  background: var(--surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ladder-track > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(76, 141, 255, 0.85), rgba(76, 141, 255, 0.35));
+  border-radius: 3px;
+  transition: width 0.25s ease;
+}
+
+.ladder-track > em {
+  position: absolute;
+  top: 0;
+  right: 5px;
+  line-height: 12px;
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.02em;
+  color: var(--warn);
+  white-space: nowrap;
+  /* The bar can grow under this label, so the text carries its own backdrop. */
+  padding-left: 10px;
+  text-shadow: 0 0 4px var(--surface), 0 0 3px var(--surface);
+}
+
+.ladder-count {
+  width: 18px;
+  text-align: right;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.ladder-delta {
+  width: 24px;
+  text-align: right;
+  flex-shrink: 0;
+  font-size: 11px;
+}

@@ -122,6 +122,23 @@ object PairMath {
         theirShares + lot - myShares
 
     /**
+     * Where to bid relative to the cheapest offer the window has shown.
+     *
+     * The budget says what a leg may cost; it says nothing about what the
+     * market will actually give. A bid set from the budget alone either sits
+     * under everything that traded for five minutes or pays up for no reason.
+     * The window's low is the one price we know a buy could have been done at,
+     * so bids are placed around it: under it when accumulating on our own
+     * initiative, since there is no hurry and a better price may come, and over
+     * it when a leg is behind and the order is completing a pair, which is
+     * worth a few cents to get done.
+     */
+    fun anchoredBid(lowAsk: Double, biasCents: Double, urgent: Boolean): Double {
+        val bias = biasCents / 100.0
+        return lowAsk + if (urgent) bias else -bias
+    }
+
+    /**
      * Profit threshold for rotating out of a leg.
      *
      * Cheaply-bought shares are let go sooner: they are the ones that ran, and

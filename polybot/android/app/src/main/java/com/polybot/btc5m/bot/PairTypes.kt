@@ -47,6 +47,15 @@ data class PairSettings(
     val flattenSec: Int = 40,
     /** Starting balance for the paper run, seeded once and then left alone. */
     val paperStartUsd: Double = 100.0,
+    /**
+     * How far from the window's cheapest offer to bid, in cents.
+     *
+     * Subtracted while accumulating on our own initiative — there is no hurry,
+     * so wait for a price better than anything seen yet. Added when a leg is
+     * behind and the order is completing a pair, which is worth a few cents to
+     * actually get done.
+     */
+    val lowBiasCents: Double = 3.0,
 )
 
 /** One side of the book: how many shares, and what they cost in total. */
@@ -74,6 +83,45 @@ data class PairLeg(
             this.shares = 0.0
             this.costUsd = 0.0
         }
+    }
+}
+
+/**
+ * Where one side's price has been during the current window.
+ *
+ * Counts arrivals, not samples: a price that sits on a level for a minute
+ * visited it once. "How often did it come back here" is the useful question —
+ * how long it stayed is a different one, and conflating them would make a
+ * quiet level that never moved look like the busiest on the ladder.
+ */
+class LevelTrack {
+    /** Visits per level, keyed by price in ticks. */
+    val visits = LinkedHashMap<Int, Int>()
+
+    private var lastLevel: Int? = null
+
+    /** Cheapest offer seen this window — what a buy could actually have paid. */
+    var lowAsk: Double? = null
+        private set
+
+    var lowMid: Double? = null
+        private set
+
+    var highMid: Double? = null
+        private set
+
+    fun record(quote: Quote, tick: Double) {
+        val mid = quote.mid ?: return
+        if (tick <= 0.0) return
+
+        val level = Math.round(mid / tick).toInt()
+        if (level != lastLevel) {
+            visits[level] = (visits[level] ?: 0) + 1
+            lastLevel = level
+        }
+        quote.bestAsk?.let { ask -> lowAsk = minOf(lowAsk ?: ask, ask) }
+        lowMid = minOf(lowMid ?: mid, mid)
+        highMid = maxOf(highMid ?: mid, mid)
     }
 }
 
@@ -140,7 +188,12 @@ data class PairBook(
     var winner: String? = null,
     var pnlUsd: Double? = null,
     var settled: Boolean = false,
+    /** Price history of the window, one track per side. */
+    val trackUp: LevelTrack = LevelTrack(),
+    val trackDown: LevelTrack = LevelTrack(),
 ) {
+    fun track(side: String): LevelTrack = if (side == "Up") trackUp else trackDown
+
     val pairs: Double get() = kotlin.math.min(up.shares, down.shares)
     val imbalance: Double get() = up.shares - down.shares
     val exposureUsd: Double get() = up.costUsd + down.costUsd

@@ -26,4 +26,5 @@ export const DEFAULT_PAIR_SETTINGS: PairSettings = {
   maxImbalanceShares: 20,
   flattenSec: 40,
   paperStartUsd: 100,
+  lowBiasCents: 3,
 };
