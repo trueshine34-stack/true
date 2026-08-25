@@ -94,9 +94,18 @@ export function Manual() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
+  /**
+   * Until the stored settings arrive, `settings` holds the defaults — and the
+   * defaults have the rules off. Re-arming from them would push "off" at a
+   * service that was correctly on, which is how the journal filled with
+   * off/on pairs.
+   */
+  const loadedRef = useRef(false);
+
   useEffect(() => {
     void loadManualSettings().then((stored) => {
       setSettings(stored);
+      loadedRef.current = true;
       // The rules live in the native service, which starts every process with
       // them off. Without this the switch would read as on from the store while
       // nothing was actually sweeping — the toggle looked armed and was not.
@@ -107,6 +116,7 @@ export function Manual() {
           retryEverySec: stored.autoSellRetrySec,
           rebuyEnabled: stored.autoRebuyEnabled,
           rebuyDropPct: stored.autoRebuyDropPct,
+          watchSec: stored.autoSellWatchSec,
         }).catch(() => {});
       }
     });
@@ -265,13 +275,18 @@ export function Manual() {
           // The foreground service can be killed by the system. If the setting
           // says the rule should be on and the service says it is not, arm it
           // again rather than leaving a switch that lies.
-          if (s.enabled !== settingsRef.current.autoSellEnabled || (s.enabled && !s.running)) {
+          if (
+            loadedRef.current &&
+            (s.enabled !== settingsRef.current.autoSellEnabled ||
+              (s.enabled && !s.running))
+          ) {
             void PolyBot.autoSellUpdate({
               enabled: settingsRef.current.autoSellEnabled,
               ladder: settingsRef.current.autoSellLadder,
               retryEverySec: settingsRef.current.autoSellRetrySec,
               rebuyEnabled: settingsRef.current.autoRebuyEnabled,
               rebuyDropPct: settingsRef.current.autoRebuyDropPct,
+              watchSec: settingsRef.current.autoSellWatchSec,
             }).catch(() => {});
           }
         })
@@ -947,6 +962,7 @@ function RuleBar({
         retryEverySec: next.autoSellRetrySec,
         rebuyEnabled: next.autoRebuyEnabled,
         rebuyDropPct: next.autoRebuyDropPct,
+        watchSec: next.autoSellWatchSec,
       }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
     },
     [onChange, onNote],
@@ -977,8 +993,8 @@ function RuleBar({
               ? state.lastFault
               : !state.running
                 ? 'запускается…'
-                : state.rows.length === 0
-                  ? `нет позиций · проверка ${ago(state.lastSweepAt)}`
+                : (state.watching ?? 0) === 0
+                  ? 'ждём покупку'
                   : `${rung != null ? `${Math.round(rung * 100)}¢ · ` : ''}` +
                     `покрыто ${covered}/${state.rows.length} · ${ago(state.lastSweepAt)}`}
         </span>
@@ -1197,6 +1213,26 @@ function ManualSettingsForm({
       </div>
 
       <label className="field" style={{ marginTop: 12 }}>
+        <span>Сколько добиваться после покупки, сек</span>
+        <input
+          type="number"
+          value={String(settings.autoSellWatchSec)}
+          onChange={(e) =>
+            push({
+              ...settings,
+              autoSellWatchSec: Number(e.target.value.replace(',', '.')),
+            })
+          }
+        />
+        <span className="muted" style={{ fontSize: 11 }}>
+          Правило просыпается только после покупки и живёт эту минуту. Продажа,
+          которую отклоняют минуту, отклоняется по причине, которую следующая
+          попытка не изменит, — а бесконечные попытки упирались в лимит
+          запросов data-api и убивали правило целиком.
+        </span>
+      </label>
+
+      <label className="field">
         <span>Повтор, сек</span>
         <input
           type="number"

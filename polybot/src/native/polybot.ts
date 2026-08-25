@@ -222,6 +222,7 @@ export interface PolyBotPlugin {
     retryEverySec?: number;
     rebuyEnabled?: boolean;
     rebuyDropPct?: number;
+    watchSec?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
   addListener(
@@ -281,6 +282,9 @@ export type AutoSellState = {
   lastSweepAt: number;
   /** Why the last sweep could not run at all, if it could not. */
   lastFault?: string | null;
+  /** Purchases still being chased, and how long each is chased for. */
+  watching?: number;
+  watchSec?: number;
   rebuyEnabled: boolean;
   rebuyDropPct: number;
   rebuys: AutoSellRebuy[];

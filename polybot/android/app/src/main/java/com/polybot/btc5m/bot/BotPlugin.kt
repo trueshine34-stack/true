@@ -940,6 +940,7 @@ class BotPlugin : Plugin() {
             retryEverySec = call.getInt("retryEverySec") ?: defaults.retryEverySec,
             rebuyEnabled = call.getBoolean("rebuyEnabled") ?: defaults.rebuyEnabled,
             rebuyDropPct = call.getDouble("rebuyDropPct") ?: defaults.rebuyDropPct,
+            watchSec = call.getInt("watchSec") ?: defaults.watchSec,
         )
         if (next.enabled && !engine.isConfigured()) {
             call.reject("Сначала подключите кошелёк")
@@ -993,6 +994,8 @@ class BotPlugin : Plugin() {
                 .put("retryEverySec", bot.settings.retryEverySec)
                 .put("lastSweepAt", bot.lastSweepAt)
                 .put("lastFault", bot.lastFault)
+                .put("watching", bot.watchingCount)
+                .put("watchSec", bot.settings.watchSec)
                 .put("rebuyEnabled", bot.settings.rebuyEnabled)
                 .put("rebuyDropPct", bot.settings.rebuyDropPct)
                 .put("rebuys", waiting)

@@ -45,6 +45,8 @@ class AutoSell(
         val ladder: List<Double> = SellLadder.DEFAULT,
         /** How often to try again while the venue is still refusing. */
         val retryEverySec: Int = 7,
+        /** How long to keep trying on one purchase before giving up. */
+        val watchSec: Int = 60,
         /** Buy the same size back if the price falls far enough after a sale. */
         val rebuyEnabled: Boolean = false,
         /** How far below the sale price the buy-back triggers, as a fraction. */
@@ -86,6 +88,9 @@ class AutoSell(
     var lastFault: String? = null
         private set
 
+    /** How many purchases are still being chased. */
+    val watchingCount: Int get() = watching.size
+
     val rows = CopyOnWriteArrayList<Row>()
 
     private var scope: CoroutineScope? = null
@@ -111,6 +116,16 @@ class AutoSell(
 
     private val placed = HashMap<String, Placed>()
 
+    /**
+     * Outcomes bought recently, with the moment to stop chasing them.
+     *
+     * The rule used to sweep on a timer forever, which meant polling the data
+     * API every few seconds around the clock whether or not anything had been
+     * bought — enough to earn a 429 and stop working altogether. A sell is only
+     * ever needed just after a purchase, so that is the only time it looks.
+     */
+    private val watching = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
     /** Sold shares waiting for a cheap enough price to be bought back. */
     data class Rebuy(
         val asset: String,
@@ -123,38 +138,85 @@ class AutoSell(
 
     val rebuys = CopyOnWriteArrayList<Rebuy>()
 
+    @Volatile
+    private var sweepRequested = false
+
     private companion object {
         const val META_TTL_MS = 60_000L
+
+        /** How long to sit still when there is nothing to watch. */
+        const val IDLE_MS = 5_000L
     }
 
+    /**
+     * Something was just bought: watch it until it is covered, or until the
+     * window of attention runs out.
+     */
+    fun watch(asset: String) {
+        if (asset.isEmpty()) return
+        watching[asset] = System.currentTimeMillis() + settings.watchSec.coerceAtLeast(5) * 1000L
+        sweepRequested = true
+    }
+
+    /**
+     * Idempotent on purpose. The UI re-sends the settings whenever it suspects
+     * the service may have been restarted, and a naive stop-then-start on every
+     * push made the rule flap — the log filled with "off/on" pairs and each
+     * restart threw away the watch it was in the middle of.
+     */
     fun update(next: Settings) {
         settings = next
-        if (next.enabled) start() else stop()
-        onStateChanged()
+        when {
+            next.enabled && !running -> start()
+            !next.enabled && running -> stop()
+            else -> onStateChanged()
+        }
     }
 
     fun start() {
         if (running) return
         running = true
+        // Anything already held when the rule is switched on gets one window of
+        // attention too, or a position opened before the app was would never be
+        // covered.
+        sweepRequested = true
+
         val newScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope = newScope
         job = newScope.launch {
+            var backoffMs = 0L
             while (isActive && running) {
-                try {
-                    sweep()
-                } catch (e: Exception) {
-                    lastFault = e.message ?: "сбой обхода"
-                    engine.log("error", "Автопродажа: ${e.message}")
-                    onStateChanged()
+                val busy = sweepRequested || watching.isNotEmpty() || rebuys.isNotEmpty()
+                if (busy) {
+                    try {
+                        sweep()
+                        backoffMs = 0L
+                    } catch (e: Exception) {
+                        lastFault = e.message ?: "сбой обхода"
+                        engine.log("error", "Автопродажа: ${e.message}")
+                        onStateChanged()
+                        // A rate limit answered at the same cadence stays a rate
+                        // limit; back off and let it clear.
+                        backoffMs = if (backoffMs == 0L) 15_000L else minOf(backoffMs * 2, 120_000L)
+                    }
                 }
-                delay(settings.retryEverySec.coerceAtLeast(1) * 1000L)
+                delay(
+                    when {
+                        backoffMs > 0L -> backoffMs
+                        busy -> settings.retryEverySec.coerceAtLeast(1) * 1000L
+                        // Nothing bought and nothing pending: no reason to ask
+                        // the venue anything at all.
+                        else -> IDLE_MS
+                    },
+                )
             }
         }
         engine.log(
             "info",
             "Автопродажа лесенкой " +
                 settings.ladder.joinToString("/") { "${(it * 100).toInt()}" } +
-                "¢, повтор каждые ${settings.retryEverySec} с",
+                "¢: ${settings.watchSec} с после покупки, повтор каждые " +
+                "${settings.retryEverySec} с",
         )
         onStateChanged()
     }
@@ -170,6 +232,7 @@ class AutoSell(
         rungs.clear()
         placed.clear()
         rebuys.clear()
+        watching.clear()
         engine.log("info", "Автопродажа выключена")
         onStateChanged()
     }
@@ -187,6 +250,12 @@ class AutoSell(
     }
 
     private fun sweep() {
+        // A one-shot pass, requested when the rule is switched on, looks at
+        // everything held. Ordinary passes look only at what was just bought.
+        val fullSweep = sweepRequested
+        sweepRequested = false
+        expireWatches()
+
         val session = engine.session()
         if (session == null) {
             lastFault = "кошелёк не подключён"
@@ -204,6 +273,7 @@ class AutoSell(
         val next = ArrayList<Row>()
         for (position in positions) {
             if (position.redeemable || position.size <= 0.0) continue
+            if (!fullSweep && !watching.containsKey(position.asset)) continue
 
             val rung = trackRung(position, windowStart, now)
             val target = settings.ladder.getOrElse(rung.step) { settings.ladder.last() }
@@ -217,6 +287,17 @@ class AutoSell(
                 meta.closed || !meta.acceptingOrders -> "рынок закрыт"
                 mine < meta.minimumOrderSize -> "у бота"
                 else -> reconcile(position, open, meta, target, mine)
+            }
+            // Covered, settled, or the bot's: nothing left to chase here.
+            if (status == "покрыто" || status == "рынок закрыт" || status == "у бота") {
+                watching.remove(position.asset)
+            } else if (fullSweep) {
+                // Found on the opening pass; give it the same window of
+                // attention a fresh purchase would get.
+                watching.putIfAbsent(
+                    position.asset,
+                    System.currentTimeMillis() + settings.watchSec.coerceAtLeast(5) * 1000L,
+                )
             }
             next.add(rowFor(position, open, status, rung.step, target))
         }
@@ -232,6 +313,29 @@ class AutoSell(
         rows.clear()
         rows.addAll(next)
         onStateChanged()
+    }
+
+    /**
+     * Stop chasing a purchase that has had its minute.
+     *
+     * Giving up is the point: a sell that has been refused for a minute is
+     * being refused for a reason the next attempt will not change, and trying
+     * forever is what turned this into a rate limit.
+     */
+    private fun expireWatches() {
+        val now = System.currentTimeMillis()
+        val done = watching.filterValues { it <= now }.keys
+        for (asset in done) {
+            watching.remove(asset)
+            val row = rows.firstOrNull { it.asset == asset }
+            engine.log(
+                "warn",
+                "Автопродажа сдалась по ${row?.outcome ?: "позиции"} после " +
+                    "${settings.watchSec} с" +
+                    (row?.lastError?.let { ": $it" } ?: ""),
+            )
+        }
+        if (done.isNotEmpty()) onStateChanged()
     }
 
     /**

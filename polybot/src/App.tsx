@@ -10,11 +10,13 @@ import { SettingsScreen } from './ui/Settings';
 import { Setup } from './ui/Setup';
 
 type Phase = 'loading' | 'setup' | 'ready';
-type Tab = 'dashboard' | 'manual' | 'pair' | 'settings';
+type Tab = 'auto' | 'manual' | 'settings';
+type AutoPane = 'terminal' | 'pair';
 
 export function App() {
   const [phase, setPhase] = useState<Phase>('loading');
-  const [tab, setTab] = useState<Tab>('dashboard');
+  const [tab, setTab] = useState<Tab>('auto');
+  const [autoPane, setAutoPane] = useState<AutoPane>('terminal');
   const [settings, setSettings] = useState<StrategySettings>(DEFAULT_SETTINGS);
   const [account, setAccount] = useState<AccountConfig | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
@@ -138,11 +140,37 @@ export function App() {
       </div>
 
       <div className="scroll">
-        {tab === 'dashboard' && (
-          <Dashboard settings={settings} onSellPosition={onSellPosition} />
+        {tab === 'auto' && (
+          <>
+            {/*
+              Two automated strategies, one tab. They are never watched at the
+              same time, and as separate tabs they crowded out the two screens
+              that are.
+            */}
+            <div className="card tight">
+              <div className="segmented">
+                <button
+                  className={autoPane === 'terminal' ? 'active' : ''}
+                  onClick={() => setAutoPane('terminal')}
+                >
+                  Терминал
+                </button>
+                <button
+                  className={autoPane === 'pair' ? 'active' : ''}
+                  onClick={() => setAutoPane('pair')}
+                >
+                  Пара
+                </button>
+              </div>
+            </div>
+            {autoPane === 'terminal' ? (
+              <Dashboard settings={settings} onSellPosition={onSellPosition} />
+            ) : (
+              <Pair />
+            )}
+          </>
         )}
         {tab === 'manual' && <Manual />}
-        {tab === 'pair' && <Pair />}
         {tab === 'settings' && (
           <SettingsScreen
             settings={settings}
@@ -154,20 +182,14 @@ export function App() {
       </div>
 
       <nav className="tabs">
-        <button
-          className={tab === 'dashboard' ? 'active' : ''}
-          onClick={() => setTab('dashboard')}
-        >
-          Терминал
+        <button className={tab === 'auto' ? 'active' : ''} onClick={() => setTab('auto')}>
+          Авто
         </button>
         <button
           className={tab === 'manual' ? 'active' : ''}
           onClick={() => setTab('manual')}
         >
           Руки
-        </button>
-        <button className={tab === 'pair' ? 'active' : ''} onClick={() => setTab('pair')}>
-          Пара
         </button>
         <button
           className={tab === 'settings' ? 'active' : ''}

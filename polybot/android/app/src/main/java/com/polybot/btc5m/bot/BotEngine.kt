@@ -29,6 +29,10 @@ class BotEngine(
 ) {
     val feed = ChainlinkFeed()
 
+    /** Told when this engine buys, so a sell rule can start watching it. */
+    @Volatile
+    var onBought: ((String) -> Unit)? = null
+
     @Volatile
     var settings: Settings = Settings()
 
@@ -1357,6 +1361,7 @@ class BotEngine(
         if (result.success && filledShares > 1e-9) {
             if (side == "BUY") {
                 LocalFills.bought(tokenId, filledShares, result.makingAmount ?: (filledShares * price))
+                onBought?.invoke(tokenId)
             } else {
                 LocalFills.sold(tokenId, filledShares)
             }

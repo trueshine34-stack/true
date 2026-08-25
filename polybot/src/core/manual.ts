@@ -22,6 +22,8 @@ export type ManualSettings = {
   /** Sell price by minute of the window, cheapest rung first. */
   autoSellLadder: number[];
   autoSellRetrySec: number;
+  /** How long to keep trying on one purchase before giving up. */
+  autoSellWatchSec: number;
   /** Buy the same size back if the price falls far enough after a sale. */
   autoRebuyEnabled: boolean;
   /** How far below the sale price the buy-back triggers, as a fraction. */
@@ -44,6 +46,7 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellEnabled: false,
   autoSellLadder: [0.77, 0.84, 0.89, 0.93, 0.97],
   autoSellRetrySec: 7,
+  autoSellWatchSec: 60,
   autoRebuyEnabled: false,
   autoRebuyDropPct: 0.2,
   useBalanceShare: false,

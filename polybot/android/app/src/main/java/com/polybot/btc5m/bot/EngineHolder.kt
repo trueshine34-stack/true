@@ -87,7 +87,12 @@ object EngineHolder {
                     onState?.invoke()
                     onServiceState?.invoke()
                 },
-            ).also { autoSell = it }
+            ).also {
+                autoSell = it
+                // A sell is only ever needed just after a buy, so that is when
+                // the rule starts looking.
+                host.onBought = { asset -> it.watch(asset) }
+            }
         }
     }
 
