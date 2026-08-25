@@ -121,6 +121,8 @@ export function Manual() {
   const [now, setNow] = useState(() => Date.now());
   const [limitPrice, setLimitPrice] = useState('');
   const [limitSize, setLimitSize] = useState('');
+  /** The size field is being edited: that is when sizing by wallet is useful. */
+  const [sizingLimit, setSizingLimit] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
 
   // Read inside pollers that must not re-subscribe every time a setting changes.
@@ -623,6 +625,12 @@ export function Manual() {
   const limitDefaultSize = limitShares(limitPriceNum, minSize);
   const limitSizeNum = limitSize === '' ? limitDefaultSize : Number(limitSize.replace(',', '.'));
 
+  /** What the size is priced at: the typed limit, or the ask it would default to. */
+  const limitBasis =
+    Number.isFinite(limitPriceNum) && limitPriceNum > 0
+      ? limitPriceNum
+      : (quickUp?.ask ?? quickDown?.ask ?? 0);
+
   const nudgeLimit = (delta: number) => {
     const base = Number.isFinite(limitPriceNum) && limitPriceNum > 0
       ? Math.round(limitPriceNum * 100)
@@ -1027,6 +1035,39 @@ export function Manual() {
       {note && <div className="banner info">{note}</div>}
 
       <div className="dock">
+        {/*
+          Chips for the size field, shown while it is being edited. A limit is
+          usually sized as "some of the wallet", and the arithmetic — balance,
+          less the fee, over the limit price — is not something to do on a
+          phone with the keyboard already up.
+        */}
+        {sizingLimit && balance != null && balance > 0 && (
+          <div className="limitpcts pcts" onMouseDown={(e) => e.preventDefault()}>
+            {[25, 50, 100].map((pct) => {
+              const shares = stakeShares(limitBasis, balance, pct / 100, minSize);
+              return (
+                <button
+                  key={pct}
+                  disabled={shares == null}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => shares != null && setLimitSize(String(shares))}
+                  title={
+                    shares == null
+                      ? 'Меньше минимального ордера'
+                      : `${shares} долей · ${usd(shares * limitBasis)}`
+                  }
+                >
+                  {pct}%
+                </button>
+              );
+            })}
+            <span className="muted limitpct-hint">
+              {limitSizeNum > 0 && limitBasis > 0
+                ? `≈ ${usd(limitSizeNum * limitBasis)}`
+                : 'от баланса'}
+            </span>
+          </div>
+        )}
         <div className="limitrow">
           <button
             className="limit up"
@@ -1057,6 +1098,8 @@ export function Manual() {
               inputMode="decimal"
               placeholder={`${limitDefaultSize.toFixed(0)} долей`}
               value={limitSize}
+              onFocus={() => setSizingLimit(true)}
+              onBlur={() => setSizingLimit(false)}
               onChange={(e) => setLimitSize(e.target.value)}
             />
           </div>

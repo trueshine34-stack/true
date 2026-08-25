@@ -1647,3 +1647,15 @@ button.pill.balance {
 .listrow.trade .tag-side {
   white-space: nowrap;
 }
+
+/* Wallet-share chips for the limit size, over the docked row while it is edited. */
+.limitpcts {
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.limitpct-hint {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
