@@ -89,8 +89,15 @@ export function Dashboard({
   }, []);
 
   const cycle = snap.current;
-  const price = snap.lastTick?.value ?? null;
-  const spot = snap.spotTick?.value ?? null;
+  /**
+   * The headline is the thirty-second TWAP, because that is the number
+   * Polymarket puts on screen and the one the window settles against. The raw
+   * Chainlink tick is what the model works from and sits underneath it — they
+   * differ by the smoothing, and showing only the raw one made the app disagree
+   * with the site by tens of dollars.
+   */
+  const price = snap.twapTick?.value ?? snap.lastTick?.value ?? null;
+  const raw = snap.twapTick ? (snap.lastTick?.value ?? null) : null;
   const strike = cycle?.strike ?? null;
   const drift =
     price !== null && strike !== null && strike !== undefined ? price - strike : null;
@@ -232,16 +239,16 @@ export function Dashboard({
         >
           <div>
             <div className="muted" style={{ fontSize: 12 }}>
-              BTC/USD · Chainlink (источник расчёта Polymarket)
+              BTC/USD · Polymarket TWAP 30с (цена расчёта)
             </div>
             <div className="price">
               {price !== null ? `$${price.toFixed(2)}` : '—'}
             </div>
-            {spot !== null && (
+            {raw !== null && (
               <div className="muted" style={{ fontSize: 12 }}>
-                Спот btcusdt: ${spot.toFixed(2)}
+                Тик Chainlink: ${raw.toFixed(2)}
                 {price !== null &&
-                  ` · базис ${price - spot >= 0 ? '+' : ''}${(price - spot).toFixed(2)} $`}
+                  ` · сглаживание ${raw - price >= 0 ? '+' : ''}${(raw - price).toFixed(2)} $`}
               </div>
             )}
           </div>

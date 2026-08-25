@@ -153,7 +153,7 @@ export function Manual() {
   useEffect(() => {
     let cancelled = false;
     const read = () => {
-      void PolyBot.gmxCandles({ symbol: 'BTC', period: '1m', limit: CHART_MINUTES })
+      void PolyBot.polyCandles({ minutes: CHART_MINUTES })
         .then((r) => {
           if (cancelled) return;
           setCandles(r.candles);
@@ -524,7 +524,7 @@ export function Manual() {
         <div className="deskbar">
           <div>
             <div className="muted" style={{ fontSize: 10 }}>
-              BTC · GMX 1м
+              BTC · Polymarket TWAP
             </div>
             <div className="deskprice">
               {spot != null ? `$${spot.toFixed(0)}` : '—'}

@@ -140,6 +140,8 @@ export type NativeState = {
   };
   lastTick?: NativeTick;
   spotTick?: NativeTick;
+  /** Thirty-second TWAP — the number Polymarket shows and settles on. */
+  twapTick?: NativeTick;
   quotes?: NativeQuotes;
   positions?: NativePosition[];
   stats?: NativeStats;
@@ -210,6 +212,10 @@ export interface PolyBotPlugin {
   gmxCandles(args?: { symbol?: string; period?: string; limit?: number }): Promise<{
     candles: GmxCandle[];
     ticker?: GmxTicker;
+  }>;
+  polyCandles(args?: { minutes?: number }): Promise<{
+    candles: GmxCandle[];
+    ticker?: { mid: number; at: number };
   }>;
   getBookLevels(args: { tokenId: string; depth?: number }): Promise<BookLevels>;
   getPositions(): Promise<{ positions: NativePosition[] }>;
@@ -499,6 +505,9 @@ const webStub: PolyBotPlugin = {
   pairUpdateSettings: async () => {},
   pairGetState: async () => IDLE_PAIR_STATE,
   gmxCandles: async () => {
+    throw new Error('График доступен только в приложении Android');
+  },
+  polyCandles: async () => {
     throw new Error('График доступен только в приложении Android');
   },
   getBookLevels: async () => ({ bids: [], asks: [] }),

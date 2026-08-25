@@ -45,6 +45,16 @@ class ChainlinkFeed(
     var spot: Tick? = null
         private set
 
+    /**
+     * Latest thirty-second TWAP, which is the number Polymarket puts on screen
+     * and charts. Display only: the model builds its own average from the raw
+     * ticks above, and reading a pre-smoothed series into it would average
+     * twice.
+     */
+    @Volatile
+    var twap: Tick? = null
+        private set
+
     private val history = CopyOnWriteArrayList<Tick>()
     private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
         Thread(r, "chainlink-feed").apply { isDaemon = true }
@@ -64,6 +74,7 @@ class ChainlinkFeed(
         const val MAX_BACKOFF_SEC = 30L
         const val CHAINLINK_TOPIC = "crypto_prices_chainlink"
         const val SPOT_TOPIC = "crypto_prices"
+        const val TWAP_TOPIC = "crypto_prices_twap_thirty"
     }
 
     fun start() {
@@ -122,7 +133,8 @@ class ChainlinkFeed(
                             "subscriptions",
                             JSONArray()
                                 .put(subscription(CHAINLINK_TOPIC))
-                                .put(subscription(SPOT_TOPIC)),
+                                .put(subscription(SPOT_TOPIC))
+                                .put(subscription(TWAP_TOPIC)),
                         )
                     webSocket.send(message.toString())
                 }
@@ -223,9 +235,13 @@ class ChainlinkFeed(
         val value = payload.optDouble("value", Double.NaN)
         if (timestamp <= 0L || value.isNaN()) return
 
-        when (itemSymbol) {
-            symbol -> push(Tick(timestamp, value), live = true)
-            spotSymbol -> spot = Tick(timestamp, value)
+        // Two topics carry btc/usd — the raw stream and the TWAP — so the
+        // topic decides, not the symbol.
+        val topic = json.optString("topic")
+        when {
+            topic == TWAP_TOPIC && itemSymbol == symbol -> twap = Tick(timestamp, value)
+            itemSymbol == symbol -> push(Tick(timestamp, value), live = true)
+            itemSymbol == spotSymbol -> spot = Tick(timestamp, value)
         }
     }
 

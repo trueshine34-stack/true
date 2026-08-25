@@ -626,6 +626,13 @@ class BotPlugin : Plugin() {
             )
         }
 
+        bot.feed.twap?.let {
+            state.put(
+                "twapTick",
+                JSObject().put("timestamp", it.timestamp).put("value", it.value),
+            )
+        }
+
         bot.feed.spot?.let {
             state.put(
                 "spotTick",
@@ -809,6 +816,44 @@ class BotPlugin : Plugin() {
     }
 
     // --------------------------------------------------------- manual desk
+
+    /**
+     * Polymarket's own price series for the chart.
+     *
+     * Their chart is the thirty-second TWAP — the average the five-minute
+     * markets settle against — so this is that same series, stitched from as
+     * many five-minute windows as the chart spans. The live figure comes from
+     * the TWAP socket, which is the number the site puts on screen.
+     */
+    @PluginMethod
+    fun polyCandles(call: PluginCall) {
+        val minutes = call.getInt("minutes") ?: 40
+        Thread {
+            try {
+                val candles = JSArray()
+                PolyPriceApi.candles(minutes).forEach {
+                    candles.put(
+                        JSObject()
+                            .put("time", it.time)
+                            .put("open", it.open)
+                            .put("high", it.high)
+                            .put("low", it.low)
+                            .put("close", it.close),
+                    )
+                }
+                val result = JSObject().put("candles", candles)
+                engine.feed.twap?.let {
+                    result.put(
+                        "ticker",
+                        JSObject().put("mid", it.value).put("at", it.timestamp),
+                    )
+                }
+                call.resolve(result)
+            } catch (e: Exception) {
+                call.reject(e.message ?: "цены Polymarket недоступны")
+            }
+        }.start()
+    }
 
     /**
      * GMX candles for the chart. This runs natively for the same reason every
