@@ -51,6 +51,8 @@ class AutoSell(
         val rebuyEnabled: Boolean = false,
         /** How far below the sale price the buy-back triggers, as a fraction. */
         val rebuyDropPct: Double = 0.20,
+        /** Pause between buy-back slices, so a deeper dip can still be caught. */
+        val rebuySlicePauseSec: Int = 3,
     )
 
     /** One position and what the rule has managed to do about it. */
@@ -115,7 +117,13 @@ class AutoSell(
      */
     private val watching = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
-    /** Sold shares waiting for a cheap enough price to be bought back. */
+    /**
+     * Sold shares waiting for a cheap enough price to be bought back.
+     *
+     * Bought back in slices the size of the original clips, with a pause
+     * between them: taking the whole size at the first price that clears the
+     * trigger throws away the rest of the dip.
+     */
     data class Rebuy(
         val asset: String,
         val conditionId: String,
@@ -123,6 +131,11 @@ class AutoSell(
         val soldAt: Double,
         val trigger: Double,
         val windowStart: Long,
+        val lot: Double,
+        var remaining: Double,
+        var nextAtMs: Long = 0L,
+        /** Why it is still waiting, shown on the desk. */
+        var note: String? = null,
     )
 
     val rebuys = CopyOnWriteArrayList<Rebuy>()
@@ -373,6 +386,8 @@ class AutoSell(
 
         for (fill in fills) {
             val drop = settings.rebuyDropPct.coerceIn(0.0, 0.95)
+            val lot = OrderLog.buyLotFor(fill.asset)?.coerceAtMost(fill.matched)
+                ?: fill.matched
             rebuys.add(
                 Rebuy(
                     asset = fill.asset,
@@ -381,6 +396,8 @@ class AutoSell(
                     soldAt = fill.price,
                     trigger = fill.price * (1.0 - drop),
                     windowStart = windowStart,
+                    lot = lot,
+                    remaining = fill.matched,
                 ),
             )
             engine.log(
@@ -409,19 +426,38 @@ class AutoSell(
             return
         }
 
+        val now = System.currentTimeMillis()
         val done = ArrayList<Rebuy>()
-        for (rebuy in rebuys) {
-            val ask = try {
-                ClobApi.quote(rebuy.asset).bestAsk
-            } catch (e: Exception) {
-                continue
-            } ?: continue
-            if (ask > rebuy.trigger) continue
 
-            val meta = metaFor(rebuy.conditionId) ?: continue
+        for (rebuy in rebuys) {
+            // Every branch below leaves a note. The previous version dropped out
+            // silently on a missing quote, missing market data, or — worst — a
+            // rejected order, so a buy-back that never happened looked exactly
+            // like one that was still patiently waiting.
+            if (now < rebuy.nextAtMs) continue
+
+            val book = try {
+                ClobApi.getBook(rebuy.asset)
+            } catch (e: Exception) {
+                rebuy.note = "стакан недоступен"
+                continue
+            }
+            val ask = book.asks.minByOrNull { it.price }?.price
+            if (ask == null) {
+                rebuy.note = "нет предложений"
+                continue
+            }
+            if (ask > rebuy.trigger) {
+                rebuy.note = "аск ${(ask * 100).toInt()}¢"
+                continue
+            }
+
+            val meta = metaFor(rebuy.conditionId)
+            if (meta == null) {
+                rebuy.note = "нет данных рынка"
+                continue
+            }
             if (meta.closed || !meta.acceptingOrders) {
-                // The only real deadline: an outcome whose market has closed
-                // cannot be bought at any price.
                 engine.log(
                     "warn",
                     "Автодокуп отменён: рынок закрылся раньше, чем цена дошла до " +
@@ -430,38 +466,62 @@ class AutoSell(
                 done.add(rebuy)
                 continue
             }
-            val size = maxOf(rebuy.shares, meta.minimumOrderSize)
+
+            val slice = minOf(rebuy.lot, rebuy.remaining)
+                .coerceAtLeast(meta.minimumOrderSize)
+                .coerceAtMost(maxOf(rebuy.remaining, meta.minimumOrderSize))
+
+            // Crossing rather than resting: this is meant to be taken now. Two
+            // ticks through the offer covers the top of book moving between the
+            // read and the send, and caps what it can pay.
+            val limit = minOf(ask + meta.tickSize * 2, 1.0 - meta.tickSize)
+
             val result = try {
                 engine.placeManualOrder(
                     tokenId = rebuy.asset,
                     conditionId = rebuy.conditionId,
                     side = "BUY",
-                    price = ask,
-                    size = size,
+                    price = limit,
+                    size = slice,
                     orderType = "GTC",
                     auto = true,
                 )
             } catch (e: Exception) {
+                rebuy.note = e.message ?: "ошибка сети"
                 engine.log("error", "Автодокуп не прошёл: ${e.message}")
                 continue
             }
-            if (result.success) {
-                engine.log(
-                    "trade",
-                    "Автодокуп " + String.format("%.1f", size) + " по " +
-                        "${(ask * 100).toInt()}¢ (продано по ${(rebuy.soldAt * 100).toInt()}¢)",
-                )
-                done.add(rebuy)
+
+            if (!result.success) {
+                val reason = result.error ?: "отказ CLOB"
+                rebuy.note = reason
+                engine.log("error", "Автодокуп отклонён: $reason")
+                continue
             }
+
+            rebuy.remaining -= slice
+            // A pause before the next slice, so a dip that is still falling is
+            // not all bought at its first price.
+            rebuy.nextAtMs = now + settings.rebuySlicePauseSec.coerceAtLeast(1) * 1000L
+            rebuy.note = null
+
+            engine.log(
+                "trade",
+                "Автодокуп " + String.format("%.1f", slice) + " по " +
+                    "${(ask * 100).toInt()}¢ (продано по ${(rebuy.soldAt * 100).toInt()}¢)" +
+                    if (rebuy.remaining > 1e-9) {
+                        ", осталось " + String.format("%.1f", rebuy.remaining)
+                    } else {
+                        ""
+                    },
+            )
+
+            if (rebuy.remaining < meta.minimumOrderSize) done.add(rebuy)
         }
         rebuys.removeAll(done)
+        if (done.isNotEmpty()) onStateChanged()
     }
 
-    /**
-     * Advance this outcome's rung. The high-water mark is what lets the ladder
-     * skip ahead of the clock, and it is per window: a new window starts the
-     * climb again from the bottom.
-     */
     private fun trackRung(position: Position, windowStart: Long, now: Long): Rung {
         val existing = rungs[position.asset]
         val rung = if (existing == null || existing.windowStart != windowStart) {

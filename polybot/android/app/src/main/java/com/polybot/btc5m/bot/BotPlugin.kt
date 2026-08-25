@@ -1045,6 +1045,8 @@ class BotPlugin : Plugin() {
             rebuyEnabled = call.getBoolean("rebuyEnabled") ?: defaults.rebuyEnabled,
             rebuyDropPct = call.getDouble("rebuyDropPct") ?: defaults.rebuyDropPct,
             watchSec = call.getInt("watchSec") ?: defaults.watchSec,
+            rebuySlicePauseSec = call.getInt("rebuySlicePauseSec")
+                ?: defaults.rebuySlicePauseSec,
         )
         if (next.enabled && !engine.isConfigured()) {
             call.reject("Сначала подключите кошелёк")
@@ -1091,8 +1093,11 @@ class BotPlugin : Plugin() {
                 JSObject()
                     .put("outcome", bot.rows.firstOrNull { r -> r.asset == it.asset }?.outcome)
                     .put("shares", it.shares)
+                    .put("remaining", it.remaining)
+                    .put("lot", it.lot)
                     .put("soldAt", it.soldAt)
-                    .put("trigger", it.trigger),
+                    .put("trigger", it.trigger)
+                    .put("note", it.note),
             )
         }
         call.resolve(

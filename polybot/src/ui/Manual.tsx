@@ -120,6 +120,7 @@ export function Manual() {
           rebuyEnabled: stored.autoRebuyEnabled,
           rebuyDropPct: stored.autoRebuyDropPct,
           watchSec: stored.autoSellWatchSec,
+          rebuySlicePauseSec: stored.autoRebuySlicePauseSec,
         }).catch(() => {});
       }
     });
@@ -313,6 +314,7 @@ export function Manual() {
               rebuyEnabled: settingsRef.current.autoRebuyEnabled,
               rebuyDropPct: settingsRef.current.autoRebuyDropPct,
               watchSec: settingsRef.current.autoSellWatchSec,
+              rebuySlicePauseSec: settingsRef.current.autoRebuySlicePauseSec,
             }).catch(() => {});
           }
         })
@@ -1019,6 +1021,7 @@ function RuleBar({
         rebuyEnabled: next.autoRebuyEnabled,
         rebuyDropPct: next.autoRebuyDropPct,
         watchSec: next.autoSellWatchSec,
+        rebuySlicePauseSec: next.autoRebuySlicePauseSec,
       }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
     },
     [onChange, onNote],
@@ -1065,8 +1068,19 @@ function RuleBar({
         />
         <span className="rule-name">Автодокуп</span>
         <span className="rule-note muted">
+          {/*
+            The reason it is still waiting, not just the target. A buy-back that
+            was rejected used to read the same as one patiently watching.
+          */}
           {state.rebuys.length > 0
-            ? `ждём ${state.rebuys.map((r) => `${Math.round(r.trigger * 100)}¢`).join(', ')}`
+            ? state.rebuys
+                .map(
+                  (r) =>
+                    `${r.remaining.toFixed(0)}×${Math.round(r.lot)} к ${Math.round(
+                      r.trigger * 100,
+                    )}¢${r.note ? ` · ${r.note}` : ''}`,
+                )
+                .join(' | ')
             : `−${Math.round(settings.autoRebuyDropPct * 100)}%`}
         </span>
       </div>
@@ -1303,6 +1317,25 @@ function ManualSettingsForm({
         <span className="muted" style={{ fontSize: 11 }}>
           Доли не продаются сразу после покупки, поэтому правило повторяет
           попытку, пока биржа не примет ордер.
+        </span>
+      </label>
+
+      <label className="field">
+        <span>Пауза между докупами, сек</span>
+        <input
+          type="number"
+          value={String(settings.autoRebuySlicePauseSec)}
+          onChange={(e) =>
+            push({
+              ...settings,
+              autoRebuySlicePauseSec: Number(e.target.value.replace(',', '.')),
+            })
+          }
+        />
+        <span className="muted" style={{ fontSize: 11 }}>
+          Докуп идёт клипами того же размера, каким набиралась позиция: три по
+          пять выкупаются по пять. Взять всё по первой подходящей цене — значит
+          отдать остаток просадки.
         </span>
       </label>
 

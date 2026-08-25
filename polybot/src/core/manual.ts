@@ -28,6 +28,8 @@ export type ManualSettings = {
   autoRebuyEnabled: boolean;
   /** How far below the sale price the buy-back triggers, as a fraction. */
   autoRebuyDropPct: number;
+  /** Pause between buy-back slices, so a deeper dip can still be caught. */
+  autoRebuySlicePauseSec: number;
   /** Size a click off the wallet instead of the price ladder. */
   useBalanceShare: boolean;
   /** Share of the balance one click spends, as a fraction. */
@@ -49,6 +51,7 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellWatchSec: 60,
   autoRebuyEnabled: false,
   autoRebuyDropPct: 0.2,
+  autoRebuySlicePauseSec: 3,
   useBalanceShare: false,
   balanceSharePct: 0.25,
 };

@@ -3,6 +3,7 @@ package com.polybot.btc5m.bot
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -152,5 +153,76 @@ class OrderLogTest {
 
         assertEquals("filled", entry.status)
         assertEquals(5.0, OrderLog.takeSellFills().single().matched, 1e-9)
+    }
+}
+
+/**
+ * The clip a buy-back is made in.
+ *
+ * A position built as three lots of five should be bought back five at a time:
+ * taking the whole fifteen at the first price that clears the trigger hands
+ * back the rest of the dip.
+ */
+class BuyLotTest {
+
+    @Before
+    fun reset() = OrderLog.clear()
+
+    @After
+    fun tidy() = OrderLog.clear()
+
+    private fun buy(size: Double, asset: String = "token-a") = OrderLog.record(
+        orderId = "b$size$asset",
+        asset = asset,
+        conditionId = "cond-a",
+        outcome = "Up",
+        action = "BUY",
+        price = 0.42,
+        size = size,
+        matched = size,
+        auto = false,
+    )
+
+    @Test
+    fun threeLotsOfFiveGiveAClipOfFive() {
+        repeat(3) { buy(5.0) }
+        assertEquals(5.0, OrderLog.buyLotFor("token-a")!!, 1e-9)
+    }
+
+    @Test
+    fun theSmallestClipWins() {
+        buy(15.0)
+        buy(5.0)
+        // Mixed sizes: the smallest is the one that keeps the buy-back gradual.
+        assertEquals(5.0, OrderLog.buyLotFor("token-a")!!, 1e-9)
+    }
+
+    @Test
+    fun clipsAreKeptPerOutcome() {
+        buy(5.0, "token-a")
+        buy(20.0, "token-b")
+        assertEquals(5.0, OrderLog.buyLotFor("token-a")!!, 1e-9)
+        assertEquals(20.0, OrderLog.buyLotFor("token-b")!!, 1e-9)
+    }
+
+    @Test
+    fun aSellIsNotABuyClip() {
+        OrderLog.record(
+            orderId = "s1",
+            asset = "token-a",
+            conditionId = "cond-a",
+            outcome = "Up",
+            action = "SELL",
+            price = 0.77,
+            size = 5.0,
+            matched = 5.0,
+            auto = false,
+        )
+        assertNull(OrderLog.buyLotFor("token-a"))
+    }
+
+    @Test
+    fun nothingBoughtMeansNoClipToCopy() {
+        assertNull(OrderLog.buyLotFor("never-seen"))
     }
 }

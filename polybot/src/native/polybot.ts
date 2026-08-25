@@ -231,6 +231,7 @@ export interface PolyBotPlugin {
     rebuyEnabled?: boolean;
     rebuyDropPct?: number;
     watchSec?: number;
+    rebuySlicePauseSec?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
   addListener(
@@ -293,8 +294,13 @@ export type AutoSellRow = {
 export type AutoSellRebuy = {
   outcome?: string | null;
   shares: number;
+  /** Still to buy back, and the clip it is bought in. */
+  remaining: number;
+  lot: number;
   soldAt: number;
   trigger: number;
+  /** Why it is still waiting: the current ask, or what went wrong. */
+  note?: string | null;
 };
 
 export type AutoSellState = {

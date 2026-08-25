@@ -146,6 +146,18 @@ object OrderLog {
             it.windowStart >= windowStart - WINDOW_SECONDS
     }
 
+    /**
+     * The size a single buy of this outcome was made in.
+     *
+     * Positions here are built up in equal clips — three lots of five rather
+     * than one of fifteen — and a buy-back that went in as one block would take
+     * the whole size at the first price it saw. The smallest buy recorded is
+     * that clip.
+     */
+    fun buyLotFor(asset: String): Double? = entries
+        .filter { it.action == "BUY" && it.asset == asset && it.size > 0.0 }
+        .minOfOrNull { it.size }
+
     fun forWindow(windowStart: Long): List<Entry> =
         entries.filter { it.windowStart == windowStart }.sortedByDescending { it.placedAt }
 
