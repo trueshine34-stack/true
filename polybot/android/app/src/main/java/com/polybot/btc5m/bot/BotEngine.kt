@@ -138,6 +138,24 @@ class BotEngine(
 
     fun isConfigured(): Boolean = account != null && creds != null && keyPair != null
 
+    /** Everything needed to sign and send, or nothing. */
+    data class Session(
+        val account: Account,
+        val creds: Credentials,
+        val keys: Secp256k1.KeyPair,
+    )
+
+    /**
+     * Lets a second strategy trade on this connection without duplicating the
+     * key handling — and without ever copying the key out of this object.
+     */
+    fun session(): Session? {
+        val a = account ?: return null
+        val c = creds ?: return null
+        val k = keyPair ?: return null
+        return Session(a, c, k)
+    }
+
     fun updateSettings(settings: Settings) {
         this.settings = settings
         onStateChanged()

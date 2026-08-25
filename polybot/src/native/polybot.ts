@@ -202,6 +202,11 @@ export interface PolyBotPlugin {
   ): Promise<PlaceOrderResult>;
   requestBatteryExemption(): Promise<{ exempt: boolean }>;
   isBatteryExempt(): Promise<{ exempt: boolean }>;
+  pairStart(args?: { settings?: PairSettings }): Promise<void>;
+  pairStop(): Promise<void>;
+  pairReset(): Promise<void>;
+  pairUpdateSettings(args: { settings: PairSettings }): Promise<void>;
+  pairGetState(): Promise<PairState>;
   addListener(
     event: 'state',
     fn: (state: NativeState) => void,
@@ -212,11 +217,116 @@ export interface PolyBotPlugin {
   ): Promise<PluginListenerHandle>;
 }
 
+// ------------------------------------------------------------ pair strategy
+
+export type PairSettings = {
+  dryRun: boolean;
+  lotShares: number;
+  minIntervalSec: number;
+  maxIntervalSec: number;
+  maxSeedPrice: number;
+  maxPairAvg: number;
+  minPairProfitPct: number;
+  rotateProfitPct: number;
+  cheapLegUnder: number;
+  cheapRotateProfitPct: number;
+  rotateFraction: number;
+  takerEntry: boolean;
+  maxExposureUsd: number;
+  maxImbalanceShares: number;
+  flattenSec: number;
+};
+
+export type PairOrder = {
+  localId: number;
+  orderId?: string | null;
+  side: 'Up' | 'Down';
+  action: 'BUY' | 'SELL';
+  price: number;
+  size: number;
+  matched: number;
+  dryRun: boolean;
+  placedAt: number;
+  note: string;
+};
+
+export type PairFill = {
+  at: number;
+  side: 'Up' | 'Down';
+  action: 'BUY' | 'SELL';
+  shares: number;
+  price: number;
+  feeUsd: number;
+  dryRun: boolean;
+  note: string;
+};
+
+export type PairBook = {
+  windowStart: number;
+  windowEnd: number;
+  upShares: number;
+  upAvg: number;
+  downShares: number;
+  downAvg: number;
+  pairs: number;
+  pairAvg: number;
+  imbalance: number;
+  exposureUsd: number;
+  spentUsd: number;
+  proceedsUsd: number;
+  feesUsd: number;
+  lockedProfitUsd: number;
+};
+
+export type PairWindow = {
+  windowStart: number;
+  pairs: number;
+  pairAvg: number;
+  winner?: 'Up' | 'Down' | null;
+  pnlUsd?: number | null;
+  feesUsd: number;
+};
+
+export type PairState = {
+  running: boolean;
+  dryRun: boolean;
+  haltReason?: string | null;
+  quotes?: NativeQuotes;
+  book?: PairBook;
+  orders: PairOrder[];
+  fills: PairFill[];
+  windows: PairWindow[];
+  stats: {
+    windows: number;
+    buys: number;
+    sells: number;
+    pairsLocked: number;
+    feesUsd: number;
+    realisedPnlUsd: number;
+  };
+};
+
 const IDLE_STATE: NativeState = {
   serviceAlive: false,
   running: false,
   feedStatus: 'closed',
   clockOffsetSec: 0,
+};
+
+const IDLE_PAIR_STATE: PairState = {
+  running: false,
+  dryRun: true,
+  orders: [],
+  fills: [],
+  windows: [],
+  stats: {
+    windows: 0,
+    buys: 0,
+    sells: 0,
+    pairsLocked: 0,
+    feesUsd: 0,
+    realisedPnlUsd: 0,
+  },
 };
 
 /**
@@ -258,6 +368,13 @@ const webStub: PolyBotPlugin = {
   },
   requestBatteryExemption: async () => ({ exempt: true }),
   isBatteryExempt: async () => ({ exempt: true }),
+  pairStart: async () => {
+    throw new Error('Торговый сервис доступен только в приложении Android');
+  },
+  pairStop: async () => {},
+  pairReset: async () => {},
+  pairUpdateSettings: async () => {},
+  pairGetState: async () => IDLE_PAIR_STATE,
   addListener: async () => ({ remove: async () => {} }) as PluginListenerHandle,
 };
 

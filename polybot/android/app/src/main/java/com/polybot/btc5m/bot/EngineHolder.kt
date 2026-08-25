@@ -16,6 +16,9 @@ object EngineHolder {
     private var engine: BotEngine? = null
 
     @Volatile
+    private var pair: PairEngine? = null
+
+    @Volatile
     var onState: (() -> Unit)? = null
 
     @Volatile
@@ -46,6 +49,30 @@ object EngineHolder {
         }
     }
 
+    /**
+     * The pair strategy shares the price feed, the journal and the signing
+     * session with the main engine; it runs its own loop and its own book.
+     */
+    fun pair(context: Context): PairEngine {
+        pair?.let { return it }
+        val host = get(context)
+        return synchronized(this) {
+            pair ?: PairEngine(
+                feed = host.feed,
+                journal = host.journal,
+                session = { host.session() },
+                marketNow = { host.currentMarket() },
+                onStateChanged = {
+                    onState?.invoke()
+                    onServiceState?.invoke()
+                },
+                onLog = { entry -> onLogEntry?.invoke(entry) },
+            ).also { pair = it }
+        }
+    }
+
     /** Null when nothing has touched the engine yet this process. */
     fun peek(): BotEngine? = engine
+
+    fun peekPair(): PairEngine? = pair
 }

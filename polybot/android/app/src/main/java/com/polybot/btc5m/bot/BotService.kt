@@ -32,25 +32,33 @@ class BotService : Service() {
     companion object {
         const val ACTION_START = "com.polybot.btc5m.START"
         const val ACTION_STOP = "com.polybot.btc5m.STOP"
+        const val ACTION_START_PAIR = "com.polybot.btc5m.START_PAIR"
+        const val ACTION_STOP_PAIR = "com.polybot.btc5m.STOP_PAIR"
 
         private const val CHANNEL_ID = "polybot_engine"
         private const val NOTIFICATION_ID = 4201
 
         fun isRunning(): Boolean = EngineHolder.peek()?.running == true
 
-        fun start(context: Context) {
-            val intent = Intent(context, BotService::class.java).setAction(ACTION_START)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        /** True while either strategy is trading. */
+        fun anyRunning(): Boolean =
+            EngineHolder.peek()?.running == true || EngineHolder.peekPair()?.running == true
+
+        fun start(context: Context) = send(context, ACTION_START, foreground = true)
+
+        fun stop(context: Context) = send(context, ACTION_STOP, foreground = false)
+
+        fun startPair(context: Context) = send(context, ACTION_START_PAIR, foreground = true)
+
+        fun stopPair(context: Context) = send(context, ACTION_STOP_PAIR, foreground = false)
+
+        private fun send(context: Context, action: String, foreground: Boolean) {
+            val intent = Intent(context, BotService::class.java).setAction(action)
+            if (foreground && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
                 context.startService(intent)
             }
-        }
-
-        fun stop(context: Context) {
-            context.startService(
-                Intent(context, BotService::class.java).setAction(ACTION_STOP),
-            )
         }
     }
 
@@ -72,9 +80,18 @@ class BotService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                stopEngine()
+                EngineHolder.peek()?.shutdown()
+                releaseUnlessBusy()
                 return START_NOT_STICKY
             }
+
+            ACTION_STOP_PAIR -> {
+                EngineHolder.peekPair()?.stop()
+                releaseUnlessBusy()
+                return START_NOT_STICKY
+            }
+
+            ACTION_START_PAIR -> startPairEngine()
 
             else -> startEngine()
         }
@@ -100,10 +117,23 @@ class BotService : Service() {
         updateNotification()
     }
 
-    private fun stopEngine() {
-        // Stops trading only. The engine keeps the day's statistics, the price
-        // feed and the credentials so the user can still manage orders.
-        EngineHolder.peek()?.shutdown()
+    private fun startPairEngine() {
+        startForeground(NOTIFICATION_ID, buildNotification("Запуск пары…"))
+        acquireWakeLock()
+        EngineHolder.pair(this).start()
+        updateNotification()
+    }
+
+    /**
+     * Stops trading only. The engines keep the day's statistics, the price feed
+     * and the credentials so the user can still manage orders — and the service
+     * stays up while the other strategy is still trading.
+     */
+    private fun releaseUnlessBusy() {
+        if (anyRunning()) {
+            updateNotification()
+            return
+        }
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -112,6 +142,7 @@ class BotService : Service() {
     override fun onDestroy() {
         if (EngineHolder.onServiceState === stateHook) EngineHolder.onServiceState = null
         EngineHolder.peek()?.shutdown()
+        EngineHolder.peekPair()?.stop()
         releaseWakeLock()
         super.onDestroy()
     }
@@ -182,12 +213,21 @@ class BotService : Service() {
         val bot = EngineHolder.peek() ?: return
         val stats = bot.stats
         val mode = if (bot.settings.dryRun) "тест" else "реальные сделки"
+        val pairBot = EngineHolder.peekPair()
         val state = when {
-            !bot.running -> bot.haltReason?.let { "остановлен: $it" } ?: "остановлен"
-            else -> {
+            bot.running -> {
                 val pnl = String.format("%+.2f", stats.realisedPnlUsd)
                 "$mode · сделок ${stats.trades} · $pnl $"
             }
+
+            pairBot?.running == true -> {
+                val pairMode = if (pairBot.settings.dryRun) "тест" else "реальные сделки"
+                val pnl = String.format("%+.2f", pairBot.stats.realisedPnlUsd)
+                "пара · $pairMode · пар " +
+                    String.format("%.0f", pairBot.stats.pairsLocked) + " · $pnl $"
+            }
+
+            else -> bot.haltReason?.let { "остановлен: $it" } ?: "остановлен"
         }
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ID, buildNotification(state))

@@ -42,6 +42,9 @@ class BotPlugin : Plugin() {
     /** The engine outlives the service, so it is always available here. */
     private val engine: BotEngine get() = EngineHolder.get(context)
 
+    /** The pair strategy, sharing this engine's feed and signing session. */
+    private val pair: PairEngine get() = EngineHolder.pair(context)
+
     override fun load() {
         EngineHolder.onState = { notifyState() }
         EngineHolder.onLogEntry = { entry -> notifyLog(entry) }
@@ -771,6 +774,186 @@ class BotPlugin : Plugin() {
                 "averageDownDeadlineSec",
                 defaults.averageDownDeadlineSec,
             ),
+        )
+    }
+
+    // ------------------------------------------------------- pair strategy
+
+    @PluginMethod
+    fun pairUpdateSettings(call: PluginCall) {
+        val raw = call.getObject("settings")
+        if (raw == null) {
+            call.reject("settings required")
+            return
+        }
+        pair.updateSettings(parsePairSettings(raw))
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun pairStart(call: PluginCall) {
+        val raw = call.getObject("settings")
+        if (raw != null) pair.updateSettings(parsePairSettings(raw))
+        if (!pair.settings.dryRun && !engine.isConfigured()) {
+            call.reject("Сначала подключите кошелёк")
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            getPermissionState(NOTIFICATIONS) != com.getcapacitor.PermissionState.GRANTED
+        ) {
+            requestPermissionForAlias(NOTIFICATIONS, call, "afterPairNotificationsPermission")
+            return
+        }
+        BotService.startPair(context)
+        call.resolve()
+    }
+
+    @PermissionCallback
+    private fun afterPairNotificationsPermission(call: PluginCall) {
+        BotService.startPair(context)
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun pairStop(call: PluginCall) {
+        pair.stop()
+        BotService.stopPair(context)
+        call.resolve()
+        notifyState()
+    }
+
+    @PluginMethod
+    fun pairReset(call: PluginCall) {
+        pair.reset()
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun pairGetState(call: PluginCall) {
+        call.resolve(buildPairState())
+    }
+
+    private fun buildPairState(): JSObject {
+        val bot = pair
+        val state = JSObject()
+            .put("running", bot.running)
+            .put("dryRun", bot.settings.dryRun)
+            .put("haltReason", bot.haltReason)
+
+        bot.quotes?.let { q ->
+            fun quoteJson(quote: Quote?) = quote?.let {
+                JSObject().put("bestBid", it.bestBid).put("bestAsk", it.bestAsk).put("mid", it.mid)
+            }
+            state.put(
+                "quotes",
+                JSObject().put("up", quoteJson(q.up)).put("down", quoteJson(q.down))
+                    .put("atMs", q.atMs),
+            )
+        }
+
+        bot.book?.let { b ->
+            state.put(
+                "book",
+                JSObject()
+                    .put("windowStart", b.windowStart)
+                    .put("windowEnd", b.windowEnd)
+                    .put("upShares", b.up.shares)
+                    .put("upAvg", b.up.avg)
+                    .put("downShares", b.down.shares)
+                    .put("downAvg", b.down.avg)
+                    .put("pairs", b.pairs)
+                    .put("pairAvg", b.pairAvg)
+                    .put("imbalance", b.imbalance)
+                    .put("exposureUsd", b.exposureUsd)
+                    .put("spentUsd", b.spentUsd)
+                    .put("proceedsUsd", b.proceedsUsd)
+                    .put("feesUsd", b.feesUsd)
+                    .put("lockedProfitUsd", PairMath.lockedProfit(b.up, b.down)),
+            )
+        }
+
+        val orders = JSArray()
+        bot.orders.filter { it.live }.forEach {
+            orders.put(
+                JSObject()
+                    .put("localId", it.localId)
+                    .put("orderId", it.orderId)
+                    .put("side", it.side)
+                    .put("action", it.action)
+                    .put("price", it.price)
+                    .put("size", it.size)
+                    .put("matched", it.matched)
+                    .put("dryRun", it.dryRun)
+                    .put("placedAt", it.placedAt)
+                    .put("note", it.note),
+            )
+        }
+        state.put("orders", orders)
+
+        val fills = JSArray()
+        bot.fills.asReversed().take(60).forEach {
+            fills.put(
+                JSObject()
+                    .put("at", it.at)
+                    .put("side", it.side)
+                    .put("action", it.action)
+                    .put("shares", it.shares)
+                    .put("price", it.price)
+                    .put("feeUsd", it.feeUsd)
+                    .put("dryRun", it.dryRun)
+                    .put("note", it.note),
+            )
+        }
+        state.put("fills", fills)
+
+        val windows = JSArray()
+        bot.history.take(20).forEach {
+            windows.put(
+                JSObject()
+                    .put("windowStart", it.windowStart)
+                    .put("pairs", it.pairs)
+                    .put("pairAvg", it.pairAvg)
+                    .put("winner", it.winner)
+                    .put("pnlUsd", it.pnlUsd)
+                    .put("feesUsd", it.feesUsd),
+            )
+        }
+        state.put("windows", windows)
+
+        state.put(
+            "stats",
+            JSObject()
+                .put("windows", bot.stats.windows)
+                .put("buys", bot.stats.buys)
+                .put("sells", bot.stats.sells)
+                .put("pairsLocked", bot.stats.pairsLocked)
+                .put("feesUsd", bot.stats.feesUsd)
+                .put("realisedPnlUsd", bot.stats.realisedPnlUsd),
+        )
+        return state
+    }
+
+    private fun parsePairSettings(raw: JSObject): PairSettings {
+        val d = PairSettings()
+        return PairSettings(
+            dryRun = raw.optBoolean("dryRun", d.dryRun),
+            lotShares = raw.optDouble("lotShares", d.lotShares),
+            minIntervalSec = raw.optInt("minIntervalSec", d.minIntervalSec),
+            maxIntervalSec = raw.optInt("maxIntervalSec", d.maxIntervalSec),
+            maxSeedPrice = raw.optDouble("maxSeedPrice", d.maxSeedPrice),
+            maxPairAvg = raw.optDouble("maxPairAvg", d.maxPairAvg),
+            minPairProfitPct = raw.optDouble("minPairProfitPct", d.minPairProfitPct),
+            rotateProfitPct = raw.optDouble("rotateProfitPct", d.rotateProfitPct),
+            cheapLegUnder = raw.optDouble("cheapLegUnder", d.cheapLegUnder),
+            cheapRotateProfitPct = raw.optDouble(
+                "cheapRotateProfitPct",
+                d.cheapRotateProfitPct,
+            ),
+            rotateFraction = raw.optDouble("rotateFraction", d.rotateFraction),
+            takerEntry = raw.optBoolean("takerEntry", d.takerEntry),
+            maxExposureUsd = raw.optDouble("maxExposureUsd", d.maxExposureUsd),
+            maxImbalanceShares = raw.optDouble("maxImbalanceShares", d.maxImbalanceShares),
+            flattenSec = raw.optInt("flattenSec", d.flattenSec),
         )
     }
 

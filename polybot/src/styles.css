@@ -452,3 +452,80 @@ button.stat.quote:active {
   background: var(--surface-2);
   border: 1px solid var(--line);
 }
+
+.segmented {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.segmented button {
+  flex: 1;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 4px;
+  cursor: pointer;
+}
+
+.segmented button.active {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/*
+ * One trade per line. The eye scans the left edge for direction and the middle
+ * for size and price, so those columns are fixed and only the note gives way.
+ */
+.ledger {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger + .ledger {
+  border-top: 1px solid var(--line);
+}
+
+.ledger .tag {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.ledger .tag.buy {
+  background: rgba(35, 192, 123, 0.14);
+  color: var(--up);
+}
+
+.ledger .tag.sell {
+  background: rgba(255, 90, 106, 0.14);
+  color: var(--down);
+}
+
+.ledger-main {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.ledger-note {
+  font-size: 11px;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
