@@ -1006,8 +1006,13 @@ class BotPlugin : Plugin() {
             return
         }
         autoSell.update(next)
-        // The service keeps it alive while the app is backgrounded.
-        if (next.enabled) BotService.startAutoSell(context) else BotService.stopAutoSell(context)
+        // The service keeps it alive while the app is backgrounded. Either rule
+        // on is reason enough: the buy-back runs in the same loop.
+        if (next.enabled || next.rebuyEnabled) {
+            BotService.startAutoSell(context)
+        } else {
+            BotService.stopAutoSell(context)
+        }
         call.resolve()
     }
 

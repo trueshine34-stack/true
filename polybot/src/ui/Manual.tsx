@@ -112,9 +112,9 @@ export function Manual() {
       // The rules live in the native service, which starts every process with
       // them off. Without this the switch would read as on from the store while
       // nothing was actually sweeping — the toggle looked armed and was not.
-      if (stored.autoSellEnabled) {
+      if (stored.autoSellEnabled || stored.autoRebuyEnabled) {
         void PolyBot.autoSellUpdate({
-          enabled: true,
+          enabled: stored.autoSellEnabled,
           ladder: stored.autoSellLadder,
           retryEverySec: stored.autoSellRetrySec,
           rebuyEnabled: stored.autoRebuyEnabled,
@@ -296,10 +296,15 @@ export function Manual() {
           // The foreground service can be killed by the system. If the setting
           // says the rule should be on and the service says it is not, arm it
           // again rather than leaving a switch that lies.
+          // Either rule running is reason for the loop to be up, so both are
+          // compared — otherwise a buy-back-only setup would never be re-armed.
+          const wanted =
+            settingsRef.current.autoSellEnabled || settingsRef.current.autoRebuyEnabled;
           if (
             loadedRef.current &&
             (s.enabled !== settingsRef.current.autoSellEnabled ||
-              (s.enabled && !s.running))
+              s.rebuyEnabled !== settingsRef.current.autoRebuyEnabled ||
+              (wanted && !s.running))
           ) {
             void PolyBot.autoSellUpdate({
               enabled: settingsRef.current.autoSellEnabled,

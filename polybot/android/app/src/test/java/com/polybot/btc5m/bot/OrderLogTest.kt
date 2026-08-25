@@ -1,0 +1,156 @@
+package com.polybot.btc5m.bot
+
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+/**
+ * The order log is what the buy-back hangs on.
+ *
+ * It has to count a sell's matched volume exactly once, and it has to count
+ * sells placed by hand as readily as ones a rule placed — the rule used to
+ * track only its own orders, which is why a limit sell put on by hand filled
+ * without the buy-back ever hearing about it.
+ */
+class OrderLogTest {
+
+    @Before
+    fun reset() = OrderLog.clear()
+
+    @After
+    fun tidy() = OrderLog.clear()
+
+    private fun record(
+        action: String,
+        price: Double,
+        size: Double,
+        matched: Double = 0.0,
+        auto: Boolean = false,
+        orderId: String? = "o${(0..1_000_000).random()}",
+    ) = OrderLog.record(
+        orderId = orderId,
+        asset = "token-a",
+        conditionId = "cond-a",
+        outcome = "Up",
+        action = action,
+        price = price,
+        size = size,
+        matched = matched,
+        auto = auto,
+    )
+
+    @Test
+    fun aHandPlacedSellCountsJustLikeARuleOne() {
+        record("SELL", 0.93, 5.0, matched = 5.0, auto = false)
+        record("SELL", 0.84, 5.0, matched = 5.0, auto = true)
+
+        val fills = OrderLog.takeSellFills()
+        assertEquals(2, fills.size)
+        assertEquals(10.0, fills.sumOf { it.matched }, 1e-9)
+    }
+
+    @Test
+    fun matchedVolumeIsOnlyEverCountedOnce() {
+        record("SELL", 0.93, 5.0, matched = 5.0)
+
+        assertEquals(5.0, OrderLog.takeSellFills().sumOf { it.matched }, 1e-9)
+        // A second sweep must not register the same sale again, or one sell
+        // would queue a buy-back on every pass.
+        assertTrue(OrderLog.takeSellFills().isEmpty())
+    }
+
+    @Test
+    fun aPartialFillCountsTheIncrementAndThenTheRest() {
+        val entry = record("SELL", 0.84, 10.0, matched = 4.0)
+        assertEquals(4.0, OrderLog.takeSellFills().single().matched, 1e-9)
+
+        entry.matched = 10.0
+        assertEquals(6.0, OrderLog.takeSellFills().single().matched, 1e-9)
+        assertTrue(OrderLog.takeSellFills().isEmpty())
+    }
+
+    @Test
+    fun buysAreNotSales() {
+        record("BUY", 0.42, 5.0, matched = 5.0)
+        assertTrue(OrderLog.takeSellFills().isEmpty())
+    }
+
+    @Test
+    fun anUnfilledSellYieldsNothing() {
+        record("SELL", 0.97, 5.0, matched = 0.0)
+        assertTrue(OrderLog.takeSellFills().isEmpty())
+    }
+
+    @Test
+    fun theFillCarriesThePriceTheBuyBackIsMeasuredFrom() {
+        record("SELL", 0.93, 5.0, matched = 5.0)
+        val fill = OrderLog.takeSellFills().single()
+
+        assertEquals(0.93, fill.price, 1e-9)
+        assertEquals("token-a", fill.asset)
+        assertEquals("cond-a", fill.conditionId)
+        // 20% below where it sold.
+        assertEquals(0.744, fill.price * 0.8, 1e-9)
+    }
+
+    @Test
+    fun aRestingSellKeepsTheRuleAwake() {
+        val window = System.currentTimeMillis() / 1000 - (System.currentTimeMillis() / 1000) % WINDOW_SECONDS
+        record("SELL", 0.97, 5.0, matched = 0.0)
+
+        assertTrue(OrderLog.hasWorkingSells(window))
+    }
+
+    @Test
+    fun aFilledSellDoesNotKeepItAwake() {
+        val window = System.currentTimeMillis() / 1000 - (System.currentTimeMillis() / 1000) % WINDOW_SECONDS
+        val entry = record("SELL", 0.97, 5.0, matched = 0.0)
+        entry.status = "filled"
+
+        assertFalse(OrderLog.hasWorkingSells(window))
+    }
+
+    @Test
+    fun ordersFromClosedWindowsAreLetGo() {
+        val entry = record("SELL", 0.97, 5.0, matched = 0.0)
+        // Two windows on, its market has closed and nothing more will happen.
+        assertFalse(OrderLog.hasWorkingSells(entry.windowStart + WINDOW_SECONDS * 2))
+    }
+
+    @Test
+    fun aVanishedOrderIsAskedAboutRatherThanAssumedFilled() {
+        val entry = record("SELL", 0.97, 5.0, matched = 0.0, orderId = "gone")
+
+        // Not in the open listing, and the venue says nothing matched: that is
+        // a cancel, and calling it a fill would queue a buy-back for a sale
+        // that never happened.
+        OrderLog.reconcile(emptyList()) { null }
+
+        assertEquals("cancelled", entry.status)
+        assertTrue(OrderLog.takeSellFills().isEmpty())
+    }
+
+    @Test
+    fun aVanishedOrderThatDidMatchIsAFill() {
+        val entry = record("SELL", 0.97, 5.0, matched = 0.0, orderId = "gone")
+        OrderLog.reconcile(emptyList()) {
+            ClobApi.OpenOrder(
+                id = "gone",
+                status = "matched",
+                market = "cond-a",
+                assetId = "token-a",
+                side = "SELL",
+                price = 0.97,
+                originalSize = 5.0,
+                sizeMatched = 5.0,
+                outcome = "Up",
+            )
+        }
+
+        assertEquals("filled", entry.status)
+        assertEquals(5.0, OrderLog.takeSellFills().single().matched, 1e-9)
+    }
+}

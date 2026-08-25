@@ -105,17 +105,6 @@ class AutoSell(
 
     private val rungs = HashMap<String, Rung>()
 
-    /** A sell we placed, so its fill can be recognised when it happens. */
-    private data class Placed(
-        val asset: String,
-        val conditionId: String,
-        val price: Double,
-        val size: Double,
-        var matched: Double = 0.0,
-    )
-
-    private val placed = HashMap<String, Placed>()
-
     /**
      * Outcomes bought recently, with the moment to stop chasing them.
      *
@@ -166,9 +155,13 @@ class AutoSell(
      */
     fun update(next: Settings) {
         settings = next
+        // The buy-back needs the loop as much as the sell ladder does — it is
+        // how a filled sell gets noticed at all. Tying the loop to the ladder
+        // alone left "buy-back on, ladder off" as a switch that did nothing.
+        val shouldRun = next.enabled || next.rebuyEnabled
         when {
-            next.enabled && !running -> start()
-            !next.enabled && running -> stop()
+            shouldRun && !running -> start()
+            !shouldRun && running -> stop()
             else -> onStateChanged()
         }
     }
@@ -186,7 +179,13 @@ class AutoSell(
         job = newScope.launch {
             var backoffMs = 0L
             while (isActive && running) {
-                val busy = sweepRequested || watching.isNotEmpty() || rebuys.isNotEmpty()
+                val nowSec = Clock.nowSec()
+                val busy = sweepRequested ||
+                    watching.isNotEmpty() ||
+                    rebuys.isNotEmpty() ||
+                    // A resting sell is the only thing a buy-back can start
+                    // from, so its fill has to be watched for.
+                    OrderLog.hasWorkingSells(nowSec - SellLadder.elapsedInWindow(nowSec))
                 if (busy) {
                     try {
                         sweep()
@@ -213,7 +212,9 @@ class AutoSell(
         }
         engine.log(
             "info",
-            "Автопродажа лесенкой " +
+            if (!settings.enabled) {
+                "Автодокуп включён: следим за исполнением продаж"
+            } else "Автопродажа лесенкой " +
                 settings.ladder.joinToString("/") { "${(it * 100).toInt()}" } +
                 "¢: ${settings.watchSec} с после покупки, повтор каждые " +
                 "${settings.retryEverySec} с",
@@ -230,7 +231,6 @@ class AutoSell(
         scope = null
         attempts.clear()
         rungs.clear()
-        placed.clear()
         rebuys.clear()
         watching.clear()
         engine.log("info", "Автопродажа выключена")
@@ -273,14 +273,14 @@ class AutoSell(
         // host with its own limits — can no longer take them down with it. That
         // is exactly what happened: every 429 on positions threw before either
         // of these ran, so sales went unnoticed and buy-backs never triggered.
-        noteFills(session, open, nowSec - SellLadder.elapsedInWindow(nowSec))
         OrderLog.reconcile(open) { id ->
             ClobApi.order(session.creds, session.account.signerAddress, id)
         }
+        noteFills(nowSec - SellLadder.elapsedInWindow(nowSec))
         runRebuys()
 
         val positions = try {
-            DataApi.positions(session.account.funderAddress)
+            if (settings.enabled) DataApi.positions(session.account.funderAddress) else emptyList()
         } catch (e: Exception) {
             lastFault = e.message ?: "позиции недоступны"
             lastSweepAt = nowMs
@@ -293,7 +293,9 @@ class AutoSell(
         lastFault = null
 
         val next = ArrayList<Row>()
-        for (position in positions) {
+        // With the ladder off, the loop is only here for the buy-back; it must
+        // not start selling on its own.
+        for (position in if (settings.enabled) positions else emptyList()) {
             if (position.redeemable || position.size <= 0.0) continue
             if (!fullSweep && !watching.containsKey(position.asset)) continue
 
@@ -358,59 +360,37 @@ class AutoSell(
     }
 
     /**
-     * Notice when one of our own sells actually filled.
+     * Turn sells that have matched into pending buy-backs.
      *
-     * A position simply shrinking is not enough to go on — it shrinks when the
-     * user sells by hand too, and buying that back would be the opposite of
-     * what they meant. Only orders this rule placed are tracked, and only their
-     * matched size counts.
+     * The volume comes from the order log, which records every order the app
+     * sends. The rule used to track only the sells it placed itself, so a limit
+     * sell put on by hand — the ordinary way of taking profit here — filled
+     * without the buy-back ever hearing about it.
      */
-    private fun noteFills(
-        session: BotEngine.Session,
-        open: List<ClobApi.OpenOrder>,
-        windowStart: Long,
-    ) {
-        val byId = open.associateBy { it.id }
-        val finished = ArrayList<String>()
+    private fun noteFills(windowStart: Long) {
+        val fills = OrderLog.takeSellFills()
+        if (fills.isEmpty() || !settings.rebuyEnabled) return
 
-        for ((id, order) in placed) {
-            val remote = byId[id]
-            val matched = if (remote != null) {
-                remote.sizeMatched
-            } else {
-                // Gone from the book: filled, or cancelled. Only the venue knows.
-                val resolved = try {
-                    ClobApi.order(session.creds, session.account.signerAddress, id)
-                } catch (e: Exception) {
-                    continue
-                }
-                finished.add(id)
-                resolved?.sizeMatched ?: 0.0
-            }
-
-            val delta = matched - order.matched
-            if (delta <= 1e-9) continue
-            order.matched = matched
-
-            if (!settings.rebuyEnabled) continue
+        for (fill in fills) {
+            val drop = settings.rebuyDropPct.coerceIn(0.0, 0.95)
             rebuys.add(
                 Rebuy(
-                    asset = order.asset,
-                    conditionId = order.conditionId,
-                    shares = delta,
-                    soldAt = order.price,
-                    trigger = order.price * (1.0 - settings.rebuyDropPct.coerceIn(0.0, 0.95)),
+                    asset = fill.asset,
+                    conditionId = fill.conditionId,
+                    shares = fill.matched,
+                    soldAt = fill.price,
+                    trigger = fill.price * (1.0 - drop),
                     windowStart = windowStart,
                 ),
             )
             engine.log(
                 "trade",
-                "Продано " + String.format("%.1f", delta) + " по " +
-                    "${(order.price * 100).toInt()}¢ · докуп при " +
-                    "${(order.price * (1.0 - settings.rebuyDropPct) * 100).toInt()}¢",
+                "Продано " + String.format("%.1f", fill.matched) + " по " +
+                    "${(fill.price * 100).toInt()}¢ · докуп при " +
+                    "${(fill.price * (1.0 - drop) * 100).toInt()}¢",
             )
         }
-        finished.forEach { placed.remove(it) }
+        onStateChanged()
     }
 
     /**
@@ -581,9 +561,6 @@ class AutoSell(
             if (result.success) {
                 attempts.remove(position.asset)
                 lastError.remove(position.asset)
-                result.orderId?.let {
-                    placed[it] = Placed(position.asset, position.conditionId, price, size)
-                }
                 "выставлено"
             } else {
                 // Almost always "shares not sellable yet"; the next sweep retries.

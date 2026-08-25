@@ -31,6 +31,8 @@ object OrderLog {
         var matched: Double,
         var status: String,
         var auto: Boolean = false,
+        /** Matched volume already turned into a buy-back, so it counts once. */
+        var rebuyAccounted: Double = 0.0,
     )
 
     private val entries = CopyOnWriteArrayList<Entry>()
@@ -108,6 +110,40 @@ object OrderLog {
             entry.matched = resolved?.sizeMatched ?: entry.matched
             entry.status = statusFor(entry.matched, entry.size, resting = false)
         }
+    }
+
+    /**
+     * Sell volume that has matched since the last time this was asked.
+     *
+     * Keyed off every sell the app sent, not just the ones a rule placed: a
+     * limit sell put on by hand fills exactly the same way, and a buy-back that
+     * only reacted to the rule's own orders ignored the case the user actually
+     * meant.
+     */
+    @Synchronized
+    fun takeSellFills(): List<Entry> {
+        val out = ArrayList<Entry>()
+        for (entry in entries) {
+            if (entry.action != "SELL") continue
+            if (entry.matched - entry.rebuyAccounted <= 1e-9) continue
+            out.add(entry.copy(matched = entry.matched - entry.rebuyAccounted))
+            entry.rebuyAccounted = entry.matched
+        }
+        return out
+    }
+
+    /**
+     * Are any of our sells still working?
+     *
+     * While one is, the rule has to keep looking: that is the only way it can
+     * notice the fill that a buy-back hangs on. Orders older than the previous
+     * window are not counted — their market has closed, and nothing more will
+     * happen to them.
+     */
+    fun hasWorkingSells(windowStart: Long): Boolean = entries.any {
+        it.action == "SELL" &&
+            (it.status == "resting" || it.status == "partial") &&
+            it.windowStart >= windowStart - WINDOW_SECONDS
     }
 
     fun forWindow(windowStart: Long): List<Entry> =
