@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_MANUAL_SETTINGS,
   balanceShares,
+  sellableShares,
+  stakeShares,
   limitShares,
   minShares,
   sharesFor,
@@ -475,7 +477,7 @@ export function Manual() {
         side: which,
         action: 'SELL',
         price: String(Math.round(bid * 100)),
-        shares: position.size.toFixed(1),
+        shares: sellableShares(position.size, bid).toFixed(1),
       });
       setNote(null);
     },
@@ -756,6 +758,32 @@ export function Manual() {
                   </div>
                 </div>
               </div>
+              {balance != null && balance > 0 && (
+                <div className="draftpcts pcts">
+                  {[25, 50, 100].map((pct) => {
+                    const price = Number(draft.price) / 100;
+                    const shares = stakeShares(price, balance, pct / 100, minSize);
+                    return (
+                      <button
+                        key={pct}
+                        disabled={shares == null}
+                        onClick={() =>
+                          shares != null &&
+                          setDraft({ ...draft, shares: String(shares) })
+                        }
+                        title={
+                          shares == null
+                            ? 'Меньше минимального ордера'
+                            : `${shares} долей`
+                        }
+                      >
+                        {pct}%
+                      </button>
+                    );
+                  })}
+                  <span className="muted draftpct-hint">от баланса</span>
+                </div>
+              )}
               <div className="draftrow">
                 <button
                   className="primary compact"

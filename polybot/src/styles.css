@@ -1385,3 +1385,22 @@ button.compact.narrow {
   font-size: 10px;
   margin-top: 3px;
 }
+
+/*
+ * Size-by-balance chips inside the order form. Same buttons as the rule bar,
+ * given a line of their own so the row of them reads as one control rather
+ * than as an afterthought beside the quantity box.
+ */
+.draftpcts {
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.draftpcts button:disabled {
+  opacity: 0.4;
+}
+
+.draftpct-hint {
+  font-size: 11px;
+}

@@ -4,8 +4,10 @@ import {
   balanceShares,
   limitShares,
   minShares,
+  sellableShares,
   sharesFor,
   spendableBalance,
+  stakeShares,
   type ManualSettings,
 } from '../manual';
 
@@ -235,5 +237,62 @@ describe('balance sizing leaves room for the fee', () => {
   it('half the wallet still leaves the other half alone', () => {
     const shares = balanceShares(0.5, 100, 0.5)!;
     expect(shares * 0.5).toBeCloseTo(48.25, 9);
+  });
+});
+
+describe('sellableShares', () => {
+  it('trims three percent off the position', () => {
+    expect(sellableShares(100)).toBeCloseTo(97, 6);
+  });
+
+  it('never asks for more than is held', () => {
+    // 15.69 held: rounding to a tenth alone asks for 15.7 and is refused.
+    expect(sellableShares(15.69)).toBeLessThanOrEqual(15.69);
+    expect(sellableShares(15.69)).toBeCloseTo(15.2, 6);
+  });
+
+  it('trims by the fee where the fee is bigger than three percent', () => {
+    // At 20c the fee is 5.6% of the share count, so 3% would still over-ask.
+    expect(sellableShares(100, 0.2)).toBeCloseTo(94.4, 6);
+    expect(sellableShares(100, 0.9)).toBeCloseTo(97, 6);
+  });
+
+  it('lands on a tenth, without float dust', () => {
+    for (const size of [15.69, 7.77, 42.03, 5.5, 100]) {
+      const s = sellableShares(size, 0.43);
+      expect(Math.abs(s * 10 - Math.round(s * 10))).toBeLessThan(1e-9);
+    }
+  });
+
+  it('offers a dust position whole rather than nothing', () => {
+    expect(sellableShares(0.1)).toBeCloseTo(0.1, 6);
+  });
+
+  it('is zero for nothing held', () => {
+    expect(sellableShares(0)).toBe(0);
+    expect(sellableShares(Number.NaN)).toBe(0);
+  });
+});
+
+describe('stakeShares', () => {
+  it('rounds the wallet share down to whole shares', () => {
+    // 100 $ at 50c: 96.5 spendable, half of that is 48.25 -> 96.5 shares.
+    expect(stakeShares(0.5, 100, 0.5)).toBe(96);
+  });
+
+  it('stays inside the balance the fee narrowed', () => {
+    const shares = stakeShares(0.5, 100, 1) as number;
+    expect(shares * 0.5 * 1.035).toBeLessThanOrEqual(100);
+  });
+
+  it('refuses a share too small for the venue floor', () => {
+    expect(stakeShares(0.5, 4, 0.25)).toBeNull();
+  });
+
+  it('keeps the venue floor when flooring would drop under it', () => {
+    // 20 $ at 90c, a quarter of it is ~5.3 shares - flooring lands under five.
+    const shares = stakeShares(0.9, 20, 0.25);
+    expect(shares).not.toBeNull();
+    expect(shares as number).toBeGreaterThanOrEqual(5);
   });
 });

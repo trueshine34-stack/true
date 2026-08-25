@@ -157,3 +157,72 @@ export function sharesFor(
   const band = bands.find((r) => price <= r.maxPrice + 1e-9);
   return Math.max(band ? band.shares : fromStake, floor);
 }
+
+/** The least a sell is trimmed by, whatever the fee works out to. */
+export const SELL_HEADROOM = 0.03;
+
+/**
+ * How much smaller than the reported size a sell order has to be.
+ *
+ * Polymarket takes its fee out of what the trade pays out, so a buy delivers
+ * fewer shares than it asked for: `rate x p x (1 - p)` per share in dollars is
+ * `rate x (1 - p)` of the share count. At 50c that is three and a half percent,
+ * which is why a position reported as 15.7 cannot sell 15.7. Three percent is
+ * the floor; where the fee is larger — anything under about 57c — the fee wins,
+ * because trimming less would be refused exactly as before.
+ */
+export function sellHeadroom(price?: number): number {
+  if (price == null || !Number.isFinite(price) || price <= 0 || price >= 1) {
+    return SELL_HEADROOM;
+  }
+  return Math.max(SELL_HEADROOM, TAKER_FEE_RATE * (1 - price));
+}
+
+/**
+ * How many shares a position can actually be sold for.
+ *
+ * Two things make the reported size unsellable. The fee above is one. The other
+ * is display rounding: rounding a size of 15.69 to a tenth gives 15.7, more than
+ * is held, and the venue simply refuses it. So the trim comes off first and the
+ * result always rounds *down*.
+ *
+ * A position too small to trim is offered whole: selling slightly too much is
+ * refused, but so is selling nothing, and the untrimmed size is the one with a
+ * chance of clearing the venue floor.
+ */
+export function sellableShares(
+  size: number,
+  price?: number,
+  step = 0.1,
+): number {
+  if (!Number.isFinite(size) || size <= 0) return 0;
+  const trimmed = size * (1 - sellHeadroom(price));
+  // Round before flooring: 15.7 / 0.1 comes through as 156.999... in floats,
+  // and flooring that alone would quietly drop another whole tenth.
+  const units = Math.floor(Number((trimmed / step).toFixed(6)));
+  const snapped = units * step;
+  return snapped > 0
+    ? Number(snapped.toFixed(4))
+    : Number((Math.floor(Number((size / step).toFixed(6))) * step).toFixed(4));
+}
+
+/**
+ * Shares for a share-of-the-balance click, rounded down to whole shares.
+ *
+ * Rounding down is the point: a fractional size that spends the exact percentage
+ * reads as noise on a button that says 50%, and rounding up would put the order
+ * over the balance the fee already narrowed.
+ */
+export function stakeShares(
+  price: number,
+  balanceUsd: number,
+  sharePct: number,
+  minimumOrderSize = 5,
+): number | null {
+  const raw = balanceShares(price, balanceUsd, sharePct, minimumOrderSize);
+  if (raw == null) return null;
+
+  const floor = minShares(price, minimumOrderSize);
+  const whole = Math.floor(raw);
+  return whole >= floor ? whole : Math.ceil(floor * 100) / 100;
+}
