@@ -8,6 +8,7 @@ import { Manual } from './ui/Manual';
 import { Pair } from './ui/Pair';
 import { SettingsScreen } from './ui/Settings';
 import { Setup } from './ui/Setup';
+import { Withdraw } from './ui/Withdraw';
 
 type Phase = 'loading' | 'setup' | 'ready';
 type Tab = 'manual' | 'auto' | 'settings';
@@ -20,6 +21,7 @@ export function App() {
   const [settings, setSettings] = useState<StrategySettings>(DEFAULT_SETTINGS);
   const [account, setAccount] = useState<AccountConfig | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,12 +131,15 @@ export function App() {
 
   return (
     <div className="app">
+      {withdrawing && <Withdraw onClose={() => setWithdrawing(false)} />}
       <div className="topbar">
         <h1>PolyBot · BTC 5м</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <span className="pill balance">
+          {/* The balance is the natural place to reach for when taking money
+              out, so it is the button that opens the withdrawal. */}
+          <button className="pill balance" onClick={() => setWithdrawing(true)}>
             {balance === null ? '— $' : `${balance.toFixed(2)} $`}
-          </span>
+          </button>
           {account && <span className="pill mono">{short(account.signerAddress)}</span>}
         </div>
       </div>

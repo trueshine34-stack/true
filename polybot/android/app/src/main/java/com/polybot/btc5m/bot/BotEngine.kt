@@ -1393,11 +1393,17 @@ class BotEngine(
         if (result.success && filledShares > 1e-9) {
             if (side == "BUY") {
                 LocalFills.bought(tokenId, filledShares, result.makingAmount ?: (filledShares * price))
-                onBought?.invoke(tokenId)
             } else {
                 LocalFills.sold(tokenId, filledShares)
             }
         }
+
+        // Every accepted buy arms the sell rule, filled or not. Arming only on
+        // an immediate fill meant a limit buy that rested for a few seconds —
+        // the ordinary way of buying here — was never watched, and no sell was
+        // ever placed against it. The venue also reports no taking amount at
+        // all for some fills, which broke the same way.
+        if (result.success && side == "BUY") onBought?.invoke(tokenId)
 
         log(
             if (result.success) "trade" else "error",

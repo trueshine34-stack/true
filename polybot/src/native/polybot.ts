@@ -55,6 +55,18 @@ export type NativePosition = {
   redeemable: boolean;
 };
 
+/** The funding wallet as the chain sees it, not as the exchange reports it. */
+export type WalletInfo = {
+  address: string;
+  /** USDC.e held on Polygon, in dollars. */
+  usdc: number;
+  /** POL held, and what one transfer costs at the fees quoted right now. */
+  gas: number;
+  fee: number;
+  canSend: boolean;
+  note?: string | null;
+};
+
 export type NativeExit = {
   orderId: string;
   price: number;
@@ -191,6 +203,8 @@ export interface PolyBotPlugin {
   getState(): Promise<NativeState>;
   getLogs(): Promise<{ entries: NativeLog[] }>;
   getBalance(): Promise<{ usdc: number }>;
+  walletInfo(): Promise<WalletInfo>;
+  walletWithdraw(args: { to: string; amount: number }): Promise<{ hash: string }>;
   exportJournal(): Promise<{ file: string; bytes: number }>;
   clearJournal(): Promise<void>;
   getJournalSize(): Promise<{ bytes: number }>;
@@ -501,6 +515,12 @@ const webStub: PolyBotPlugin = {
   getLogs: async () => ({ entries: [] }),
   getBalance: async () => {
     throw new Error('Баланс доступен только в приложении Android');
+  },
+  walletInfo: async () => {
+    throw new Error('Кошелёк доступен только в приложении Android');
+  },
+  walletWithdraw: async () => {
+    throw new Error('Вывод доступен только в приложении Android');
   },
   exportJournal: async () => {
     throw new Error('Экспорт доступен только в приложении Android');

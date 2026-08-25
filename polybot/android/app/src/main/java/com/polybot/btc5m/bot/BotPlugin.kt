@@ -228,6 +228,60 @@ class BotPlugin : Plugin() {
         }.start()
     }
 
+    /**
+     * What the funding wallet can send, read from the chain rather than from
+     * the exchange: collateral behind a resting order is still the exchange's.
+     */
+    @PluginMethod
+    fun walletInfo(call: PluginCall) {
+        Thread {
+            try {
+                val session = engine.session()
+                if (session == null) {
+                    call.reject("кошелёк не подключён")
+                    return@Thread
+                }
+                val info = Wallet.info(session.account)
+                call.resolve(
+                    JSObject()
+                        .put("address", info.address)
+                        .put("usdc", info.usdc)
+                        .put("gas", info.gas)
+                        .put("fee", info.fee)
+                        .put("canSend", info.canSend)
+                        .put("note", info.note),
+                )
+            } catch (e: Exception) {
+                call.reject(e.message ?: "сеть Polygon недоступна")
+            }
+        }.start()
+    }
+
+    /** Send USDC to an address on Polygon. Nothing here bridges to a chain. */
+    @PluginMethod
+    fun walletWithdraw(call: PluginCall) {
+        val to = call.getString("to").orEmpty()
+        val amount = call.getDouble("amount") ?: 0.0
+        Thread {
+            try {
+                val session = engine.session()
+                if (session == null) {
+                    call.reject("кошелёк не подключён")
+                    return@Thread
+                }
+                val sent = Wallet.send(session.keys, session.account, to, amount)
+                engine.log(
+                    "trade",
+                    "Вывод " + String.format("%.2f", amount) + " USDC на " +
+                        to.take(6) + "…" + to.takeLast(4) + " · " + sent.hash.take(10),
+                )
+                call.resolve(JSObject().put("hash", sent.hash))
+            } catch (e: Exception) {
+                call.reject(e.message ?: "перевод не прошёл")
+            }
+        }.start()
+    }
+
     @PluginMethod
     fun getOpenOrders(call: PluginCall) {
         val market = call.getString("market")

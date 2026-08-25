@@ -10,6 +10,12 @@ import {
   stakeShares,
   type ManualSettings,
 } from '../manual';
+import {
+  DEFAULT_WITHDRAW_ADDRESS,
+  looksLikeAddress,
+  shortAddress,
+  withdrawable,
+} from '../withdraw';
 
 /**
  * The size ladder decides how much real money one tap spends, so the bands and
@@ -294,5 +300,30 @@ describe('stakeShares', () => {
     const shares = stakeShares(0.9, 20, 0.25);
     expect(shares).not.toBeNull();
     expect(shares as number).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe('withdrawable', () => {
+  it('trims to the cent, downwards', () => {
+    expect(withdrawable(12.3456)).toBeCloseTo(12.34, 6);
+    expect(withdrawable(12.999)).toBeCloseTo(12.99, 6);
+  });
+
+  it('is zero for an empty wallet', () => {
+    expect(withdrawable(0)).toBe(0);
+    expect(withdrawable(Number.NaN)).toBe(0);
+  });
+});
+
+describe('withdrawal address', () => {
+  it('accepts a proper address and refuses anything else', () => {
+    expect(looksLikeAddress(DEFAULT_WITHDRAW_ADDRESS)).toBe(true);
+    expect(looksLikeAddress('0x123')).toBe(false);
+    expect(looksLikeAddress(`${DEFAULT_WITHDRAW_ADDRESS}00`)).toBe(false);
+    expect(looksLikeAddress('')).toBe(false);
+  });
+
+  it('shows both ends, which is what gets checked', () => {
+    expect(shortAddress(DEFAULT_WITHDRAW_ADDRESS)).toBe('0x89C1…77C3');
   });
 });

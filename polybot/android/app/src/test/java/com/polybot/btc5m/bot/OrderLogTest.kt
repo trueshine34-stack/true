@@ -142,6 +142,30 @@ class OrderLogTest {
     }
 
     @Test
+    fun aRestingBuyKeepsTheRuleAwake() {
+        val window = System.currentTimeMillis() / 1000 -
+            (System.currentTimeMillis() / 1000) % WINDOW_SECONDS
+        record("BUY", 0.42, 5.0, matched = 0.0)
+
+        // The position it will become still has to be covered by a sell, and
+        // nothing else in the loop knows the fill is coming.
+        assertTrue(OrderLog.hasWorkingBuys(window))
+        assertTrue(OrderLog.hasWorkingBuy("token-a"))
+        assertFalse(OrderLog.hasWorkingBuy("token-b"))
+    }
+
+    @Test
+    fun aFilledBuyStopsKeepingItAwake() {
+        val window = System.currentTimeMillis() / 1000 -
+            (System.currentTimeMillis() / 1000) % WINDOW_SECONDS
+        val entry = record("BUY", 0.42, 5.0, matched = 5.0)
+        entry.status = "filled"
+
+        assertFalse(OrderLog.hasWorkingBuys(window))
+        assertFalse(OrderLog.hasWorkingBuy("token-a"))
+    }
+
+    @Test
     fun ordersFromClosedWindowsAreLetGo() {
         val entry = record("SELL", 0.97, 5.0, matched = 0.0)
         // Two windows on, its market has closed and nothing more will happen.

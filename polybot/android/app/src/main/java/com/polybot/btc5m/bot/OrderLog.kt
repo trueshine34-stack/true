@@ -130,8 +130,27 @@ object OrderLog {
      * window are not counted — their market has closed, and nothing more will
      * happen to them.
      */
-    fun hasWorkingSells(windowStart: Long): Boolean = entries.any {
-        it.action == "SELL" &&
+    fun hasWorkingSells(windowStart: Long): Boolean = working("SELL", windowStart)
+
+    /**
+     * Are any of our buys still working?
+     *
+     * A limit buy that rests and fills a minute later has to wake the rule just
+     * as much as a sell does — it is a position about to exist, and nothing else
+     * in the loop knows it is coming. Without this the rule went quiet the
+     * moment the order was placed and never came back to cover the fill.
+     */
+    fun hasWorkingBuys(windowStart: Long): Boolean = working("BUY", windowStart)
+
+    /** Is one particular asset's buy still working? */
+    fun hasWorkingBuy(asset: String): Boolean = entries.any {
+        it.asset == asset &&
+            it.action == "BUY" &&
+            (it.status == "resting" || it.status == "partial")
+    }
+
+    private fun working(action: String, windowStart: Long): Boolean = entries.any {
+        it.action == action &&
             (it.status == "resting" || it.status == "partial") &&
             it.windowStart >= windowStart - WINDOW_SECONDS
     }

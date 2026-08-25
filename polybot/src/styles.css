@@ -1404,3 +1404,89 @@ button.compact.narrow {
 .draftpct-hint {
   font-size: 11px;
 }
+
+/*
+ * Withdrawal sheet. It covers the screen because the decision underneath it is
+ * irreversible — a chain has no undo — and a panel that can be half-tapped
+ * through is the wrong shape for that.
+ */
+.sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(4, 6, 11, 0.72);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+  padding-bottom: calc(12px + var(--safe-bottom));
+}
+
+.sheet {
+  width: 100%;
+  max-width: 460px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.sheet-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.row.wrap {
+  flex-wrap: wrap;
+}
+
+.sheet input.addr {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+button.linkish {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.fineprint {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 10px 0;
+}
+
+.confirm {
+  border: 1px solid var(--warn);
+  background: rgba(245, 181, 68, 0.08);
+  border-radius: 11px;
+  padding: 11px;
+  font-size: 13px;
+}
+
+.confirm .draftrow {
+  margin-top: 9px;
+}
+
+button.pill.balance {
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--text);
+}

@@ -241,10 +241,12 @@ class AutoSell(
                     }
                 }
 
+                val windowNow = nowSec - SellLadder.elapsedInWindow(nowSec)
                 val busy = sweepRequested ||
                     watching.isNotEmpty() ||
                     rebuys.isNotEmpty() ||
-                    OrderLog.hasWorkingSells(nowSec - SellLadder.elapsedInWindow(nowSec))
+                    OrderLog.hasWorkingSells(windowNow) ||
+                    OrderLog.hasWorkingBuys(windowNow)
                 val due = now - lastFullMs >= settings.retryEverySec.coerceAtLeast(1) * 1000L
 
                 if (busy && due && backoffMs <= 0L) {
@@ -423,6 +425,13 @@ class AutoSell(
         val now = System.currentTimeMillis()
         val done = watching.filterValues { it <= now }.keys
         for (asset in done) {
+            // A buy still on the book is not a lost cause — there is nothing to
+            // sell yet. Renew rather than give up, or a limit that takes longer
+            // than the watch to fill would never be covered.
+            if (OrderLog.hasWorkingBuy(asset)) {
+                watching[asset] = now + settings.watchSec.coerceAtLeast(5) * 1000L
+                continue
+            }
             watching.remove(asset)
             val row = rows.firstOrNull { it.asset == asset }
             engine.log(
@@ -465,7 +474,16 @@ class AutoSell(
 
             val tick = metaFor(trade.conditionId)?.tickSize ?: 0.01
             OrderLog.applyTrade(trade.asset, trade.side, trade.price, trade.size, tick)
-            if (trade.side != "SELL" || !settings.rebuyEnabled) continue
+
+            // A buy that has actually happened gets its own window of attention,
+            // whatever put it there: a limit that rested past the watch it was
+            // given, a fill in slices, or a purchase made outside the app. This
+            // is the only signal that is true after the fact.
+            if (trade.side == "BUY") {
+                if (settings.enabled) watch(trade.asset)
+                continue
+            }
+            if (!settings.rebuyEnabled) continue
 
             val drop = settings.rebuyDropPct.coerceIn(0.0, 0.95)
             val lot = OrderLog.buyLotFor(trade.asset)?.coerceAtMost(trade.size) ?: trade.size
