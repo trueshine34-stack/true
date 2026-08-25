@@ -60,6 +60,7 @@ object EngineHolder {
             pair ?: PairEngine(
                 feed = host.feed,
                 journal = host.journal,
+                store = PairStore(context),
                 session = { host.session() },
                 marketNow = { host.currentMarket() },
                 onStateChanged = {

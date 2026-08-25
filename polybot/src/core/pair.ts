@@ -11,6 +11,7 @@ import type { PairSettings } from '../native/polybot';
 export const DEFAULT_PAIR_SETTINGS: PairSettings = {
   dryRun: true,
   lotShares: 5,
+  cheapSideBonusPct: 0.3,
   minIntervalSec: 10,
   maxIntervalSec: 20,
   maxSeedPrice: 0.5,
@@ -24,4 +25,5 @@ export const DEFAULT_PAIR_SETTINGS: PairSettings = {
   maxExposureUsd: 20,
   maxImbalanceShares: 20,
   flattenSec: 40,
+  paperStartUsd: 100,
 };

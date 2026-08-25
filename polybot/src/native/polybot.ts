@@ -222,6 +222,8 @@ export interface PolyBotPlugin {
 export type PairSettings = {
   dryRun: boolean;
   lotShares: number;
+  /** Extra size on the cheaper side, and how far it may lead the other. */
+  cheapSideBonusPct: number;
   minIntervalSec: number;
   maxIntervalSec: number;
   maxSeedPrice: number;
@@ -235,6 +237,7 @@ export type PairSettings = {
   maxExposureUsd: number;
   maxImbalanceShares: number;
   flattenSec: number;
+  paperStartUsd: number;
 };
 
 export type PairOrder = {
@@ -296,14 +299,23 @@ export type PairState = {
   orders: PairOrder[];
   fills: PairFill[];
   windows: PairWindow[];
-  stats: {
-    windows: number;
-    buys: number;
-    sells: number;
-    pairsLocked: number;
-    feesUsd: number;
-    realisedPnlUsd: number;
-  };
+  stats: PairStats;
+  /** Kept apart so a paper run can never flatter the live figures. */
+  testStats?: PairStats;
+  liveStats?: PairStats;
+  /** Cash in the paper account, carried across every session. */
+  paperCash?: number;
+  /** Paper cash plus what the open legs would fetch at the bid. */
+  paperEquity?: number;
+};
+
+export type PairStats = {
+  windows: number;
+  buys: number;
+  sells: number;
+  pairsLocked: number;
+  feesUsd: number;
+  realisedPnlUsd: number;
 };
 
 const IDLE_STATE: NativeState = {

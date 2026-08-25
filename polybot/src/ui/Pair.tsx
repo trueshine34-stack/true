@@ -3,6 +3,7 @@ import { DEFAULT_PAIR_SETTINGS } from '../core/pair';
 import { loadPairSettings, savePairSettings } from '../core/storage';
 import {
   PolyBot,
+  type NativeQuote,
   type PairFill,
   type PairOrder,
   type PairSettings,
@@ -37,6 +38,7 @@ export function Pair() {
   const [settings, setSettings] = useState<PairSettings>(DEFAULT_PAIR_SETTINGS);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<'live' | 'settings'>('live');
+  const [wallet, setWallet] = useState<number | null>(null);
 
   useEffect(() => {
     void loadPairSettings().then(setSettings);
@@ -55,6 +57,27 @@ export function Pair() {
     };
     read();
     const timer = window.setInterval(read, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  // The live side of the balance is the wallet itself, which only moves when an
+  // order fills, so a slow poll is plenty.
+  useEffect(() => {
+    let cancelled = false;
+    const read = () => {
+      void PolyBot.getBalance()
+        .then((r) => {
+          if (!cancelled) setWallet(r.usdc);
+        })
+        .catch(() => {
+          // Not connected; the paper side still has something to show.
+        });
+    };
+    read();
+    const timer = window.setInterval(read, 30_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -83,6 +106,15 @@ export function Pair() {
   const book = state.book;
   const upQ = state.quotes?.up;
   const downQ = state.quotes?.down;
+  const test = state.testStats;
+  const live = state.liveStats;
+
+  // What a pair would cost right now, resting versus crossing. This is the one
+  // number that says whether the strategy has anything to do at all.
+  const sum = (a?: number | null, b?: number | null) =>
+    a != null && b != null ? a + b : null;
+  const pairAtBid = sum(upQ?.bestBid, downQ?.bestBid);
+  const pairAtAsk = sum(upQ?.bestAsk, downQ?.bestAsk);
 
   return (
     <>
@@ -116,6 +148,83 @@ export function Pair() {
         <PairSettingsForm settings={settings} onChange={apply} running={state.running} />
       ) : (
         <>
+          <div className="card">
+            <h2>Цены</h2>
+            <div className="grid2">
+              <PriceTile label="Up" quote={upQ} />
+              <PriceTile label="Down" quote={downQ} />
+            </div>
+            <div className="row">
+              <span className="label">Пара по бидам</span>
+              <span
+                className={`value ${
+                  pairAtBid === null
+                    ? ''
+                    : pairAtBid <= settings.maxPairAvg
+                      ? 'up'
+                      : 'warn'
+                }`}
+              >
+                {pairAtBid === null ? '—' : cents(pairAtBid)}
+              </span>
+            </div>
+            <div className="row">
+              <span className="label">Пара по аскам</span>
+              <span className="value muted">
+                {pairAtAsk === null ? '—' : cents(pairAtAsk)}
+              </span>
+            </div>
+            <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+              Пара гасится в 1 $. Прибыль есть, только пока её удаётся собрать
+              дешевле потолка в {cents(settings.maxPairAvg)}.
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Баланс</h2>
+            <div className="grid2">
+              <div className="stat">
+                <div className="k">Тестовый</div>
+                <div className="v">
+                  {state.paperEquity !== undefined
+                    ? `${state.paperEquity.toFixed(2)} $`
+                    : '—'}
+                </div>
+                <div className="muted" style={{ fontSize: 11 }}>
+                  свободно{' '}
+                  {state.paperCash !== undefined
+                    ? `${state.paperCash.toFixed(2)} $`
+                    : '—'}
+                </div>
+              </div>
+              <div className="stat">
+                <div className="k">Реальный</div>
+                <div className="v">
+                  {wallet !== null ? `${wallet.toFixed(2)} $` : '—'}
+                </div>
+                <div className="muted" style={{ fontSize: 11 }}>
+                  кошелёк USDC
+                </div>
+              </div>
+            </div>
+            <div className="row">
+              <span className="label">Тест · за все сессии</span>
+              <span
+                className={`value ${(test?.realisedPnlUsd ?? 0) >= 0 ? 'up' : 'down'}`}
+              >
+                {test ? usd(test.realisedPnlUsd) : '—'}
+              </span>
+            </div>
+            <div className="row">
+              <span className="label">Реальные · за все сессии</span>
+              <span
+                className={`value ${(live?.realisedPnlUsd ?? 0) >= 0 ? 'up' : 'down'}`}
+              >
+                {live ? usd(live.realisedPnlUsd) : '—'}
+              </span>
+            </div>
+          </div>
+
           <div className="card">
             <h2>Пара Up + Down = 1 $</h2>
             <div className="grid2">
@@ -215,7 +324,9 @@ export function Pair() {
             <h2>Итог</h2>
             <div className="grid2">
               <div className="stat">
-                <div className="k">Результат</div>
+                <div className="k">
+                  Результат · {settings.dryRun ? 'тест' : 'реальные'}
+                </div>
                 <div
                   className={`v ${state.stats.realisedPnlUsd >= 0 ? 'up' : 'down'}`}
                 >
@@ -279,6 +390,32 @@ export function Pair() {
             : 'Запустить на реальные'}
       </button>
     </>
+  );
+}
+
+/**
+ * One side's top of book. The mid is what the bot prices against, so it leads;
+ * bid and ask sit under it because the gap between them is where the margin
+ * comes from.
+ */
+function PriceTile({
+  label,
+  quote,
+}: {
+  label: string;
+  quote?: NativeQuote | null;
+}) {
+  return (
+    <div className="stat">
+      <div className="k">{label}</div>
+      <div className={`v ${label === 'Up' ? 'up' : 'down'}`}>
+        {quote?.mid != null ? cents(quote.mid) : '—'}
+      </div>
+      <div className="muted" style={{ fontSize: 11 }}>
+        бид {quote?.bestBid != null ? cents(quote.bestBid) : '—'} · аск{' '}
+        {quote?.bestAsk != null ? cents(quote.bestAsk) : '—'}
+      </div>
+    </div>
   );
 }
 
@@ -409,6 +546,12 @@ function PairSettingsForm({
 
       <div style={{ height: 12 }} />
       {num('lotShares', 'Долей в лоте', '1', 'Минимум биржи — 5.')}
+      {num(
+        'cheapSideBonusPct',
+        'Прибавка дешёвой стороне',
+        '0.05',
+        '0.30 = дешёвая нога берётся на 30% большим лотом и на столько же может оторваться от второй.',
+      )}
       {num('minIntervalSec', 'Пауза между лотами, от (сек)')}
       {num('maxIntervalSec', 'Пауза между лотами, до (сек)')}
       {num('maxSeedPrice', 'Набирать сторону дешевле', '0.01', 'Доля, не центы: 0.50 = 50¢.')}
@@ -426,6 +569,12 @@ function PairSettingsForm({
       {num('maxExposureUsd', 'Потолок вложенного, $', '1')}
       {num('maxImbalanceShares', 'Потолок перекоса, долей', '1', 'Единственный риск направления.')}
       {num('flattenSec', 'Сводить книгу за (сек до закрытия)', '5')}
+      {num(
+        'paperStartUsd',
+        'Стартовый тестовый баланс, $',
+        '10',
+        'Применяется при сбросе — между запусками тестовый баланс не обнуляется.',
+      )}
     </div>
   );
 }

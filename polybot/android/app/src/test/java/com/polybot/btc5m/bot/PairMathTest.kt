@@ -258,3 +258,107 @@ class PairBidTest {
         assertTrue("joining the book buys a 98¢ pair", bidUp + bidDown > 0.95)
     }
 }
+
+/**
+ * The lead cap, and the failure it exists to prevent.
+ *
+ * Without it the bot bought twenty shares of one side and none of the other,
+ * because "buy the cheaper side" kept pointing at the leg that was collapsing.
+ */
+class PairLeadCapTest {
+
+    private val settings = PairSettings()
+    private val minOrder = 5.0
+
+    private fun lot(cheap: Boolean) =
+        PairMath.lotFor(settings.lotShares, minOrder, cheap, settings.cheapSideBonusPct)
+
+    @Test
+    fun theCheaperSideGetsTheBiggerLot() {
+        assertEquals(6.5, lot(cheap = true), 1e-9)
+        assertEquals(5.0, lot(cheap = false), 1e-9)
+        assertTrue(lot(cheap = true) > lot(cheap = false))
+    }
+
+    @Test
+    fun aLotNeverFallsUnderTheVenueFloor() {
+        assertEquals(5.0, PairMath.lotFor(1.0, 5.0, cheap = false, bonusPct = 0.3), 1e-9)
+        assertEquals(5.0, PairMath.lotFor(2.0, 5.0, cheap = true, bonusPct = 0.3), 1e-9)
+    }
+
+    @Test
+    fun aLevelBookMayBuyExactlyOneLot() {
+        assertEquals(6.5, PairMath.allowance(0.0, 0.0, lot(true)), 1e-9)
+        assertEquals(5.0, PairMath.allowance(10.0, 10.0, lot(false)), 1e-9)
+    }
+
+    @Test
+    fun aSideAlreadyALotAheadMayNotBuy() {
+        // Cheap side holds its full lot against an empty other side.
+        assertEquals(0.0, PairMath.allowance(6.5, 0.0, lot(true)), 1e-9)
+        assertTrue(PairMath.allowance(6.5, 0.0, lot(true)) < minOrder)
+    }
+
+    @Test
+    fun theSideThatIsBehindMayBuyMore() {
+        // Up holds 6.5 as the cheap side, Down holds none. Down is the dear
+        // side, so it takes its own smaller lot plus the gap it has to close.
+        assertEquals(11.5, PairMath.allowance(0.0, 6.5, lot(cheap = false)), 1e-9)
+    }
+
+    /**
+     * Replays the run from the failing screenshot: Up quoted 46, 29, 25, 22¢
+     * while Down climbed away, so every lot went into Up and no pair was ever
+     * formed. The cap has to stop that after a single lot.
+     */
+    @Test
+    fun theCollapsingSideCannotSwallowTheBalance() {
+        val up = PairLeg()
+        val down = PairLeg()
+
+        for (price in listOf(0.46, 0.29, 0.25, 0.22, 0.18, 0.12)) {
+            val allowed = PairMath.allowance(up.shares, down.shares, lot(cheap = true))
+            if (allowed < minOrder) continue
+            up.buy(minOf(lot(cheap = true), allowed), price * minOf(lot(cheap = true), allowed))
+        }
+
+        assertEquals("only one lot may go in", 6.5, up.shares, 1e-9)
+        assertEquals(0.0, down.shares, 1e-9)
+        assertTrue("exposure must stay small, was ${up.costUsd}", up.costUsd < 3.5)
+    }
+
+    @Test
+    fun withoutTheCapItRunsAway() {
+        // The same six quotes with no cap — this is what the screenshot showed.
+        val up = PairLeg()
+        for (price in listOf(0.46, 0.29, 0.25, 0.22, 0.18, 0.12)) {
+            up.buy(5.0, price * 5.0)
+        }
+        assertEquals(30.0, up.shares, 1e-9)
+        assertTrue("uncapped exposure is multiples of the capped one", up.costUsd > 6.0)
+    }
+
+    @Test
+    fun theSidesTakeTurns() {
+        val up = PairLeg()
+        val down = PairLeg()
+        var bought = 0
+
+        // Alternate attempts; each side may only proceed when it is not a lot
+        // ahead, so the counts stay within one lot of each other throughout.
+        repeat(12) { round ->
+            val side = if (round % 2 == 0) up else down
+            val otherLeg = if (round % 2 == 0) down else up
+            val allowed = PairMath.allowance(side.shares, otherLeg.shares, lot(cheap = false))
+            if (allowed < minOrder) return@repeat
+            side.buy(5.0, 5.0 * 0.47)
+            bought += 1
+            assertTrue(
+                "counts drifted apart at round $round",
+                abs(up.shares - down.shares) <= lot(cheap = true) + 1e-9,
+            )
+        }
+        assertTrue("both sides must actually get bought", up.shares > 0 && down.shares > 0)
+        assertEquals(12, bought)
+    }
+}

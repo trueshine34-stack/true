@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 class PairEngine(
     private val feed: ChainlinkFeed,
     private val journal: Journal,
+    private val store: PairStore,
     private val session: () -> BotEngine.Session?,
     private val marketNow: () -> Market?,
     private val onStateChanged: () -> Unit,
@@ -60,9 +61,24 @@ class PairEngine(
     val fills = CopyOnWriteArrayList<PairFill>()
     val history = CopyOnWriteArrayList<PairBook>()
 
+    /** Paper and live figures, kept apart and kept across restarts. */
     @Volatile
-    var stats: PairStats = PairStats()
+    var testStats: PairStats = store.loadStats(dryRun = true)
         private set
+
+    @Volatile
+    var liveStats: PairStats = store.loadStats(dryRun = false)
+        private set
+
+    /** Cash in the paper account, carried over every session. */
+    @Volatile
+    var paperCash: Double = store.loadPaperCash(PairSettings().paperStartUsd)
+        private set
+
+    val stats: PairStats get() = if (settings.dryRun) testStats else liveStats
+
+    /** Mid prices over the last few minutes, used to see which way a side went. */
+    private val trail = java.util.concurrent.ConcurrentHashMap<String, MutableList<Tick>>()
 
     private var scope: CoroutineScope? = null
     private var job: Job? = null
@@ -81,6 +97,13 @@ class PairEngine(
         const val TICK_MS = 500L
         const val QUOTE_EVERY_MS = 2_000L
         const val RECONCILE_EVERY_MS = 2_500L
+
+        /** Leave a resting order alone this long before moving it. */
+        const val REPRICE_AFTER_MS = 5_000L
+
+        /** How far back to look when deciding which side has been rising. */
+        const val MOMENTUM_LOOKBACK_MS = 30_000L
+        const val MAX_TRAIL = 200
         const val MAX_FILLS = 400
         const val MAX_HISTORY = 60
     }
@@ -142,8 +165,11 @@ class PairEngine(
         book = null
         fills.clear()
         history.clear()
-        stats = PairStats()
-        log("info", "Книга и статистика обнулены")
+        testStats = PairStats()
+        liveStats = PairStats()
+        store.clear(settings.paperStartUsd)
+        paperCash = settings.paperStartUsd
+        log("info", "Книга и статистика обнулены, тестовый баланс восстановлен")
         onStateChanged()
     }
 
@@ -164,6 +190,7 @@ class PairEngine(
             book = PairBook(
                 windowStart = market.windowStart,
                 windowEnd = market.windowEnd,
+                dryRun = settings.dryRun,
                 market = market,
                 nextSeedAtMs = System.currentTimeMillis(),
             )
@@ -184,8 +211,7 @@ class PairEngine(
             flatten(current, market)
         } else {
             rotate(current, market)
-            completePair(current, market)
-            seed(current, market, now)
+            accumulate(current, market, now)
         }
         onStateChanged()
     }
@@ -211,16 +237,75 @@ class PairEngine(
                 up = ClobApi.quote(market.up.tokenId),
                 down = ClobApi.quote(market.down.tokenId),
                 atMs = now,
-            )
+            ).also { recordTrail(it, now) }
         } catch (e: Exception) {
             quotes
         }
+    }
+
+    private fun recordTrail(q: Quotes, now: Long) {
+        for ((side, quote) in listOf("Up" to q.up, "Down" to q.down)) {
+            val mid = quote?.mid ?: continue
+            val series = trail.getOrPut(side) { java.util.Collections.synchronizedList(ArrayList()) }
+            synchronized(series) {
+                series.add(Tick(now, mid))
+                while (series.size > MAX_TRAIL) series.removeAt(0)
+            }
+        }
+    }
+
+    /** Mid this side was quoted at roughly `MOMENTUM_LOOKBACK_MS` ago. */
+    private fun midEarlier(side: String, now: Long): Double? {
+        val series = trail[side] ?: return null
+        synchronized(series) {
+            val cutoff = now - MOMENTUM_LOOKBACK_MS
+            return series.firstOrNull { it.timestamp >= cutoff }?.value
+                ?: series.firstOrNull()?.value
+        }
+    }
+
+    /**
+     * Which side has been going up.
+     *
+     * This decides who gets bought first, and it is the difference between the
+     * completion order filling and sitting there all window. Buying the rising
+     * side first sets the budget for the other leg *below* where that leg is
+     * heading, so the trend brings the second fill to us. Buying the falling
+     * side first does the opposite: the cheap leg keeps getting cheaper while
+     * the order waiting on the other side drifts further out of reach.
+     *
+     * With no meaningful move either way, price decides instead.
+     */
+    private fun leadSide(now: Long): String? {
+        val upNow = quoteFor("Up")?.mid ?: return null
+        val upThen = midEarlier("Up", now)
+        val move = if (upThen != null) upNow - upThen else 0.0
+        // Up and Down are complements, so one number describes both. Anything
+        // under half a tick is noise, not a move.
+        if (abs(move) < 0.005) return cheaperSide()
+        return if (move > 0) "Up" else "Down"
     }
 
     private fun quoteFor(side: String): Quote? {
         val q = quotes ?: return null
         if (System.currentTimeMillis() - q.atMs > 15_000) return null
         return if (side == "Up") q.up else q.down
+    }
+
+    private fun statsFor(dryRun: Boolean): PairStats = if (dryRun) testStats else liveStats
+
+    private fun adjustPaperCash(delta: Double) {
+        paperCash += delta
+        store.savePaperCash(paperCash)
+    }
+
+    /** Paper cash plus what the open legs would fetch at the bid right now. */
+    fun paperEquity(): Double {
+        val b = book ?: return paperCash
+        if (!b.dryRun) return paperCash
+        val up = (quoteFor("Up")?.bestBid ?: b.up.avg) * b.up.shares
+        val down = (quoteFor("Down")?.bestBid ?: b.down.avg) * b.down.shares
+        return paperCash + up + down
     }
 
     private fun legOf(bookNow: PairBook, side: String): PairLeg =
@@ -240,32 +325,121 @@ class PairEngine(
      * metronome into the book, which is both easy to read and easy to trade
      * against.
      */
-    private fun seed(bookNow: PairBook, market: Market, now: Long) {
-        if (now < bookNow.nextSeedAtMs) return
+    /**
+     * Buy both sides, in turn, never letting either run away.
+     *
+     * The rule that matters is the lead cap: a side may only get ahead of the
+     * other by a single lot. Without it "always buy the cheaper side" is a trap
+     * — the cheaper side is cheaper because it is losing, and it keeps getting
+     * cheaper, so the bot pours the whole balance into the leg heading for zero
+     * and never assembles a single pair.
+     *
+     * The cheaper side does get a bigger lot, so it also gets a bigger lead.
+     * That is deliberate: if the book has to be lopsided, being long the cheap
+     * leg risks a few cents a share, while being long the dear one risks most
+     * of a dollar.
+     */
+    private fun accumulate(bookNow: PairBook, market: Market, now: Long) {
+        val first = leadSide(now) ?: return
+        val cheap = cheaperSide()
 
-        val upMid = quoteFor("Up")?.mid
-        val downMid = quoteFor("Down")?.mid
-        if (upMid == null || downMid == null) return
+        for (side in listOf(first, other(first))) {
+            accumulateSide(
+                bookNow, market, side, now,
+                cheap = side == cheap,
+                lead = side == first,
+            )
+        }
+    }
 
-        val side = if (upMid <= downMid) "Up" else "Down"
-        // One resting buy per side. The other side's order is the pair
-        // completion and has a job of its own.
-        if (liveOrder(side, "BUY") != null) return
+    private fun cheaperSide(): String? {
+        val upMid = quoteFor("Up")?.mid ?: return null
+        val downMid = quoteFor("Down")?.mid ?: return null
+        return if (upMid <= downMid) "Up" else "Down"
+    }
 
-        val lot = maxOf(settings.lotShares, market.minimumOrderSize)
+    /** Lot for one side. The cheaper leg is bought in larger size. */
+    private fun lotFor(market: Market, cheap: Boolean): Double = PairMath.lotFor(
+        lotShares = settings.lotShares,
+        minOrder = market.minimumOrderSize,
+        cheap = cheap,
+        bonusPct = settings.cheapSideBonusPct,
+    )
+
+    /**
+     * How many more shares this side may hold before it is too far ahead.
+     *
+     * Measured on filled shares only. Counting resting orders here would let a
+     * large unfilled order on one side unlock unlimited buying on the other,
+     * which is the runaway this cap exists to stop.
+     */
+    private fun allowanceFor(bookNow: PairBook, side: String, lot: Double): Double =
+        PairMath.allowance(
+            myShares = legOf(bookNow, side).shares,
+            theirShares = legOf(bookNow, other(side)).shares,
+            lot = lot,
+        )
+
+    private fun accumulateSide(
+        bookNow: PairBook,
+        market: Market,
+        side: String,
+        now: Long,
+        cheap: Boolean,
+        lead: Boolean,
+    ) {
+        val lot = lotFor(market, cheap)
+        val allowance = allowanceFor(bookNow, side, lot)
+        val existing = liveOrder(side, "BUY")
+
+        if (allowance < market.minimumOrderSize) {
+            // Already a full lot ahead; wait for the other side to catch up.
+            existing?.let { cancel(it, "перекос: ждём вторую сторону") }
+            return
+        }
+
+        val size = min(lot, allowance)
         val price = bidFor(bookNow, market, side) ?: return
-        if (price > settings.maxSeedPrice) {
-            // Nothing is cheap right now; wait rather than pay up.
-            scheduleNextSeed(bookNow, now)
-            return
-        }
-        if (!withinCaps(bookNow, side, price, lot)) {
-            scheduleNextSeed(bookNow, now)
-            return
-        }
+        val mine = legOf(bookNow, side).shares
+        val theirs = legOf(bookNow, other(side)).shares
+        val behind = mine < theirs - 1e-9
+        val ahead = mine > theirs + 1e-9
 
-        place(market, side, "BUY", price, lot, "набор дешёвой стороны")
-        scheduleNextSeed(bookNow, now)
+        // Behind means this order completes a pair: it goes up at once, and the
+        // pair budget is already its price ceiling.
+        //
+        // Otherwise the buy is the bot's own idea, and only the side that has
+        // been rising gets to have it. Resting a bid on the falling side while
+        // the book is level is precisely how the balance ends up in the leg
+        // heading for zero — the trend walks the price down into that order,
+        // fills it, and leaves the other leg further out of reach than before.
+        if (!behind) {
+            if (!lead) {
+                existing?.let { cancel(it, "ждём сторону, которая пошла вверх") }
+                return
+            }
+            if (existing == null && now < bookNow.nextSeedAtMs) return
+        }
+        if (ahead && price > settings.maxSeedPrice) return
+
+        if (existing != null) {
+            val samePrice = abs(existing.price - price) < market.tickSize / 2
+            val sameSize = abs(existing.remaining - size) < 0.51
+            if (samePrice && sameSize) return
+            if (now < existing.placedAt + REPRICE_AFTER_MS) return
+            cancel(existing, "перестановка")
+        }
+        if (!withinCaps(bookNow, side, price, size)) return
+
+        val note = if (behind) {
+            "добор пары под ${cents(PairMath.maxPairCost(settings.minPairProfitPct, settings.maxPairAvg))}"
+        } else if (cheap) {
+            "набор дешёвой стороны"
+        } else {
+            "набор второй стороны"
+        }
+        place(market, side, "BUY", price, size, note)
+        if (existing == null && !behind) scheduleNextSeed(bookNow, now)
     }
 
     /**
@@ -319,39 +493,6 @@ class PairEngine(
         val hi = settings.maxIntervalSec.coerceAtLeast(lo)
         val wait = lo + if (hi > lo) random.nextInt(hi - lo + 1) else 0
         bookNow.nextSeedAtMs = now + wait * 1000L
-    }
-
-    /**
-     * Rest a buy on the light side at the price that still clears the margin.
-     *
-     * This is the order that does the work: it sits below the market waiting
-     * for the other side to come down, and because it rests it pays no fee.
-     */
-    private fun completePair(bookNow: PairBook, market: Market) {
-        val gap = bookNow.imbalance
-        if (abs(gap) < 1e-9) return
-
-        val lightSide = if (gap > 0) "Down" else "Up"
-        val heavy = legOf(bookNow, other(lightSide))
-        val needed = abs(gap)
-        if (heavy.avg <= 0.0) return
-
-        val budget = PairMath.maxPairCost(settings.minPairProfitPct, settings.maxPairAvg)
-        val limit = bidFor(bookNow, market, lightSide) ?: return
-        val size = maxOf(needed, market.minimumOrderSize)
-        val existing = liveOrder(lightSide, "BUY")
-        if (existing != null) {
-            val samePrice = abs(existing.price - limit) < market.tickSize / 2
-            val sameSize = abs(existing.remaining - size) < 0.51
-            if (samePrice && sameSize) return
-            cancel(existing, "перестановка")
-        }
-        if (!withinCaps(bookNow, lightSide, limit, size)) return
-
-        place(
-            market, lightSide, "BUY", limit, size,
-            "добор пары под ${cents(budget)}",
-        )
     }
 
     /**
@@ -491,6 +632,15 @@ class PairEngine(
         )
 
         if (settings.dryRun) {
+            if (action == "BUY" && price * size > paperCash + 1e-9) {
+                log(
+                    "warn",
+                    "[ТЕСТ] Не хватает баланса на $action $side: нужно " +
+                        String.format("%.2f", price * size) + " $, есть " +
+                        String.format("%.2f", paperCash) + " $",
+                )
+                return
+            }
             orders.add(order)
             log("trade", "[ТЕСТ] $action $side " + shares(size) + " по ${cents(price)} — $note")
             // A limit placed through the book fills at once, as taker.
@@ -664,19 +814,23 @@ class PairEngine(
         val leg = legOf(bookNow, order.side)
         order.matched += shares
 
+        val ledger = statsFor(order.dryRun)
         if (order.action == "BUY") {
             val cost = shares * price + fee
             leg.buy(shares, cost)
             bookNow.spentUsd += cost
-            stats.buys += 1
+            ledger.buys += 1
+            if (order.dryRun) adjustPaperCash(-cost)
         } else {
             val proceeds = shares * price - fee
             leg.sell(shares)
             bookNow.proceedsUsd += proceeds
-            stats.sells += 1
+            ledger.sells += 1
+            if (order.dryRun) adjustPaperCash(proceeds)
         }
         bookNow.feesUsd += fee
-        stats.feesUsd += fee
+        ledger.feesUsd += fee
+        store.saveStats(order.dryRun, ledger)
 
         fills.add(
             PairFill(
@@ -720,7 +874,13 @@ class PairEngine(
         val side = other(sold.side)
         if (liveOrder(side, "BUY") != null) return
 
-        val size = maxOf(shares, market.minimumOrderSize)
+        // The lead cap applies here too: a rotation must not become the way one
+        // side runs away from the other.
+        val lot = lotFor(market, cheap = side == cheaperSide())
+        val allowance = allowanceFor(bookNow, side, lot)
+        if (allowance < market.minimumOrderSize) return
+
+        val size = min(maxOf(shares, market.minimumOrderSize), allowance)
         val price = bidFor(bookNow, market, side) ?: return
         if (!withinCaps(bookNow, side, price, size)) return
 
@@ -743,9 +903,16 @@ class PairEngine(
         bookNow.pnlUsd = pnl
         bookNow.settled = true
 
-        stats.windows += 1
-        stats.pairsLocked += bookNow.pairs
-        stats.realisedPnlUsd += pnl
+        val ledger = statsFor(bookNow.dryRun)
+        ledger.windows += 1
+        ledger.pairsLocked += bookNow.pairs
+        ledger.realisedPnlUsd += pnl
+        // Settlement pays out in cash: the paper account has to receive it or
+        // the balance would only ever go down.
+        if (bookNow.dryRun && winner != null) {
+            adjustPaperCash(PairMath.settlementProceeds(bookNow.up, bookNow.down, winner))
+        }
+        store.saveStats(bookNow.dryRun, ledger)
 
         history.add(0, bookNow)
         while (history.size > MAX_HISTORY) history.removeAt(history.size - 1)

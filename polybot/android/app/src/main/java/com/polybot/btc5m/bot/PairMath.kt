@@ -99,6 +99,29 @@ object PairMath {
     }
 
     /**
+     * Lot size for one side. The cheaper leg is bought in larger size.
+     */
+    fun lotFor(lotShares: Double, minOrder: Double, cheap: Boolean, bonusPct: Double): Double {
+        val bonus = if (cheap) 1.0 + max(0.0, bonusPct) else 1.0
+        return max(lotShares * bonus, minOrder)
+    }
+
+    /**
+     * How many more shares a side may take on before it is too far ahead.
+     *
+     * This is the cap that makes the strategy safe. "Always buy the cheaper
+     * side" on its own is a trap: the cheaper side is cheaper because it is
+     * losing, and it keeps getting cheaper, so an uncapped bot pours the whole
+     * balance into the leg heading for zero and never assembles one pair. A
+     * side may lead by a single lot and no more.
+     *
+     * Counted on filled shares only — measuring resting orders here would let a
+     * large unfilled order on one side unlock unlimited buying on the other.
+     */
+    fun allowance(myShares: Double, theirShares: Double, lot: Double): Double =
+        theirShares + lot - myShares
+
+    /**
      * Profit threshold for rotating out of a leg.
      *
      * Cheaply-bought shares are let go sooner: they are the ones that ran, and

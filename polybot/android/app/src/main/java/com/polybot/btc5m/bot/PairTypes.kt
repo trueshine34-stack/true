@@ -11,6 +11,14 @@ data class PairSettings(
     val dryRun: Boolean = true,
     /** Shares per lot. The venue's own floor is 5. */
     val lotShares: Double = 5.0,
+    /**
+     * Extra size on the cheaper side, as a fraction of the lot.
+     *
+     * It also sets how far that side may lead the other. Being long the cheap
+     * leg risks a few cents a share; being long the dear one risks most of a
+     * dollar, so the lopsidedness is pointed deliberately at the cheap side.
+     */
+    val cheapSideBonusPct: Double = 0.30,
     val minIntervalSec: Int = 10,
     val maxIntervalSec: Int = 20,
     /** Only seed a side quoted below this — "the cheaper side". */
@@ -37,6 +45,8 @@ data class PairSettings(
     val maxImbalanceShares: Double = 20.0,
     /** Stop seeding and try to square the book this long before the close. */
     val flattenSec: Int = 40,
+    /** Starting balance for the paper run, seeded once and then left alone. */
+    val paperStartUsd: Double = 100.0,
 )
 
 /** One side of the book: how many shares, and what they cost in total. */
@@ -116,6 +126,8 @@ data class PairStats(
 data class PairBook(
     val windowStart: Long,
     val windowEnd: Long,
+    /** Captured at creation: a book settles into the books it was opened in. */
+    val dryRun: Boolean = true,
     var market: Market? = null,
     val up: PairLeg = PairLeg(),
     val down: PairLeg = PairLeg(),

@@ -920,16 +920,19 @@ class BotPlugin : Plugin() {
         }
         state.put("windows", windows)
 
-        state.put(
-            "stats",
-            JSObject()
-                .put("windows", bot.stats.windows)
-                .put("buys", bot.stats.buys)
-                .put("sells", bot.stats.sells)
-                .put("pairsLocked", bot.stats.pairsLocked)
-                .put("feesUsd", bot.stats.feesUsd)
-                .put("realisedPnlUsd", bot.stats.realisedPnlUsd),
-        )
+        fun statsJson(s: PairStats) = JSObject()
+            .put("windows", s.windows)
+            .put("buys", s.buys)
+            .put("sells", s.sells)
+            .put("pairsLocked", s.pairsLocked)
+            .put("feesUsd", s.feesUsd)
+            .put("realisedPnlUsd", s.realisedPnlUsd)
+
+        state.put("stats", statsJson(bot.stats))
+        state.put("testStats", statsJson(bot.testStats))
+        state.put("liveStats", statsJson(bot.liveStats))
+        state.put("paperCash", bot.paperCash)
+        state.put("paperEquity", bot.paperEquity())
         return state
     }
 
@@ -938,6 +941,7 @@ class BotPlugin : Plugin() {
         return PairSettings(
             dryRun = raw.optBoolean("dryRun", d.dryRun),
             lotShares = raw.optDouble("lotShares", d.lotShares),
+            cheapSideBonusPct = raw.optDouble("cheapSideBonusPct", d.cheapSideBonusPct),
             minIntervalSec = raw.optInt("minIntervalSec", d.minIntervalSec),
             maxIntervalSec = raw.optInt("maxIntervalSec", d.maxIntervalSec),
             maxSeedPrice = raw.optDouble("maxSeedPrice", d.maxSeedPrice),
@@ -954,6 +958,7 @@ class BotPlugin : Plugin() {
             maxExposureUsd = raw.optDouble("maxExposureUsd", d.maxExposureUsd),
             maxImbalanceShares = raw.optDouble("maxImbalanceShares", d.maxImbalanceShares),
             flattenSec = raw.optInt("flattenSec", d.flattenSec),
+            paperStartUsd = raw.optDouble("paperStartUsd", d.paperStartUsd),
         )
     }
 
