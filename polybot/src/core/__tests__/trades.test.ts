@@ -154,6 +154,23 @@ describe('pairOrders', () => {
     expect(realised(rows)).toBeCloseTo(sum, 9);
   });
 
+  it('says whether the round was closed by the rule or by hand', () => {
+    const byRule = pairOrders([
+      order('BUY', 0.4, 5, { at: 1 }),
+      order('SELL', 0.6, 5, { at: 2, auto: true }),
+    ]);
+    const byHand = pairOrders([
+      order('BUY', 0.4, 5, { at: 1 }),
+      order('SELL', 0.6, 5, { at: 2 }),
+    ]);
+    const open = pairOrders([order('BUY', 0.4, 5, { at: 1 })]);
+
+    expect(byRule[0].closedBy).toBe('rule');
+    // A sale made by tapping is a decision, and reads as one.
+    expect(byHand[0].closedBy).toBe('hand');
+    expect(open[0].closedBy).toBeUndefined();
+  });
+
   it('marks a row as automatic when either leg was', () => {
     const rows = pairOrders([
       order('BUY', 0.4, 5, { at: 1 }),

@@ -708,15 +708,12 @@ class PairEngine(
         // response, so book it now rather than waiting for a poll. It fills at
         // the far side of the book, not at our limit, so take the price the
         // amounts actually imply.
-        val matched = result.takingAmount ?: 0.0
-        if (matched > 1e-9) {
-            val paid = result.makingAmount
-            val actual = if (paid != null && matched > 0.0) {
-                if (action == "BUY") paid / matched else matched / paid
-            } else {
-                price
-            }
-            fill(order, min(matched, size), actual, taker = true)
+        val matched = Orders.filled(action, result.makingAmount, result.takingAmount)
+        if (matched.shares > 1e-9) {
+            // It fills at the far side of the book, not at our limit, so take
+            // the price the amounts actually imply.
+            val actual = if (matched.usd > 0.0) matched.usd / matched.shares else price
+            fill(order, min(matched.shares, size), actual, taker = true)
         }
     }
 

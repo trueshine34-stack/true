@@ -809,7 +809,13 @@ export function Manual() {
                   <div className={`listrow static trade trade-${t.status}`} key={t.key}>
                     <span className={t.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
                       {t.outcome}
-                      {t.auto && <span className="muted"> а</span>}
+                      {t.closedBy && (
+                        <span className="muted" title={
+                          t.closedBy === 'rule' ? 'закрыто правилом' : 'закрыто руками'
+                        }>
+                          {t.closedBy === 'rule' ? ' а' : ' р'}
+                        </span>
+                      )}
                     </span>
                     <span className="listrow-main">
                       {/*

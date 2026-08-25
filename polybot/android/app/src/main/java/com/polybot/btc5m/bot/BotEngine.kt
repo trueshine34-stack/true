@@ -1372,6 +1372,9 @@ class BotEngine(
         )
         val result = ClobApi.postOrder(order, creds, acct.signerAddress, orderType)
 
+        // Which of the venue's two amounts is shares depends on the side.
+        val fill = Orders.filled(side, result.makingAmount, result.takingAmount)
+
         if (result.success) {
             OrderLog.record(
                 orderId = result.orderId,
@@ -1381,7 +1384,7 @@ class BotEngine(
                 action = side,
                 price = price,
                 size = size,
-                matched = result.takingAmount ?: 0.0,
+                matched = fill.shares,
                 auto = auto,
                 windowStart = meta.windowStart,
             )
@@ -1389,10 +1392,14 @@ class BotEngine(
 
         // Remember what actually filled. The data API needs a moment to index a
         // trade, and until it does it reports the position with no cost basis.
-        val filledShares = result.takingAmount ?: 0.0
+        val filledShares = fill.shares
         if (result.success && filledShares > 1e-9) {
             if (side == "BUY") {
-                LocalFills.bought(tokenId, filledShares, result.makingAmount ?: (filledShares * price))
+                LocalFills.bought(
+                    tokenId,
+                    filledShares,
+                    fill.usd.takeIf { it > 0.0 } ?: (filledShares * price),
+                )
             } else {
                 LocalFills.sold(tokenId, filledShares)
             }

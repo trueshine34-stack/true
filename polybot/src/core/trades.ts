@@ -31,6 +31,12 @@ export type TradeRow = {
   orderId?: string | null;
   /** Either leg placed by a rule rather than by hand. */
   auto: boolean;
+  /**
+   * How the round was closed: by the rule, or by hand. Null while it is open.
+   * Which leg did it is the thing worth seeing — a sale made by tapping is a
+   * decision, one made by the ladder is the rule doing its job.
+   */
+  closedBy?: 'rule' | 'hand' | null;
   at: number;
 };
 
@@ -131,6 +137,7 @@ export function pairOrders(orders: LoggedOrder[]): TradeRow[] {
           sellPrice: sell.price,
           status,
           orderId: status === 'pending' ? sell.orderId : null,
+          closedBy: sell.auto ? 'rule' : 'hand',
           pnl: proceeds - cost,
           pct: cost > 0 ? (proceeds - cost) / cost : null,
           auto: lot.auto || sell.auto,

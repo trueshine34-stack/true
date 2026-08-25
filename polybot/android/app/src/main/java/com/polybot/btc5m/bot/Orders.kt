@@ -135,6 +135,26 @@ object Orders {
         }
     }
 
+    /** Shares and dollars a fill came to. */
+    data class Filled(val shares: Double, val usd: Double)
+
+    /**
+     * What actually matched, from the amounts the venue reports.
+     *
+     * The response gives the maker and taker asset amounts of the order that
+     * was posted, and which is which swaps with the side: a buy gives dollars
+     * and takes shares, a sell gives shares and takes dollars. Reading "taking"
+     * as shares for both is how a hand-placed sale of five shares at 99¢ was
+     * booked as 4.95 shares — leaving a phantom remainder for the sell rule to
+     * chase and a fifth of a cent missing from the round. At 50¢ the same sale
+     * would have been booked as two and a half shares.
+     */
+    fun filled(side: String, makingAmount: Double?, takingAmount: Double?): Filled {
+        val making = makingAmount ?: 0.0
+        val taking = takingAmount ?: 0.0
+        return if (side == "BUY") Filled(taking, making) else Filled(making, taking)
+    }
+
     data class SignedOrder(
         val salt: BigInteger,
         val maker: String,
