@@ -687,10 +687,6 @@ button.stat.quote:active {
   font-weight: 600;
 }
 
-.chart-tag.open b {
-  font-weight: 600;
-}
-
 .deskprice {
   font-size: 19px;
   font-weight: 700;
@@ -752,11 +748,7 @@ button.stat.quote:active {
 .chart-tag.support {
   color: var(--up);
 }
-.chart-tag.open {
-  color: var(--warn);
-  left: auto;
-  right: 0;
-}
+
 
 .chart-empty {
   height: 104px;

@@ -641,7 +641,9 @@ function Chart({
         Labels sit outside the SVG: the chart is stretched to fill its box, so
         text drawn inside it would be squashed with the candles. Levels close
         together get one label between them — two overlapping numbers are less
-        readable than one, and the lines themselves are still both drawn.
+        readable than one, and the lines themselves are still both drawn. They
+        hug the left edge: the newest candles are on the right and must stay
+        clear. The window open needs no label here — it is in the header.
       */}
       {labelled.map((l) => (
         <span
@@ -653,18 +655,6 @@ function Chart({
           <i>{'·'.repeat(Math.min(l.touches, 4))}</i>
         </span>
       ))}
-      {openPrice != null && inView(openPrice) && (
-        <span className="chart-tag open" style={{ top: `${(y(openPrice) / H) * 100}%` }}>
-          окно {openPrice.toFixed(0)}
-          {spot != null && (
-            <b className={spot >= openPrice ? 'up' : 'down'}>
-              {' '}
-              {spot >= openPrice ? '+' : '−'}
-              {Math.abs(spot - openPrice).toFixed(0)}
-            </b>
-          )}
-        </span>
-      )}
     </div>
   );
 }
