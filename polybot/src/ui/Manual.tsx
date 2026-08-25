@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DEFAULT_MANUAL_SETTINGS,
+  limitShares,
   sharesFor,
   type ManualSettings,
 } from '../core/manual';
@@ -36,9 +37,12 @@ type Draft = {
 const IDLE_AUTOSELL: AutoSellState = {
   enabled: false,
   running: false,
-  price: 0.97,
+  ladder: [0.77, 0.84, 0.89, 0.93, 0.97],
   retryEverySec: 7,
   lastSweepAt: 0,
+  rebuyEnabled: false,
+  rebuyDropPct: 0.2,
+  rebuys: [],
   rows: [],
 };
 
@@ -67,6 +71,8 @@ export function Manual() {
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [limitPrice, setLimitPrice] = useState('');
+  const [limitSize, setLimitSize] = useState('');
 
   useEffect(() => {
     void loadManualSettings().then(setSettings);
@@ -77,8 +83,13 @@ export function Manual() {
     return () => window.clearInterval(timer);
   }, []);
 
-  // Chart. One minute of candles is a slow-moving thing; the last price comes
-  // with the same call, so a 10-second refresh keeps both current enough.
+  /** Which five-minute window the clock is in. Changes on the boundary. */
+  const windowStart = Math.floor(now / 1000 / WINDOW_SEC) * WINDOW_SEC;
+
+  // Chart. Candles are a slow-moving thing between windows, but the moment one
+  // rolls the whole picture changes — a new open, a new shaded stretch, levels
+  // that now sit relative to a different price — so the window is a dependency
+  // and the fetch happens on the boundary rather than up to ten seconds later.
   useEffect(() => {
     let cancelled = false;
     const read = () => {
@@ -98,8 +109,15 @@ export function Manual() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [windowStart]);
 
+  /** True while the loaded market is not the one the clock says we are in. */
+  const marketStale = market?.windowStart != null && market.windowStart !== windowStart;
+
+  // The market must never lag the clock: its token ids are what orders are sent
+  // against, so a stale one would place a buy in the window that just ended.
+  // While it is behind — including the second or two Gamma needs to index a new
+  // window — this polls hard, and backs off once it has caught up.
   useEffect(() => {
     let cancelled = false;
     const read = () => {
@@ -110,12 +128,12 @@ export function Manual() {
         .catch(() => {});
     };
     read();
-    const timer = window.setInterval(read, 20_000);
+    const timer = window.setInterval(read, marketStale ? 2000 : 20_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [windowStart, marketStale]);
 
   const tokenFor = useCallback(
     (which: 'Up' | 'Down') =>
@@ -212,9 +230,9 @@ export function Manual() {
 
   const drift = spot != null && windowOpen != null ? spot - windowOpen : null;
 
-  const secondsLeft = market?.windowEnd
-    ? Math.max(0, market.windowEnd - Math.floor(now / 1000))
-    : null;
+  // From the clock, not the market: the countdown must keep running even in the
+  // seconds where the new window's market has not loaded yet.
+  const secondsLeft = Math.max(0, windowStart + WINDOW_SEC - Math.floor(now / 1000));
 
   const place = useCallback(
     async (
@@ -226,6 +244,12 @@ export function Manual() {
       const tokenId = which === 'Up' ? market?.upTokenId : market?.downTokenId;
       if (!market || !tokenId) {
         setNote('Рынок окна ещё не загружен');
+        return;
+      }
+      if (market.windowStart != null && market.windowStart !== windowStart) {
+        // The window rolled and the new market has not arrived yet. Sending
+        // this would buy into the window that just closed.
+        setNote('Окно сменилось — ждём новый рынок');
         return;
       }
       if (!Number.isFinite(price) || price <= 0 || price >= 1) {
@@ -260,7 +284,7 @@ export function Manual() {
         setBusy(false);
       }
     },
-    [market],
+    [market, windowStart],
   );
 
   /**
@@ -310,6 +334,30 @@ export function Manual() {
   const quickUp = quickFor('Up');
   const quickDown = quickFor('Down');
 
+  /**
+   * The limit row seeds itself from whichever side is on the button, and the
+   * size follows the price: under 20¢ five shares is under a dollar of
+   * exposure, so cheap prices are sized by money instead.
+   */
+  const limitPriceNum = Number(limitPrice.replace(',', '.')) / 100;
+  const limitDefaultSize = limitShares(limitPriceNum, minSize);
+  const limitSizeNum = limitSize === '' ? limitDefaultSize : Number(limitSize.replace(',', '.'));
+
+  const nudgeLimit = (delta: number) => {
+    const base = Number.isFinite(limitPriceNum) && limitPriceNum > 0
+      ? Math.round(limitPriceNum * 100)
+      : Math.round((quickUp?.ask ?? 0.5) * 100);
+    setLimitPrice(String(Math.min(99, Math.max(1, base + delta))));
+  };
+
+  const placeLimit = (which: 'Up' | 'Down') => {
+    if (!Number.isFinite(limitPriceNum) || limitPriceNum <= 0) {
+      setNote('Укажите цену лимитки');
+      return;
+    }
+    void place(which, 'BUY', limitPriceNum, limitSizeNum);
+  };
+
   return (
     <>
       <div className="card tight">
@@ -342,9 +390,7 @@ export function Manual() {
               до конца
             </div>
             <div className="deskprice">
-              {secondsLeft == null
-                ? '—'
-                : `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}
+              {`${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}
             </div>
           </div>
           <button
@@ -504,23 +550,67 @@ export function Manual() {
 
       {note && <div className="banner info">{note}</div>}
 
-      <div className="buybar">
-        <button
-          className="buy up"
-          disabled={busy || !quickUp}
-          onClick={() => quickBuy('Up')}
-        >
-          <b>{quickUp ? cents(quickUp.ask) : '—'}</b>
-          <s>{quickUp ? `${quickUp.shares.toFixed(0)} долей` : 'стакан пуст'}</s>
-        </button>
-        <button
-          className="buy down"
-          disabled={busy || !quickDown}
-          onClick={() => quickBuy('Down')}
-        >
-          <b>{quickDown ? cents(quickDown.ask) : '—'}</b>
-          <s>{quickDown ? `${quickDown.shares.toFixed(0)} долей` : 'стакан пуст'}</s>
-        </button>
+      <div className="dock">
+        <div className="limitrow">
+          <button
+            className="limit up"
+            disabled={busy}
+            onClick={() => placeLimit('Up')}
+          >
+            Up
+          </button>
+          <div className="limitmid">
+            <div className="limitprice">
+              <button className="step" onClick={() => nudgeLimit(-1)}>
+                −
+              </button>
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder={quickUp ? String(Math.round(quickUp.ask * 100)) : '¢'}
+                value={limitPrice}
+                onChange={(e) => setLimitPrice(e.target.value)}
+              />
+              <button className="step" onClick={() => nudgeLimit(1)}>
+                +
+              </button>
+            </div>
+            <input
+              className="limitsize"
+              type="number"
+              inputMode="decimal"
+              placeholder={`${limitDefaultSize.toFixed(0)} долей`}
+              value={limitSize}
+              onChange={(e) => setLimitSize(e.target.value)}
+            />
+          </div>
+          <button
+            className="limit down"
+            disabled={busy}
+            onClick={() => placeLimit('Down')}
+          >
+            Down
+          </button>
+        </div>
+
+        <div className="buybar">
+          <button
+            className="buy up"
+            disabled={busy || !quickUp}
+            onClick={() => quickBuy('Up')}
+          >
+            <b>{quickUp ? cents(quickUp.ask) : '—'}</b>
+            <s>{quickUp ? `${quickUp.shares.toFixed(0)} долей` : 'стакан пуст'}</s>
+          </button>
+          <button
+            className="buy down"
+            disabled={busy || !quickDown}
+            onClick={() => quickBuy('Down')}
+          >
+            <b>{quickDown ? cents(quickDown.ask) : '—'}</b>
+            <s>{quickDown ? `${quickDown.shares.toFixed(0)} долей` : 'стакан пуст'}</s>
+          </button>
+        </div>
       </div>
     </>
   );
@@ -675,14 +765,26 @@ function AutoSellBar({
       onChange(next);
       void PolyBot.autoSellUpdate({
         enabled: next.autoSellEnabled,
-        price: next.autoSellPrice,
+        ladder: next.autoSellLadder,
         retryEverySec: next.autoSellRetrySec,
+        rebuyEnabled: next.autoRebuyEnabled,
+        rebuyDropPct: next.autoRebuyDropPct,
       }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
     },
     [onChange, onNote],
   );
 
+  const setRung = (index: number, value: string) => {
+    const cents = Number(value.replace(',', '.'));
+    if (!Number.isFinite(cents)) return;
+    const ladder = settings.autoSellLadder.map((r, i) => (i === index ? cents / 100 : r));
+    push({ ...settings, autoSellLadder: ladder });
+  };
+
   const covered = state.rows.filter((r) => r.status === 'покрыто').length;
+  // The rung the positions are actually on — the ladder can be ahead of the
+  // clock, so this is not simply the minute of the window.
+  const activeStep = state.rows.length > 0 ? Math.max(...state.rows.map((r) => r.step)) : null;
 
   return (
     <div className="card tight">
@@ -694,22 +796,52 @@ function AutoSellBar({
           }
         />
         <div className="autosell-label">
-          <div>Автопродажа всего</div>
+          <div>Автопродажа лесенкой</div>
           <div className="muted" style={{ fontSize: 10 }}>
-            повтор каждые {settings.autoSellRetrySec} с · позиции ботов не
-            трогает
+            рунг за минуту, но не ниже рынка · позиции ботов не трогает
+          </div>
+        </div>
+      </div>
+
+      <div className="rungs">
+        {settings.autoSellLadder.map((price, i) => (
+          <label className={`rung${activeStep === i ? ' on' : ''}`} key={i}>
+            <span>{i + 1}м</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={String(Math.round(price * 100))}
+              onChange={(e) => setRung(i, e.target.value)}
+            />
+          </label>
+        ))}
+      </div>
+
+      <div className="autosell rebuy">
+        <button
+          className={`switch ${settings.autoRebuyEnabled ? 'on' : ''}`}
+          onClick={() =>
+            push({ ...settings, autoRebuyEnabled: !settings.autoRebuyEnabled })
+          }
+        />
+        <div className="autosell-label">
+          <div>Автодокуп после продажи</div>
+          <div className="muted" style={{ fontSize: 10 }}>
+            {state.rebuys.length > 0
+              ? `ждём ${state.rebuys.map((r) => `${Math.round(r.trigger * 100)}¢`).join(', ')}`
+              : 'тем же объёмом, когда цена упадёт'}
           </div>
         </div>
         <label className="mini narrow">
-          <span>по, ¢</span>
+          <span>на, %</span>
           <input
             type="number"
             inputMode="numeric"
-            value={String(Math.round(settings.autoSellPrice * 100))}
+            value={String(Math.round(settings.autoRebuyDropPct * 100))}
             onChange={(e) =>
               push({
                 ...settings,
-                autoSellPrice: Number(e.target.value.replace(',', '.')) / 100,
+                autoRebuyDropPct: Number(e.target.value.replace(',', '.')) / 100,
               })
             }
           />
@@ -725,7 +857,7 @@ function AutoSellBar({
             <div className="ledger" key={r.asset}>
               <span className={r.outcome === 'Up' ? 'up' : 'down'}>{r.outcome}</span>
               <span className="ledger-main">
-                {r.size.toFixed(1)} · продаётся {r.resting.toFixed(1)}
+                {r.size.toFixed(1)} → {Math.round(r.target * 100)}¢
               </span>
               <span
                 className={`ledger-note ${

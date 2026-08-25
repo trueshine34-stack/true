@@ -898,8 +898,10 @@ class BotPlugin : Plugin() {
         val defaults = autoSell.settings
         val next = AutoSell.Settings(
             enabled = call.getBoolean("enabled") ?: defaults.enabled,
-            price = call.getDouble("price") ?: defaults.price,
+            ladder = parseSellLadder(call.getArray("ladder")) ?: defaults.ladder,
             retryEverySec = call.getInt("retryEverySec") ?: defaults.retryEverySec,
+            rebuyEnabled = call.getBoolean("rebuyEnabled") ?: defaults.rebuyEnabled,
+            rebuyDropPct = call.getDouble("rebuyDropPct") ?: defaults.rebuyDropPct,
         )
         if (next.enabled && !engine.isConfigured()) {
             call.reject("Сначала подключите кошелёк")
@@ -925,16 +927,34 @@ class BotPlugin : Plugin() {
                     .put("resting", it.resting)
                     .put("restingPrice", it.restingPrice)
                     .put("status", it.status)
-                    .put("attempts", it.attempts),
+                    .put("attempts", it.attempts)
+                    .put("step", it.step)
+                    .put("target", it.target),
+            )
+        }
+        val ladder = JSArray()
+        bot.settings.ladder.forEach { ladder.put(it) }
+
+        val waiting = JSArray()
+        bot.rebuys.forEach {
+            waiting.put(
+                JSObject()
+                    .put("outcome", bot.rows.firstOrNull { r -> r.asset == it.asset }?.outcome)
+                    .put("shares", it.shares)
+                    .put("soldAt", it.soldAt)
+                    .put("trigger", it.trigger),
             )
         }
         call.resolve(
             JSObject()
                 .put("enabled", bot.settings.enabled)
                 .put("running", bot.running)
-                .put("price", bot.settings.price)
+                .put("ladder", ladder)
                 .put("retryEverySec", bot.settings.retryEverySec)
                 .put("lastSweepAt", bot.lastSweepAt)
+                .put("rebuyEnabled", bot.settings.rebuyEnabled)
+                .put("rebuyDropPct", bot.settings.rebuyDropPct)
+                .put("rebuys", waiting)
                 .put("rows", rows),
         )
     }
@@ -1117,6 +1137,21 @@ class BotPlugin : Plugin() {
         state.put("paperCash", bot.paperCash)
         state.put("paperEquity", bot.paperEquity())
         return state
+    }
+
+    /**
+     * A ladder with no usable rung falls back to the default: leaving the rule
+     * with nowhere to sell would be worse than ignoring the input.
+     */
+    private fun parseSellLadder(raw: JSArray?): List<Double>? {
+        if (raw == null || raw.length() == 0) return null
+        val out = ArrayList<Double>(raw.length())
+        for (i in 0 until raw.length()) {
+            val price = raw.optDouble(i, Double.NaN)
+            if (price.isNaN() || price <= 0.0 || price >= 1.0) continue
+            out.add(price)
+        }
+        return out.sorted().ifEmpty { null }
     }
 
     private fun parsePairSettings(raw: JSObject): PairSettings {

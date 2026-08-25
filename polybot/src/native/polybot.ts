@@ -215,8 +215,10 @@ export interface PolyBotPlugin {
   getPositions(): Promise<{ positions: NativePosition[] }>;
   autoSellUpdate(args: {
     enabled?: boolean;
-    price?: number;
+    ladder?: number[];
     retryEverySec?: number;
+    rebuyEnabled?: boolean;
+    rebuyDropPct?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
   addListener(
@@ -253,14 +255,27 @@ export type AutoSellRow = {
   restingPrice?: number | null;
   status: string;
   attempts: number;
+  /** Rung of the ladder this position is on, and the price it asks. */
+  step: number;
+  target: number;
+};
+
+export type AutoSellRebuy = {
+  outcome?: string | null;
+  shares: number;
+  soldAt: number;
+  trigger: number;
 };
 
 export type AutoSellState = {
   enabled: boolean;
   running: boolean;
-  price: number;
+  ladder: number[];
   retryEverySec: number;
   lastSweepAt: number;
+  rebuyEnabled: boolean;
+  rebuyDropPct: number;
+  rebuys: AutoSellRebuy[];
   rows: AutoSellRow[];
 };
 
@@ -463,9 +478,12 @@ const webStub: PolyBotPlugin = {
   autoSellState: async () => ({
     enabled: false,
     running: false,
-    price: 0.97,
+    ladder: [0.77, 0.84, 0.89, 0.93, 0.97],
     retryEverySec: 7,
     lastSweepAt: 0,
+    rebuyEnabled: false,
+    rebuyDropPct: 0.2,
+    rebuys: [],
     rows: [],
   }),
   addListener: async () => ({ remove: async () => {} }) as PluginListenerHandle,

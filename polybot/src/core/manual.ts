@@ -19,8 +19,13 @@ export type ManualSettings = {
   useSizeLadder: boolean;
   sizeRules: SizeRule[];
   autoSellEnabled: boolean;
-  autoSellPrice: number;
+  /** Sell price by minute of the window, cheapest rung first. */
+  autoSellLadder: number[];
   autoSellRetrySec: number;
+  /** Buy the same size back if the price falls far enough after a sale. */
+  autoRebuyEnabled: boolean;
+  /** How far below the sale price the buy-back triggers, as a fraction. */
+  autoRebuyDropPct: number;
 };
 
 export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
@@ -33,9 +38,24 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
     { maxPrice: 1, shares: 5 },
   ],
   autoSellEnabled: false,
-  autoSellPrice: 0.97,
+  autoSellLadder: [0.77, 0.84, 0.89, 0.93, 0.97],
   autoSellRetrySec: 7,
+  autoRebuyEnabled: false,
+  autoRebuyDropPct: 0.2,
 };
+
+/**
+ * Default size for a hand-placed limit buy.
+ *
+ * Five shares is the venue's floor and a sensible unit most of the book. Under
+ * 20c it stops being sensible — five shares there is under a dollar of exposure
+ * for the same tap — so cheap prices are sized by money instead.
+ */
+export function limitShares(price: number, minimumOrderSize = 5, cheapStakeUsd = 1): number {
+  if (!Number.isFinite(price) || price <= 0) return minimumOrderSize;
+  const base = price < 0.2 ? cheapStakeUsd / price : 5;
+  return Math.max(base, minimumOrderSize);
+}
 
 /**
  * Shares to buy at this price. The first band whose ceiling the price is under

@@ -251,10 +251,13 @@ class BotService : Service() {
                     String.format("%.0f", pairBot.stats.pairsLocked) + " · $pnl $"
             }
 
-            EngineHolder.peekAutoSell()?.running == true ->
-                "автопродажа по " +
-                    String.format("%.0f", (EngineHolder.peekAutoSell()?.settings?.price ?: 0.0) * 100) +
-                    "¢ · позиций ${EngineHolder.peekAutoSell()?.rows?.size ?: 0}"
+            EngineHolder.peekAutoSell()?.running == true -> {
+                val rule = EngineHolder.peekAutoSell()
+                val rung = rule?.rows?.maxOfOrNull { it.target }
+                "автопродажа" +
+                    (rung?.let { " по " + String.format("%.0f", it * 100) + "¢" } ?: "") +
+                    " · позиций ${rule?.rows?.size ?: 0}"
+            }
 
             else -> bot.haltReason?.let { "остановлен: $it" } ?: "остановлен"
         }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_MANUAL_SETTINGS, sharesFor, type ManualSettings } from '../manual';
+import {
+  DEFAULT_MANUAL_SETTINGS,
+  limitShares,
+  sharesFor,
+  type ManualSettings,
+} from '../manual';
 
 /**
  * The size ladder decides how much real money one tap spends, so the bands and
@@ -77,5 +82,29 @@ describe('sharesFor', () => {
     expect(sharesFor(0, s)).toBe(0);
     expect(sharesFor(-0.1, s)).toBe(0);
     expect(sharesFor(Number.NaN, s)).toBe(0);
+  });
+});
+
+describe('limitShares', () => {
+  it('is five shares over the cheap threshold', () => {
+    expect(limitShares(0.2)).toBe(5);
+    expect(limitShares(0.5)).toBe(5);
+    expect(limitShares(0.95)).toBe(5);
+  });
+
+  it('sizes cheap prices by money instead', () => {
+    // Five shares at 5c is 25c of exposure for the same tap; a dollar is not.
+    expect(limitShares(0.05)).toBe(20);
+    expect(limitShares(0.1)).toBe(10);
+  });
+
+  it('still respects the venue floor when a dollar buys too little', () => {
+    expect(limitShares(0.19)).toBeCloseTo(1 / 0.19, 9);
+    expect(limitShares(0.5, 10)).toBe(10);
+  });
+
+  it('does not divide by a nonsense price', () => {
+    expect(limitShares(0)).toBe(5);
+    expect(limitShares(Number.NaN)).toBe(5);
   });
 });

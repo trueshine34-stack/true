@@ -868,13 +868,108 @@ button.compact.narrow {
   font-size: 12px;
 }
 
-/* The two buy buttons live at the bottom, under the thumb. */
+/*
+ * The trading controls stay at the bottom of the screen whatever the content
+ * above does. Sticky rather than fixed: it pins to the scroller it lives in,
+ * so it needs nothing from the app shell around it.
+ */
+.dock {
+  position: sticky;
+  bottom: -12px;
+  z-index: 2;
+  padding-top: 6px;
+  margin-bottom: -12px;
+  background: linear-gradient(to bottom, transparent, var(--bg) 14px);
+}
+
+.limitrow {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.limitrow button.limit {
+  flex: 0 0 58px;
+  border-radius: 10px;
+  border: 1px solid;
+  background: var(--surface);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.limitrow button.limit.up {
+  color: var(--up);
+  border-color: rgba(35, 192, 123, 0.45);
+}
+
+.limitrow button.limit.down {
+  color: var(--down);
+  border-color: rgba(255, 90, 106, 0.45);
+}
+
+.limitmid {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+}
+
+.limitprice {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.limitprice input,
+.limitsize {
+  border: none;
+  background: none;
+  text-align: center;
+  padding: 8px 2px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  border-radius: 0;
+}
+
+.limitprice input:focus,
+.limitsize:focus {
+  outline: none;
+}
+
+.limitsize {
+  flex: 0 0 82px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/* Wide enough to hit without looking at it. */
+.limitprice button.step {
+  flex: 0 0 34px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.limitprice button.step:active {
+  color: var(--accent);
+}
+
 .buybar {
   display: flex;
   gap: 8px;
-  margin-top: 4px;
-  /* Eats the scroller's bottom padding so the whole desk clears one screen. */
-  margin-bottom: -12px;
 }
 
 .buybar button.buy {
@@ -1036,4 +1131,48 @@ button.compact.narrow {
   color: var(--muted);
   font-size: 12px;
   cursor: pointer;
+}
+
+/* One editable rung per minute of the window. */
+.rungs {
+  display: flex;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.rung {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.rung > span {
+  display: block;
+  font-size: 9px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.rung input {
+  padding: 6px 2px;
+  text-align: center;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The rung the ladder is actually resting on right now. */
+.rung.on input {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.rung.on > span {
+  color: var(--accent);
+}
+
+.autosell.rebuy {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
 }
