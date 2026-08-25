@@ -1,2 +1,5 @@
 # Locally staged APK builds
 dist-apk/
+
+# Built APKs staged for delivery
+*.apk
