@@ -147,7 +147,26 @@ class AutoSell(
         var nextAtMs: Long = 0L,
         /** Why it is still waiting, shown on the desk. */
         var note: String? = null,
+        /** Last price seen, and when — so the desk can show it is alive. */
+        var lastAsk: Double? = null,
+        var lastCheckAt: Long = 0L,
+        var checks: Int = 0,
+        /** Cheapest the offer has been since the sale; how close it ever came. */
+        var bestAsk: Double? = null,
     )
+
+    /** A buy-back that is over, kept so the desk can say how it ended. */
+    data class RebuyDone(
+        val outcome: String,
+        val shares: Double,
+        val soldAt: Double,
+        val trigger: Double,
+        val bestAsk: Double?,
+        val result: String,
+        val at: Long,
+    )
+
+    val recentRebuys = CopyOnWriteArrayList<RebuyDone>()
 
     val rebuys = CopyOnWriteArrayList<Rebuy>()
 
@@ -281,6 +300,7 @@ class AutoSell(
         attempts.clear()
         rungs.clear()
         rebuys.clear()
+        recentRebuys.clear()
         watching.clear()
         seenTrades.clear()
         tradesSeeded = false
@@ -506,8 +526,13 @@ class AutoSell(
                 rebuy.note = "нет предложений"
                 continue
             }
+
+            rebuy.lastAsk = ask
+            rebuy.lastCheckAt = now
+            rebuy.checks += 1
+            rebuy.bestAsk = minOf(rebuy.bestAsk ?: ask, ask)
             if (ask > rebuy.trigger) {
-                rebuy.note = "аск ${(ask * 100).toInt()}¢"
+                rebuy.note = null
                 continue
             }
 
@@ -522,6 +547,7 @@ class AutoSell(
                     "Автодокуп отменён: рынок закрылся раньше, чем цена дошла до " +
                         "${(rebuy.trigger * 100).toInt()}¢",
                 )
+                finish(rebuy, "рынок закрылся")
                 done.add(rebuy)
                 continue
             }
@@ -578,7 +604,10 @@ class AutoSell(
                     },
             )
 
-            if (rebuy.remaining < meta.minimumOrderSize) done.add(rebuy)
+            if (rebuy.remaining < meta.minimumOrderSize) {
+                finish(rebuy, "куплено")
+                done.add(rebuy)
+            }
         }
         rebuys.removeAll(done)
         if (done.isNotEmpty()) onStateChanged()
@@ -642,6 +671,32 @@ class AutoSell(
         if (uncovered < meta.minimumOrderSize) return "покрыто"
 
         return tryPlace(position, uncovered, price)
+    }
+
+    /**
+     * File how a buy-back ended, newest first.
+     *
+     * "It did not happen" is only useful next to why, and by the time the user
+     * looks the pending entry is gone — so the ending is kept rather than the
+     * absence of one.
+     */
+    private fun finish(rebuy: Rebuy, result: String) {
+        recentRebuys.add(
+            0,
+            RebuyDone(
+                outcome = rows.firstOrNull { it.asset == rebuy.asset }?.outcome
+                    ?: OrderLog.forWindow(rebuy.windowStart)
+                        .firstOrNull { it.asset == rebuy.asset }?.outcome
+                    ?: "",
+                shares = rebuy.shares,
+                soldAt = rebuy.soldAt,
+                trigger = rebuy.trigger,
+                bestAsk = rebuy.bestAsk,
+                result = result,
+                at = System.currentTimeMillis(),
+            ),
+        )
+        while (recentRebuys.size > 8) recentRebuys.removeAt(recentRebuys.size - 1)
     }
 
     private fun rowFor(

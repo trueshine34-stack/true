@@ -300,8 +300,24 @@ export type AutoSellRebuy = {
   lot: number;
   soldAt: number;
   trigger: number;
-  /** Why it is still waiting: the current ask, or what went wrong. */
+  /** Set only when something is wrong; a plain wait leaves it empty. */
   note?: string | null;
+  /** Live price, the closest it has come, and when it was last read. */
+  lastAsk?: number | null;
+  bestAsk?: number | null;
+  lastCheckAt: number;
+  checks: number;
+};
+
+/** How a buy-back ended. */
+export type AutoSellRebuyDone = {
+  outcome: string;
+  shares: number;
+  soldAt: number;
+  trigger: number;
+  bestAsk?: number | null;
+  result: string;
+  at: number;
 };
 
 export type AutoSellState = {
@@ -318,6 +334,7 @@ export type AutoSellState = {
   rebuyEnabled: boolean;
   rebuyDropPct: number;
   rebuys: AutoSellRebuy[];
+  rebuysDone?: AutoSellRebuyDone[];
   rows: AutoSellRow[];
 };
 

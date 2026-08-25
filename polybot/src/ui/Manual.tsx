@@ -20,6 +20,8 @@ import {
   type AutoSellState,
   type BookLevels,
   type GmxCandle,
+  type AutoSellRebuy,
+  type AutoSellRebuyDone,
   type LoggedOrder,
   type NativeMarket,
   type NativePosition,
@@ -59,6 +61,7 @@ const IDLE_AUTOSELL: AutoSellState = {
   rebuyEnabled: false,
   rebuyDropPct: 0.2,
   rebuys: [],
+  rebuysDone: [],
   rows: [],
 };
 
@@ -797,6 +800,12 @@ export function Manual() {
             </div>
           )}
 
+          {!draft &&
+            (autoSell.rebuys.length > 0 ||
+              (autoSell.rebuysDone?.length ?? 0) > 0) && (
+              <RebuyCard state={autoSell} now={now} />
+            )}
+
           {!draft && (
             <RuleBar
               state={autoSell}
@@ -1055,6 +1064,111 @@ function Chart({
 }
 
 /**
+ * What the buy-back is doing, while it is doing it.
+ *
+ * A rule that waits silently is indistinguishable from one that is broken, and
+ * that ambiguity cost several rounds of guessing. So the wait is drawn: where
+ * the price sold, where it has to fall to, where it is now, and how close it
+ * has ever come. The seconds-since-checked tick every second, which is the only
+ * honest proof that anything is still running.
+ */
+function RebuyCard({ state, now }: { state: AutoSellState; now: number }) {
+  return (
+    <div className="card tight">
+      <div className="listhead">
+        <span>Автодокуп</span>
+        <span className="muted">
+          {state.rebuys.length > 0 ? `ждёт ${state.rebuys.length}` : 'свободен'}
+        </span>
+      </div>
+
+      {state.rebuys.map((r, i) => (
+        <RebuyWait key={`${r.soldAt}-${i}`} rebuy={r} now={now} />
+      ))}
+
+      {(state.rebuysDone ?? []).slice(0, 3).map((d, i) => (
+        <RebuyDoneRow key={`${d.at}-${i}`} done={d} />
+      ))}
+    </div>
+  );
+}
+
+function RebuyWait({ rebuy, now }: { rebuy: AutoSellRebuy; now: number }) {
+  const sold = rebuy.soldAt;
+  const target = rebuy.trigger;
+  const ask = rebuy.lastAsk ?? null;
+  const best = rebuy.bestAsk ?? null;
+
+  // How far the price has travelled from where it sold toward the target.
+  const span = Math.max(sold - target, 1e-6);
+  const pos = (v: number) => Math.min(100, Math.max(0, ((sold - v) / span) * 100));
+
+  const stale = rebuy.lastCheckAt > 0 && now - rebuy.lastCheckAt > 15_000;
+  const gap = ask != null ? ask - target : null;
+
+  return (
+    <div className="rebuy">
+      <div className="rebuy-top">
+        <span className={rebuy.outcome === 'Down' ? 'down' : 'up'}>
+          {rebuy.outcome || '—'}
+        </span>
+        <span className="rebuy-size">
+          {rebuy.remaining.toFixed(0)} долей · клип {Math.round(rebuy.lot)}
+        </span>
+        <span className={`rebuy-live ${rebuy.note ? 'down' : stale ? 'warn' : 'up'}`}>
+          <i className="pulse" />
+          {rebuy.note
+            ? rebuy.note
+            : rebuy.lastCheckAt === 0
+              ? 'первая проверка…'
+              : `${Math.max(0, Math.round((now - rebuy.lastCheckAt) / 1000))}с`}
+        </span>
+      </div>
+
+      <div className="rebuy-track">
+        {best != null && best < sold && (
+          <i className="best" style={{ left: `${pos(best)}%` }} />
+        )}
+        {ask != null && <i className="now" style={{ left: `${pos(ask)}%` }} />}
+      </div>
+
+      <div className="rebuy-scale">
+        <span>продано {cents(sold)}</span>
+        <span className={gap != null && gap <= 0 ? 'up' : 'muted'}>
+          {ask != null ? `сейчас ${cents(ask)}` : 'цены нет'}
+          {gap != null && gap > 0 ? ` · ещё ${Math.round(gap * 100)}¢` : ''}
+        </span>
+        <span className="warn">купить {cents(target)}</span>
+      </div>
+
+      {best != null && (
+        <div className="muted rebuy-best">
+          ближе всего подходил к {cents(best)} · проверок {rebuy.checks}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RebuyDoneRow({ done }: { done: AutoSellRebuyDone }) {
+  const bought = done.result === 'куплено';
+  return (
+    <div className="ledger">
+      <span className={done.outcome === 'Down' ? 'down' : 'up'}>
+        {done.outcome || '—'}
+      </span>
+      <span className="ledger-main">
+        {done.shares.toFixed(0)} · {cents(done.soldAt)} → {cents(done.trigger)}
+      </span>
+      <span className={`ledger-note ${bought ? 'up' : 'warn'}`}>
+        {done.result}
+        {!bought && done.bestAsk != null ? ` · дошло до ${cents(done.bestAsk)}` : ''}
+      </span>
+    </div>
+  );
+}
+
+/**
  * The rules, as switches only.
  *
  * What each rule *is* — the rungs, the retry interval, the percentages — lives
@@ -1141,19 +1255,8 @@ function RuleBar({
         />
         <span className="rule-name">Автодокуп</span>
         <span className="rule-note muted">
-          {/*
-            The reason it is still waiting, not just the target. A buy-back that
-            was rejected used to read the same as one patiently watching.
-          */}
           {state.rebuys.length > 0
-            ? state.rebuys
-                .map(
-                  (r) =>
-                    `${r.remaining.toFixed(0)}×${Math.round(r.lot)} к ${Math.round(
-                      r.trigger * 100,
-                    )}¢${r.note ? ` · ${r.note}` : ''}`,
-                )
-                .join(' | ')
+            ? `ждёт ${state.rebuys.length}`
             : `−${Math.round(settings.autoRebuyDropPct * 100)}%`}
         </span>
       </div>

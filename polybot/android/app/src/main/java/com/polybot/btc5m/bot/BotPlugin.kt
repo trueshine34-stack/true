@@ -1098,7 +1098,11 @@ class BotPlugin : Plugin() {
                     .put("lot", it.lot)
                     .put("soldAt", it.soldAt)
                     .put("trigger", it.trigger)
-                    .put("note", it.note),
+                    .put("note", it.note)
+                    .put("lastAsk", it.lastAsk)
+                    .put("bestAsk", it.bestAsk)
+                    .put("lastCheckAt", it.lastCheckAt)
+                    .put("checks", it.checks),
             )
         }
         call.resolve(
@@ -1114,6 +1118,20 @@ class BotPlugin : Plugin() {
                 .put("rebuyEnabled", bot.settings.rebuyEnabled)
                 .put("rebuyDropPct", bot.settings.rebuyDropPct)
                 .put("rebuys", waiting)
+                .put("rebuysDone", JSArray().also { arr ->
+                    bot.recentRebuys.forEach {
+                        arr.put(
+                            JSObject()
+                                .put("outcome", it.outcome)
+                                .put("shares", it.shares)
+                                .put("soldAt", it.soldAt)
+                                .put("trigger", it.trigger)
+                                .put("bestAsk", it.bestAsk)
+                                .put("result", it.result)
+                                .put("at", it.at),
+                        )
+                    }
+                })
                 .put("rows", rows),
         )
     }

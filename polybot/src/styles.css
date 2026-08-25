@@ -1276,3 +1276,112 @@ button.compact.narrow {
   color: var(--accent);
   font-weight: 600;
 }
+
+/*
+ * Buy-back watch. The track runs from where the position sold to the price it
+ * has to reach — left is where it started, right is the goal — so distance on
+ * screen is distance in price, and progress reads without a number.
+ */
+.rebuy {
+  padding: 8px 0 6px;
+}
+
+.rebuy + .rebuy,
+.rebuy + .ledger {
+  border-top: 1px solid var(--line);
+}
+
+.rebuy-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rebuy-size {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rebuy-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* A heartbeat, so a working rule never looks like a frozen one. */
+.rebuy-live .pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: rebuy-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes rebuy-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
+}
+
+.rebuy-track {
+  position: relative;
+  height: 8px;
+  margin: 7px 0 5px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 0%,
+    rgba(245, 181, 68, 0.28) 100%
+  );
+  overflow: hidden;
+}
+
+.rebuy-track > i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  transition: left 0.4s ease;
+}
+
+.rebuy-track > i.now {
+  background: var(--text);
+}
+
+/* How close it has ever come — the high-water mark of the wait. */
+.rebuy-track > i.best {
+  background: rgba(230, 235, 245, 0.35);
+  width: 2px;
+}
+
+.rebuy-scale {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.rebuy-scale > span:nth-child(2) {
+  text-align: center;
+}
+
+.rebuy-best {
+  font-size: 10px;
+  margin-top: 3px;
+}
