@@ -1729,3 +1729,120 @@ button.pill.balance {
   margin-left: auto;
   margin-right: 10px;
 }
+
+/*
+ * Header: three numbers, no name. What there is, what a round should make,
+ * what the open round would make if it went our way.
+ */
+.topbar {
+  gap: 4px;
+}
+
+.headnum {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  text-align: left;
+  color: var(--text);
+}
+
+.headnum b {
+  font-size: 19px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.headnum s {
+  text-decoration: none;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* A working order is a price and a size, in the size you can read at a glance. */
+.ordermain {
+  display: block;
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.ordermain i {
+  font-style: normal;
+  color: var(--muted);
+  margin: 0 6px;
+  font-size: 15px;
+}
+
+.listrow.editable {
+  cursor: pointer;
+}
+
+.listrow.editable:active {
+  background: var(--surface-2);
+}
+
+/* What the limit row would make on the way to a dollar. */
+.limitmeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 2px 4px;
+}
+
+/* Big, thumb-sized fields: the editor and the day's opening number. */
+.bigfield {
+  margin-bottom: 12px;
+}
+
+.bigfield > span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.bigrow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.bigrow input {
+  flex: 1;
+  text-align: center;
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 10px;
+}
+
+button.step.big {
+  width: 58px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 24px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.banner.lockbanner {
+  margin: 10px 14px 0;
+  background: rgba(35, 192, 123, 0.1);
+  border-color: rgba(35, 192, 123, 0.4);
+  color: var(--text);
+}

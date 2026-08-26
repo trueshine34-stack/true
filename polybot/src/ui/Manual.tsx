@@ -15,10 +15,13 @@ import {
   type ManualSettings,
 } from '../core/manual';
 import { findLevels } from '../core/levels';
-import { pairOrders, realised } from '../core/trades';
+import { pairOrders, realised, type TradeRow } from '../core/trades';
 import {
   SELL_GAINS,
+  limitLadder,
+  limitUpside,
   positionPnl,
+  potentialProfit,
   signedPct,
   signedUsd,
   targetPrice,
@@ -101,7 +104,15 @@ const IDLE_AUTOSELL: AutoSellState = {
  * sit at the bottom where the thumb already is. Everything that would push the
  * book off the screen lives behind the settings tab.
  */
-export function Manual() {
+export function Manual({
+  onSummary,
+  locked,
+}: {
+  /** Potential profit of the round, for the header. */
+  onSummary?: (potential: number) => void;
+  /** The day's goal is met: no new exposure until midnight. */
+  locked?: boolean;
+}) {
   const [settings, setSettings] = useState<ManualSettings>(DEFAULT_MANUAL_SETTINGS);
   const [tab, setTab] = useState<'desk' | 'settings'>('desk');
   const [candles, setCandles] = useState<GmxCandle[]>([]);
@@ -130,6 +141,8 @@ export function Manual() {
   const [limitSize, setLimitSize] = useState('');
   /** The size field is being edited: that is when sizing by wallet is useful. */
   const [sizingLimit, setSizingLimit] = useState(false);
+  /** A resting order opened for editing. */
+  const [editing, setEditing] = useState<TradeRow | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
 
   // Read inside pollers that must not re-subscribe every time a setting changes.
@@ -245,6 +258,16 @@ export function Manual() {
   useEffect(() => {
     setViewWindow(null);
   }, [windowStart]);
+
+  /** What the round makes if it goes our way — the header's second number. */
+  const potential = useMemo(
+    () => potentialProfit(positions.filter((p) => !p.redeemable)),
+    [positions],
+  );
+
+  useEffect(() => {
+    onSummary?.(potential);
+  }, [potential, onSummary]);
 
   /** The window's orders, paired into trades: a buy and the sell that closed it. */
   const trades = useMemo(() => pairOrders(logged), [logged]);
@@ -540,6 +563,14 @@ export function Manual() {
         );
         return;
       }
+      // The day's stop comes before everything else: it is the one rule that
+      // exists to end trading, not to shape it. Selling stays open — a stop
+      // that stranded open positions would work against the win it protects.
+      if (action === 'BUY' && locked) {
+        setNote('Цель дня взята — покупки до полуночи заблокированы');
+        return;
+      }
+
       // The guard is on every buy, not only on the ones the buttons size:
       // limits, the order form and a quick tap all end up here, and a rule that
       // covers most of the ways to spend money is not a rule.
@@ -579,7 +610,7 @@ export function Manual() {
         setBusy(false);
       }
     },
-    [market, deskWindow, guard, exposure, settings.exposureCapPct],
+    [market, deskWindow, guard, exposure, settings.exposureCapPct, locked],
   );
 
   /**
@@ -674,6 +705,53 @@ export function Manual() {
     }
   }, [restingLimits]);
 
+  /**
+   * Change a resting order's price or size.
+   *
+   * Pulled and re-placed as one step, because that is all the venue offers: an
+   * order's terms are what it was signed with.
+   */
+  const editOrder = useCallback(
+    async (orderId: string, side: 'Up' | 'Down', price: number, shares: number) => {
+      const tokenId = side === 'Up' ? market?.upTokenId : market?.downTokenId;
+      if (!market || !tokenId) {
+        setNote('Рынок окна ещё не загружен');
+        return;
+      }
+      const floor = minShares(price, market.minimumOrderSize);
+      if (!Number.isFinite(price) || price <= 0 || price >= 1) {
+        setNote('Цена вне диапазона');
+        return;
+      }
+      if (!Number.isFinite(shares) || shares < floor - 1e-9) {
+        setNote(`Минимум ${floor.toFixed(floor % 1 ? 1 : 0)} долей`);
+        return;
+      }
+
+      setBusy(true);
+      try {
+        const r = await PolyBot.replaceOrder({
+          orderId,
+          tokenId,
+          conditionId: market.conditionId,
+          side: 'BUY',
+          price,
+          size: shares,
+          orderType: 'GTC',
+        });
+        setNote(r.success ? `Изменено: ${shares} × ${cents(price)}` : r.error ?? 'Не вышло');
+        const fresh = await PolyBot.getOpenOrders().catch(() => null);
+        if (fresh) setOrders(fresh.orders);
+      } catch (e) {
+        setNote(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+        setEditing(null);
+      }
+    },
+    [market],
+  );
+
   const cancel = useCallback(async (orderId: string) => {
     setBusy(true);
     try {
@@ -739,12 +817,29 @@ export function Manual() {
     setLimitPrice(String(Math.min(99, Math.max(1, base + delta))));
   };
 
-  const placeLimit = (which: 'Up' | 'Down') => {
+  /**
+   * One limit, or a ladder of them stepping down from it.
+   *
+   * The rungs go out oldest-price-first and each is a normal order, so the
+   * guard, the minimum and the log all treat them as what they are.
+   */
+  const placeLimit = async (which: 'Up' | 'Down') => {
     if (!Number.isFinite(limitPriceNum) || limitPriceNum <= 0) {
       setNote('Укажите цену лимитки');
       return;
     }
-    void place(which, 'BUY', limitPriceNum, limitSizeNum);
+    const rungs = settings.limitLadder
+      ? limitLadder(
+          limitPriceNum,
+          settings.limitLadderCount,
+          settings.limitLadderStep,
+          market?.tickSize ?? 0.01,
+        )
+      : [limitPriceNum];
+
+    for (const price of rungs) {
+      await place(which, 'BUY', price, limitSizeNum);
+    }
   };
 
   return (
@@ -916,8 +1011,15 @@ export function Manual() {
                 const live = t.orderId
                   ? orders.find((x) => x.id === t.orderId)
                   : undefined;
+                const editable = t.status === 'buying' && live != null;
                 return (
-                  <div className={`listrow static trade trade-${t.status}`} key={t.key}>
+                  <div
+                    className={`listrow static trade trade-${t.status}${
+                      editable ? ' editable' : ''
+                    }`}
+                    key={t.key}
+                    onClick={editable ? () => setEditing(t) : undefined}
+                  >
                     <span className={t.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
                       {t.outcome}
                       {t.closedBy && (
@@ -929,25 +1031,39 @@ export function Manual() {
                       )}
                     </span>
                     <span className="listrow-main">
-                      {/*
-                        The round on one line: what it cost, what it fetched.
-                        An arrow with nothing after it is a buy still looking
-                        for its exit, which is a state worth seeing at a glance.
-                      */}
-                      {t.buyPrice != null ? usd(t.shares * t.buyPrice) : '—'}
-                      <span className="arrow">→</span>
-                      {t.sellPrice != null ? (
-                        usd(t.shares * t.sellPrice)
-                      ) : (
-                        <span className="muted">
-                          {t.status === 'buying' ? 'ждёт' : '…'}
+                      {t.status === 'buying' || t.status === 'pending' ? (
+                        // A working order is a price and a size, and nothing
+                        // else is worth the room: that is what you change.
+                        <span className="ordermain">
+                          {cents(
+                            (t.status === 'buying' ? t.buyPrice : t.sellPrice) ?? 0,
+                          )}
+                          <i>×</i>
+                          {t.shares.toFixed(t.shares % 1 ? 1 : 0)}
+                          <span className="sub muted">
+                            {usd(
+                              t.shares *
+                                ((t.status === 'buying' ? t.buyPrice : t.sellPrice) ?? 0),
+                            )}
+                            {t.status === 'buying' ? ' · лимитка' : ' · продажа'}
+                          </span>
                         </span>
+                      ) : (
+                        <>
+                          {t.buyPrice != null ? usd(t.shares * t.buyPrice) : '—'}
+                          <span className="arrow">→</span>
+                          {t.sellPrice != null ? (
+                            usd(t.shares * t.sellPrice)
+                          ) : (
+                            <span className="muted">…</span>
+                          )}
+                          <span className="sub muted">
+                            {t.shares.toFixed(1)} ·{' '}
+                            {t.buyPrice != null ? cents(t.buyPrice) : '—'}
+                            {t.sellPrice != null ? ` → ${cents(t.sellPrice)}` : ''}
+                          </span>
+                        </>
                       )}
-                      <span className="sub muted">
-                        {t.shares.toFixed(1)} ·{' '}
-                        {t.buyPrice != null ? cents(t.buyPrice) : '—'}
-                        {t.sellPrice != null ? ` → ${cents(t.sellPrice)}` : ''}
-                      </span>
                     </span>
                     <span
                       className={`listrow-pnl ${
@@ -973,7 +1089,10 @@ export function Manual() {
                       <button
                         className="xbtn"
                         disabled={busy}
-                        onClick={() => void cancel(live.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void cancel(live.id);
+                        }}
                         aria-label="Снять ордер"
                       >
                         ✕
@@ -1150,6 +1269,27 @@ export function Manual() {
         </div>
       )}
 
+      {editing && (
+        <OrderEditor
+          row={editing}
+          tick={market?.tickSize ?? 0.01}
+          busy={busy}
+          onSave={(price, shares) =>
+            void editOrder(
+              editing.orderId as string,
+              editing.outcome === 'Up' ? 'Up' : 'Down',
+              price,
+              shares,
+            )
+          }
+          onCancelOrder={() => {
+            void cancel(editing.orderId as string);
+            setEditing(null);
+          }}
+          onClose={() => setEditing(null)}
+        />
+      )}
+
       {note && <div className="banner info">{note}</div>}
 
       <div className="dock">
@@ -1181,16 +1321,35 @@ export function Manual() {
             })}
             <span className="muted limitpct-hint">
               {limitSizeNum > 0 && limitBasis > 0
-                ? `≈ ${usd(limitSizeNum * limitBasis)}`
+                ? `${usd(limitSizeNum * limitBasis)} → +${usd(
+                    limitUpside(limitSizeNum, limitBasis),
+                  )}`
                 : 'от баланса'}
             </span>
           </div>
         )}
+        <div className="limitmeta">
+          <span className="muted">
+            {settings.limitLadder
+              ? `лесенка ×${settings.limitLadderCount + 1} · шаг ${Math.round(
+                  settings.limitLadderStep * 100,
+                )}¢`
+              : 'лимитка'}
+          </span>
+          <span className={limitBasis > 0 ? 'up' : 'muted'}>
+            {limitSizeNum > 0 && limitBasis > 0
+              ? `+${usd(
+                  limitUpside(limitSizeNum, limitBasis) *
+                    (settings.limitLadder ? settings.limitLadderCount + 1 : 1),
+                )}`
+              : '—'}
+          </span>
+        </div>
         <div className="limitrow">
           <button
             className="limit up"
-            disabled={busy}
-            onClick={() => placeLimit('Up')}
+            disabled={busy || locked}
+            onClick={() => void placeLimit('Up')}
           >
             Up
           </button>
@@ -1223,8 +1382,8 @@ export function Manual() {
           </div>
           <button
             className="limit down"
-            disabled={busy}
-            onClick={() => placeLimit('Down')}
+            disabled={busy || locked}
+            onClick={() => void placeLimit('Down')}
           >
             Down
           </button>
@@ -1233,7 +1392,7 @@ export function Manual() {
         <div className="buybar">
           <button
             className="buy up"
-            disabled={busy || !quickUp || quickUp.blocked}
+            disabled={busy || !quickUp || quickUp.blocked || locked}
             onClick={() => quickBuy('Up')}
           >
             <b>{quickUp ? cents(quickUp.ask) : '—'}</b>
@@ -1247,7 +1406,7 @@ export function Manual() {
           </button>
           <button
             className="buy down"
-            disabled={busy || !quickDown || quickDown.blocked}
+            disabled={busy || !quickDown || quickDown.blocked || locked}
             onClick={() => quickBuy('Down')}
           >
             <b>{quickDown ? cents(quickDown.ask) : '—'}</b>
@@ -1266,6 +1425,126 @@ export function Manual() {
 }
 
 /** Closed positions, newest first, stamped with the window they belonged to. */
+/**
+ * A working limit, opened to change.
+ *
+ * Price and size, large enough to hit with a thumb, because those are the only
+ * two things an order is. Saving pulls it and places it again — the venue has
+ * no other way: an order's terms are what it was signed with.
+ */
+function OrderEditor({
+  row,
+  tick,
+  busy,
+  onSave,
+  onCancelOrder,
+  onClose,
+}: {
+  row: TradeRow;
+  tick: number;
+  busy: boolean;
+  onSave: (price: number, shares: number) => void;
+  onCancelOrder: () => void;
+  onClose: () => void;
+}) {
+  const [price, setPrice] = useState(String(Math.round((row.buyPrice ?? 0) * 100)));
+  const [shares, setShares] = useState(String(row.shares));
+
+  const priceNum = Number(price.replace(',', '.')) / 100;
+  const sharesNum = Number(shares.replace(',', '.'));
+  const step = Math.max(1, Math.round(tick * 100));
+
+  return (
+    <div className="sheet-scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <h2>
+            <span className={row.outcome === 'Up' ? 'up' : 'down'}>{row.outcome}</span>{' '}
+            лимитка
+          </h2>
+          <button className="xbtn" onClick={onClose} aria-label="Закрыть">
+            ✕
+          </button>
+        </div>
+
+        <div className="bigfield">
+          <span>цена, ¢</span>
+          <div className="bigrow">
+            <button
+              className="step big"
+              onClick={() =>
+                setPrice(String(Math.max(1, Math.round(priceNum * 100) - step)))
+              }
+            >
+              −
+            </button>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+            />
+            <button
+              className="step big"
+              onClick={() =>
+                setPrice(String(Math.min(99, Math.round(priceNum * 100) + step)))
+              }
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <div className="bigfield">
+          <span>долей</span>
+          <div className="bigrow">
+            <button
+              className="step big"
+              onClick={() => setShares(String(Math.max(1, Math.round(sharesNum) - 5)))}
+            >
+              −
+            </button>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={shares}
+              onChange={(e) => setShares(e.target.value)}
+            />
+            <button
+              className="step big"
+              onClick={() => setShares(String(Math.round(sharesNum) + 5))}
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <div className="row">
+          <span className="label">Сумма</span>
+          <span className="value">{usd(sharesNum * priceNum || 0)}</span>
+        </div>
+        <div className="row">
+          <span className="label">Если сыграет</span>
+          <span className="value up">+{usd(limitUpside(sharesNum, priceNum) || 0)}</span>
+        </div>
+
+        <div className="draftrow" style={{ marginTop: 12 }}>
+          <button
+            className="primary compact"
+            disabled={busy}
+            onClick={() => onSave(priceNum, sharesNum)}
+          >
+            Изменить
+          </button>
+          <button className="danger compact" disabled={busy} onClick={onCancelOrder}>
+            Снять
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * How the last few five-minute events went.
  *
@@ -1734,6 +2013,30 @@ function RuleBar({
       */}
       <div className="rule">
         <button
+          className={`switch ${settings.limitLadder ? 'on' : ''}`}
+          onClick={() =>
+            onChange({ ...settings, limitLadder: !settings.limitLadder })
+          }
+        />
+        <span className="rule-name">Лесенка лимиток</span>
+        <span className="pcts">
+          {[2, 3, 4].map((n) => (
+            <button
+              key={n}
+              className={settings.limitLadderCount === n ? 'on' : undefined}
+              onClick={() => onChange({ ...settings, limitLadderCount: n })}
+            >
+              +{n}
+            </button>
+          ))}
+        </span>
+        <span className="rule-note muted">
+          шаг {Math.round(settings.limitLadderStep * 100)}¢
+        </span>
+      </div>
+
+      <div className="rule">
+        <button
           className={`switch ${settings.exposureGuard ? 'on' : ''}`}
           onClick={() =>
             onChange({ ...settings, exposureGuard: !settings.exposureGuard })
@@ -1898,10 +2201,6 @@ function ManualSettingsForm({
             })
           }
         />
-        <span className="muted" style={{ fontSize: 11 }}>
-          Работает, когда включён тумблер на панели. Заменяет лесенку размера:
-          сколько бы ни стоила сторона, клик тратит одну и ту же долю кошелька.
-        </span>
       </label>
 
       <label className="field">
@@ -1917,20 +2216,10 @@ function ManualSettingsForm({
             })
           }
         />
-        <span className="muted" style={{ fontSize: 11 }}>
-          Используется, когда лесенка выключена или цена не попала ни в один
-          диапазон.
-        </span>
       </label>
 
       <div className="toggle">
-        <div>
-          <div>Лесенка по цене</div>
-          <div className="muted" style={{ fontSize: 11 }}>
-            Пять долей по 10¢ и по 90¢ — это 50¢ и 4,50 $ риска. Разное
-            количество по диапазонам держит вложенное примерно ровным.
-          </div>
-        </div>
+        <span>Лесенка по цене</span>
         <button
           className={`switch ${settings.useSizeLadder ? 'on' : ''}`}
           onClick={() =>
@@ -1973,15 +2262,7 @@ function ManualSettingsForm({
     <div className="card">
       <h2>Защита депозита</h2>
       <div className="toggle">
-        <span>
-          Не пускать в рынок больше доли депозита
-          <span className="muted" style={{ display: 'block', fontSize: 11 }}>
-            Депозит — свободные деньги плюс то, что уже в рынке: наличные и
-            позиции — это одни и те же деньги в разной форме. Считать от одного
-            баланса нельзя, он падает с каждой покупкой, и такой предел сползает
-            вниз и никогда не срабатывает.
-          </span>
-        </span>
+        <span>Не больше доли депозита в рынке</span>
         <button
           className={`switch ${settings.exposureGuard ? 'on' : ''}`}
           onClick={() =>
@@ -2005,12 +2286,6 @@ function ManualSettingsForm({
             })
           }
         />
-        <span className="muted" style={{ fontSize: 11 }}>
-          В счёт идут открытые позиции по цене покупки и висящие заявки на
-          покупку по их стоимости: незаполненная лимитка — это уже обещанные
-          деньги. Клик по кнопке покупает столько, сколько влезает в остаток, и
-          пишет об этом; если не влезает даже минимальная заявка — кнопка гаснет.
-        </span>
       </label>
     </div>
 
@@ -2039,11 +2314,6 @@ function ManualSettingsForm({
 
       {settings.autoSellPercentMode ? (
         <>
-          <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
-            Продажа выставляется от цены покупки: столько сверху, сколько указано
-            — уже за вычетом комиссии, которая снимается с выручки. Несколько
-            покупок продаются по частям, каждая следующая дороже предыдущей.
-          </div>
 
           <label className="field">
             <span>Продавать при плюсе, %</span>
@@ -2057,11 +2327,6 @@ function ManualSettingsForm({
                 })
               }
             />
-            <span className="muted" style={{ fontSize: 11 }}>
-              Считается по тому, что сделка реально заплатит. Заявка на «avg ×
-              1,2» приносит меньше двадцати процентов — комиссия берётся с
-              выручки, а на дешёвой стороне она заметная.
-            </span>
           </label>
 
           <label className="field">
@@ -2076,10 +2341,6 @@ function ManualSettingsForm({
                 })
               }
             />
-            <span className="muted" style={{ fontSize: 11 }}>
-              Если первая часть исполнилась — рынок идёт вверх, и остальное имеет
-              смысл отдавать дороже, а не по той же цене.
-            </span>
           </label>
 
           <label className="field">
@@ -2095,13 +2356,6 @@ function ManualSettingsForm({
                 })
               }
             />
-            <span className="muted" style={{ fontSize: 11 }}>
-              В последнюю минуту пятиминутка почти решена, и выигравшая сторона
-              идёт к доллару. Поэтому не «любой плюс после комиссии» — заявка
-              встаёт на 90¢ и забирается сразу, как только стакан её касается.
-              Два цента прибыли там продают позицию, которая вот-вот стоила бы
-              девяносто с лишним.
-            </span>
           </label>
 
           <label className="field">
@@ -2116,15 +2370,6 @@ function ManualSettingsForm({
                 })
               }
             />
-            <span className="muted" style={{ fontSize: 11 }}>
-              Полоса перед последней минутой:{' '}
-              {settings.autoSellLateBandSec} секунд, которые заканчиваются там,
-              где начинается последняя минута. К четвёртой минуте окно обычно
-              уже выбрало сторону, и дёшево купленный лот стоит больше, чем
-              просит его маржа, — поэтому заявка перестаёт уходить по полтиннику
-              и ждёт здесь. Порог только поднимает цену: лот, который и так
-              просит дороже, остаётся при своём.
-            </span>
           </label>
 
           <label className="field">
@@ -2153,21 +2398,10 @@ function ManualSettingsForm({
                 })
               }
             />
-            <span className="muted" style={{ fontSize: 11 }}>
-              В последнюю минуту, если нужный процент так и не набрался, позиция
-              уходит по тому, что даёт стакан, — но только пока это плюс после
-              комиссии. Убыток не фиксируется: пятиминутка досиживается до
-              расчёта.
-            </span>
           </label>
         </>
       ) : (
         <>
-      <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
-        Цена продажи по минуте окна: ступень встаёт на {settings.autoSellLeadSec}{' '}
-        секунд раньше самой минуты. Лесенка перепрыгивает вперёд, если рынок уже
-        прошёл ступень, и никогда не спускается обратно.
-      </div>
       <label className="field">
         <span>Переключать ступень за, сек до минуты</span>
         <input
@@ -2180,12 +2414,6 @@ function ManualSettingsForm({
             })
           }
         />
-        <span className="muted" style={{ fontSize: 11 }}>
-          Ступень, меняющаяся ровно на минуте, выставляет заявку в стакан ровно
-          тогда, когда он переворачивается. Пятнадцать секунд форы ставят
-          предложение раньше. Шаг между ступенями остаётся минутным — сдвигается
-          вся последовательность.
-        </span>
       </label>
 
       <div className="rungs">
@@ -2216,12 +2444,6 @@ function ManualSettingsForm({
             })
           }
         />
-        <span className="muted" style={{ fontSize: 11 }}>
-          Правило просыпается только после покупки и живёт эту минуту. Продажа,
-          которую отклоняют минуту, отклоняется по причине, которую следующая
-          попытка не изменит, — а бесконечные попытки упирались в лимит
-          запросов data-api и убивали правило целиком.
-        </span>
       </label>
 
       <label className="field">
@@ -2236,10 +2458,6 @@ function ManualSettingsForm({
             })
           }
         />
-        <span className="muted" style={{ fontSize: 11 }}>
-          Доли не продаются сразу после покупки, поэтому правило повторяет
-          попытку, пока биржа не примет ордер.
-        </span>
       </label>
 
       <label className="field">
@@ -2254,11 +2472,6 @@ function ManualSettingsForm({
             })
           }
         />
-        <span className="muted" style={{ fontSize: 11 }}>
-          Докуп идёт клипами того же размера, каким набиралась позиция: три по
-          пять выкупаются по пять. Взять всё по первой подходящей цене — значит
-          отдать остаток просадки.
-        </span>
       </label>
 
       <label className="field">
@@ -2273,11 +2486,6 @@ function ManualSettingsForm({
             })
           }
         />
-        <span className="muted" style={{ fontSize: 11 }}>
-          Считаются только продажи, выставленные самим правилом: позиция
-          уменьшается и когда вы продаёте руками, а выкупать это обратно —
-          противоположное тому, что вы имели в виду.
-        </span>
       </label>
     </div>
     </>

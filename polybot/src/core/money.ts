@@ -93,3 +93,57 @@ export const signedPct = (fraction: number): string =>
 
 /** The gains the sell form offers, as fractions. */
 export const SELL_GAINS = [0.25, 0.5, 1, 2, 3];
+
+/** A position as the desk knows it, for the arithmetic below. */
+export type Held = { outcome: string; size: number; avgPrice: number };
+
+/**
+ * What the round makes if it goes your way.
+ *
+ * A share of the winning side settles at a dollar and pays no fee to do it, so
+ * the best case is that side's share count less everything the window cost.
+ * Holding both sides only one of them can win, so the sides are scored
+ * separately and the better one is the potential.
+ */
+export function potentialProfit(positions: Held[]): number {
+  const live = positions.filter((p) => p.size > 0);
+  if (live.length === 0) return 0;
+
+  const cost = live.reduce(
+    (sum, p) => sum + p.size * p.avgPrice + feePerShare(p.avgPrice) * p.size,
+    0,
+  );
+
+  const bySide = new Map<string, number>();
+  for (const p of live) {
+    bySide.set(p.outcome, (bySide.get(p.outcome) ?? 0) + p.size);
+  }
+  return Math.max(...[...bySide.values()].map((shares) => shares - cost));
+}
+
+/** What one limit adds to that best case if it fills. */
+export function limitUpside(shares: number, price: number): number {
+  if (!Number.isFinite(shares) || !Number.isFinite(price)) return 0;
+  return shares * (1 - price) - feePerShare(price) * shares;
+}
+
+/**
+ * The rungs a laddered limit places: the price asked for, then steps below it.
+ *
+ * Under a cent there is nothing left to step down to, so the ladder simply
+ * ends — a rung at or below zero is not a price.
+ */
+export function limitLadder(
+  price: number,
+  count: number,
+  step: number,
+  tick = 0.01,
+): number[] {
+  const rungs = [price];
+  for (let i = 1; i <= Math.max(0, count); i += 1) {
+    const next = Number((price - step * i).toFixed(4));
+    if (next < tick) break;
+    rungs.push(next);
+  }
+  return rungs;
+}

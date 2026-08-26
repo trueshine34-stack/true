@@ -3,6 +3,9 @@ import {
   breakEvenPrice,
   ceilToTick,
   feePerShare,
+  limitLadder,
+  limitUpside,
+  potentialProfit,
   netSellPrice,
   positionPnl,
   signedPct,
@@ -96,5 +99,48 @@ describe('formatting', () => {
     expect(signedUsd(1.5)).toBe('+1.50 $');
     expect(signedUsd(-1.5)).toBe('−1.50 $');
     expect(signedPct(0.2)).toBe('+20%');
+  });
+});
+
+describe('potentialProfit', () => {
+  it('is the winning side less what the window cost', () => {
+    // 10 shares of Up at 40c: 10 back if Up wins, about 4.17 paid.
+    const p = potentialProfit([{ outcome: 'Up', size: 10, avgPrice: 0.4 }]);
+    expect(p).toBeGreaterThan(5.8);
+    expect(p).toBeLessThan(6);
+  });
+
+  it('scores the sides separately, since only one can win', () => {
+    const p = potentialProfit([
+      { outcome: 'Up', size: 10, avgPrice: 0.4 },
+      { outcome: 'Down', size: 4, avgPrice: 0.5 },
+    ]);
+    // Up winning pays 10; both sides together cost about 6.3.
+    expect(p).toBeCloseTo(10 - (4 + 0.0168 * 10 + 2 + 0.0175 * 4), 6);
+  });
+
+  it('has nothing to say with nothing held', () => {
+    expect(potentialProfit([])).toBe(0);
+    expect(potentialProfit([{ outcome: 'Up', size: 0, avgPrice: 0.4 }])).toBe(0);
+  });
+});
+
+describe('limitUpside', () => {
+  it('is what the shares gain on the way to a dollar', () => {
+    expect(limitUpside(10, 0.6)).toBeCloseTo(10 * 0.4 - 0.0168 * 10, 6);
+  });
+});
+
+describe('limitLadder', () => {
+  it('steps down from the price asked for', () => {
+    expect(limitLadder(0.6, 3, 0.03)).toEqual([0.6, 0.57, 0.54, 0.51]);
+  });
+
+  it('stops where prices stop', () => {
+    expect(limitLadder(0.05, 3, 0.03)).toEqual([0.05, 0.02]);
+  });
+
+  it('is just the one price when the ladder is off', () => {
+    expect(limitLadder(0.6, 0, 0.03)).toEqual([0.6]);
   });
 });

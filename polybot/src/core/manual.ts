@@ -50,6 +50,11 @@ export type ManualSettings = {
   useBalanceShare: boolean;
   /** Share of the balance one click spends, as a fraction. */
   balanceSharePct: number;
+  /** A hand-placed limit also goes out at lower prices, same size. */
+  limitLadder: boolean;
+  /** How many extra rungs, and how far apart. */
+  limitLadderCount: number;
+  limitLadderStep: number;
   /** Refuse to have more than a set share of the deposit at risk at once. */
   exposureGuard: boolean;
   /** That share, as a fraction of the deposit. */
@@ -82,6 +87,9 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoRebuySlicePauseSec: 3,
   useBalanceShare: false,
   balanceSharePct: 0.25,
+  limitLadder: false,
+  limitLadderCount: 3,
+  limitLadderStep: 0.03,
   exposureGuard: true,
   exposureCapPct: 0.5,
 };

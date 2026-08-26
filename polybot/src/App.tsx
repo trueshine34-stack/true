@@ -28,7 +28,20 @@ import {
   startRun,
   type GoalState,
 } from './core/goal';
-import { usd } from './core/money';
+import { signedUsd, usd } from './core/money';
+import {
+  DAY_MULTIPLE,
+  dayReached,
+  dayTarget,
+  isLocked,
+  loadDayGoal,
+  markHit,
+  needsBaseline,
+  saveDayGoal,
+  startDay,
+  untilMidnightText,
+  type DayGoal,
+} from './core/day';
 
 type Phase = 'loading' | 'setup' | 'ready';
 type Tab = 'manual' | 'settings';
@@ -43,6 +56,11 @@ export function App() {
   const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
   const [goal, setGoal] = useState<GoalState | null>(null);
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  /** What the open round makes if it goes our way, reported by the desk. */
+  const [potential, setPotential] = useState(0);
+  const [day, setDay] = useState<DayGoal | null>(null);
+  const [dayAsked, setDayAsked] = useState(false);
+  const [dayInput, setDayInput] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -127,7 +145,21 @@ export function App() {
     void loadBalanceHistory().then(setBalanceHistory);
     void loadAdjustments().then(setAdjustments);
     void loadGoal().then(setGoal);
+    void loadDayGoal().then((d) => {
+      setDay(d);
+      setDayAsked(true);
+    });
   }, []);
+
+  // Ten times the day's opening balance ends the day: the stop goes on and
+  // stays on until the clock rolls past midnight.
+  useEffect(() => {
+    if (!day || balance == null) return;
+    if (day.hitAt != null || !dayReached(day, balance)) return;
+    const hit = markHit(day);
+    setDay(hit);
+    void saveDayGoal(hit);
+  }, [day, balance]);
 
   // The run starts at the first balance the app ever sees. Doing it here rather
   // than at connect time means a reinstall picks up where the money is, not at
@@ -167,6 +199,19 @@ export function App() {
     },
     [goal, balance],
   );
+
+  const askDay = dayAsked && needsBaseline(day) && balance != null;
+  const locked = isLocked(day);
+
+  const setDayBaseline = useCallback((amount: number) => {
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    const next = startDay(amount);
+    setDay(next);
+    void saveDayGoal(next);
+  }, []);
+
+  /** A quarter of the wallet per five-minute round. */
+  const roundGoal = balance != null ? balance * 0.25 : 0;
 
   const remind = balance != null && shouldRemind(goal, balance);
   const progress = goal && balance != null ? goalProgress(goal, balance) : null;
@@ -217,15 +262,69 @@ export function App() {
           onClose={() => setShowBalance(false)}
         />
       )}
+      {askDay && (
+        <div className="sheet-scrim">
+          <div className="sheet">
+            <div className="sheet-head">
+              <h2>Цель дня ×{DAY_MULTIPLE}</h2>
+            </div>
+            <div className="bigfield">
+              <span>считаем от, $</span>
+              <div className="bigrow">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  autoFocus
+                  placeholder={balance?.toFixed(2) ?? ''}
+                  value={dayInput}
+                  onChange={(e) => setDayInput(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="row">
+              <span className="label">Цель</span>
+              <span className="value">
+                {usd(
+                  (Number(dayInput.replace(',', '.')) || balance || 0) * DAY_MULTIPLE,
+                )}
+              </span>
+            </div>
+            <button
+              className="primary"
+              style={{ marginTop: 12 }}
+              onClick={() =>
+                setDayBaseline(Number(dayInput.replace(',', '.')) || balance || 0)
+              }
+            >
+              Начать день
+            </button>
+          </div>
+        </div>
+      )}
+
+      {locked && day && (
+        <div className="banner lockbanner">
+          <b>Цель дня ×{DAY_MULTIPLE} взята.</b> {usd(dayTarget(day))} от{' '}
+          {usd(day.baseline)}. Покупки заблокированы ещё {untilMidnightText()} —
+          до полуночи. Продажи и правило выхода работают.
+        </div>
+      )}
+
       <div className="topbar">
-        <h1>PolyBot · BTC 5м</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          {/* The number says how much; tapping it says which way it has been
-              going, which is the question the number provokes. */}
-          <button className="pill balance" onClick={() => setShowBalance(true)}>
-            {balance === null ? '— $' : `${balance.toFixed(2)} $`}
-          </button>
-          {account && <span className="pill mono">{short(account.signerAddress)}</span>}
+        <button className="headnum" onClick={() => setShowBalance(true)}>
+          <b>{balance === null ? '—' : balance.toFixed(2)}</b>
+          <s>баланс</s>
+        </button>
+        <div className="headnum">
+          <b className="muted">{roundGoal > 0 ? roundGoal.toFixed(2) : '—'}</b>
+          <s>цель 25%</s>
+        </div>
+        {/* Green once the round could make the goal, amber while it could not. */}
+        <div className="headnum">
+          <b className={potential >= roundGoal && roundGoal > 0 ? 'up' : 'warn'}>
+            {potential > 0 ? signedUsd(potential).replace(' $', '') : '—'}
+          </b>
+          <s>если сыграет</s>
         </div>
       </div>
 
@@ -255,7 +354,7 @@ export function App() {
       )}
 
       <div className="scroll">
-        {tab === 'manual' && <Manual />}
+        {tab === 'manual' && <Manual onSummary={setPotential} locked={locked} />}
         {tab === 'settings' && (
           <SettingsScreen
             settings={settings}
@@ -284,6 +383,4 @@ export function App() {
   );
 }
 
-function short(address: string): string {
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
-}
+

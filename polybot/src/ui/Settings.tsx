@@ -173,10 +173,6 @@ export function SettingsScreen({
             />
           </label>
         </div>
-        <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
-          Если преимущества не было или ордер не прошёл — бот попробует ещё раз.
-          Стопы по риску не повторяются: это решение, а не помеха.
-        </p>
 
         {settings.mode === 'edge' && (
           <label className="field">
@@ -218,12 +214,7 @@ export function SettingsScreen({
         </div>
 
         <div className="toggle">
-          <div>
-            <div>Поднимать ставку до минимума биржи</div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Минимум — 5 долей, поэтому 2 $ проходят только при цене до 40¢.
-            </div>
-          </div>
+          <span>Поднимать ставку до минимума биржи</span>
           <Switch
             on={settings.autoBumpToMinimum}
             onToggle={() => set('autoBumpToMinimum', !settings.autoBumpToMinimum)}
@@ -231,12 +222,7 @@ export function SettingsScreen({
         </div>
 
         <div className="toggle">
-          <div>
-            <div>Тестовый режим</div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Считать и подписывать ордера, но не отправлять их.
-            </div>
-          </div>
+          <span>Тестовый режим</span>
           <Switch on={settings.dryRun} onToggle={() => set('dryRun', !settings.dryRun)} />
         </div>
       </div>
@@ -245,13 +231,7 @@ export function SettingsScreen({
         <h2>Выход из позиции</h2>
 
         <div className="toggle" style={{ borderTop: 'none', paddingTop: 0 }}>
-          <div>
-            <div>Ставить продажу сразу после входа</div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Лимитка на всю позицию: сначала по первой цене, за N секунд до
-              конца окна переставляется на вторую.
-            </div>
-          </div>
+          <span>Ставить продажу сразу после входа</span>
           <Switch
             on={settings.exitEnabled}
             onToggle={() => set('exitEnabled', !settings.exitEnabled)}
@@ -274,9 +254,6 @@ export function SettingsScreen({
                 }
               />
             </label>
-            <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
-              Сразу после покупки доли ещё нельзя продать — биржа отклонит ордер.
-            </p>
 
             <div className="muted" style={{ fontSize: 12, margin: '12px 0 6px' }}>
               Лесенка: с какой секунды окна какая цена продажи.
@@ -362,12 +339,6 @@ export function SettingsScreen({
             >
               Добавить ступень
             </button>
-
-            <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
-              Если к моменту перехода на следующую ступень неисполненный остаток
-              меньше минимума биржи, ордер остаётся на прежней цене — снимать
-              его было бы хуже, чем оставить шанс на исполнение.
-            </p>
           </>
         )}
       </div>
@@ -376,13 +347,7 @@ export function SettingsScreen({
         <h2>Реакции на цену</h2>
 
         <div className="toggle" style={{ borderTop: 'none', paddingTop: 0 }}>
-          <div>
-            <div>Тейк-профит при +100%</div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Когда бид доходит до двойной средней цены — снять лимитку, продать
-              половину по рынку, остаток вернуть в лесенку.
-            </div>
-          </div>
+          <span>Тейк-профит при +100%</span>
           <Switch
             on={settings.takeProfitEnabled}
             onToggle={() => set('takeProfitEnabled', !settings.takeProfitEnabled)}
@@ -427,13 +392,7 @@ export function SettingsScreen({
         )}
 
         <div className="toggle">
-          <div>
-            <div>Докупка при −50%</div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              Когда аск падает вдвое от средней цены — купить ещё на ту же сумму,
-              что и первый вход.
-            </div>
-          </div>
+          <span>Докупка при −50%</span>
           <Switch
             on={settings.averageDownEnabled}
             onToggle={() => set('averageDownEnabled', !settings.averageDownEnabled)}
@@ -490,10 +449,6 @@ export function SettingsScreen({
                 }
               />
             </label>
-            <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-              Ближе к концу окна упавшая вдвое цена обычно значит, что исход уже
-              почти решён, а не что сторона подешевела.
-            </p>
           </>
         )}
       </div>
