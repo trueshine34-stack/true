@@ -21,6 +21,14 @@ export type ManualSettings = {
   autoSellEnabled: boolean;
   /** Sell price by minute of the window, cheapest rung first. */
   autoSellLadder: number[];
+  /**
+   * How long before a refused sell is tried again.
+   *
+   * Three seconds, and not a setting any more. The venue either has the shares
+   * ready or it has not; the only useful answer to "not yet" is to ask again
+   * shortly, and a number the user has to guess at was a number that could be
+   * set wrong.
+   */
   autoSellRetrySec: number;
   /** How long to keep trying on one purchase before giving up. */
   autoSellWatchSec: number;
@@ -77,7 +85,7 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   ],
   autoSellEnabled: false,
   autoSellLadder: [0.77, 0.84, 0.89, 0.93, 0.97],
-  autoSellRetrySec: 7,
+  autoSellRetrySec: 3,
   autoSellWatchSec: 60,
   autoSellLeadSec: 15,
   autoSellPercentMode: false,

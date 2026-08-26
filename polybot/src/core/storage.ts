@@ -45,9 +45,17 @@ export async function loadManualSettings(): Promise<ManualSettings> {
   const { value } = await Preferences.get({ key: KEY_MANUAL });
   if (!value) return { ...DEFAULT_MANUAL_SETTINGS };
   try {
+    const stored = JSON.parse(value) as ManualSettings;
     return {
       ...DEFAULT_MANUAL_SETTINGS,
-      ...(JSON.parse(value) as ManualSettings),
+      ...stored,
+      // The retry used to be a field the user set, and seven was its default.
+      // It is a fixed three seconds now, so a stored seven is read as "never
+      // chosen" — otherwise the change would never reach anyone already running.
+      autoSellRetrySec:
+        stored.autoSellRetrySec === 7
+          ? DEFAULT_MANUAL_SETTINGS.autoSellRetrySec
+          : (stored.autoSellRetrySec ?? DEFAULT_MANUAL_SETTINGS.autoSellRetrySec),
     };
   } catch {
     return { ...DEFAULT_MANUAL_SETTINGS };

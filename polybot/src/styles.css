@@ -49,22 +49,6 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.topbar h1 {
-  font-size: 16px;
-  margin: 0;
-  font-weight: 600;
-}
-
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -957,6 +941,9 @@ button.compact.narrow {
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 10px;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
 }
 
 /* Wide enough to hit without looking at it. */
@@ -1065,6 +1052,13 @@ button.compact.narrow {
 
 .listhead.second {
   margin-top: 10px;
+}
+
+/* A heading row with no heading: just the action that lives on it. */
+.listhead.bare {
+  justify-content: flex-end;
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .listhead .muted {
@@ -1687,6 +1681,10 @@ button.pill.balance {
   margin-bottom: 6px;
 }
 
+.limitpcts button {
+  flex: 1;
+}
+
 .limitpct-hint {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -1762,44 +1760,6 @@ button.pill.balance {
   margin-right: 10px;
 }
 
-/*
- * Header: three numbers, no name. What there is, what a round should make,
- * what the open round would make if it went our way.
- */
-.topbar {
-  gap: 4px;
-}
-
-.headnum {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  flex: 1;
-  min-width: 0;
-  background: none;
-  border: none;
-  padding: 0;
-  font-family: inherit;
-  text-align: left;
-  color: var(--text);
-}
-
-.headnum b {
-  font-size: 19px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-}
-
-.headnum s {
-  text-decoration: none;
-  font-size: 10px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
 /* A working order is a price and a size, in the size you can read at a glance. */
 .ordermain {
   display: block;
@@ -1827,9 +1787,9 @@ button.pill.balance {
 /* What the limit row would make on the way to a dollar. */
 .limitmeta {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+  justify-content: flex-end;
   font-size: 11px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   padding: 0 2px 4px;
 }
@@ -2297,13 +2257,16 @@ button.step.big {
 }
 
 .pairsize {
-  font-size: 19px;
+  font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
+/* The average, sized to be read at the same glance as the count. */
 .pairavg {
-  font-size: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 .pairmid {
@@ -2316,7 +2279,7 @@ button.step.big {
 }
 
 .pairmid > b {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -2540,8 +2503,36 @@ button.step.big {
 .rail {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+}
+
+/*
+ * The balance leads the rail. It is the only number on the screen that is not
+ * about this five minutes, which is exactly why it belongs at the start of the
+ * row rather than in a header of its own.
+ */
+.railbal {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  margin-right: auto;
+  padding: 6px 2px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.railbal b {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.railbal span {
+  font-size: 13px;
 }
 
 .railchip {
@@ -2583,4 +2574,63 @@ button.step.big {
 
 .raildot.live {
   background: var(--up);
+}
+
+/* --------------------------------------------------- moving a resting order */
+
+.pricepick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 0 10px;
+}
+
+.pricepick-now {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pricepick-now b {
+  font-size: 46px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.pricepick-now span {
+  font-size: 20px;
+}
+
+/*
+ * The wheel stood on end. This sheet has the height to spare, and a thumb runs
+ * up and down it more naturally than across.
+ */
+.wheel.vertical {
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-snap-type: y mandatory;
+  height: 168px;
+  padding: 0 4px;
+  margin-bottom: 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.wheel.vertical .wheelpad {
+  flex: 0 0 62px;
+}
+
+.wheel.vertical .wheelnum {
+  width: 100%;
+  min-width: 0;
+  font-size: 17px;
+}
+
+button.wide {
+  width: 100%;
 }

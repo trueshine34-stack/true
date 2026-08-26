@@ -74,6 +74,8 @@ class LadderBot(
         val spent: Double = 0.0,
         val got: Double = 0.0,
         val settled: Double = 0.0,
+        /** Winning rounds in a row, which is what earns the container a rise. */
+        val winStreak: Int = 0,
     ) {
         val pnl: Double get() = got + settled - spent
     }
@@ -97,6 +99,9 @@ class LadderBot(
     @Volatile
     var round: Round? = null
         private set
+
+    private var lastWinnerFor: Long = 0L
+    private var lastWinnerCache: String = ""
 
     val cash: Double
         get() = settings.bankUsd + totals.got + totals.settled - totals.spent -
@@ -270,6 +275,7 @@ class LadderBot(
             rung = rung,
             elapsedSec = elapsed,
             cashUsd = cash,
+            lastWinner = lastWinner(windowStart),
             settings = settings,
         )
         // The slot is used up either way: a check that found nothing is a check
@@ -455,19 +461,69 @@ class LadderBot(
             .sumOf { it.open }
         val pnl = current.got + settlement - current.spent
 
+        // A window it sat out is not a result, and must not move the staking.
+        val traded = current.lots.isNotEmpty()
+        val streak = when {
+            !traded -> totals.winStreak
+            pnl > 0 -> totals.winStreak + 1
+            pnl < 0 -> 0
+            else -> totals.winStreak
+        }
+
         totals = totals.copy(
             rounds = totals.rounds + 1,
             settled = totals.settled + settlement,
+            winStreak = streak,
         )
         store.saveTotals(totals)
 
-        if (current.lots.isNotEmpty()) {
+        if (traded) {
+            val wasShares = settings.shares
+            val wasBank = settings.bankUsd
+            val nextShares = LadderPlan.stakeAfter(
+                shares = wasShares,
+                pnl = pnl,
+                base = LadderPlan.DEFAULT_SHARES,
+            )
+            val nextBank = LadderPlan.bankAfter(wasBank, streak)
+            if (nextShares != wasShares || nextBank != wasBank) {
+                settings = settings.copy(shares = nextShares, bankUsd = nextBank)
+                store.saveSettings(settings)
+                engine.log(
+                    "info",
+                    "Лесенка: клип " + String.format("%.0f", nextShares) + " долей" +
+                        if (nextBank != wasBank) {
+                            ", контейнер $" + String.format("%.2f", nextBank) +
+                                " — ${streak} побед подряд"
+                        } else {
+                            ""
+                        },
+                )
+            }
+
             engine.log(
                 if (pnl >= 0) "trade" else "warn",
                 "Лесенка закрыла окно: " + (if (pnl >= 0) "+" else "−") +
                     "$" + String.format("%.2f", abs(pnl)),
             )
         }
+    }
+
+    /**
+     * Which side the previous window closed on.
+     *
+     * Cached: it cannot change once the window is settled, and it is asked for
+     * on every check.
+     */
+    private fun lastWinner(windowStart: Long): String {
+        val previous = windowStart - WINDOW_SECONDS
+        if (lastWinnerFor == previous) return lastWinnerCache
+        val winner = EventStats.winnerFor(previous, Clock.nowSec())
+        if (winner.isNotEmpty()) {
+            lastWinnerFor = previous
+            lastWinnerCache = winner
+        }
+        return winner
     }
 
     /** A sell must never round down onto a worse price than the rung asks. */

@@ -49,6 +49,18 @@ object LadderPlan {
      */
     const val DEFAULT_PAUSE_SEC = 4L
 
+    /** Not paid above this inside the opening stretch. */
+    const val DEFAULT_EARLY_MAX_PRICE = 0.73
+    const val DEFAULT_EARLY_SEC = 180L
+
+    /** How the clip moves with the result of the last round. */
+    const val WIN_STEP = 1.0
+    const val LOSS_STEP = 2.0
+
+    /** A run this long earns the container a rise. */
+    const val WINS_FOR_BANK = 5
+    const val BANK_GROWTH = 0.20
+
     private const val FEE_RATE = 0.07
 
     data class Settings(
@@ -61,6 +73,9 @@ object LadderPlan {
         val untilSec: Long = DEFAULT_UNTIL_SEC,
         /** The shortest gap between two clips, once one has gone through. */
         val pauseSec: Long = DEFAULT_PAUSE_SEC,
+        /** The most it pays inside the opening stretch, and how long that is. */
+        val earlyMaxPrice: Double = DEFAULT_EARLY_MAX_PRICE,
+        val earlySec: Long = DEFAULT_EARLY_SEC,
     )
 
     /**
@@ -115,13 +130,26 @@ object LadderPlan {
         rung: Double,
         elapsedSec: Long,
         cashUsd: Double,
+        /** The side the previous window closed on, or empty if not known yet. */
+        lastWinner: String,
         settings: Settings,
     ): String? = when {
         !settings.enabled -> "выключен"
         elapsedSec < settings.firstAtSec -> "ждёт ${settings.firstAtSec} с"
         elapsedSec > settings.untilSec -> "поздно входить"
         side == null -> "стороны вровень"
+        // Five-minute windows run in streaks more often than they alternate,
+        // and the side that just won is the side with the momentum behind it.
+        // Without a previous close there is nothing to follow, so it sits out.
+        lastWinner.isEmpty() -> "нет прошлого окна"
+        side != lastWinner -> "прошлое окно закрылось в $lastWinner"
         ask == null || ask <= 0.0 -> "нет цены"
+        // Early on the favourite is dear for no reason yet: three minutes is
+        // long enough for the market to change its mind, and paying seventy-
+        // odd cents for that is paying for a lead that has not been earned.
+        elapsedSec < settings.earlySec && ask > settings.earlyMaxPrice + 1e-9 ->
+            "первые ${settings.earlySec / 60} мин не дороже " +
+                "${(settings.earlyMaxPrice * 100).toInt()}¢"
         ask >= rung -> "дороже ступени ${(rung * 100).toInt()}¢"
         cashUsd < ask * settings.shares - 1e-9 -> "нет денег в контейнере"
         // The rung is above the ask but not by enough to pay the fee, which
@@ -132,6 +160,36 @@ object LadderPlan {
 
     /** What a clip is worth at this price. */
     fun clipCost(ask: Double, settings: Settings): Double = ask * settings.shares
+
+    /**
+     * The clip for the next round, after this one's result.
+     *
+     * Up one share on a win, down two on a loss. Compounding while it is right
+     * and cutting twice as fast when it is not is the whole staking plan: a run
+     * of wins grows the size it is winning with, and one loss gives back two
+     * rounds of that growth. It never goes below the size it started at —
+     * under five shares the venue stops taking the order anyway.
+     */
+    fun stakeAfter(shares: Double, pnl: Double, base: Double): Double = when {
+        pnl > 0 -> shares + WIN_STEP
+        pnl < 0 -> maxOf(base, shares - LOSS_STEP)
+        else -> shares
+    }
+
+    /**
+     * The container after this round.
+     *
+     * Five wins in a row is a rule that is working, and a rule that is working
+     * deserves more of the wallet — but only in steps it has earned, so the
+     * rise comes on the fifth, the tenth, the fifteenth, and a single loss
+     * puts the count back to nothing.
+     */
+    fun bankAfter(bankUsd: Double, winStreak: Int): Double =
+        if (winStreak > 0 && winStreak % WINS_FOR_BANK == 0) {
+            bankUsd * (1.0 + BANK_GROWTH)
+        } else {
+            bankUsd
+        }
 
     /** Crossing the offer: the check is a moment, not a resting order. */
     fun crossPrice(ask: Double, tick: Double): Double =

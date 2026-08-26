@@ -27,7 +27,7 @@ import {
   startRun,
   type GoalState,
 } from './core/goal';
-import { signedUsd, usd } from './core/money';
+import { usd } from './core/money';
 import {
   loadContainer,
   saveContainer,
@@ -75,7 +75,6 @@ export function App() {
   const [goal, setGoal] = useState<GoalState | null>(null);
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   /** What the open round makes if it goes our way, reported by the desk. */
-  const [potential, setPotential] = useState(0);
   /** The startup connect did not answer in time; the desk opened anyway. */
   const [slowStart, setSlowStart] = useState(false);
   const [day, setDay] = useState<DayGoal | null>(null);
@@ -253,7 +252,6 @@ export function App() {
   }, []);
 
   /** A quarter of the wallet per five-minute round. */
-  const roundGoal = balance != null ? balance * 0.25 : 0;
 
   const remind = balance != null && shouldRemind(goal, balance);
   const progress = goal && balance != null ? goalProgress(goal, balance) : null;
@@ -352,28 +350,6 @@ export function App() {
         </div>
       )}
 
-      <div className="topbar">
-        <button className="headnum" onClick={() => setShowBalance(true)}>
-          <b>{balance === null ? '—' : balance.toFixed(2)}</b>
-          <s>баланс</s>
-        </button>
-        <button className="headnum" onClick={() => setShowBalance(true)}>
-          <b className="muted">{split.locked > 0 ? split.locked.toFixed(2) : '—'}</b>
-          <s>в контейнере</s>
-        </button>
-        <div className="headnum">
-          <b className="muted">{roundGoal > 0 ? roundGoal.toFixed(2) : '—'}</b>
-          <s>цель 25%</s>
-        </div>
-        {/* Green once the round could make the goal, amber while it could not. */}
-        <div className="headnum">
-          <b className={potential >= roundGoal && roundGoal > 0 ? 'up' : 'warn'}>
-            {potential > 0 ? signedUsd(potential).replace(' $', '') : '—'}
-          </b>
-          <s>если сыграет</s>
-        </div>
-      </div>
-
       {/*
         The one moment a run is most worth protecting is the one it is least
         likely to be protected in, so the app says it out loud — with the figure
@@ -407,8 +383,8 @@ export function App() {
       */}
       <div className="scroll">
         <Manual
-          onSummary={setPotential}
           onCommitted={setCommitted}
+          onOpenBalance={() => setShowBalance(true)}
           containerLocked={split.locked}
           container={container ?? { corePct: 0.3, reserves: [] }}
           containerSplit={split}

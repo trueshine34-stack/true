@@ -21,9 +21,7 @@ import {
   limitLadder,
   limitUpside,
   potentialProfit,
-  signedPct,
   signedUsd,
-  standingOf,
   targetPrice,
   usd,
 } from '../core/money';
@@ -41,15 +39,11 @@ import {
   type LoggedOrder,
   type NativeMarket,
   type LadderState,
-  type Timings,
   type NativePosition,
   type OpenOrder,
 } from '../native/polybot';
 
 const cents = (p: number) => `${Math.round(p * 100)}¢`;
-
-/** How many rounds the window's list shows before it says how many are left. */
-const TRADE_ROWS = 12;
 
 /** A window's opening time, which is how an event is named on this screen. */
 const clockOf = (windowStart: number) =>
@@ -114,6 +108,7 @@ export function Manual({
   onSummary,
   onCommitted,
   containerLocked = 0,
+  onOpenBalance,
   container,
   containerSplit,
   onContainer,
@@ -126,6 +121,8 @@ export function Manual({
   onCommitted?: (usd: number) => void;
   /** What the container holds back, in dollars. */
   containerLocked?: number;
+  /** Opens the balance sheet; the balance lives on the desk's own rail now. */
+  onOpenBalance?: () => void;
   /** The container itself, so its own settings live with its switch. */
   container?: Container;
   containerSplit?: ContainerSplit;
@@ -290,6 +287,19 @@ export function Manual({
 
   /** The window's orders, paired into trades: a buy and the sell that closed it. */
   const trades = useMemo(() => pairOrders(logged), [logged]);
+
+  /**
+   * Only what is still working.
+   *
+   * A limit that has filled is no longer something to watch or cancel; it is a
+   * round that happened, and it belongs in the history below. Keeping it in
+   * this list meant the one place you look to answer "what is still out there"
+   * was mostly answers to a different question.
+   */
+  const working = useMemo(
+    () => trades.filter((t) => t.status === 'buying' || t.status === 'pending'),
+    [trades],
+  );
   const realisedPnl = useMemo(() => realised(trades), [trades]);
 
   /** The window the desk is trading: this one, or the one after it. */
@@ -915,6 +925,18 @@ export function Manual({
         than hide.
       */}
       <div className="rail">
+        {/*
+          The balance, and after the slash what the container is holding out of
+          it. Two cells for one fact read as two facts; the slash says what it
+          is — this much money, that much of it spoken for.
+        */}
+        <button className="railbal" onClick={onOpenBalance}>
+          <b>{balance === null ? '—' : balance.toFixed(2)}</b>
+          {containerLocked > 0 && (
+            <span className="muted">/{containerLocked.toFixed(2)}</span>
+          )}
+        </button>
+
         <button
           className={`railchip${sessionOpen ? ' on' : ''}`}
           onClick={() => setSessionOpen((v) => !v)}
@@ -1003,28 +1025,20 @@ export function Manual({
 
       {tab !== 'settings' && (
           <div className="card tight">
-            <div className="listhead">
-              <span>{viewWindow != null ? `Событие ${clockOf(viewWindow)}` : 'Позиции'}</span>
-              {viewWindow != null && (
+            {viewWindow != null && (
+              <div className="listhead">
+                <span>Событие {clockOf(viewWindow)}</span>
                 <button className="linkbtn" onClick={() => setViewWindow(null)}>
                   к текущему
                 </button>
-              )}
-            </div>
+              </div>
+            )}
             {/*
-              A closed window's positions are gone from the exchange, so a past
-              event shows nothing here — its record is the order history at the
-              bottom, which is the thing actually worth reading afterwards.
+              A closed window's positions are gone from the exchange; what it
+              came to is the order history below, which is the thing actually
+              worth reading afterwards.
             */}
-            {viewWindow != null ? (
-              <div className="muted empty">Позиции события закрыты</div>
-            ) : (
-              /*
-                Both sides at once with the clock between them. A window is one
-                trade with two legs, and the thing you look at while deciding
-                between them is how long is left and how far price has moved —
-                which used to be a bar of its own two blocks further up.
-              */
+            {viewWindow == null && (
               <PositionPair
                 positions={livePositions}
                 secondsLeft={secondsLeft}
@@ -1035,121 +1049,70 @@ export function Manual({
               />
             )}
 
-            <div className="listhead second">
-              <span>Сделки окна</span>
-              {restingLimits.length > 0 && (
-                <button className="linkbtn" disabled={busy} onClick={() => void cancelLimits()}>
-                  снять лимитки ({restingLimits.length})
-                </button>
-              )}
-              <span className={realisedPnl >= 0 ? 'up sessum' : 'down sessum'}>
-                {trades.some((t) => t.status === 'closed') ? signedUsd(realisedPnl) : ''}
-              </span>
-            </div>
-            {trades.length > TRADE_ROWS && (
-              <div className="muted empty">
-                ещё {trades.length - TRADE_ROWS} — итог сверху считает все
-              </div>
-            )}
-            {trades.length === 0 ? (
-              <div className="muted empty">В этом окне сделок не было</div>
-            ) : (
-              trades.slice(0, TRADE_ROWS).map((t) => {
-                const live = t.orderId
-                  ? orders.find((x) => x.id === t.orderId)
-                  : undefined;
-                const editable = t.status === 'buying' && live != null;
-                return (
-                  <div
-                    className={`listrow static trade trade-${t.status}${
-                      editable ? ' editable' : ''
-                    }`}
-                    key={t.key}
-                    onClick={editable ? () => setEditing(t) : undefined}
-                  >
-                    <span className={t.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
-                      {t.outcome}
-                      {t.closedBy && (
-                        <span className="muted" title={
-                          t.closedBy === 'rule' ? 'закрыто правилом' : 'закрыто руками'
-                        }>
-                          {t.closedBy === 'rule' ? ' а' : ' р'}
-                        </span>
-                      )}
-                    </span>
-                    <span className="listrow-main">
-                      {t.status === 'buying' || t.status === 'pending' ? (
-                        // A working order is a price and a size, and nothing
-                        // else is worth the room: that is what you change.
+            {/*
+              Only what is still working. A round that has closed is history and
+              is filed as such below — leaving it here meant the list you scan
+              for "what am I still exposed to" was mostly things you are not.
+            */}
+            {working.length > 0 && (
+              <>
+                {restingLimits.length > 0 && (
+                  <div className="listhead bare">
+                    <button
+                      className="linkbtn"
+                      disabled={busy}
+                      onClick={() => void cancelLimits()}
+                    >
+                      снять лимитки ({restingLimits.length})
+                    </button>
+                  </div>
+                )}
+                {working.map((t) => {
+                  const live = t.orderId
+                    ? orders.find((x) => x.id === t.orderId)
+                    : undefined;
+                  const editable = t.status === 'buying' && live != null;
+                  const price = (t.status === 'buying' ? t.buyPrice : t.sellPrice) ?? 0;
+                  return (
+                    <div
+                      className={`listrow static trade trade-${t.status}${
+                        editable ? ' editable' : ''
+                      }`}
+                      key={t.key}
+                      onClick={editable ? () => setEditing(t) : undefined}
+                    >
+                      <span
+                        className={t.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}
+                      >
+                        {t.outcome}
+                      </span>
+                      {/* A working order is a price and a size. Nothing else. */}
+                      <span className="listrow-main">
                         <span className="ordermain">
-                          {cents(
-                            (t.status === 'buying' ? t.buyPrice : t.sellPrice) ?? 0,
-                          )}
+                          {cents(price)}
                           <i>×</i>
                           {t.shares.toFixed(t.shares % 1 ? 1 : 0)}
-                          <span className="sub muted">
-                            {usd(
-                              t.shares *
-                                ((t.status === 'buying' ? t.buyPrice : t.sellPrice) ?? 0),
-                            )}
-                            {t.status === 'buying' ? ' · лимитка' : ' · продажа'}
-                          </span>
                         </span>
-                      ) : (
-                        <>
-                          {t.buyPrice != null ? usd(t.shares * t.buyPrice) : '—'}
-                          <span className="arrow">→</span>
-                          {t.sellPrice != null ? (
-                            usd(t.shares * t.sellPrice)
-                          ) : (
-                            <span className="muted">…</span>
-                          )}
-                          <span className="sub muted">
-                            {t.shares.toFixed(1)} ·{' '}
-                            {t.buyPrice != null ? cents(t.buyPrice) : '—'}
-                            {t.sellPrice != null ? ` → ${cents(t.sellPrice)}` : ''}
-                          </span>
-                        </>
-                      )}
-                    </span>
-                    <span
-                      className={`listrow-pnl ${
-                        t.pnl == null
-                          ? 'muted'
-                          : t.pnl >= 0
-                            ? 'up'
-                            : 'down'
-                      }`}
-                    >
-                      {t.pnl == null ? '—' : signedUsd(t.pnl)}
-                      <span className="sub">
-                        {t.pnl == null || t.pct == null
-                          ? t.status === 'buying'
-                            ? 'лимитка'
-                            : 'открыта'
-                          : t.status === 'pending'
-                            ? 'ждёт'
-                            : signedPct(t.pct)}
                       </span>
-                    </span>
-                    {live ? (
-                      <button
-                        className="xbtn"
-                        disabled={busy}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void cancel(live.id);
-                        }}
-                        aria-label="Снять ордер"
-                      >
-                        ✕
-                      </button>
-                    ) : (
-                      <span className="orderdot" aria-hidden />
-                    )}
-                  </div>
-                );
-              })
+                      {live ? (
+                        <button
+                          className="xbtn"
+                          disabled={busy}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void cancel(live.id);
+                          }}
+                          aria-label="Снять ордер"
+                        >
+                          ✕
+                        </button>
+                      ) : (
+                        <span className="orderdot" aria-hidden />
+                      )}
+                    </div>
+                  );
+                })}
+              </>
             )}
           </div>
       )}
@@ -1158,9 +1121,26 @@ export function Manual({
 
       {tab === 'settings' ? (
         <>
+          {/*
+            The rules live here now. They are set once and then watched, and a
+            permanent row of switches on the desk was five taps' worth of
+            screen given to something changed a few times a day.
+          */}
+          <RuleBar
+            state={autoSell}
+            settings={settings}
+            balance={balance}
+            exposure={exposure}
+            ask={
+              quickUp && quickDown
+                ? Math.min(quickUp.ask, quickDown.ask)
+                : (quickUp?.ask ?? quickDown?.ask ?? null)
+            }
+            onChange={apply}
+            onNote={setNote}
+          />
           <ManualSettingsForm
             settings={settings}
-            timings={autoSell.timings}
             container={container}
             containerSplit={containerSplit}
             onContainer={onContainer}
@@ -1315,23 +1295,13 @@ export function Manual({
             at 14:35" actually means, and it belongs at the bottom, under the
             numbers it explains.
           */}
-          {viewWindow != null && <OrderHistory orders={logged} />}
+          {/*
+            Everything this window has done, newest first — the current one as
+            much as a past one. A filled limit lands here the moment it fills,
+            which is the only list it still belongs in.
+          */}
+          <OrderHistory orders={logged} realised={realisedPnl} />
 
-          {!draft && (
-            <RuleBar
-              state={autoSell}
-              settings={settings}
-              balance={balance}
-              exposure={exposure}
-              ask={
-                quickUp && quickDown
-                  ? Math.min(quickUp.ask, quickDown.ask)
-                  : (quickUp?.ask ?? quickDown?.ask ?? null)
-              }
-              onChange={apply}
-              onNote={setNote}
-            />
-          )}
         </>
       )}
 
@@ -1375,38 +1345,44 @@ export function Manual({
       */}
       <div className={`dock${tab === 'settings' ? ' away' : ''}`}>
         {/*
-          Chips for the size field, shown while it is being edited. A limit is
-          usually sized as "some of the wallet", and the arithmetic — balance,
-          less the fee, over the limit price — is not something to do on a
-          phone with the keyboard already up.
+          The size is picked, not typed. A limit here is either a share of the
+          wallet or one of three standing clip sizes, and both are one tap —
+          against a keypad that covers the book you are pricing against.
         */}
-        {sizingLimit && balance != null && balance > 0 && (
+        {sizingLimit && (
           <div className="limitpcts pcts" onMouseDown={(e) => e.preventDefault()}>
             {[25, 50, 100].map((pct) => {
-              const shares = stakeShares(limitBasis, balance, pct / 100, minSize);
+              const shares =
+                balance != null && balance > 0
+                  ? stakeShares(limitBasis, balance, pct / 100, minSize)
+                  : null;
               return (
                 <button
                   key={pct}
                   disabled={shares == null}
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => shares != null && setLimitSize(String(shares))}
-                  title={
-                    shares == null
-                      ? 'Меньше минимального ордера'
-                      : `${shares} долей · ${usd(shares * limitBasis)}`
-                  }
+                  onClick={() => {
+                    if (shares == null) return;
+                    setLimitSize(String(shares));
+                    setSizingLimit(false);
+                  }}
                 >
                   {pct}%
                 </button>
               );
             })}
-            <span className="muted limitpct-hint">
-              {limitSizeNum > 0 && limitBasis > 0
-                ? `${usd(limitSizeNum * limitBasis)} → +${usd(
-                    limitUpside(limitSizeNum, limitBasis),
-                  )}`
-                : 'от баланса'}
-            </span>
+            {[5, 10, 15].map((n) => (
+              <button
+                key={n}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setLimitSize(String(n));
+                  setSizingLimit(false);
+                }}
+              >
+                {n}
+              </button>
+            ))}
           </div>
         )}
         {/*
@@ -1428,23 +1404,17 @@ export function Manual({
             }}
           />
         )}
-        <div className="limitmeta">
-          <span className="muted">
-            {settings.limitLadder
-              ? `лесенка ×${LIMIT_LADDER_COUNT + 1} · шаг ${Math.round(
-                  settings.limitLadderStep * 100,
-                )}¢`
-              : 'лимитка'}
-          </span>
-          <span className={limitBasis > 0 ? 'up' : 'muted'}>
-            {limitSizeNum > 0 && limitBasis > 0
-              ? `+${usd(
-                  limitUpside(limitSizeNum, limitBasis) *
-                    (settings.limitLadder ? LIMIT_LADDER_COUNT + 1 : 1),
-                )}`
-              : '—'}
-          </span>
-        </div>
+        {limitSizeNum > 0 && limitBasis > 0 && (
+          <div className="limitmeta">
+            <span className="up">
+              +
+              {usd(
+                limitUpside(limitSizeNum, limitBasis) *
+                  (settings.limitLadder ? LIMIT_LADDER_COUNT + 1 : 1),
+              )}
+            </span>
+          </div>
+        )}
         <div className="limitrow">
           <button
             className="limit up"
@@ -1470,16 +1440,12 @@ export function Manual({
                 +
               </button>
             </div>
-            <input
+            <button
               className="limitsize"
-              type="number"
-              inputMode="decimal"
-              placeholder={`${limitDefaultSize.toFixed(0)} долей`}
-              value={limitSize}
-              onFocus={() => setSizingLimit(true)}
-              onBlur={() => setSizingLimit(false)}
-              onChange={(e) => setLimitSize(e.target.value)}
-            />
+              onClick={() => setSizingLimit((v) => !v)}
+            >
+              {limitSize || limitDefaultSize.toFixed(0)}
+            </button>
           </div>
           <button
             className="limit down"
@@ -1533,6 +1499,15 @@ export function Manual({
  * two things an order is. Saving pulls it and places it again — the venue has
  * no other way: an order's terms are what it was signed with.
  */
+/**
+ * Moving a resting order to another price.
+ *
+ * One number, as large as the screen allows, with a step either side and a
+ * wheel of prices under it — and one button that moves the order there. The
+ * size is left alone: an order that is out at the wrong price is almost always
+ * the right size at the wrong price, and every extra field between the price
+ * and the button is a second the book has to move in.
+ */
 function OrderEditor({
   row,
   tick,
@@ -1548,12 +1523,10 @@ function OrderEditor({
   onCancelOrder: () => void;
   onClose: () => void;
 }) {
-  const [price, setPrice] = useState(String(Math.round((row.buyPrice ?? 0) * 100)));
-  const [shares, setShares] = useState(String(row.shares));
-
-  const priceNum = Number(price.replace(',', '.')) / 100;
-  const sharesNum = Number(shares.replace(',', '.'));
+  const opened = Math.round(((row.buyPrice ?? row.sellPrice) ?? 0) * 100);
+  const [cents_, setCents] = useState(opened);
   const step = Math.max(1, Math.round(tick * 100));
+  const nudge = (d: number) => setCents((c) => Math.min(99, Math.max(1, c + d)));
 
   return (
     <div className="sheet-scrim" onClick={onClose}>
@@ -1561,90 +1534,91 @@ function OrderEditor({
         <div className="sheet-head">
           <h2>
             <span className={row.outcome === 'Up' ? 'up' : 'down'}>{row.outcome}</span>{' '}
-            лимитка
+            {row.shares.toFixed(row.shares % 1 ? 1 : 0)}
           </h2>
           <button className="xbtn" onClick={onClose} aria-label="Закрыть">
             ✕
           </button>
         </div>
 
-        <div className="bigfield">
-          <span>цена, ¢</span>
-          <div className="bigrow">
-            <button
-              className="step big"
-              onClick={() =>
-                setPrice(String(Math.max(1, Math.round(priceNum * 100) - step)))
-              }
-            >
-              −
-            </button>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-            />
-            <button
-              className="step big"
-              onClick={() =>
-                setPrice(String(Math.min(99, Math.round(priceNum * 100) + step)))
-              }
-            >
-              +
-            </button>
-          </div>
-        </div>
-
-        <div className="bigfield">
-          <span>долей</span>
-          <div className="bigrow">
-            <button
-              className="step big"
-              onClick={() => setShares(String(Math.max(1, Math.round(sharesNum) - 5)))}
-            >
-              −
-            </button>
-            <input
-              type="number"
-              inputMode="decimal"
-              value={shares}
-              onChange={(e) => setShares(e.target.value)}
-            />
-            <button
-              className="step big"
-              onClick={() => setShares(String(Math.round(sharesNum) + 5))}
-            >
-              +
-            </button>
-          </div>
-        </div>
-
-        <div className="row">
-          <span className="label">Сумма</span>
-          <span className="value">{usd(sharesNum * priceNum || 0)}</span>
-        </div>
-        <div className="row">
-          <span className="label">Если сыграет</span>
-          <span className="value up">+{usd(limitUpside(sharesNum, priceNum) || 0)}</span>
-        </div>
-
-        <div className="draftrow" style={{ marginTop: 12 }}>
-          <button
-            className="primary compact"
-            disabled={busy}
-            onClick={() => onSave(priceNum, sharesNum)}
-          >
-            Изменить
+        <div className="pricepick">
+          <button className="step big" onClick={() => nudge(-step)}>
+            −
           </button>
-          <button className="danger compact" disabled={busy} onClick={onCancelOrder}>
-            Снять
+          <div className="pricepick-now">
+            <b>{cents_}</b>
+            <span className="muted">¢</span>
+          </div>
+          <button className="step big" onClick={() => nudge(step)}>
+            +
           </button>
         </div>
+
+        <PriceColumn value={cents_} onPick={setCents} />
+
+        <button
+          className="primary wide"
+          disabled={busy || cents_ === opened}
+          onClick={() => onSave(cents_ / 100, row.shares)}
+        >
+          {cents_ === opened ? `сейчас ${opened}¢` : `перенести на ${cents_}¢`}
+        </button>
+        <button
+          className="danger wide"
+          style={{ marginTop: 8 }}
+          disabled={busy}
+          onClick={onCancelOrder}
+        >
+          Снять
+        </button>
       </div>
     </div>
   );
 }
+
+/**
+ * The same wheel of cents as the dock's, stood on end.
+ *
+ * Vertical because this sheet has the height to spare and a thumb travels up
+ * and down it more naturally than across; snapped, so a flick always lands on
+ * a price rather than between two.
+ */
+function PriceColumn({
+  value,
+  onPick,
+}: {
+  value: number;
+  onPick: (cents: number) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const at = el.querySelector<HTMLElement>(`[data-cents="${value}"]`);
+    if (at) el.scrollTop = at.offsetTop - el.clientHeight / 2 + at.offsetHeight / 2;
+    // Opening is the only time it is positioned; after that it is the user's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="wheel vertical" ref={ref}>
+      <div className="wheelpad" />
+      {Array.from({ length: 99 }, (_, i) => i + 1).map((c) => (
+        <button
+          key={c}
+          data-cents={c}
+          className={`wheelnum${c === value ? ' on' : ''}`}
+          onClick={() => onPick(c)}
+        >
+          {c}
+        </button>
+      ))}
+      <div className="wheelpad" />
+    </div>
+  );
+}
+
 
 /**
  * How the last few five-minute events went.
@@ -1834,13 +1808,22 @@ function LadderCard({
  * price, and what became of it — which is the only way to see a limit that
  * never filled or a sale that went out in three pieces.
  */
-function OrderHistory({ orders }: { orders: LoggedOrder[] }) {
+function OrderHistory({
+  orders,
+  realised,
+}: {
+  orders: LoggedOrder[];
+  realised: number;
+}) {
   const rows = [...orders].sort((a, b) => b.placedAt - a.placedAt);
+  if (rows.length === 0) return null;
   return (
     <div className="card tight">
       <div className="listhead">
-        <span>История ордеров</span>
         <span className="muted">{rows.length}</span>
+        <span className={realised >= 0 ? 'up sessum' : 'down sessum'}>
+          {realised !== 0 ? signedUsd(realised) : ''}
+        </span>
       </div>
       {rows.length === 0 ? (
         <div className="muted empty">Ордеров не было</div>
@@ -1851,15 +1834,10 @@ function OrderHistory({ orders }: { orders: LoggedOrder[] }) {
               {o.outcome || '—'}
             </span>
             <span className="listrow-main">
-              <span className={o.action === 'BUY' ? 'hist-buy' : 'hist-sell'}>
-                {o.action === 'BUY' ? 'покупка' : 'продажа'}
-              </span>
-              <i>×</i>
-              {cents(o.price)}
-              <span className="sub muted">
-                {o.matched > 0 ? o.matched.toFixed(1) : o.size.toFixed(1)} долей ·{' '}
-                {usd((o.matched > 0 ? o.matched : o.size) * o.price)}
-                {o.auto ? ' · правило' : ''}
+              <span className={`ordermain ${o.action === 'BUY' ? 'hist-buy' : 'hist-sell'}`}>
+                {cents(o.price)}
+                <i>×</i>
+                {(o.matched > 0 ? o.matched : o.size).toFixed(1)}
               </span>
             </span>
             <span className="listrow-now">
@@ -2252,30 +2230,18 @@ function PositionPair({
     if (mine.length === 0) return null;
     const size = mine.reduce((a, p) => a + p.size, 0);
     const cost = mine.reduce((a, p) => a + p.size * p.avgPrice, 0);
-    const standing = standingOf(
-      mine.map((p) => ({
-        outcome: p.outcome,
-        size: p.size,
-        avgPrice: p.avgPrice,
-        curPrice: p.curPrice ?? 0,
-      })),
-    );
-    return {
-      position: mine[0],
-      size,
-      avg: size > 0 ? cost / size : 0,
-      cost,
-      /** Selling this leg right now, fee deducted. */
-      now: standing.now,
-      /** And what it pays if this side is the one that settles at a dollar. */
-      ifWins: size - cost,
-      priced: mine.some((p) => p.avgPrice > 0),
-    };
+    return { position: mine[0], size, avg: size > 0 ? cost / size : 0 };
   };
 
   const up = leg('Up');
   const down = leg('Down');
 
+  /*
+    A held side is a count and what it cost, and nothing else. The money it
+    would make was four numbers that all move together and none of which
+    changes what you do — the decision is the count, the average, and the
+    clock between them.
+  */
   const side = (name: 'Up' | 'Down', held: ReturnType<typeof leg>) => (
     <button
       className={`pairleg ${name === 'Up' ? 'up' : 'down'}${held ? '' : ' idle'}`}
@@ -2286,20 +2252,7 @@ function PositionPair({
       {held ? (
         <>
           <span className="pairsize">{held.size.toFixed(1)}</span>
-          <span className="muted pairavg">
-            {held.avg > 0 ? `ср ${cents(held.avg)}` : 'ср …'}
-          </span>
-          {/*
-            Two numbers per leg, which is what the middle used to carry for
-            both at once: what selling it now pays after the fee, and what it
-            pays if this is the side the window settles on.
-          */}
-          <span className={`pairleg-pnl ${held.now >= 0 ? 'up' : 'down'}`}>
-            {held.priced ? signedUsd(held.now) : '…'}
-          </span>
-          <span className="muted pairavg">
-            {held.priced ? `${signedUsd(held.ifWins)} если выиграет` : ''}
-          </span>
+          <span className="pairavg">{held.avg > 0 ? cents(held.avg) : '…'}</span>
         </>
       ) : (
         <span className="muted pairsize">—</span>
@@ -2312,19 +2265,13 @@ function PositionPair({
       {side('Up', up)}
 
       {/*
-        The clock and the open sit between the two sides, where the decision
-        is actually made. They had a bar of their own two blocks up the page,
-        which is the wrong place to read them from: the question is always
-        "this side or that one, and how long have I got".
+        The clock and the open sit between the two sides, where the decision is
+        actually made: this side or that one, and how long have I got.
       */}
       <div className="pairmid">
-        <span className={`pairlabel ${lookAhead ? 'warn' : 'muted'}`}>
-          {lookAhead ? 'до старта' : 'до конца'}
-        </span>
         <b className={clockTone(secondsLeft, lookAhead)}>
           {`${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}
         </b>
-        <span className="muted pairlabel">открытие 5м</span>
         <span className="pairopen">
           {windowOpen != null ? windowOpen.toFixed(0) : '—'}
           {drift != null && (
@@ -2397,18 +2344,8 @@ function PriceWheel({
   );
 }
 
-/** A measured delay, or an honest word about why there is not one yet. */
-function measured(ms: number | null | undefined, samples: number | undefined) {
-  const n = samples ?? 0;
-  if (ms == null || n < 2) {
-    return { text: n > 0 ? `замер ${n} из 2` : 'ещё не замерено', tone: 'muted' };
-  }
-  return { text: `${(ms / 1000).toFixed(1)} с`, tone: 'up' };
-}
-
 function ManualSettingsForm({
   settings,
-  timings,
   container,
   containerSplit,
   onContainer,
@@ -2416,7 +2353,6 @@ function ManualSettingsForm({
   onNote,
 }: {
   settings: ManualSettings;
-  timings?: Timings;
   container?: Container;
   containerSplit?: ContainerSplit;
   onContainer?: (next: Container) => void;
@@ -2461,32 +2397,8 @@ function ManualSettingsForm({
     });
   };
 
-  const ready = measured(timings?.sellReadyMs, timings?.sellReadySamples);
-  const cash = measured(timings?.cashMs, timings?.cashSamples);
-
   return (
     <>
-    {/*
-      Two waits the venue imposes and never states. The app times them itself
-      on ordinary trades — the first sell it accepts after a purchase, and the
-      first balance that shows a sale's money — and once it has two of each it
-      stops guessing and starts placing on the clock.
-    */}
-    <div className="card measures">
-      <h2>Замеры</h2>
-      <div className="measure">
-        <span>Продажа доступна через</span>
-        <b className={ready.tone}>{ready.text}</b>
-      </div>
-      <div className="measure">
-        <span>Деньги после продажи через</span>
-        <b className={cash.tone}>
-          {cash.text}
-          {timings?.cashPending ? ' · считаю' : ''}
-        </b>
-      </div>
-    </div>
-
     <Fold
       title="Покупка по клику"
       note={`${Math.round(settings.balanceSharePct * 100)}% · $${settings.defaultStakeUsd}`}
@@ -2760,63 +2672,6 @@ function ManualSettingsForm({
         </>
       )}
 
-      <div className="fields">
-      <label className="field">
-        <span>добиваться, с</span>
-        <input
-          type="number"
-          value={String(settings.autoSellWatchSec)}
-          onChange={(e) =>
-            push({
-              ...settings,
-              autoSellWatchSec: Number(e.target.value.replace(',', '.')),
-            })
-          }
-        />
-      </label>
-
-      <label className="field">
-        <span>повтор, с</span>
-        <input
-          type="number"
-          value={String(settings.autoSellRetrySec)}
-          onChange={(e) =>
-            push({
-              ...settings,
-              autoSellRetrySec: Number(e.target.value.replace(',', '.')),
-            })
-          }
-        />
-      </label>
-
-      <label className="field">
-        <span>пауза докупа, с</span>
-        <input
-          type="number"
-          value={String(settings.autoRebuySlicePauseSec)}
-          onChange={(e) =>
-            push({
-              ...settings,
-              autoRebuySlicePauseSec: Number(e.target.value.replace(',', '.')),
-            })
-          }
-        />
-      </label>
-
-      <label className="field">
-        <span>докуп при −%</span>
-        <input
-          type="number"
-          value={String(Math.round(settings.autoRebuyDropPct * 100))}
-          onChange={(e) =>
-            push({
-              ...settings,
-              autoRebuyDropPct: Number(e.target.value.replace(',', '.')) / 100,
-            })
-          }
-        />
-      </label>
-      </div>
     </Fold>
     </>
   );

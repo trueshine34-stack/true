@@ -85,16 +85,73 @@ class LadderPlanTest {
         assertEquals("Up", LadderPlan.leadingSide(0.4, null))
     }
 
+    // ---------------------------------------------- following the last close
+
+    /**
+     * Five-minute windows run in streaks more often than they alternate, so
+     * the side that just won is the one with something behind it. Without a
+     * previous close there is nothing to follow.
+     */
+    @Test
+    fun itOnlyBuysTheSideTheLastWindowClosedOn() {
+        assertNull(blocked(side = "Up", lastWinner = "Up"))
+        assertEquals(
+            "прошлое окно закрылось в Down",
+            blocked(side = "Up", lastWinner = "Down"),
+        )
+        assertEquals("нет прошлого окна", blocked(lastWinner = ""))
+    }
+
+    // -------------------------------------------------- the opening stretch
+
+    @Test
+    fun itWillNotPaySeventyThreeInTheFirstThreeMinutes() {
+        assertNull(blocked(ask = 0.73, elapsed = 105, rung = 0.84))
+        assertEquals(
+            "первые 3 мин не дороже 73¢",
+            blocked(ask = 0.74, elapsed = 105, rung = 0.84),
+        )
+        // And past three minutes only the rung decides.
+        assertNull(blocked(ask = 0.74, elapsed = 185, rung = 0.84))
+    }
+
+    // ------------------------------------------------------- what it stakes
+
+    /**
+     * Compounding while it is right, cutting twice as fast when it is not —
+     * and never below the size the venue will still take.
+     */
+    @Test
+    fun theClipGrowsOnAWinAndFallsTwiceAsFastOnALoss() {
+        assertEquals(6.0, LadderPlan.stakeAfter(5.0, pnl = 1.0, base = 5.0), 1e-9)
+        assertEquals(9.0, LadderPlan.stakeAfter(8.0, pnl = 0.4, base = 5.0), 1e-9)
+        assertEquals(6.0, LadderPlan.stakeAfter(8.0, pnl = -1.0, base = 5.0), 1e-9)
+        assertEquals(5.0, LadderPlan.stakeAfter(6.0, pnl = -1.0, base = 5.0), 1e-9)
+        assertEquals(5.0, LadderPlan.stakeAfter(5.0, pnl = -1.0, base = 5.0), 1e-9)
+        // A window it sat out is not a result.
+        assertEquals(7.0, LadderPlan.stakeAfter(7.0, pnl = 0.0, base = 5.0), 1e-9)
+    }
+
+    @Test
+    fun fiveWinsInARowRaiseTheContainerByAFifth() {
+        assertEquals(5.0, LadderPlan.bankAfter(5.0, winStreak = 4), 1e-9)
+        assertEquals(6.0, LadderPlan.bankAfter(5.0, winStreak = 5), 1e-9)
+        assertEquals(6.0, LadderPlan.bankAfter(6.0, winStreak = 6), 1e-9)
+        assertEquals(7.2, LadderPlan.bankAfter(6.0, winStreak = 10), 1e-9)
+        assertEquals(5.0, LadderPlan.bankAfter(5.0, winStreak = 0), 1e-9)
+    }
+
     // ------------------------------------------------------ whether it buys
 
     private fun blocked(
         side: String? = "Up",
         ask: Double? = 0.78,
         rung: Double = 0.84,
-        elapsed: Long = 105,
+        elapsed: Long = 185,
         cash: Double = 5.0,
+        lastWinner: String = "Up",
         settings: LadderPlan.Settings = on,
-    ) = LadderPlan.blockedBecause(side, ask, rung, elapsed, cash, settings)
+    ) = LadderPlan.blockedBecause(side, ask, rung, elapsed, cash, lastWinner, settings)
 
     @Test
     fun aFavouriteUnderItsOwnExitIsBought() {
