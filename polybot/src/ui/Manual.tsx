@@ -106,10 +106,16 @@ const IDLE_AUTOSELL: AutoSellState = {
  */
 export function Manual({
   onSummary,
+  onCommitted,
+  containerLocked = 0,
   locked,
 }: {
   /** Potential profit of the round, for the header. */
   onSummary?: (potential: number) => void;
+  /** What is in the market, so the container can split the whole deposit. */
+  onCommitted?: (usd: number) => void;
+  /** What the container holds back, in dollars. */
+  containerLocked?: number;
   /** The day's goal is met: no new exposure until midnight. */
   locked?: boolean;
 }) {
@@ -477,15 +483,24 @@ export function Manual({
    * would cost — a limit that has not filled is committed money, and leaving it
    * out is how a stack of them quietly becomes the whole deposit.
    */
-  const exposure = useMemo(() => {
+  const committed = useMemo(() => {
     const held = positions
       .filter((p) => !p.redeemable && p.size > 0)
       .reduce((sum, p) => sum + p.size * (p.avgPrice > 0 ? p.avgPrice : p.curPrice), 0);
     const resting = orders
       .filter((o) => o.side === 'BUY')
       .reduce((sum, o) => sum + orderCost(o.remaining, o.price), 0);
-    return exposureFor(balance ?? 0, held + resting, settings.exposureCapPct);
-  }, [positions, orders, balance, settings.exposureCapPct]);
+    return held + resting;
+  }, [positions, orders]);
+
+  useEffect(() => {
+    onCommitted?.(committed);
+  }, [committed, onCommitted]);
+
+  const exposure = useMemo(
+    () => exposureFor(balance ?? 0, committed, containerLocked),
+    [balance, committed, containerLocked],
+  );
 
   const guard = settings.exposureGuard && balance != null;
 
@@ -578,8 +593,7 @@ export function Manual({
         const cost = orderCost(shares, price);
         if (cost > exposure.room + 1e-9) {
           setNote(
-            `Защита ${Math.round(settings.exposureCapPct * 100)}%: заявка на ` +
-              `${usd(cost)}, свободно ${usd(exposure.room)} ` +
+            `Контейнер: заявка на ${usd(cost)}, свободно ${usd(exposure.room)} ` +
               `(в рынке ${usd(exposure.committed)} из ${usd(exposure.cap)})`,
           );
           return;
@@ -610,7 +624,7 @@ export function Manual({
         setBusy(false);
       }
     },
-    [market, deskWindow, guard, exposure, settings.exposureCapPct, locked],
+    [market, deskWindow, guard, exposure, locked],
   );
 
   /**
@@ -775,8 +789,7 @@ export function Manual({
     }
     if (quick.blocked) {
       setNote(
-        `Защита ${Math.round(settings.exposureCapPct * 100)}%: в рынке уже ` +
-          `${usd(exposure.committed)} из ${usd(exposure.cap)}`,
+        `Контейнер: в рынке уже ${usd(exposure.committed)} из ${usd(exposure.cap)}`,
       );
       return;
     }
@@ -788,8 +801,7 @@ export function Manual({
     }
     if (quick.capped) {
       setNote(
-        `Защита ${Math.round(settings.exposureCapPct * 100)}%: свободно ` +
-          `${usd(exposure.room)}, беру ${quick.shares.toFixed(1)} долей`,
+        `Контейнер: свободно ${usd(exposure.room)}, беру ${quick.shares.toFixed(1)} долей`,
       );
     }
     void place(which, 'BUY', quick.ask, quick.shares);
@@ -1400,7 +1412,7 @@ export function Manual({
               {!quickUp
                 ? 'стакан пуст'
                 : quickUp.blocked
-                  ? `лимит ${Math.round(settings.exposureCapPct * 100)}%`
+                  ? 'контейнер'
                   : `${quickUp.shares.toFixed(0)} долей${quickUp.capped ? ' ·огр' : ''}`}
             </s>
           </button>
@@ -1414,7 +1426,7 @@ export function Manual({
               {!quickDown
                 ? 'стакан пуст'
                 : quickDown.blocked
-                  ? `лимит ${Math.round(settings.exposureCapPct * 100)}%`
+                  ? 'контейнер'
                   : `${quickDown.shares.toFixed(0)} долей${quickDown.capped ? ' ·огр' : ''}`}
             </s>
           </button>
@@ -2042,22 +2054,7 @@ function RuleBar({
             onChange({ ...settings, exposureGuard: !settings.exposureGuard })
           }
         />
-        {/* The chips already carry the percentage; the name repeating it is
-            what pushed the figure off the row. */}
-        <span className="rule-name">Защита</span>
-        <span className="pcts">
-          {[25, 50, 75].map((pct) => (
-            <button
-              key={pct}
-              className={
-                Math.round(settings.exposureCapPct * 100) === pct ? 'on' : undefined
-              }
-              onClick={() => onChange({ ...settings, exposureCapPct: pct / 100 })}
-            >
-              {pct}%
-            </button>
-          ))}
-        </span>
+        <span className="rule-name">Контейнер</span>
         <span
           className={`rule-note ${
             settings.exposureGuard && exposure.full ? 'warn' : 'muted'
@@ -2067,7 +2064,7 @@ function RuleBar({
             ? 'выкл'
             : exposure.full
               ? 'лимит'
-              : usd(exposure.room)}
+              : `свободно ${usd(exposure.room)}`}
         </span>
       </div>
 
@@ -2260,9 +2257,9 @@ function ManualSettingsForm({
     </div>
 
     <div className="card">
-      <h2>Защита депозита</h2>
+      <h2>Контейнер</h2>
       <div className="toggle">
-        <span>Не больше доли депозита в рынке</span>
+        <span>Не пускать в рынок то, что в контейнере</span>
         <button
           className={`switch ${settings.exposureGuard ? 'on' : ''}`}
           onClick={() =>
@@ -2271,22 +2268,6 @@ function ManualSettingsForm({
         />
       </div>
 
-      <label className="field" style={{ marginTop: 12 }}>
-        <span>Предел, % депозита</span>
-        <input
-          type="number"
-          value={String(Math.round(settings.exposureCapPct * 100))}
-          onChange={(e) =>
-            onChange({
-              ...settings,
-              exposureCapPct: Math.max(
-                0,
-                Math.min(100, Number(e.target.value.replace(',', '.'))),
-              ) / 100,
-            })
-          }
-        />
-      </label>
     </div>
 
     <div className="card">

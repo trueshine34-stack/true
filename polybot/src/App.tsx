@@ -30,6 +30,12 @@ import {
 } from './core/goal';
 import { signedUsd, usd } from './core/money';
 import {
+  loadContainer,
+  saveContainer,
+  splitFor,
+  type Container,
+} from './core/container';
+import {
   DAY_MULTIPLE,
   dayReached,
   dayTarget,
@@ -61,6 +67,9 @@ export function App() {
   const [day, setDay] = useState<DayGoal | null>(null);
   const [dayAsked, setDayAsked] = useState(false);
   const [dayInput, setDayInput] = useState('');
+  const [container, setContainer] = useState<Container | null>(null);
+  /** What the desk says is already in the market, for the container's split. */
+  const [committed, setCommitted] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,6 +154,7 @@ export function App() {
     void loadBalanceHistory().then(setBalanceHistory);
     void loadAdjustments().then(setAdjustments);
     void loadGoal().then(setGoal);
+    void loadContainer().then(setContainer);
     void loadDayGoal().then((d) => {
       setDay(d);
       setDayAsked(true);
@@ -210,6 +220,17 @@ export function App() {
     void saveDayGoal(next);
   }, []);
 
+  /**
+   * The deposit is cash plus what is in the market, so the locked share does
+   * not shrink as the cash is spent.
+   */
+  const split = splitFor(container ?? { corePct: 0.3, reserves: [] }, (balance ?? 0) + committed);
+
+  const applyContainer = useCallback((next: Container) => {
+    setContainer(next);
+    void saveContainer(next);
+  }, []);
+
   /** A quarter of the wallet per five-minute round. */
   const roundGoal = balance != null ? balance * 0.25 : 0;
 
@@ -255,6 +276,9 @@ export function App() {
           adjustments={adjustments}
           balance={balance}
           goal={goal}
+          container={container ?? { corePct: 0.3, reserves: [] }}
+          split={split}
+          onContainer={applyContainer}
           onRestart={(withdrawn) => {
             restart(withdrawn);
             setShowBalance(false);
@@ -315,6 +339,10 @@ export function App() {
           <b>{balance === null ? '—' : balance.toFixed(2)}</b>
           <s>баланс</s>
         </button>
+        <button className="headnum" onClick={() => setShowBalance(true)}>
+          <b className="muted">{split.locked > 0 ? split.locked.toFixed(2) : '—'}</b>
+          <s>в контейнере</s>
+        </button>
         <div className="headnum">
           <b className="muted">{roundGoal > 0 ? roundGoal.toFixed(2) : '—'}</b>
           <s>цель 25%</s>
@@ -354,7 +382,14 @@ export function App() {
       )}
 
       <div className="scroll">
-        {tab === 'manual' && <Manual onSummary={setPotential} locked={locked} />}
+        {tab === 'manual' && (
+          <Manual
+            onSummary={setPotential}
+            onCommitted={setCommitted}
+            containerLocked={split.locked}
+            locked={locked}
+          />
+        )}
         {tab === 'settings' && (
           <SettingsScreen
             settings={settings}

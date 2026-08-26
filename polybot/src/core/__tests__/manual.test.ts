@@ -303,9 +303,9 @@ describe('stakeShares', () => {
 
 describe('exposureFor', () => {
   it('measures the cap against cash plus what is already in the market', () => {
-    // 30 free, 30 committed: the deposit is 60, half of it is 30, and that is
-    // already used up.
-    const e = exposureFor(30, 30, 0.5);
+    // 30 free, 30 committed: the deposit is 60, the container holds 30, and the
+    // rest is already used up.
+    const e = exposureFor(30, 30, 30);
     expect(e.equity).toBe(60);
     expect(e.cap).toBe(30);
     expect(e.room).toBe(0);
@@ -313,29 +313,29 @@ describe('exposureFor', () => {
   });
 
   it('leaves room while under the line', () => {
-    const e = exposureFor(80, 20, 0.5);
+    const e = exposureFor(80, 20, 50);
     expect(e.cap).toBe(50);
     expect(e.room).toBe(30);
     expect(e.full).toBe(false);
   });
 
   it('never offers more room than there is cash', () => {
-    // Nothing committed, so half the deposit is half the cash.
-    const e = exposureFor(10, 0, 0.5);
+    // Nothing committed, so the free part of the deposit is free cash.
+    const e = exposureFor(10, 0, 5);
     expect(e.room).toBe(5);
   });
 
   it('is not fooled by the balance falling as it is spent', () => {
     // Buying moves money from cash to committed; the deposit is unchanged, so
     // the cap does not slide down with it.
-    const before = exposureFor(100, 0, 0.5);
-    const after = exposureFor(60, 40, 0.5);
+    const before = exposureFor(100, 0, 50);
+    const after = exposureFor(60, 40, 50);
     expect(after.cap).toBe(before.cap);
     expect(after.room).toBe(10);
   });
 
-  it('has no room at all when the guard is set to nothing', () => {
-    expect(exposureFor(100, 0, 0).room).toBe(0);
+  it('has no room at all when the container holds everything', () => {
+    expect(exposureFor(100, 0, 100).room).toBe(0);
   });
 });
 

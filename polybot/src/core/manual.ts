@@ -55,10 +55,8 @@ export type ManualSettings = {
   /** How many extra rungs, and how far apart. */
   limitLadderCount: number;
   limitLadderStep: number;
-  /** Refuse to have more than a set share of the deposit at risk at once. */
+  /** Keep the container's share out of reach of any order. */
   exposureGuard: boolean;
-  /** That share, as a fraction of the deposit. */
-  exposureCapPct: number;
 };
 
 export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
@@ -91,7 +89,6 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   limitLadderCount: 3,
   limitLadderStep: 0.03,
   exposureGuard: true,
-  exposureCapPct: 0.5,
 };
 
 /** Never spend the last of the balance, whatever the fee works out to. */
@@ -265,11 +262,11 @@ export function stakeShares(
 /**
  * How much of the deposit is at risk, and how much more may be.
  *
- * "Half the deposit" cannot mean half the balance: the balance falls as you
- * buy, so a cap read off it slides down with every purchase and never actually
- * binds. The deposit is what is on the exchange *plus* what is already in the
- * market — cash and positions are the same money in different shapes — and the
- * cap is measured against that.
+ * The container decides how much is off limits; this decides whether the next
+ * order fits in what is left. The deposit is what is on the exchange *plus*
+ * what is already in the market — cash and positions are the same money in
+ * different shapes — because a cap read off cash alone slides down with every
+ * purchase and never actually binds.
  *
  * What counts as at risk: shares held, at what they cost, and buy orders still
  * resting, at what they would cost. A resting buy is committed money; that it
@@ -293,12 +290,14 @@ export type Exposure = {
 export function exposureFor(
   balance: number,
   committed: number,
-  capPct: number,
+  /** What the container holds back, in dollars. */
+  locked: number,
 ): Exposure {
   const cash = Number.isFinite(balance) && balance > 0 ? balance : 0;
   const held = Number.isFinite(committed) && committed > 0 ? committed : 0;
   const equity = cash + held;
-  const cap = equity * Math.max(0, Math.min(1, capPct));
+  const kept = Math.max(0, Math.min(equity, Number.isFinite(locked) ? locked : 0));
+  const cap = equity - kept;
   const room = Math.max(0, Math.min(cap - held, cash));
   return { committed: held, balance: cash, equity, cap, room, full: room <= 1e-9 };
 }
