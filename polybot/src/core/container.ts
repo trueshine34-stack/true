@@ -69,6 +69,31 @@ export function removeReserve(container: Container, id: string): Container {
   return { ...container, reserves: container.reserves.filter((r) => r.id !== id) };
 }
 
+/**
+ * The container as it stands with the running bots' money in it.
+ *
+ * A bot's stake is a reserve like any other — money in the same wallet that no
+ * hand-placed order may reach — but it is not stored here: the bot owns its own
+ * books, and its stake grows and shrinks with what it makes. Copying it into
+ * the stored container would give the same dollar two homes and let them
+ * disagree. So it is merged in when the split is worked out, and the header,
+ * the guard and the desk all read one number.
+ */
+export function withBots(
+  container: Container,
+  bots: { name: string; usd: number }[],
+): Container {
+  const live = bots.filter((b) => Number.isFinite(b.usd) && b.usd > 0);
+  if (live.length === 0) return container;
+  return {
+    ...container,
+    reserves: [
+      ...container.reserves,
+      ...live.map((b, i) => ({ id: `bot:${i}:${b.name}`, name: b.name, usd: b.usd })),
+    ],
+  };
+}
+
 /** What the named stakes come to. */
 export const reservedForBots = (container: Container): number =>
   container.reserves.reduce((sum, r) => sum + r.usd, 0);

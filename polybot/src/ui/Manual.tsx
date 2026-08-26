@@ -28,6 +28,7 @@ import {
   usd,
 } from '../core/money';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
+import { Fold } from './Fold';
 import {
   PolyBot,
   type AutoSellState,
@@ -100,6 +101,11 @@ export function Manual({
   onSummary,
   onCommitted,
   containerLocked = 0,
+  counter = null,
+  signal = null,
+  onCounter,
+  onSignal,
+  appSettings,
   locked,
 }: {
   /** Potential profit of the round, for the header. */
@@ -108,6 +114,13 @@ export function Manual({
   onCommitted?: (usd: number) => void;
   /** What the container holds back, in dollars. */
   containerLocked?: number;
+  /** The bots' accounts, polled above because the container needs them too. */
+  counter?: CounterState | null;
+  signal?: SignalState | null;
+  onCounter?: (state: CounterState) => void;
+  onSignal?: (state: SignalState) => void;
+  /** The app-wide settings, folded in under the desk's own. */
+  appSettings?: ReactNode;
   /** The day's goal is met: no new exposure until midnight. */
   locked?: boolean;
 }) {
@@ -124,9 +137,7 @@ export function Manual({
   const [positions, setPositions] = useState<NativePosition[]>([]);
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [logged, setLogged] = useState<LoggedOrder[]>([]);
-  const [counter, setCounter] = useState<CounterState | null>(null);
   const [counterOpen, setCounterOpen] = useState(false);
-  const [signal, setSignal] = useState<SignalState | null>(null);
   const [signalOpen, setSignalOpen] = useState(false);
   const [lookAhead, setLookAhead] = useState(false);
   const [events, setEvents] = useState<EventSummary[]>([]);
@@ -339,30 +350,6 @@ export function Manual({
     };
   }, [tokenFor]);
 
-  // Both small bots run on their own money in the service; the panel only
-  // reads them. Three seconds is enough to watch a two-minute entry band.
-  useEffect(() => {
-    let cancelled = false;
-    const read = () => {
-      void PolyBot.counterState()
-        .then((s) => {
-          if (!cancelled) setCounter(s);
-        })
-        .catch(() => {});
-      void PolyBot.signalState()
-        .then((s) => {
-          if (!cancelled) setSignal(s);
-        })
-        .catch(() => {});
-    };
-    read();
-    const timer = window.setInterval(read, 3000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, []);
-
   // Sizing off the wallet needs the wallet. It only moves when an order fills,
   // so a slow poll is enough.
   useEffect(() => {
@@ -488,25 +475,11 @@ export function Manual({
   }, [committed, onCommitted]);
 
   const exposure = useMemo(
-    // The bots' banks are in the same wallet and are not the desk's to spend,
-    // so they are held back exactly like anything else in the container.
-    () =>
-      exposureFor(
-        balance ?? 0,
-        committed,
-        containerLocked +
-          (counter?.enabled ? Math.max(0, counter.cash) : 0) +
-          (signal?.enabled ? Math.max(0, signal.cash) : 0),
-      ),
-    [
-      balance,
-      committed,
-      containerLocked,
-      counter?.enabled,
-      counter?.cash,
-      signal?.enabled,
-      signal?.cash,
-    ],
+    // The bots' stakes are already inside what the container holds back —
+    // they are reserves like any other, merged in one level up so the header
+    // and the guard cannot disagree about the same dollar.
+    () => exposureFor(balance ?? 0, committed, containerLocked),
+    [balance, committed, containerLocked],
   );
 
   const guard = settings.exposureGuard && balance != null;
@@ -860,6 +833,20 @@ export function Manual({
 
   return (
     <>
+      {/*
+        One surface, not five cards with air between them. Everything above the
+        dock is the same running window — the bots trading it, the events it
+        follows, its price, its positions — and hairlines rather than gaps read
+        as one instrument instead of a stack of unrelated panels.
+      */}
+      <div className="deck">
+
+      {/*
+        Both bots on one line, tight under the header: two small accounts that
+        are watched rather than worked, and a card each pushed the thing being
+        traded off the screen. Opening one drops its full account underneath.
+      */}
+      <div className="bots">
       {counter && (
         <CounterStrip
           state={counter}
@@ -868,13 +855,20 @@ export function Manual({
           onEnable={(enabled) => {
             void PolyBot.counterUpdate({ enabled })
               .then(() => PolyBot.counterState())
-              .then(setCounter)
+              .then((s) => onCounter?.(s))
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onBank={(usd) => {
+            if (!Number.isFinite(usd) || usd < 0) return;
+            void PolyBot.counterUpdate({ bankUsd: usd })
+              .then(() => PolyBot.counterState())
+              .then((s) => onCounter?.(s))
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
           onReset={() => {
             void PolyBot.counterReset()
               .then(() => PolyBot.counterState())
-              .then(setCounter)
+              .then((s) => onCounter?.(s))
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
         />
@@ -888,17 +882,26 @@ export function Manual({
           onEnable={(enabled) => {
             void PolyBot.signalUpdate({ enabled })
               .then(() => PolyBot.signalState())
-              .then(setSignal)
+              .then((s) => onSignal?.(s))
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onBank={(usd) => {
+            if (!Number.isFinite(usd) || usd < 0) return;
+            void PolyBot.signalUpdate({ bankUsd: usd })
+              .then(() => PolyBot.signalState())
+              .then((s) => onSignal?.(s))
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
           onReset={() => {
             void PolyBot.signalReset()
               .then(() => PolyBot.signalState())
-              .then(setSignal)
+              .then((s) => onSignal?.(s))
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
         />
       )}
+
+      </div>
 
       <EventStrip
         events={events}
@@ -954,15 +957,7 @@ export function Manual({
         </div>
       </div>
 
-      {tab === 'settings' ? (
-        <ManualSettingsForm
-          settings={settings}
-          timings={autoSell.timings}
-          onChange={apply}
-          onNote={setNote}
-        />
-      ) : (
-        <>
+      {tab !== 'settings' && (
           <div className="card tight">
             <div className="listhead">
               <span>{viewWindow != null ? `Событие ${clockOf(viewWindow)}` : 'Позиции'}</span>
@@ -1113,7 +1108,22 @@ export function Manual({
               })
             )}
           </div>
+      )}
 
+      </div>
+
+      {tab === 'settings' ? (
+        <>
+          <ManualSettingsForm
+            settings={settings}
+            timings={autoSell.timings}
+            onChange={apply}
+            onNote={setNote}
+          />
+          {appSettings}
+        </>
+      ) : (
+        <>
           {draft && (
             <div className="card tight">
               <div className="draftrow">
@@ -1692,6 +1702,7 @@ function BotStrip({
   open,
   onToggle,
   onEnable,
+  onBank,
   onReset,
 }: {
   title: string;
@@ -1704,21 +1715,21 @@ function BotStrip({
   open: boolean;
   onToggle: () => void;
   onEnable: (enabled: boolean) => void;
+  onBank: (usd: number) => void;
   onReset: () => void;
 }) {
   const tone = account.pnl > 0 ? 'up' : account.pnl < 0 ? 'down' : 'muted';
 
   return (
-    <div className={`counter${open ? ' open' : ''}`}>
-      <button className="counterbar" onClick={onToggle}>
-        <span className={`counterdot${account.running ? ' live' : ''}`} aria-hidden />
-        <span className="countertitle">{title}</span>
-        <span className="countercash">{usd(account.cash)}</span>
-        <span className={`counterpnl ${tone}`}>{signedUsd(account.pnl)}</span>
-        <span className="counterdoing muted">{doing}</span>
-        <span className="foldarrow" aria-hidden>
-          {open ? '−' : '+'}
+    <>
+      <button className={`botchip${open ? ' open' : ''}`} onClick={onToggle}>
+        <span className="botchip-top">
+          <span className={`counterdot${account.running ? ' live' : ''}`} aria-hidden />
+          <span className="countertitle">{title}</span>
+          <span className={`counterpnl ${tone}`}>{signedUsd(account.pnl)}</span>
         </span>
+        <span className="botchip-cash">{usd(account.cash)}</span>
+        <span className="counterdoing muted">{doing}</span>
       </button>
 
       {open && (
@@ -1732,6 +1743,29 @@ function BotStrip({
           </div>
 
           <div className="counterrule muted">{rule}</div>
+
+          {/*
+            The stake is the one setting this bot has, and it is what the
+            container holds back for it — so it is set here, next to the money
+            it governs, rather than three folds away.
+          */}
+          <div className="fields botbank">
+            <label className="field">
+              <span>контейнер, $</span>
+              <input
+                type="number"
+                step="1"
+                value={String(account.bankUsd)}
+                onChange={(e) =>
+                  onBank(Number(e.target.value.replace(',', '.')))
+                }
+              />
+            </label>
+            <div className="botbank-now">
+              <span className="muted">сейчас свободно</span>
+              <b>{usd(account.cash)}</b>
+            </div>
+          </div>
 
           <div className="countergrid">
             <div>
@@ -1824,7 +1858,7 @@ function BotStrip({
           </button>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -1834,12 +1868,14 @@ function CounterStrip({
   open,
   onToggle,
   onEnable,
+  onBank,
   onReset,
 }: {
   state: CounterState;
   open: boolean;
   onToggle: () => void;
   onEnable: (enabled: boolean) => void;
+  onBank: (usd: number) => void;
   onReset: () => void;
 }) {
   const round = state.round;
@@ -1863,6 +1899,7 @@ function CounterStrip({
       onToggle={onToggle}
       open={open}
       onEnable={onEnable}
+      onBank={onBank}
       onReset={onReset}
       rule={
         <>
@@ -1899,12 +1936,14 @@ function SignalStrip({
   open,
   onToggle,
   onEnable,
+  onBank,
   onReset,
 }: {
   state: SignalState;
   open: boolean;
   onToggle: () => void;
   onEnable: (enabled: boolean) => void;
+  onBank: (usd: number) => void;
   onReset: () => void;
 }) {
   const round = state.round;
@@ -1928,6 +1967,7 @@ function SignalStrip({
       onToggle={onToggle}
       open={open}
       onEnable={onEnable}
+      onBank={onBank}
       onReset={onReset}
       rule={
         <>
@@ -2215,114 +2255,112 @@ function RuleBar({
       ? spendableBalance(balance, ask) * settings.balanceSharePct
       : null;
 
+  /** The auto-sell's own line: on but idle and on but stuck look alike. */
+  const sellNote = !settings.autoSellEnabled
+    ? 'выключена'
+    : state.lastFault
+      ? state.lastFault
+      : !state.running
+        ? 'запускается…'
+        : state.rows.length === 0
+          ? 'ждём покупку'
+          : stuck
+            ? // A position the rule cannot cover says why, right here. "Ждём
+              // покупку" while a bought lot sat with no sell was the least
+              // useful thing this line could have said.
+              `${stuck.outcome}: ${stuck.status}`
+            : `${rung != null ? `${Math.round(rung * 100)}¢ · ` : ''}` +
+              `покрыто ${covered}/${state.rows.length} · ${ago(state.lastSweepAt)}`;
+
   return (
     <div className="card tight">
-      <div className="rule">
+      {/*
+        Five switches across, not five rows down. Each is a rule that is either
+        on or off with one number attached, and a full row apiece cost a third
+        of the screen to say so.
+      */}
+      <div className="rules-bar">
         <button
-          className={`switch ${settings.autoSellEnabled ? 'on' : ''}`}
+          className={`ruletile${settings.autoSellEnabled ? ' on' : ''}`}
           onClick={() =>
             push({ ...settings, autoSellEnabled: !settings.autoSellEnabled })
           }
-        />
-        <span className="rule-name">
-          Автопродажа
-          {settings.autoSellPercentMode && (
-            <span className="muted">
-              {' '}
-              +{Math.round(settings.autoSellProfitPct * 100)}%
-            </span>
-          )}
-        </span>
-        <span className={`rule-note ${state.lastFault ? 'down' : 'muted'}`}>
-          {/*
-            A rule that is on but not sweeping used to look identical to one
-            with nothing to do. It now says which it is.
-          */}
-          {!settings.autoSellEnabled
-            ? 'выключена'
-            : state.lastFault
-              ? state.lastFault
-              : !state.running
-                ? 'запускается…'
-                : state.rows.length === 0
-                  ? 'ждём покупку'
-                  : stuck
-                    ? // A position the rule cannot cover says why, right here.
-                      // "Ждём покупку" while a bought lot sat with no sell was
-                      // the least useful thing this line could have said.
-                      `${stuck.outcome}: ${stuck.status}`
-                    : `${rung != null ? `${Math.round(rung * 100)}¢ · ` : ''}` +
-                      `покрыто ${covered}/${state.rows.length} · ${ago(state.lastSweepAt)}`}
-        </span>
-      </div>
+        >
+          <span className={`switch mini ${settings.autoSellEnabled ? 'on' : ''}`} />
+          <b>продажа</b>
+          <i>
+            {settings.autoSellPercentMode
+              ? `+${Math.round(settings.autoSellProfitPct * 100)}%`
+              : 'лесенкой'}
+          </i>
+        </button>
 
-      <div className="rule">
         <button
-          className={`switch ${settings.autoRebuyEnabled ? 'on' : ''}`}
+          className={`ruletile${settings.autoRebuyEnabled ? ' on' : ''}`}
           onClick={() =>
             push({ ...settings, autoRebuyEnabled: !settings.autoRebuyEnabled })
           }
-        />
-        <span className="rule-name">Автодокуп</span>
-        <span className="rule-note muted">
-          {state.rebuys.length > 0
-            ? `ждёт ${state.rebuys.length}`
-            : `−${Math.round(settings.autoRebuyDropPct * 100)}%`}
-        </span>
-      </div>
+        >
+          <span className={`switch mini ${settings.autoRebuyEnabled ? 'on' : ''}`} />
+          <b>докуп</b>
+          <i>
+            {state.rebuys.length > 0
+              ? `ждёт ${state.rebuys.length}`
+              : `−${Math.round(settings.autoRebuyDropPct * 100)}%`}
+          </i>
+        </button>
 
-      {/*
-        The cap is a rule like the others, and belongs where the others are —
-        with the figure that matters on it: what is in the market against what
-        the guard allows.
-      */}
-      <div className="rule">
         <button
-          className={`switch ${settings.limitLadder ? 'on' : ''}`}
-          onClick={() =>
-            onChange({ ...settings, limitLadder: !settings.limitLadder })
-          }
-        />
-        <span className="rule-name">Лесенка лимиток</span>
-        <span className="rule-note muted">
-          +{LIMIT_LADDER_COUNT} · шаг {Math.round(settings.limitLadderStep * 100)}¢
-        </span>
-      </div>
+          className={`ruletile${settings.limitLadder ? ' on' : ''}`}
+          onClick={() => onChange({ ...settings, limitLadder: !settings.limitLadder })}
+        >
+          <span className={`switch mini ${settings.limitLadder ? 'on' : ''}`} />
+          <b>лесенка</b>
+          <i>
+            +{LIMIT_LADDER_COUNT} · {Math.round(settings.limitLadderStep * 100)}¢
+          </i>
+        </button>
 
-      <div className="rule">
         <button
-          className={`switch ${settings.exposureGuard ? 'on' : ''}`}
+          className={`ruletile${settings.exposureGuard ? ' on' : ''}`}
           onClick={() =>
             onChange({ ...settings, exposureGuard: !settings.exposureGuard })
           }
-        />
-        <span className="rule-name">Контейнер</span>
-        <span
-          className={`rule-note ${
-            settings.exposureGuard && exposure.full ? 'warn' : 'muted'
-          }`}
         >
-          {!settings.exposureGuard
-            ? 'выкл'
-            : exposure.full
-              ? 'лимит'
-              : `свободно ${usd(exposure.room)}`}
-        </span>
-      </div>
+          <span className={`switch mini ${settings.exposureGuard ? 'on' : ''}`} />
+          <b>контейнер</b>
+          <i className={settings.exposureGuard && exposure.full ? 'warn' : undefined}>
+            {!settings.exposureGuard
+              ? 'выкл'
+              : exposure.full
+                ? 'лимит'
+                : usd(exposure.room)}
+          </i>
+        </button>
 
-      <div className="rule">
         <button
-          className={`switch ${settings.useBalanceShare ? 'on' : ''}`}
+          className={`ruletile${settings.useBalanceShare ? ' on' : ''}`}
           onClick={() =>
             onChange({ ...settings, useBalanceShare: !settings.useBalanceShare })
           }
-        />
-        {/*
-          The share is the whole point of this rule, so it is picked here rather
-          than typed in settings. The switch still decides whether the mode is
-          on at all.
-        */}
-        <span className="pcts">
+        >
+          <span className={`switch mini ${settings.useBalanceShare ? 'on' : ''}`} />
+          <b>% баланса</b>
+          <i>
+            {settings.useBalanceShare && stake != null
+              ? usd(stake)
+              : `${Math.round(settings.balanceSharePct * 100)}%`}
+          </i>
+        </button>
+      </div>
+
+      {/*
+        The share is the whole point of that last rule, so it is picked here
+        rather than typed in settings — but only while the mode is on, or it is
+        a row of buttons that does nothing.
+      */}
+      {settings.useBalanceShare && (
+        <div className="pcts rules-pcts">
           {[25, 50, 100].map((pct) => (
             <button
               key={pct}
@@ -2334,15 +2372,18 @@ function RuleBar({
               {pct}%
             </button>
           ))}
-        </span>
-        <span className="rule-note muted">
-          {settings.useBalanceShare
-            ? stake != null
-              ? `${stake.toFixed(2)} $ за клик`
-              : 'баланс не прочитан'
-            : 'вместо лесенки размера'}
-        </span>
-      </div>
+          <span className="muted rules-note">
+            {stake != null ? `${stake.toFixed(2)} $ за клик` : 'баланс не прочитан'}
+          </span>
+        </div>
+      )}
+
+      {/* The sell rule is the one that can be quietly stuck, so it still talks. */}
+      {settings.autoSellEnabled && (
+        <div className={`rules-note ${state.lastFault || stuck ? 'warn' : 'muted'}`}>
+          {sellNote}
+        </div>
+      )}
 
       {state.rows.length > 0 && (
         <div className="autosell-rows">
@@ -2372,37 +2413,6 @@ function RuleBar({
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * A section that stays shut until it is wanted.
- *
- * The settings had grown to four screens of fields, which is four screens to
- * scroll past to change the one thing you came for. Folded, the whole page is
- * a list of headings you can see at once.
- */
-function Fold({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={`card fold${open ? ' open' : ''}`}>
-      <button className="foldhead" onClick={() => setOpen((v) => !v)}>
-        <span>{title}</span>
-        {note && <span className="muted foldnote">{note}</span>}
-        <span className="foldarrow" aria-hidden>
-          {open ? '−' : '+'}
-        </span>
-      </button>
-      {open && <div className="foldbody">{children}</div>}
     </div>
   );
 }

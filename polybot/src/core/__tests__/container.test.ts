@@ -5,6 +5,7 @@ import {
   removeReserve,
   reservedForBots,
   splitFor,
+  withBots,
 } from '../container';
 
 describe('the container', () => {
@@ -57,5 +58,43 @@ describe('the container', () => {
   it('refuses a stake that is not an amount', () => {
     expect(addReserve(DEFAULT_CONTAINER, 'Бот', 0).reserves).toHaveLength(0);
     expect(addReserve(DEFAULT_CONTAINER, 'Бот', Number.NaN).reserves).toHaveLength(0);
+  });
+});
+
+describe('withBots', () => {
+  const base = { corePct: 0.3, reserves: [] };
+
+  it('leaves the container alone when no bot is running', () => {
+    expect(withBots(base, [])).toBe(base);
+    expect(withBots(base, [{ name: 'Контр-бот', usd: 0 }])).toBe(base);
+  });
+
+  it('counts a running bot as a reserve', () => {
+    const c = withBots(base, [
+      { name: 'Контр-бот', usd: 5 },
+      { name: 'Индикаторы', usd: 6 },
+    ]);
+    expect(reservedForBots(c)).toBeCloseTo(11, 6);
+
+    // On a $30 deposit: $11 to the bots, 30% of the rest untouchable.
+    const split = splitFor(c, 30);
+    expect(split.bots).toBeCloseTo(11, 6);
+    expect(split.core).toBeCloseTo(9, 6);
+    expect(split.free).toBeCloseTo(10, 6);
+  });
+
+  it('locks everything when the bots alone outgrow the deposit', () => {
+    const split = splitFor(withBots(base, [{ name: 'Индикаторы', usd: 20 }]), 15);
+    expect(split.bots).toBeCloseTo(15, 6);
+    expect(split.core).toBeCloseTo(0, 6);
+    expect(split.free).toBeCloseTo(0, 6);
+  });
+
+  it('keeps the stored reserves alongside the bots', () => {
+    const stored = { corePct: 0, reserves: [{ id: 'a', name: 'Ручной', usd: 4 }] };
+    expect(reservedForBots(withBots(stored, [{ name: 'Контр-бот', usd: 5 }]))).toBeCloseTo(
+      9,
+      6,
+    );
   });
 });

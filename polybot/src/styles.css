@@ -65,29 +65,6 @@ body {
   font-weight: 600;
 }
 
-.tabs {
-  display: flex;
-  border-top: 1px solid var(--line);
-  background: var(--surface);
-  padding-bottom: var(--safe-bottom);
-}
-
-.tabs button {
-  flex: 1;
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 12px;
-  padding: 11px 4px 13px;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.tabs button.active {
-  color: var(--accent);
-  font-weight: 600;
-}
-
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1073,11 +1050,12 @@ button.compact.narrow {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  font-size: 11px;
-  letter-spacing: 0.04em;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
-  padding-bottom: 3px;
+  padding: 2px 0 4px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -1670,6 +1648,29 @@ button.pill.balance {
   padding-left: 6px;
 }
 
+/*
+ * A working order is the row you might tap, so it says so: a live edge and a
+ * faint fill, against the flat rows of rounds that are already finished.
+ */
+.listrow.trade-buying {
+  border-left-color: var(--accent);
+  background: linear-gradient(
+    to right,
+    rgba(76, 141, 255, 0.08),
+    transparent 55%
+  );
+  border-radius: 0 8px 8px 0;
+}
+
+.listrow.trade-pending {
+  background: linear-gradient(
+    to right,
+    rgba(245, 181, 68, 0.07),
+    transparent 55%
+  );
+  border-radius: 0 8px 8px 0;
+}
+
 /* The side never wraps: it is one word and a marker, and it names the row. */
 .listrow.trade .tag-side {
   white-space: nowrap;
@@ -1985,35 +1986,53 @@ button.step.big {
  * account can live without competing with the desk for attention: one line
  * while it works, a full page when it is asked about.
  */
-.counter {
-  margin: 0 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  overflow: hidden;
+/*
+ * Two accounts on one line. Each is watched far more often than it is touched,
+ * so it gets a chip rather than a card: name, result, money, and one line of
+ * what it is doing. Opening either drops its full account across both columns.
+ */
+.bots {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
 }
 
-.counter.open {
-  border-color: var(--accent, var(--line));
+.bots > .counterbody {
+  grid-column: 1 / -1;
 }
 
-.counterbar {
+.botchip {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 9px 12px;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 7px 10px;
   border: none;
-  background: none;
+  background: var(--surface);
   color: var(--text);
   font-family: inherit;
-  font-size: 13px;
   font-variant-numeric: tabular-nums;
+  text-align: left;
   cursor: pointer;
 }
 
-.counterbar:active {
+.botchip:active,
+.botchip.open {
   background: var(--surface-2);
+}
+
+.botchip-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.botchip-cash {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 /* Green only while the loop is actually up; a switch that lies is worse than
@@ -2038,7 +2057,6 @@ button.step.big {
 }
 
 .counterdoing {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2049,7 +2067,7 @@ button.step.big {
 
 .counterbody {
   padding: 10px 12px 12px;
-  border-top: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .counterhead {
@@ -2105,6 +2123,11 @@ button.step.big {
 
 /* The bot's name, so two strips stacked are told apart at a glance. */
 .countertitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
@@ -2293,4 +2316,134 @@ button.step.big {
 .pairlocked {
   font-size: 9px;
   font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ deck */
+
+/*
+ * The desk as one instrument: cards keep their own hairline between them and
+ * nothing else. Air between panels reads as "these are separate things", and
+ * on a five-minute window they are not — every number above the dock is about
+ * the same five minutes.
+ */
+.deck {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  margin-bottom: 6px;
+}
+
+.deck > .card.tight,
+.deck > .bots {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+
+.deck > * + * {
+  border-top: 1px solid var(--line);
+}
+
+/* ---------------------------------------------------- the rules, in a row */
+
+/*
+ * Five rules across the width. Each is a switch, a short name and the one
+ * number that says what it is set to — which is everything a row was carrying
+ * at a fifth of the height.
+ */
+.rules-bar {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.ruletile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 6px 2px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ruletile.on {
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.ruletile b {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.ruletile i {
+  font-style: normal;
+  font-size: 9px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.ruletile i.warn {
+  color: var(--warn);
+}
+
+/* A switch small enough to sit above its own name. */
+.switch.mini {
+  width: 26px;
+  height: 15px;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.switch.mini::after {
+  width: 11px;
+  height: 11px;
+}
+
+.switch.mini.on::after {
+  transform: translateX(11px);
+}
+
+.rules-pcts {
+  margin-top: 6px;
+}
+
+.rules-note {
+  font-size: 10px;
+  padding-top: 5px;
+}
+
+/* The bot's own stake, set where the money it governs is shown. */
+.botbank {
+  grid-template-columns: 1fr 1fr;
+  align-items: end;
+  margin-top: 8px;
+}
+
+.botbank-now {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.botbank-now span {
+  font-size: 10px;
+  order: 2;
+}
+
+.botbank-now b {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
 }

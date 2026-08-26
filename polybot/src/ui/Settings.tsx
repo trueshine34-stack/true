@@ -5,6 +5,7 @@ import { clearVault } from '../core/storage';
 import { PolyBot } from '../native/polybot';
 import { Diagnostics } from './Diagnostics';
 import { Logs } from './Logs';
+import { Fold } from './Fold';
 
 export function SettingsScreen({
   settings,
@@ -22,7 +23,6 @@ export function SettingsScreen({
   const [checking, setChecking] = useState(false);
   const [batteryExempt, setBatteryExempt] = useState<boolean | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
-  const [pane, setPane] = useState<'settings' | 'journal'>('settings');
 
   useEffect(() => {
     void PolyBot.isBatteryExempt()
@@ -67,27 +67,6 @@ export function SettingsScreen({
 
   return (
     <>
-      <div className="card tight">
-        <div className="segmented">
-          <button
-            className={pane === 'settings' ? 'active' : ''}
-            onClick={() => setPane('settings')}
-          >
-            Настройки
-          </button>
-          <button
-            className={pane === 'journal' ? 'active' : ''}
-            onClick={() => setPane('journal')}
-          >
-            Журнал
-          </button>
-        </div>
-      </div>
-
-      {pane === 'journal' ? (
-        <Logs />
-      ) : (
-        <>
       {batteryExempt === false && (
         <div className="banner warn">
           Android может усыплять приложение в фоне. Отключите для него
@@ -102,8 +81,7 @@ export function SettingsScreen({
         </div>
       )}
 
-      <div className="card">
-        <h2>Торговля</h2>
+      <Fold title="Торговля">
 
         <label className="field">
           <span>Стратегия</span>
@@ -225,10 +203,9 @@ export function SettingsScreen({
           <span>Тестовый режим</span>
           <Switch on={settings.dryRun} onToggle={() => set('dryRun', !settings.dryRun)} />
         </div>
-      </div>
+      </Fold>
 
-      <div className="card">
-        <h2>Выход из позиции</h2>
+      <Fold title="Выход из позиции">
 
         <div className="toggle" style={{ borderTop: 'none', paddingTop: 0 }}>
           <span>Ставить продажу сразу после входа</span>
@@ -341,10 +318,9 @@ export function SettingsScreen({
             </button>
           </>
         )}
-      </div>
+      </Fold>
 
-      <div className="card">
-        <h2>Реакции на цену</h2>
+      <Fold title="Реакции на цену">
 
         <div className="toggle" style={{ borderTop: 'none', paddingTop: 0 }}>
           <span>Тейк-профит при +100%</span>
@@ -451,10 +427,9 @@ export function SettingsScreen({
             </label>
           </>
         )}
-      </div>
+      </Fold>
 
-      <div className="card">
-        <h2>Ограничение риска</h2>
+      <Fold title="Ограничение риска">
         <label className="field">
           <span>Стоп по убытку за сессию, $</span>
           <input
@@ -480,10 +455,9 @@ export function SettingsScreen({
             }
           />
         </label>
-      </div>
+      </Fold>
 
-      <div className="card">
-        <h2>Аккаунт</h2>
+      <Fold title="Аккаунт">
         <div className="row">
           <span className="label">Ключ подписи</span>
           <span className="value mono">{account?.signerAddress ?? '—'}</span>
@@ -539,9 +513,11 @@ export function SettingsScreen({
         >
           Отключить кошелёк
         </button>
-      </div>
-        </>
-      )}
+      </Fold>
+
+      <Fold title="Журнал">
+        <Logs />
+      </Fold>
     </>
   );
 }
