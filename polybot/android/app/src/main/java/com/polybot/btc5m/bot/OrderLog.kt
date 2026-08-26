@@ -173,6 +173,49 @@ object OrderLog {
 
     fun hasUncovered(windowStart: Long): Boolean = uncovered(windowStart).isNotEmpty()
 
+    /** A purchase that no sell covers yet, at what it cost. */
+    data class Lot(val shares: Double, val price: Double, val at: Long)
+
+    /**
+     * The buys of one outcome that still have no sell against them, oldest
+     * first, each with its own price.
+     *
+     * A position's average is not what any single purchase cost. Pricing an
+     * exit off the average puts every offer at one price — near the first buy's
+     * — which is right for none of them: the lot bought at 32¢ is asked to wait
+     * for the same price as the lot bought at 52¢, so one leaves money behind
+     * and the other never fills. Each purchase deserves its own exit, and that
+     * needs the purchases themselves, not their mean.
+     *
+     * Sells consume lots oldest first, resting ones included: an offer already
+     * on the book is an exit already arranged for those shares.
+     */
+    fun uncoveredLots(asset: String): List<Lot> {
+        val mine = entries.filter { it.asset == asset }.sortedBy { it.placedAt }
+        val lots = ArrayList<Lot>()
+
+        for (entry in mine) {
+            if (entry.action != "BUY") continue
+            if (entry.matched > 1e-9) lots.add(Lot(entry.matched, entry.price, entry.placedAt))
+        }
+
+        for (entry in mine) {
+            if (entry.action != "SELL") continue
+            if (entry.status == "cancelled") continue
+            var left = maxOf(entry.matched, entry.size)
+            var i = 0
+            while (left > 1e-9 && i < lots.size) {
+                val lot = lots[i]
+                val take = minOf(lot.shares, left)
+                lots[i] = lot.copy(shares = lot.shares - take)
+                left -= take
+                if (lots[i].shares <= 1e-9) i += 1
+            }
+        }
+
+        return lots.filter { it.shares > 1e-6 }
+    }
+
     /** Is one particular asset's buy still working? */
     fun hasWorkingBuy(asset: String): Boolean = entries.any {
         it.asset == asset &&

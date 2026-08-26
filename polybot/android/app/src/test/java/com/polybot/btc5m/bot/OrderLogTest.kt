@@ -232,6 +232,75 @@ class OrderLogTest {
     }
 
     @Test
+    fun eachPurchaseKeepsItsOwnPrice() {
+        record("BUY", 0.32, 5.0, matched = 5.0)
+        record("BUY", 0.52, 5.0, matched = 5.0)
+        record("BUY", 0.49, 5.0, matched = 5.0)
+
+        val lots = OrderLog.uncoveredLots("token-a")
+
+        // Not one position at 44⅓¢ — three purchases, oldest first.
+        assertEquals(3, lots.size)
+        assertEquals(0.32, lots[0].price, 1e-9)
+        assertEquals(0.52, lots[1].price, 1e-9)
+        assertEquals(0.49, lots[2].price, 1e-9)
+    }
+
+    @Test
+    fun aSellTakesTheOldestPurchaseOut() {
+        record("BUY", 0.32, 5.0, matched = 5.0)
+        record("BUY", 0.52, 5.0, matched = 5.0)
+        record("SELL", 0.41, 5.0, matched = 5.0)
+
+        val lots = OrderLog.uncoveredLots("token-a")
+
+        assertEquals(1, lots.size)
+        assertEquals(0.52, lots[0].price, 1e-9)
+    }
+
+    @Test
+    fun anOfferAlreadyOnTheBookCoversItsLot() {
+        record("BUY", 0.32, 5.0, matched = 5.0)
+        record("BUY", 0.52, 5.0, matched = 5.0)
+        // Resting, nothing matched: those shares have an exit arranged.
+        record("SELL", 0.41, 5.0, matched = 0.0)
+
+        val lots = OrderLog.uncoveredLots("token-a")
+
+        assertEquals(1, lots.size)
+        assertEquals(0.52, lots[0].price, 1e-9)
+    }
+
+    @Test
+    fun aPulledOfferLeavesItsLotUncoveredAgain() {
+        record("BUY", 0.32, 5.0, matched = 5.0)
+        val sell = record("SELL", 0.41, 5.0, matched = 0.0)
+        sell.status = "cancelled"
+
+        assertEquals(1, OrderLog.uncoveredLots("token-a").size)
+    }
+
+    @Test
+    fun aSellBiggerThanOneLotEatsIntoTheNext() {
+        record("BUY", 0.32, 5.0, matched = 5.0)
+        record("BUY", 0.52, 5.0, matched = 5.0)
+        record("SELL", 0.60, 8.0, matched = 8.0)
+
+        val lots = OrderLog.uncoveredLots("token-a")
+
+        assertEquals(1, lots.size)
+        assertEquals(2.0, lots[0].shares, 1e-9)
+        assertEquals(0.52, lots[0].price, 1e-9)
+    }
+
+    @Test
+    fun anotherOutcomeIsNotThisOnesBusiness() {
+        record("BUY", 0.32, 5.0, matched = 5.0)
+
+        assertTrue(OrderLog.uncoveredLots("token-b").isEmpty())
+    }
+
+    @Test
     fun aBoughtLotWithNoSellIsUncovered() {
         record("BUY", 0.43, 5.0, matched = 5.0)
 

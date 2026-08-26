@@ -171,6 +171,18 @@ describe('pairOrders', () => {
     expect(open[0].closedBy).toBeUndefined();
   });
 
+  it('does not draw a row for float dust', () => {
+    const rows = pairOrders([
+      order('BUY', 0.4, 5, { at: 1 }),
+      order('SELL', 0.6, 4.999, { at: 2 }),
+      order('SELL', 0.62, 0.001, { at: 3 }),
+    ]);
+
+    // The 0.001 left over is rounding, and read as "0.0 → 0.0" on screen.
+    expect(rows).toHaveLength(1);
+    expect(rows[0].shares).toBeCloseTo(4.999, 6);
+  });
+
   it('marks a row as automatic when either leg was', () => {
     const rows = pairOrders([
       order('BUY', 0.4, 5, { at: 1 }),

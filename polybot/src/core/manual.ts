@@ -44,6 +44,10 @@ export type ManualSettings = {
   useBalanceShare: boolean;
   /** Share of the balance one click spends, as a fraction. */
   balanceSharePct: number;
+  /** Refuse to have more than a set share of the deposit at risk at once. */
+  exposureGuard: boolean;
+  /** That share, as a fraction of the deposit. */
+  exposureCapPct: number;
 };
 
 export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
@@ -69,6 +73,8 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoRebuySlicePauseSec: 3,
   useBalanceShare: false,
   balanceSharePct: 0.25,
+  exposureGuard: true,
+  exposureCapPct: 0.5,
 };
 
 /** Never spend the last of the balance, whatever the fee works out to. */
@@ -237,4 +243,75 @@ export function stakeShares(
   const floor = minShares(price, minimumOrderSize);
   const whole = Math.floor(raw);
   return whole >= floor ? whole : Math.ceil(floor * 100) / 100;
+}
+
+/**
+ * How much of the deposit is at risk, and how much more may be.
+ *
+ * "Half the deposit" cannot mean half the balance: the balance falls as you
+ * buy, so a cap read off it slides down with every purchase and never actually
+ * binds. The deposit is what is on the exchange *plus* what is already in the
+ * market — cash and positions are the same money in different shapes — and the
+ * cap is measured against that.
+ *
+ * What counts as at risk: shares held, at what they cost, and buy orders still
+ * resting, at what they would cost. A resting buy is committed money; that it
+ * has not filled yet is a timing detail, and leaving it out is how a stack of
+ * limits quietly becomes the whole deposit.
+ */
+export type Exposure = {
+  /** Money in the market: positions at cost, plus resting buys. */
+  committed: number;
+  /** Free cash on the exchange. */
+  balance: number;
+  /** Both together — the deposit the cap is a share of. */
+  equity: number;
+  cap: number;
+  /** What one more order may cost. Never negative. */
+  room: number;
+  /** Already at or over the line. */
+  full: boolean;
+};
+
+export function exposureFor(
+  balance: number,
+  committed: number,
+  capPct: number,
+): Exposure {
+  const cash = Number.isFinite(balance) && balance > 0 ? balance : 0;
+  const held = Number.isFinite(committed) && committed > 0 ? committed : 0;
+  const equity = cash + held;
+  const cap = equity * Math.max(0, Math.min(1, capPct));
+  const room = Math.max(0, Math.min(cap - held, cash));
+  return { committed: held, balance: cash, equity, cap, room, full: room <= 1e-9 };
+}
+
+/**
+ * The most of an order the guard will allow, in shares.
+ *
+ * Clamped rather than refused: a tap that buys a little less is a tap that
+ * still works, and the button says what it will actually do. Null means even
+ * the venue's smallest order would not fit, and the button says that instead.
+ */
+export function cappedShares(
+  shares: number,
+  price: number,
+  room: number,
+  minimumOrderSize = 5,
+): number | null {
+  if (!Number.isFinite(shares) || shares <= 0) return null;
+  if (!Number.isFinite(price) || price <= 0) return null;
+
+  const perShare = price + TAKER_FEE_RATE * price * (1 - price);
+  if (shares * perShare <= room + 1e-9) return shares;
+
+  const floor = minShares(price, minimumOrderSize);
+  const fits = Math.floor((room / perShare) * 100) / 100;
+  return fits >= floor ? fits : null;
+}
+
+/** What an order at this price and size actually costs, fee included. */
+export function orderCost(shares: number, price: number): number {
+  if (!Number.isFinite(shares) || !Number.isFinite(price)) return 0;
+  return shares * price + TAKER_FEE_RATE * price * (1 - price) * shares;
 }

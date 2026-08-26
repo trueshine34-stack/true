@@ -525,7 +525,11 @@ class AutoSell(
                     shares = trade.size,
                     soldAt = trade.price,
                     trigger = trade.price * (1.0 - drop),
-                    windowStart = windowStart,
+                    // The market's own window, not whichever one the sweep is
+                    // in: a sale in a market bought ahead of time belongs to
+                    // that market's five minutes, and expiring it against the
+                    // clock's window would end it before it began.
+                    windowStart = metaFor(trade.conditionId)?.windowStart ?: windowStart,
                     lot = lot,
                     remaining = trade.size,
                 ),
@@ -557,6 +561,38 @@ class AutoSell(
             // like one that was still patiently waiting.
             if (now < rebuy.nextAtMs) continue
 
+            // A buy-back belongs to the window it sold in, and dies with it: the
+            // next five minutes are a different market with different tokens,
+            // and there is nothing there to buy back. Judged by the clock, so it
+            // costs no request and cannot be held up by one — the card used to
+            // sit on a dead window forever, repeating the same numbers, because
+            // the price lookup failed first and the closed-market check below
+            // was never reached.
+            if (Clock.nowSec() >= rebuy.windowStart + WINDOW_SECONDS) {
+                engine.log(
+                    "warn",
+                    "Автодокуп отменён: окно закончилось раньше, чем цена дошла до " +
+                        "${(rebuy.trigger * 100).toInt()}¢",
+                )
+                finish(rebuy, "окно закончилось")
+                done.add(rebuy)
+                continue
+            }
+
+            // Then the market itself, before anything that can fail: a closed
+            // market is a finished buy-back, not a temporary problem.
+            val meta = metaFor(rebuy.conditionId)
+            if (meta != null && (meta.closed || !meta.acceptingOrders)) {
+                engine.log(
+                    "warn",
+                    "Автодокуп отменён: рынок закрылся раньше, чем цена дошла до " +
+                        "${(rebuy.trigger * 100).toInt()}¢",
+                )
+                finish(rebuy, "рынок закрылся")
+                done.add(rebuy)
+                continue
+            }
+
             // Just the price. The whole book was more than watching a price
             // needs, and pulling it on a timer is what got the request refused
             // at the moment the buy-back depended on it.
@@ -580,19 +616,8 @@ class AutoSell(
                 continue
             }
 
-            val meta = metaFor(rebuy.conditionId)
             if (meta == null) {
                 rebuy.note = "нет данных рынка"
-                continue
-            }
-            if (meta.closed || !meta.acceptingOrders) {
-                engine.log(
-                    "warn",
-                    "Автодокуп отменён: рынок закрылся раньше, чем цена дошла до " +
-                        "${(rebuy.trigger * 100).toInt()}¢",
-                )
-                finish(rebuy, "рынок закрылся")
-                done.add(rebuy)
                 continue
             }
 
@@ -677,12 +702,12 @@ class AutoSell(
     }
 
     /**
-     * The price percent mode is asking for, right now.
+     * The price percent mode is asking for the next lot in line.
      *
-     * Off the position's own cost, raised a tick above whatever is already
-     * resting — a slice that filled proves the market was there — and dropped
-     * to what the book will pay once the window is nearly out, provided that
-     * still clears the cost after the fee.
+     * Off that purchase's own cost — not the position's average. The average is
+     * what no single purchase paid: pricing every exit off it put them all at
+     * roughly one price, near the first buy's, which is too high for the cheap
+     * lot and too low for the dear one.
      */
     private fun percentTarget(
         position: Position,
@@ -690,18 +715,7 @@ class AutoSell(
         meta: ClobApi.MarketMeta,
         windowStart: Long,
     ): Double? {
-        // Everything here is measured from what the position cost, so without
-        // that number there is no price to ask — least of all the tick floor,
-        // which is what solving for a margin over zero produces. The app's own
-        // record of its fills covers the gap while data-api indexes the trade.
-        val avgPrice = position.avgPrice.takeIf { it > 0.0 }
-            ?: LocalFills.avgFor(position.asset)
-            ?: return null
-
-        val resting = open
-            .filter { it.assetId == position.asset && it.side == "SELL" }
-            .maxByOrNull { it.price }
-            ?.price
+        val lot = nextLot(position, open, meta) ?: return null
         val closesAt = (meta.windowStart.takeIf { it > 0 } ?: windowStart) + WINDOW_SECONDS
         val secondsLeft = closesAt - Clock.nowSec()
 
@@ -718,10 +732,11 @@ class AutoSell(
         }
 
         return SellPercent.priceFor(
-            avgPrice = avgPrice,
+            avgPrice = lot.price,
             gain = settings.profitPct,
             tick = meta.tickSize,
-            resting = resting,
+            // Each lot carries its own price, so there is nothing to step over.
+            resting = null,
             secondsLeft = secondsLeft,
             panicSec = settings.panicSec,
             bestBid = bid,
@@ -729,12 +744,43 @@ class AutoSell(
     }
 
     /**
-     * Offer one slice at a time, a few seconds apart.
+     * The next purchase needing an exit: oldest first, capped by what is really
+     * held.
      *
-     * Unlike the ladder, a resting sell here is never stale: it was placed at a
-     * price the position was worth then, and the next slice goes above it
-     * rather than replacing it. The one exception is the last minute, where
-     * everything left is repriced onto what the book will actually pay.
+     * Falls back to the position as one lot at its average when the log knows
+     * nothing about it — bought before this process started, or bought
+     * elsewhere. An average is a poor price to sell at, but it beats not
+     * selling.
+     */
+    private fun nextLot(
+        position: Position,
+        open: List<ClobApi.OpenOrder>,
+        meta: ClobApi.MarketMeta,
+    ): OrderLog.Lot? {
+        val covered = open
+            .filter { it.assetId == position.asset && it.side == "SELL" }
+            .sumOf { it.remaining }
+        val sellable = position.size - botShares(position.asset) - covered
+        if (sellable < meta.minimumOrderSize - 1e-6) return null
+
+        val lots = OrderLog.uncoveredLots(position.asset)
+        val lot = lots.firstOrNull()
+            ?: position.avgPrice.takeIf { it > 0.0 }?.let { OrderLog.Lot(sellable, it, 0L) }
+            ?: return null
+
+        // The log can believe in more shares than the wallet holds — a sale made
+        // elsewhere, a fill counted twice — and an order for shares that are not
+        // there is refused outright.
+        return lot.copy(shares = minOf(lot.shares, sellable))
+    }
+
+    /**
+     * Offer one purchase at a time, a few seconds apart.
+     *
+     * Unlike the ladder, a resting sell here is never stale: it was placed at
+     * the price its own lot needs. The one exception is the last minute, where
+     * an offer the book will never reach is pulled so the shares can go at what
+     * it does pay.
      */
     private fun reconcilePercent(
         position: Position,
@@ -744,15 +790,13 @@ class AutoSell(
         mine: Double,
     ): String {
         val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
-        val covered = sells.sumOf { it.remaining }
-        val uncovered = mine - covered
-
         val closesAt = (meta.windowStart.takeIf { it > 0 } ?: 0L) + WINDOW_SECONDS
         val lastMinute = closesAt > 0 &&
             !SellPercent.holdingOut(closesAt - Clock.nowSec(), settings.panicSec)
 
-        // Out of time: whatever is resting above what the book pays will not
-        // fill, so it is pulled and re-offered at a price that will.
+        // Out of time: an offer above what the book pays will not fill, so it is
+        // pulled. The lot it covered comes back round as uncovered on the next
+        // pass and is re-offered at a price that can actually trade.
         if (lastMinute && sells.any { it.price > target + meta.tickSize / 2 }) {
             val session = engine.session() ?: return "нет сессии"
             for (order in sells.filter { it.price > target + meta.tickSize / 2 }) {
@@ -762,25 +806,24 @@ class AutoSell(
                     return e.message ?: "не снять старый ордер"
                 }
             }
-            return tryPlace(position, mine, target)
+            return "переставляю"
         }
 
-        if (uncovered < meta.minimumOrderSize) return "покрыто"
+        val lot = nextLot(position, open, meta) ?: return "покрыто"
 
-        // A pause between slices is the whole point: it gives the price room to
-        // carry the next one higher.
+        // A pause between lots: the price has room to move, and the next lot is
+        // priced off its own cost anyway.
         val now = System.currentTimeMillis()
         val since = now - (lastSlice[position.asset] ?: 0L)
-        if (covered > 0.0 && since < settings.sliceGapSec.coerceAtLeast(0) * 1000L) {
+        if (sells.isNotEmpty() && since < settings.sliceGapSec.coerceAtLeast(0) * 1000L) {
             return "ждёт шага"
         }
 
-        val slice = SellPercent.sliceSize(
-            uncovered = uncovered,
-            lot = OrderLog.buyLotFor(position.asset),
-            minimum = meta.minimumOrderSize,
-        )
-        val status = tryPlace(position, slice, target)
+        val size = maxOf(lot.shares, meta.minimumOrderSize)
+            .coerceAtMost(mine - sells.sumOf { it.remaining })
+        if (size < meta.minimumOrderSize - 1e-6) return "покрыто"
+
+        val status = tryPlace(position, size, target)
         if (status == "выставлено") lastSlice[position.asset] = now
         return status
     }

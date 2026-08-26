@@ -2,12 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEFAULT_MANUAL_SETTINGS,
   balanceShares,
+  cappedShares,
+  exposureFor,
+  orderCost,
   sellableShares,
   stakeShares,
   limitShares,
   minShares,
   sharesFor,
   spendableBalance,
+  type Exposure,
   type ManualSettings,
 } from '../core/manual';
 import { findLevels } from '../core/levels';
@@ -435,6 +439,25 @@ export function Manual() {
   const minSize = market?.minimumOrderSize ?? 5;
 
   /**
+   * What is already in the market, and what the guard will still allow.
+   *
+   * Positions at what they cost, plus buy orders still resting at what they
+   * would cost — a limit that has not filled is committed money, and leaving it
+   * out is how a stack of them quietly becomes the whole deposit.
+   */
+  const exposure = useMemo(() => {
+    const held = positions
+      .filter((p) => !p.redeemable && p.size > 0)
+      .reduce((sum, p) => sum + p.size * (p.avgPrice > 0 ? p.avgPrice : p.curPrice), 0);
+    const resting = orders
+      .filter((o) => o.side === 'BUY')
+      .reduce((sum, o) => sum + orderCost(o.remaining, o.price), 0);
+    return exposureFor(balance ?? 0, held + resting, settings.exposureCapPct);
+  }, [positions, orders, balance, settings.exposureCapPct]);
+
+  const guard = settings.exposureGuard && balance != null;
+
+  /**
    * What one tap on a buy button does, worked out once so the label and the
    * order can never disagree. `short` marks the case where the wallet share
    * cannot reach the venue's floor: the order is still possible, but it spends
@@ -444,12 +467,19 @@ export function Manual() {
     const ask = books[which].asks[0]?.price ?? null;
     if (ask == null) return null;
 
-    if (settings.useBalanceShare && balance != null) {
-      const shares = balanceShares(ask, balance, settings.balanceSharePct, minSize);
-      if (shares != null) return { ask, shares, short: false };
-      return { ask, shares: minShares(ask, minSize), short: true };
-    }
-    return { ask, shares: sharesFor(ask, settings, minSize), short: false };
+    const wanted =
+      settings.useBalanceShare && balance != null
+        ? balanceShares(ask, balance, settings.balanceSharePct, minSize)
+        : sharesFor(ask, settings, minSize);
+    const short = wanted == null;
+    const size = wanted ?? minShares(ask, minSize);
+
+    // The guard trims rather than refuses: a tap that buys a little less still
+    // works, and the button says what it will actually do.
+    if (!guard) return { ask, shares: size, short, capped: false };
+    const allowed = cappedShares(size, ask, exposure.room, minSize);
+    if (allowed == null) return { ask, shares: 0, short, capped: true, blocked: true };
+    return { ask, shares: allowed, short, capped: allowed < size - 1e-9 };
   };
 
   /**
@@ -501,6 +531,21 @@ export function Manual() {
         );
         return;
       }
+      // The guard is on every buy, not only on the ones the buttons size:
+      // limits, the order form and a quick tap all end up here, and a rule that
+      // covers most of the ways to spend money is not a rule.
+      if (action === 'BUY' && guard) {
+        const cost = orderCost(shares, price);
+        if (cost > exposure.room + 1e-9) {
+          setNote(
+            `Защита ${Math.round(settings.exposureCapPct * 100)}%: заявка на ` +
+              `${usd(cost)}, свободно ${usd(exposure.room)} ` +
+              `(в рынке ${usd(exposure.committed)} из ${usd(exposure.cap)})`,
+          );
+          return;
+        }
+      }
+
       setBusy(true);
       try {
         const r = await PolyBot.placeOrder({
@@ -525,7 +570,7 @@ export function Manual() {
         setBusy(false);
       }
     },
-    [market, deskWindow],
+    [market, deskWindow, guard, exposure, settings.exposureCapPct],
   );
 
   /**
@@ -607,10 +652,23 @@ export function Manual() {
       setNote(`Стакан ${which} пуст`);
       return;
     }
+    if (quick.blocked) {
+      setNote(
+        `Защита ${Math.round(settings.exposureCapPct * 100)}%: в рынке уже ` +
+          `${usd(exposure.committed)} из ${usd(exposure.cap)}`,
+      );
+      return;
+    }
     if (quick.short) {
       setNote(
         `Минимум — ${minShares(quick.ask, minSize).toFixed(0)} долей, это больше ` +
           `${Math.round(settings.balanceSharePct * 100)}% баланса`,
+      );
+    }
+    if (quick.capped) {
+      setNote(
+        `Защита ${Math.round(settings.exposureCapPct * 100)}%: свободно ` +
+          `${usd(exposure.room)}, беру ${quick.shares.toFixed(1)} долей`,
       );
     }
     void place(which, 'BUY', quick.ask, quick.shares);
@@ -1019,6 +1077,7 @@ export function Manual() {
               state={autoSell}
               settings={settings}
               balance={balance}
+              exposure={exposure}
               ask={
                 quickUp && quickDown
                   ? Math.min(quickUp.ask, quickDown.ask)
@@ -1121,19 +1180,31 @@ export function Manual() {
         <div className="buybar">
           <button
             className="buy up"
-            disabled={busy || !quickUp}
+            disabled={busy || !quickUp || quickUp.blocked}
             onClick={() => quickBuy('Up')}
           >
             <b>{quickUp ? cents(quickUp.ask) : '—'}</b>
-            <s>{quickUp ? `${quickUp.shares.toFixed(0)} долей` : 'стакан пуст'}</s>
+            <s>
+              {!quickUp
+                ? 'стакан пуст'
+                : quickUp.blocked
+                  ? `лимит ${Math.round(settings.exposureCapPct * 100)}%`
+                  : `${quickUp.shares.toFixed(0)} долей${quickUp.capped ? ' ·огр' : ''}`}
+            </s>
           </button>
           <button
             className="buy down"
-            disabled={busy || !quickDown}
+            disabled={busy || !quickDown || quickDown.blocked}
             onClick={() => quickBuy('Down')}
           >
             <b>{quickDown ? cents(quickDown.ask) : '—'}</b>
-            <s>{quickDown ? `${quickDown.shares.toFixed(0)} долей` : 'стакан пуст'}</s>
+            <s>
+              {!quickDown
+                ? 'стакан пуст'
+                : quickDown.blocked
+                  ? `лимит ${Math.round(settings.exposureCapPct * 100)}%`
+                  : `${quickDown.shares.toFixed(0)} долей${quickDown.capped ? ' ·огр' : ''}`}
+            </s>
           </button>
         </div>
       </div>
@@ -1495,6 +1566,7 @@ function RuleBar({
   state,
   settings,
   balance,
+  exposure,
   ask,
   onChange,
   onNote,
@@ -1502,6 +1574,7 @@ function RuleBar({
   state: AutoSellState;
   settings: ManualSettings;
   balance: number | null;
+  exposure: Exposure;
   /** Price a click would pay, for showing what the share works out to. */
   ask: number | null;
   onChange: (next: ManualSettings) => void;
@@ -1595,6 +1668,47 @@ function RuleBar({
           {state.rebuys.length > 0
             ? `ждёт ${state.rebuys.length}`
             : `−${Math.round(settings.autoRebuyDropPct * 100)}%`}
+        </span>
+      </div>
+
+      {/*
+        The cap is a rule like the others, and belongs where the others are —
+        with the figure that matters on it: what is in the market against what
+        the guard allows.
+      */}
+      <div className="rule">
+        <button
+          className={`switch ${settings.exposureGuard ? 'on' : ''}`}
+          onClick={() =>
+            onChange({ ...settings, exposureGuard: !settings.exposureGuard })
+          }
+        />
+        {/* The chips already carry the percentage; the name repeating it is
+            what pushed the figure off the row. */}
+        <span className="rule-name">Защита</span>
+        <span className="pcts">
+          {[25, 50, 75].map((pct) => (
+            <button
+              key={pct}
+              className={
+                Math.round(settings.exposureCapPct * 100) === pct ? 'on' : undefined
+              }
+              onClick={() => onChange({ ...settings, exposureCapPct: pct / 100 })}
+            >
+              {pct}%
+            </button>
+          ))}
+        </span>
+        <span
+          className={`rule-note ${
+            settings.exposureGuard && exposure.full ? 'warn' : 'muted'
+          }`}
+        >
+          {!settings.exposureGuard
+            ? 'выкл'
+            : exposure.full
+              ? 'лимит'
+              : usd(exposure.room)}
         </span>
       </div>
 
@@ -1795,6 +1909,50 @@ function ManualSettingsForm({
         </div>
       )}
 
+    </div>
+
+    <div className="card">
+      <h2>Защита депозита</h2>
+      <div className="toggle">
+        <span>
+          Не пускать в рынок больше доли депозита
+          <span className="muted" style={{ display: 'block', fontSize: 11 }}>
+            Депозит — свободные деньги плюс то, что уже в рынке: наличные и
+            позиции — это одни и те же деньги в разной форме. Считать от одного
+            баланса нельзя, он падает с каждой покупкой, и такой предел сползает
+            вниз и никогда не срабатывает.
+          </span>
+        </span>
+        <button
+          className={`switch ${settings.exposureGuard ? 'on' : ''}`}
+          onClick={() =>
+            onChange({ ...settings, exposureGuard: !settings.exposureGuard })
+          }
+        />
+      </div>
+
+      <label className="field" style={{ marginTop: 12 }}>
+        <span>Предел, % депозита</span>
+        <input
+          type="number"
+          value={String(Math.round(settings.exposureCapPct * 100))}
+          onChange={(e) =>
+            onChange({
+              ...settings,
+              exposureCapPct: Math.max(
+                0,
+                Math.min(100, Number(e.target.value.replace(',', '.'))),
+              ) / 100,
+            })
+          }
+        />
+        <span className="muted" style={{ fontSize: 11 }}>
+          В счёт идут открытые позиции по цене покупки и висящие заявки на
+          покупку по их стоимости: незаполненная лимитка — это уже обещанные
+          деньги. Клик по кнопке покупает столько, сколько влезает в остаток, и
+          пишет об этом; если не влезает даже минимальная заявка — кнопка гаснет.
+        </span>
+      </label>
     </div>
 
     <div className="card">

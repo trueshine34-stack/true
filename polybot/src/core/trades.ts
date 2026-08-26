@@ -127,6 +127,9 @@ export function pairOrders(orders: LoggedOrder[]): TradeRow[] {
       status: 'closed' | 'pending',
     ) => {
       for (const lot of take(shares)) {
+        // A hundredth of a share is float dust from splitting lots, not a
+        // trade — it showed up as a "0.0 → 0.0" row with a zero result.
+        if (lot.shares < 0.01) continue;
         const cost = buyCost(lot.shares, lot.price);
         const proceeds = sellProceeds(lot.shares, sell.price);
         rows.push({
