@@ -172,6 +172,66 @@ class OrderLogTest {
     }
 
     @Test
+    fun aTradeWithNoOrderToMatchComesBackAsLeftover() {
+        record("SELL", 0.72, 5.0, matched = 0.0)
+
+        // Same outcome, but nothing here was placed at this price.
+        val left = OrderLog.applyTrade("token-a", "SELL", 0.40, 5.0, tick = 0.01)
+
+        assertEquals(5.0, left, 1e-9)
+    }
+
+    @Test
+    fun aTradeBooksAgainstTheOrderItBelongsTo() {
+        record("SELL", 0.72, 5.0, matched = 0.0)
+
+        val left = OrderLog.applyTrade("token-a", "SELL", 0.72, 5.0, tick = 0.01)
+
+        assertEquals(0.0, left, 1e-9)
+        assertEquals("filled", OrderLog.all().first().status)
+    }
+
+    @Test
+    fun aFillWithNoOrderIsFiledAsWhatItIs() {
+        // Sold in the Polymarket app, or placed before this process started:
+        // it happened, so the panel and the profit have to know about it.
+        val entry = OrderLog.recordFill(
+            asset = "token-a",
+            conditionId = "cond-a",
+            outcome = "Down",
+            action = "SELL",
+            price = 0.30,
+            size = 5.0,
+            windowStart = 0L,
+            at = System.currentTimeMillis(),
+        )
+
+        assertEquals("filled", entry.status)
+        assertEquals(5.0, entry.matched, 1e-9)
+        assertFalse(entry.auto)
+        assertTrue(OrderLog.all().contains(entry))
+    }
+
+    @Test
+    fun aFilledSaleFromOutsideCoversTheLotItSold() {
+        record("BUY", 0.23, 5.0, matched = 5.0)
+        assertTrue(OrderLog.hasUncovered(nowWindow()))
+
+        OrderLog.recordFill(
+            asset = "token-a",
+            conditionId = "cond-a",
+            outcome = "Down",
+            action = "SELL",
+            price = 0.30,
+            size = 5.0,
+            windowStart = nowWindow(),
+            at = System.currentTimeMillis(),
+        )
+
+        assertFalse(OrderLog.hasUncovered(nowWindow()))
+    }
+
+    @Test
     fun aBoughtLotWithNoSellIsUncovered() {
         record("BUY", 0.43, 5.0, matched = 5.0)
 

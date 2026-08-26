@@ -121,15 +121,6 @@ class AutoSell(
     private val lastSlice = HashMap<String, Long>()
 
     /**
-     * Trades already turned into buy-backs, by transaction. The venue can only
-     * be asked what trades happened, not what is new since last time.
-     */
-    private val seenTrades = HashSet<String>()
-
-    @Volatile
-    private var tradesSeeded = false
-
-    /**
      * Outcomes bought recently, with the moment to stop chasing them.
      *
      * The rule used to sweep on a timer forever, which meant polling the data
@@ -322,8 +313,7 @@ class AutoSell(
         rebuys.clear()
         recentRebuys.clear()
         watching.clear()
-        seenTrades.clear()
-        tradesSeeded = false
+        TradeSync.reset()
         engine.log("info", "Автопродажа выключена")
         onStateChanged()
     }
@@ -509,28 +499,13 @@ class AutoSell(
      * without the buy-back ever hearing about it.
      */
     private fun noteFills(session: BotEngine.Session, windowStart: Long) {
-        val trades = try {
-            DataApi.trades(session.account.funderAddress)
-        } catch (e: Exception) {
-            lastFault = e.message ?: "сделки недоступны"
-            return
-        }
+        // Reading the feed and folding it into the log is shared with the desk,
+        // which does the same on its own timer — otherwise a sale that filled
+        // while the rule was off or asleep was never written down anywhere.
+        TradeSync.poll(session.account.funderAddress, minGapMs = 3_000L)
+        TradeSync.lastFault?.let { lastFault = it }
 
-        // The first pass only learns what already happened. Without it, turning
-        // the rule on would queue a buy-back for every sale in recent history.
-        if (!tradesSeeded) {
-            trades.forEach { seenTrades.add(it.key) }
-            tradesSeeded = true
-            return
-        }
-
-        // Oldest first, so several fills of one order land in order.
-        for (trade in trades.sortedBy { it.at }) {
-            if (!seenTrades.add(trade.key)) continue
-
-            val tick = metaFor(trade.conditionId)?.tickSize ?: 0.01
-            OrderLog.applyTrade(trade.asset, trade.side, trade.price, trade.size, tick)
-
+        for (trade in TradeSync.drain()) {
             // A buy that has actually happened gets its own window of attention,
             // whatever put it there: a limit that rested past the watch it was
             // given, a fill in slices, or a purchase made outside the app. This
@@ -561,11 +536,6 @@ class AutoSell(
                     "${(trade.price * 100).toInt()}¢ · докуп при " +
                     "${(trade.price * (1.0 - drop) * 100).toInt()}¢",
             )
-        }
-
-        // The key set only needs to outlive the newest page it can see.
-        if (seenTrades.size > 400) {
-            seenTrades.retainAll(trades.map { it.key }.toSet())
         }
         onStateChanged()
     }

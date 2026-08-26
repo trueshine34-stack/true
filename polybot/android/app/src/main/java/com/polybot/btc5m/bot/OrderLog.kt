@@ -195,7 +195,13 @@ object OrderLog {
      * buy-back works off the trade itself, not off this.
      */
     @Synchronized
-    fun applyTrade(asset: String, action: String, price: Double, size: Double, tick: Double) {
+    fun applyTrade(
+        asset: String,
+        action: String,
+        price: Double,
+        size: Double,
+        tick: Double,
+    ): Double {
         var left = size
         for (entry in entries.sortedBy { it.placedAt }) {
             if (left <= 1e-9) break
@@ -210,6 +216,48 @@ object OrderLog {
             entry.status = statusFor(entry.matched, entry.size, resting = true)
             left -= take
         }
+        return left
+    }
+
+    /**
+     * File a fill that belongs to no order this log knows about.
+     *
+     * There are several ways to end up here and all of them are real: a sale
+     * made in the Polymarket app, an order placed before this process started,
+     * an order whose response never came back. The trade happened either way,
+     * and a panel that leaves it out is wrong about both the position and the
+     * money — so it goes in as what it is, already filled.
+     */
+    @Synchronized
+    fun recordFill(
+        asset: String,
+        conditionId: String,
+        outcome: String,
+        action: String,
+        price: Double,
+        size: Double,
+        windowStart: Long,
+        at: Long,
+    ): Entry {
+        val nowSec = at / 1000
+        val entry = Entry(
+            id = ids.incrementAndGet(),
+            orderId = null,
+            asset = asset,
+            conditionId = conditionId,
+            outcome = outcome,
+            action = action,
+            price = price,
+            size = size,
+            placedAt = at,
+            windowStart = if (windowStart > 0L) windowStart else nowSec - (nowSec % WINDOW_SECONDS),
+            matched = size,
+            status = "filled",
+            auto = false,
+        )
+        entries.add(entry)
+        while (entries.size > MAX) entries.removeAt(0)
+        return entry
     }
 
     /**

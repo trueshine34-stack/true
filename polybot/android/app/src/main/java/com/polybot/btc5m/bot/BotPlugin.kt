@@ -994,6 +994,12 @@ class BotPlugin : Plugin() {
                     OrderLog.reconcile(open) { id ->
                         ClobApi.order(session.creds, session.account.signerAddress, id)
                     }
+                    // The listing says what is still working; only the trade
+                    // feed says what actually changed hands. Asking it here as
+                    // well as in the sell rule is what makes the panel right
+                    // when the rule is off — twice a minute is enough for a
+                    // five-minute market and gentle on the data API.
+                    TradeSync.poll(session.account.funderAddress, minGapMs = 30_000L)
                 }
                 val out = JSArray()
                 OrderLog.forWindow(windowStart).forEach {
