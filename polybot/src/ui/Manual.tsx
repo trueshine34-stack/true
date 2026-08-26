@@ -1822,44 +1822,50 @@ function OrderHistory({
   orders: LoggedOrder[];
   realised: number;
 }) {
+  const [open, setOpen] = useState(false);
   const rows = [...orders].sort((a, b) => b.placedAt - a.placedAt);
   if (rows.length === 0) return null;
+
   return (
-    <div className="card tight">
-      <div className="listhead">
+    <div className="hist">
+      {/*
+        Shut by default. It is the record of what happened, which is read after
+        the fact and almost never while a window is running — and open it was
+        half the screen between the price and the buttons.
+      */}
+      <button className="histhead" onClick={() => setOpen((v) => !v)}>
         <span className="muted">{rows.length}</span>
         <span className={realised >= 0 ? 'up sessum' : 'down sessum'}>
           {realised !== 0 ? signedUsd(realised) : ''}
         </span>
-      </div>
-      {rows.length === 0 ? (
-        <div className="muted empty">Ордеров не было</div>
-      ) : (
+        <span className="foldarrow" aria-hidden>
+          {open ? '−' : '+'}
+        </span>
+      </button>
+
+      {open &&
         rows.map((o) => (
-          <div className="listrow static hist" key={o.id}>
+          <div className="histrow" key={o.id}>
             <span className={o.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
               {o.outcome || '—'}
             </span>
-            <span className="listrow-main">
-              <span className={`ordermain ${o.action === 'BUY' ? 'hist-buy' : 'hist-sell'}`}>
-                {cents(o.price)}
-                <i>×</i>
-                {(o.matched > 0 ? o.matched : o.size).toFixed(1)}
-              </span>
+            <span className={o.action === 'BUY' ? 'hist-buy' : 'hist-sell'}>
+              {cents(o.price)}
+              <i>×</i>
+              {(o.matched > 0 ? o.matched : o.size).toFixed(1)}
             </span>
-            <span className="listrow-now">
+            <span className="muted histtime">
               {new Date(o.placedAt).toLocaleTimeString('ru-RU', {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
               })}
-              <span className={`sub ${statusTone(o.status)}`}>
-                {statusWord(o.status)}
-              </span>
+            </span>
+            <span className={`histstate ${statusTone(o.status)}`}>
+              {statusWord(o.status)}
             </span>
           </div>
-        ))
-      )}
+        ))}
     </div>
   );
 }

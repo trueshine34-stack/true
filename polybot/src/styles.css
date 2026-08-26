@@ -1842,19 +1842,78 @@ button.step.big {
 /* ---------------------------------------------- one event's order history */
 
 /*
+ * Edge to edge like the desk above it, and shut until it is asked for. It is
+ * the record of what happened — read after the fact, almost never while a
+ * window is running — and open it was half the screen between the price and
+ * the buttons.
+ */
+.hist {
+  margin: 0 -14px 6px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.histhead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 14px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.histhead .sessum {
+  margin-left: auto;
+}
+
+.histhead:active {
+  background: var(--surface-2);
+}
+
+/* One line each: side, price by size, when, and what became of it. */
+.histrow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  border-top: 1px solid var(--line);
+}
+
+.histrow .tag-side {
+  flex: 0 0 34px;
+  font-size: 11px;
+}
+
+.histrow i {
+  font-style: normal;
+  color: var(--muted);
+  margin: 0 3px;
+}
+
+.histtime {
+  margin-left: auto;
+  font-size: 11px;
+}
+
+.histstate {
+  flex: 0 0 62px;
+  text-align: right;
+  font-size: 10px;
+}
+
+
+/*
  * Wider clock column than the position rows: a history is read by when, and
  * seconds matter when three sells go out two seconds apart.
  */
-.listrow.hist .listrow-now {
-  flex: 0 0 62px;
-}
-
-.listrow.hist .listrow-main i {
-  font-style: normal;
-  color: var(--muted);
-  margin: 0 5px;
-}
-
 .hist-buy {
   color: var(--up);
   font-weight: 600;
