@@ -157,3 +157,71 @@ export function pathFor(
 
   return { line, area };
 }
+
+/**
+ * Money that moved for a reason other than trading.
+ *
+ * A withdrawal drops the balance without losing anything, and a deposit lifts
+ * it without earning anything. Left unrecorded, both are read as performance:
+ * the line falls off a cliff the day you take profit out, and the run looks
+ * like it gave back everything it made.
+ */
+export type Adjustment = {
+  at: number;
+  /** Always positive; `kind` carries the direction. */
+  usd: number;
+  kind: 'withdraw' | 'deposit';
+};
+
+const ADJ_KEY = 'baladjust.v1';
+
+export async function loadAdjustments(): Promise<Adjustment[]> {
+  const { value } = await Preferences.get({ key: ADJ_KEY });
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as Adjustment[];
+    return Array.isArray(parsed) ? parsed.filter((a) => Number.isFinite(a.usd)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveAdjustments(list: Adjustment[]): Promise<void> {
+  await Preferences.set({ key: ADJ_KEY, value: JSON.stringify(list) });
+}
+
+export function appendAdjustment(
+  list: Adjustment[],
+  usd: number,
+  kind: Adjustment['kind'],
+  at = Date.now(),
+): Adjustment[] {
+  if (!Number.isFinite(usd) || usd <= 0) return list;
+  return [...list, { at, usd, kind }];
+}
+
+/** What has been taken out, less what has been put in, up to a moment. */
+export function movedBy(adjustments: Adjustment[], at: number): number {
+  return adjustments
+    .filter((a) => a.at <= at)
+    .reduce((sum, a) => sum + (a.kind === 'withdraw' ? a.usd : -a.usd), 0);
+}
+
+/**
+ * The series as it would read if nothing had been taken out or put in.
+ *
+ * Every point carries the withdrawals made up to that moment back into the
+ * balance, so a withdrawal is a step the line does not take: what is left is
+ * the shape of the trading alone, and the end of the line is what the run has
+ * actually made since it started.
+ */
+export function adjustedPoints(
+  points: BalancePoint[],
+  adjustments: Adjustment[],
+): BalancePoint[] {
+  if (adjustments.length === 0) return points;
+  return points.map((p) => ({ at: p.at, usd: p.usd + movedBy(adjustments, p.at) }));
+}
+
+export const totalWithdrawn = (adjustments: Adjustment[]): number =>
+  adjustments.filter((a) => a.kind === 'withdraw').reduce((s, a) => s + a.usd, 0);

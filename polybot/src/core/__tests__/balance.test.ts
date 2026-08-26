@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  adjustedPoints,
+  appendAdjustment,
   appendBalance,
+  movedBy,
+  totalWithdrawn,
   pathFor,
   sliceFor,
   statsFor,
@@ -118,5 +122,56 @@ describe('pathFor', () => {
 
   it('has nothing to draw with no points', () => {
     expect(pathFor([], 320, 132)).toBeNull();
+  });
+});
+
+describe('withdrawals', () => {
+  const points = [
+    { at: at(0), usd: 20 },
+    { at: at(10), usd: 40 },
+    // 30 taken out here.
+    { at: at(20), usd: 10 },
+    { at: at(30), usd: 16 },
+  ];
+  const out = [{ at: at(15), usd: 30, kind: 'withdraw' as const }];
+
+  it('does not read a withdrawal as a loss', () => {
+    const adjusted = adjustedPoints(points, out);
+
+    // The line keeps climbing: 20 → 40 → 40 → 46.
+    expect(adjusted.map((p) => p.usd)).toEqual([20, 40, 40, 46]);
+    expect(statsFor(adjusted)?.change).toBe(26);
+  });
+
+  it('leaves the series alone when nothing has moved', () => {
+    expect(adjustedPoints(points, [])).toBe(points);
+  });
+
+  it('does not read a deposit as a profit either', () => {
+    const adjusted = adjustedPoints(
+      [
+        { at: at(0), usd: 20 },
+        { at: at(20), usd: 45 },
+      ],
+      [{ at: at(10), usd: 25, kind: 'deposit' }],
+    );
+
+    // Twenty five was added, not earned: the line is flat.
+    expect(adjusted.map((p) => p.usd)).toEqual([20, 20]);
+  });
+
+  it('counts only what moved before the moment asked about', () => {
+    expect(movedBy(out, at(10))).toBe(0);
+    expect(movedBy(out, at(20))).toBe(30);
+  });
+
+  it('refuses an amount that is not one', () => {
+    expect(appendAdjustment([], 0, 'withdraw')).toHaveLength(0);
+    expect(appendAdjustment([], Number.NaN, 'withdraw')).toHaveLength(0);
+    expect(appendAdjustment([], 12.5, 'withdraw')).toHaveLength(1);
+  });
+
+  it('adds up what has been taken out', () => {
+    expect(totalWithdrawn([...out, { at: at(40), usd: 5, kind: 'deposit' }])).toBe(30);
   });
 });

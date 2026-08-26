@@ -8,9 +8,13 @@ import { SettingsScreen } from './ui/Settings';
 import { Setup } from './ui/Setup';
 import { BalanceSheet } from './ui/BalanceSheet';
 import {
+  appendAdjustment,
   appendBalance,
+  loadAdjustments,
   loadBalanceHistory,
+  saveAdjustments,
   saveBalanceHistory,
+  type Adjustment,
   type BalancePoint,
 } from './core/balance';
 import {
@@ -38,6 +42,7 @@ export function App() {
   const [showBalance, setShowBalance] = useState(false);
   const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
   const [goal, setGoal] = useState<GoalState | null>(null);
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,6 +125,7 @@ export function App() {
 
   useEffect(() => {
     void loadBalanceHistory().then(setBalanceHistory);
+    void loadAdjustments().then(setAdjustments);
     void loadGoal().then(setGoal);
   }, []);
 
@@ -140,13 +146,27 @@ export function App() {
     void saveGoal(next);
   }, [goal, balance]);
 
-  /** The money is out: the next run starts from what is left. */
-  const restart = useCallback(() => {
-    if (!goal || balance == null) return;
-    const next = restartRun(goal, balance);
-    setGoal(next);
-    void saveGoal(next);
-  }, [goal, balance]);
+  /**
+   * The money is out: the next run starts from what is left, and the amount
+   * withdrawn is remembered so the balance line does not read it as a loss.
+   */
+  const restart = useCallback(
+    (withdrawn: number) => {
+      if (!goal || balance == null) return;
+      const next = restartRun(goal, balance);
+      setGoal(next);
+      void saveGoal(next);
+
+      if (withdrawn > 0) {
+        setAdjustments((current) => {
+          const list = appendAdjustment(current, withdrawn, 'withdraw');
+          void saveAdjustments(list);
+          return list;
+        });
+      }
+    },
+    [goal, balance],
+  );
 
   const remind = balance != null && shouldRemind(goal, balance);
   const progress = goal && balance != null ? goalProgress(goal, balance) : null;
@@ -187,10 +207,11 @@ export function App() {
       {showBalance && (
         <BalanceSheet
           history={balanceHistory}
+          adjustments={adjustments}
           balance={balance}
           goal={goal}
-          onRestart={() => {
-            restart();
+          onRestart={(withdrawn) => {
+            restart(withdrawn);
             setShowBalance(false);
           }}
           onClose={() => setShowBalance(false)}

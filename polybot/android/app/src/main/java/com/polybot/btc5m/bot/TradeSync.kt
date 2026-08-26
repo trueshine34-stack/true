@@ -93,6 +93,18 @@ object TradeSync {
         return true
     }
 
+    /**
+     * Is there anything the rules have not looked at yet?
+     *
+     * The desk polls this feed too, on its own timer, and whichever side asks
+     * first is the one that sees a trade. If the desk saw it, the sell rule's
+     * loop must stay awake long enough to drain it — otherwise a sale noticed
+     * by the screen would settle the log, leave nothing uncovered, put the loop
+     * to sleep, and the buy-back it should have started would never exist.
+     */
+    @Synchronized
+    fun hasFresh(): Boolean = fresh.isNotEmpty()
+
     /** Trades the rules have not handled yet. Draining them marks them handled. */
     @Synchronized
     fun drain(): List<DataApi.Trade> {

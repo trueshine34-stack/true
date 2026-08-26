@@ -249,6 +249,10 @@ class AutoSell(
                 val busy = sweepRequested ||
                     watching.isNotEmpty() ||
                     rebuys.isNotEmpty() ||
+                    // A trade the desk's own poll saw first and nobody has acted
+                    // on yet. Without this the loop could sleep through the one
+                    // fill a buy-back exists to answer.
+                    TradeSync.hasFresh() ||
                     OrderLog.hasWorkingSells(windowNow) ||
                     OrderLog.hasWorkingBuys(windowNow) ||
                     // A purchase with no exit arranged is unfinished business,

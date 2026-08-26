@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
 import {
   SPANS,
+  adjustedPoints,
   pathFor,
   sliceFor,
   statsFor,
+  totalWithdrawn,
+  type Adjustment,
   type BalancePoint,
 } from '../core/balance';
 import { signedPct, signedUsd, usd } from '../core/money';
@@ -21,24 +24,29 @@ const H = 132;
  */
 export function BalanceSheet({
   history,
+  adjustments,
   balance,
   goal,
   onRestart,
   onClose,
 }: {
   history: BalancePoint[];
+  adjustments: Adjustment[];
   balance: number | null;
   goal: GoalState | null;
-  /** The money is out: start the run again from what is left. */
-  onRestart: () => void;
+  /** The money is out: record how much, and start the run again. */
+  onRestart: (withdrawn: number) => void;
   onClose: () => void;
 }) {
   const [span, setSpan] = useState(2);
 
+  // Carry withdrawals back into the line: taking profit out is not a loss, and
+  // a chart that reads it as one says the run gave back everything it made.
   const points = useMemo(
-    () => sliceFor(history, SPANS[span].ms),
-    [history, span],
+    () => adjustedPoints(sliceFor(history, SPANS[span].ms), adjustments),
+    [history, adjustments, span],
   );
+  const withdrawn = useMemo(() => totalWithdrawn(adjustments), [adjustments]);
   const stats = useMemo(() => statsFor(points), [points]);
   const path = useMemo(() => pathFor(points, W, H), [points]);
   const rising = (stats?.change ?? 0) >= 0;
@@ -128,6 +136,15 @@ export function BalanceSheet({
                 {usd(stats.min)} <span className="muted">·</span> {usd(stats.max)}
               </span>
             </div>
+            {withdrawn > 0 && (
+              <div className="row">
+                <span className="label">Выведено всего</span>
+                <span className="value">
+                  {usd(withdrawn)}
+                  <span className="muted"> · учтено в линии</span>
+                </span>
+              </div>
+            )}
             <div className="row">
               <span className="label">Точек</span>
               <span className="value muted">{points.length}</span>
@@ -151,10 +168,12 @@ function GoalCard({
 }: {
   goal: GoalState;
   balance: number;
-  onRestart: () => void;
+  onRestart: (withdrawn: number) => void;
 }) {
   const p = goalProgress(goal, balance);
   const share = Math.round((p.gain / GOAL_GAIN) * 100);
+  const [confirming, setConfirming] = useState(false);
+  const [amount, setAmount] = useState('');
 
   return (
     <div className={`goal${p.reached ? ' goal-hit' : ''}`}>
@@ -177,9 +196,45 @@ function GoalCard({
             {Math.round(WITHDRAW_SHARE * 100)}% профита. Останется{' '}
             {usd(p.leftAfter)}, всё ещё больше, чем в начале круга.
           </div>
-          <button className="ghost compact" onClick={onRestart}>
-            Вывел — считать заново
-          </button>
+          {confirming ? (
+            <div className="draftrow">
+              {/*
+                The figure matters: it is what gets carried back into the
+                balance line, so a withdrawal reads as a step aside rather than
+                a loss. Pre-filled with the suggestion, editable because the
+                amount that actually left the wallet is the one that counts.
+              */}
+              <label className="mini">
+                <span>вывел, $</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  autoFocus
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
+              </label>
+              <button
+                className="primary compact"
+                onClick={() => {
+                  onRestart(Math.max(0, Number(amount.replace(',', '.')) || 0));
+                  setConfirming(false);
+                }}
+              >
+                Записать
+              </button>
+            </div>
+          ) : (
+            <button
+              className="ghost compact"
+              onClick={() => {
+                setAmount(p.suggested.toFixed(2));
+                setConfirming(true);
+              }}
+            >
+              Вывел — считать заново
+            </button>
+          )}
         </>
       ) : (
         <div className="muted goal-call">
@@ -187,7 +242,7 @@ function GoalCard({
           напомню вывести {Math.round(WITHDRAW_SHARE * 100)}% профита.{' '}
           {/* Money can leave the wallet without the goal being reached, and a
               baseline that no longer matches reality measures nothing. */}
-          <button className="linkbtn" onClick={onRestart}>
+          <button className="linkbtn" onClick={() => onRestart(0)}>
             считать от текущего
           </button>
         </div>
