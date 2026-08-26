@@ -83,7 +83,7 @@ export function Setup({
       <div className="scroll">
         <h1 style={{ fontSize: 21, marginBottom: 4 }}>Подключение Polymarket</h1>
         <p className="muted" style={{ marginTop: 0 }}>
-          Ключ шифруется PIN-кодом и хранится только на этом телефоне. Он никуда
+          Ключ шифруется хранилищем Android и остаётся только на этом телефоне. Он никуда
           не отправляется — им подписываются ордера прямо на устройстве.
         </p>
 

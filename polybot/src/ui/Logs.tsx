@@ -64,6 +64,47 @@ export function Logs() {
     }
   };
 
+  /**
+   * The journal as text, on the clipboard.
+   *
+   * Newest last, so a pasted excerpt reads in the order things happened rather
+   * than the order the screen shows them.
+   */
+  const copyJournal = async () => {
+    const text = [...entries]
+      .reverse()
+      .map(
+        (e) =>
+          `${new Date(e.at).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          })} ${e.level.padEnd(5)} ${e.message}`,
+      )
+      .join('\n');
+
+    if (!text) {
+      setNotice('Журнал пуст');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setNotice(`Скопировано строк: ${entries.length}`);
+    } catch {
+      // Some WebViews refuse the async clipboard; the old way still works.
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(area);
+      setNotice(ok ? `Скопировано строк: ${entries.length}` : 'Не вышло скопировать');
+    }
+  };
+
   const clearJournal = async () => {
     await PolyBot.clearJournal();
     setJournalBytes(0);
@@ -98,15 +139,16 @@ export function Logs() {
         >
           Очистить журнал на диске
         </button>
-        <p className="muted" style={{ fontSize: 12, margin: '10px 0 0' }}>
-          Откроется меню «Поделиться» — файл можно отправить куда угодно. Внутри
-          настройки, калибровка модели и по строке на каждое закрытое окно с
-          ценами, преимуществом, комиссиями и результатом.
-        </p>
+
       </div>
 
     <div className="card">
-      <h2>Журнал сервиса</h2>
+      <div className="listhead">
+        <span>Журнал сервиса</span>
+        <button className="linkbtn" onClick={() => void copyJournal()}>
+          скопировать ({entries.length})
+        </button>
+      </div>
       {entries.length === 0 && (
         <div className="muted">
           Пока пусто. Записи появятся, когда бот будет запущен.

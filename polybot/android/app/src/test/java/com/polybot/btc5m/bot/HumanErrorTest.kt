@@ -23,6 +23,18 @@ class HumanErrorTest {
     }
 
     @Test
+    fun aRejectedKeySaysWhatToCheck() {
+        val out = ClobApi.humanError(
+            "400 https://clob.polymarket.com/auth/derive-api-key: " +
+                "{\"error\":\"Could not derive api key!\"}",
+            400,
+        )
+
+        assertTrue(out.contains("подпись"))
+        assertTrue("names both causes", out.contains("время"))
+    }
+
+    @Test
     fun aRateLimitIsNotAMystery() {
         assertEquals("Биржа просит подождать", ClobApi.humanError("429 Too Many Requests", 429))
     }

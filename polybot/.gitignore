@@ -14,6 +14,10 @@ android/app/src/main/assets/capacitor.plugins.json
 android/capacitor-cordova-android-plugins/
 *.keystore
 *.jks
+# …except the app's own signing key. A build from a different machine must
+# produce the same signature, or Android treats it as a different app: the
+# install then wipes the data, and the sealed wallet key with it.
+!android/keystore/polybot.jks
 
 # Locally staged APKs
 

@@ -122,7 +122,9 @@ class BotPlugin : Plugin() {
                 }
                 call.resolve(result)
             } catch (e: Exception) {
-                call.reject(e.message ?: "не удалось подключиться", e)
+                // The venue's own words, in words: a rejected signature and a
+                // wrong wallet type look identical in the raw 400.
+                call.reject(ClobApi.humanError(e.message ?: "", 0), e)
             }
         }.start()
     }

@@ -50,6 +50,23 @@ import {
 } from './core/day';
 
 type Phase = 'loading' | 'setup' | 'ready';
+
+/**
+ * Nothing at startup may hang the app.
+ *
+ * Every one of these calls crosses to the native side and from there to the
+ * exchange; a slow network turned the splash screen into a dead end with no way
+ * out. A call that has not answered in time is treated as not having answered —
+ * the service carries on regardless, and the screen stops waiting for it.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise.catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
+const STARTUP_MS = 12_000;
 type Tab = 'manual' | 'settings';
 
 export function App() {
@@ -64,6 +81,8 @@ export function App() {
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   /** What the open round makes if it goes our way, reported by the desk. */
   const [potential, setPotential] = useState(0);
+  /** The startup connect did not answer in time; the desk opened anyway. */
+  const [slowStart, setSlowStart] = useState(false);
   const [day, setDay] = useState<DayGoal | null>(null);
   const [dayAsked, setDayAsked] = useState(false);
   const [dayInput, setDayInput] = useState('');
@@ -81,7 +100,7 @@ export function App() {
 
       // The service outlives the UI, so a bot started earlier is still trading;
       // rejoin it rather than reconnecting over a running engine.
-      const state = await PolyBot.getState().catch(() => null);
+      const state = await withTimeout(PolyBot.getState(), 4_000);
       if (!cancelled && state?.serviceAlive && acct) {
         setPhase('ready');
         return;
@@ -94,23 +113,29 @@ export function App() {
       // The key is sealed by the Android Keystore, so it opens without anything
       // from the user. A vault that cannot be opened — reinstalled app, cleared
       // keystore — means the key is genuinely gone and has to be entered again.
-      const vault = await PolyBot.vaultLoad().catch(() => ({ privateKey: null }));
+      const vault = await withTimeout(PolyBot.vaultLoad(), 4_000);
       if (cancelled) return;
-      if (!vault.privateKey) {
+      if (!vault?.privateKey) {
         setPhase('setup');
         return;
       }
-      try {
-        await PolyBot.connect({
+
+      // The key is here, so the desk opens either way. A connect that is still
+      // in flight finishes on its own thread and the desk starts working when
+      // it lands; a connect that failed says so on the first order rather than
+      // by never showing the screen at all.
+      const connected = await withTimeout(
+        PolyBot.connect({
           privateKey: vault.privateKey,
           funderAddress: acct.funderAddress,
           signatureType: Number(acct.signatureType),
           settings: stored,
-        });
-        if (!cancelled) setPhase('ready');
-      } catch {
-        if (!cancelled) setPhase('setup');
-      }
+        }),
+        STARTUP_MS,
+      );
+      if (cancelled) return;
+      if (!connected) setSlowStart(true);
+      setPhase('ready');
     })();
     return () => {
       cancelled = true;
@@ -323,6 +348,14 @@ export function App() {
               Начать день
             </button>
           </div>
+        </div>
+      )}
+
+      {slowStart && (
+        <div className="banner warn">
+          Биржа не ответила за {STARTUP_MS / 1000} с — экран открыт, подключение
+          продолжается. Если ордера не проходят, переподключите кошелёк в
+          настройках.
         </div>
       )}
 

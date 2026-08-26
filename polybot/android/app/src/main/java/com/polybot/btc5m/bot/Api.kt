@@ -470,6 +470,10 @@ object ClobApi {
     fun humanError(raw: String, status: Int): String {
         val text = raw.lowercase()
         return when {
+            text.contains("could not derive api key") || text.contains("invalid signature") ->
+                "Биржа не приняла подпись. Это должен быть ключ подписи из " +
+                    "Polymarket (Settings → Export Private Key), и время на " +
+                    "телефоне должно идти верно"
             text.contains("not enough balance") || text.contains("allowance") ->
                 "Не хватает баланса"
             status == 429 || text.contains("too many requests") ->
