@@ -25,6 +25,9 @@ object EngineHolder {
     private var counter: CounterBot? = null
 
     @Volatile
+    private var signal: SignalBot? = null
+
+    @Volatile
     var onState: (() -> Unit)? = null
 
     @Volatile
@@ -127,6 +130,31 @@ object EngineHolder {
     fun peekCounter(): CounterBot? = counter
 
     /**
+     * The indicator bot. Its exits are the desk's own sell ladder, read live so
+     * changing the ladder in settings changes every exit in the app at once.
+     */
+    fun signal(context: Context): SignalBot {
+        signal?.let { return it }
+        val host = get(context)
+        return synchronized(this) {
+            signal ?: SignalBot(
+                engine = host,
+                store = SignalStore(context),
+                ladder = { autoSell(context).settings.ladder },
+                onStateChanged = {
+                    onState?.invoke()
+                    onServiceState?.invoke()
+                },
+            ).also {
+                signal = it
+                if (it.settings.enabled) it.start()
+            }
+        }
+    }
+
+    fun peekSignal(): SignalBot? = signal
+
+    /**
      * How many shares of one outcome the running bots are holding.
      *
      * A dry run holds nothing real, so a paper cycle contributes zero — the
@@ -152,6 +180,7 @@ object EngineHolder {
         // The counter bot arranges its own exits at its own margin; the desk's
         // rule blanketing them at a different price would fight it.
         counter?.takeIf { it.running }?.let { held += it.heldShares(asset) }
+        signal?.takeIf { it.running }?.let { held += it.heldShares(asset) }
 
         pair?.takeIf { it.running }?.book?.let { book ->
             if (!book.dryRun) {

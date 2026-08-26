@@ -51,6 +51,9 @@ class BotPlugin : Plugin() {
     /** The counter-side dip bot, on its own walled-off money. */
     private val counter: CounterBot get() = EngineHolder.counter(context)
 
+    /** The bot that trades TradingView's five-minute read. */
+    private val signal: SignalBot get() = EngineHolder.signal(context)
+
     override fun load() {
         EngineHolder.onState = { notifyState() }
         EngineHolder.onLogEntry = { entry -> notifyLog(entry) }
@@ -1308,6 +1311,113 @@ class BotPlugin : Plugin() {
                         .put("lastAsk", it.lastAsk)
                         .put("bestAsk", it.bestAsk)
                         .put("checks", it.checks)
+                        .put("note", it.note)
+                        .put("lots", lots)
+                })
+                .put("past", history),
+        )
+    }
+
+    // -------------------------------------------------------- indicator bot
+
+    @PluginMethod
+    fun signalUpdate(call: PluginCall) {
+        val d = signal.settings
+        signal.update(
+            SignalPlan.Settings(
+                enabled = call.getBoolean("enabled") ?: d.enabled,
+                bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
+                clipUsd = call.getDouble("clipUsd") ?: d.clipUsd,
+                maxBuys = call.getInt("maxBuys") ?: d.maxBuys,
+                maxPrice = call.getDouble("maxPrice") ?: d.maxPrice,
+                fromSec = (call.getInt("fromSec")?.toLong()) ?: d.fromSec,
+                untilSec = (call.getInt("untilSec")?.toLong()) ?: d.untilSec,
+            ),
+        )
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun signalReset(call: PluginCall) {
+        signal.resetBank()
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun signalState(call: PluginCall) {
+        val bot = signal
+        val totals = bot.totals
+        val round = bot.round
+        val g = bot.gauges
+
+        val lots = JSArray()
+        round?.lots?.forEach {
+            lots.put(
+                JSObject()
+                    .put("shares", it.shares)
+                    .put("price", it.price)
+                    .put("sellPrice", it.sellPrice)
+                    .put("sold", it.sold)
+                    .put("proceeds", it.proceeds)
+                    .put("boughtAt", it.boughtAt)
+                    .put("note", it.note),
+            )
+        }
+
+        val history = JSArray()
+        bot.past.forEach {
+            history.put(
+                JSObject()
+                    .put("windowStart", it.windowStart)
+                    .put("side", it.side)
+                    .put("shares", it.shares)
+                    .put("spent", it.spent)
+                    .put("got", it.got)
+                    .put("pnl", it.pnl)
+                    .put("note", it.note),
+            )
+        }
+
+        call.resolve(
+            JSObject()
+                .put("enabled", bot.settings.enabled)
+                .put("running", bot.running)
+                .put("bankUsd", bot.settings.bankUsd)
+                .put("clipUsd", bot.settings.clipUsd)
+                .put("maxBuys", bot.settings.maxBuys)
+                .put("maxPrice", bot.settings.maxPrice)
+                .put("fromSec", bot.settings.fromSec)
+                .put("untilSec", bot.settings.untilSec)
+                .put("cash", bot.cash)
+                .put("lastFault", bot.lastFault)
+                .put("rounds", totals.rounds)
+                .put("buys", totals.buys)
+                .put("sells", totals.sells)
+                .put("spent", totals.spent)
+                .put("got", totals.got)
+                .put("settled", totals.settled)
+                .put("wins", totals.wins)
+                .put("losses", totals.losses)
+                .put("pnl", totals.pnl)
+                .put("gauges", g?.let {
+                    JSObject()
+                        .put("summary", it.summary)
+                        .put("movingAverages", it.movingAverages)
+                        .put("oscillators", it.oscillators)
+                        .put("summaryWord", SignalPlan.verdict(it.summary))
+                        .put("maWord", SignalPlan.verdict(it.movingAverages))
+                        .put("oscWord", SignalPlan.verdict(it.oscillators))
+                        .put("direction", SignalPlan.direction(it))
+                        .put("close", it.close)
+                        .put("at", it.at)
+                })
+                .put("round", round?.let {
+                    JSObject()
+                        .put("windowStart", it.windowStart)
+                        .put("side", it.side)
+                        .put("lastAsk", it.lastAsk)
+                        .put("bestAsk", it.bestAsk)
+                        .put("step", it.step)
                         .put("note", it.note)
                         .put("lots", lots)
                 })

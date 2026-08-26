@@ -1,6 +1,7 @@
 package com.polybot.btc5m.bot
 
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -11,32 +12,33 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * A small bot that fades the desk's own side.
+ * The bot that trades TradingView's five-minute read on Bitcoin.
  *
- * It trades five dollars of its own, kept apart from the money the desk is
- * allowed to touch, and it only ever does one thing: in the first two minutes
- * of a window, whenever the side the user is *not* on is offered under thirty
- * cents, it takes a dollar of it — up to three times, and never twice at the
- * same price. Each clip is offered straight back at a quarter up, net of the
- * fee, and it holds nothing into the decision on purpose: the position it buys
- * is the one that is losing, and the last minute is where that gets settled.
+ * Six dollars of its own, and one rule: when the summary, the moving averages
+ * and the oscillators all say buy — or all say sell — it takes a dollar of the
+ * side they point at, three times, each time the price has come down another
+ * tick, and never above sixty cents. It sits out every window the three do not
+ * agree on, which is most of them.
  *
- * The rules themselves live in [CounterPlan] so they can be argued with in a
- * test. What is here is the loop, the money, and the record.
+ * The exits are the desk's own sell ladder rather than a fixed margin: a
+ * position taken on a directional call is worth holding up the rungs as the
+ * window resolves, and the ladder is what already knows how to do that. It
+ * therefore manages its own offers, repricing them as the ladder steps, and its
+ * shares are kept out of the desk's sweep so the two cannot fight over a price.
  */
-class CounterBot(
+class SignalBot(
     private val engine: BotEngine,
-    private val store: CounterStore,
+    private val store: SignalStore,
+    /** The desk's sell ladder, so one setting drives every exit in the app. */
+    private val ladder: () -> List<Double>,
     private val onStateChanged: () -> Unit,
 ) {
 
-    /** One clip, from the moment it is bought to the moment it is off the books. */
     data class Lot(
         val asset: String,
         val conditionId: String,
         val outcome: String,
         val shares: Double,
-        /** What was paid per share. */
         val price: Double,
         val boughtAt: Long,
         var sellOrderId: String? = null,
@@ -49,11 +51,8 @@ class CounterBot(
         val open: Double get() = (shares - sold).coerceAtLeast(0.0)
     }
 
-    /** One window's work. */
     data class Round(
         val windowStart: Long,
-        /** The side the desk is on, and the one this bot therefore buys. */
-        val deskSide: String,
         val side: String,
         val asset: String,
         val conditionId: String,
@@ -61,7 +60,9 @@ class CounterBot(
         var lastEntry: Double? = null,
         var lastAsk: Double? = null,
         var bestAsk: Double? = null,
-        var checks: Int = 0,
+        /** Highest this side has been this window, which is what walks the ladder. */
+        var highWater: Double = 0.0,
+        var step: Int = 0,
         var note: String? = null,
     ) {
         val spent: Double get() = lots.sumOf { it.cost }
@@ -69,7 +70,7 @@ class CounterBot(
     }
 
     @Volatile
-    var settings: CounterPlan.Settings = store.loadSettings()
+    var settings: SignalPlan.Settings = store.loadSettings()
         private set
 
     @Volatile
@@ -88,9 +89,13 @@ class CounterBot(
     var round: Round? = null
         private set
 
+    /** The last read of the three gauges, kept so the panel can show them. */
+    @Volatile
+    var gauges: TradingView.Gauges? = null
+        private set
+
     val past = CopyOnWriteArrayList<BotBook.Past>().also { it.addAll(store.loadPast()) }
 
-    /** What is left of the bot's own money. */
     val cash: Double
         get() = settings.bankUsd + totals.got + totals.settled - totals.spent -
             (round?.spent ?: 0.0) + (round?.got ?: 0.0)
@@ -98,27 +103,29 @@ class CounterBot(
     private var scope: CoroutineScope? = null
     private var job: Job? = null
     private var lastOrdersAt = 0L
+    private var lastGaugesAt = 0L
     private var openOrders: List<ClobApi.OpenOrder> = emptyList()
 
     private companion object {
-        /** How often to look at the price while entries are still allowed. */
         const val HUNT_MS = 2_000L
-
-        /** And once they are not: only the exits still need attention. */
         const val IDLE_MS = 5_000L
-
-        /** The book listing is shared between passes; it moves slower than a price. */
         const val ORDERS_TTL_MS = 5_000L
+
+        /**
+         * How often the gauges are re-read. They are a five-minute study, so
+         * they cannot change faster than the candle underneath them — and the
+         * scanner is somebody else's server.
+         */
+        const val GAUGES_TTL_MS = 20_000L
     }
 
-    /** Shares of an outcome this bot is holding, so nothing else sells them. */
     fun heldShares(asset: String): Double {
         val current = round ?: return 0.0
         if (current.asset != asset) return 0.0
         return current.lots.sumOf { it.open }
     }
 
-    fun update(next: CounterPlan.Settings) {
+    fun update(next: SignalPlan.Settings) {
         settings = next
         store.saveSettings(next)
         when {
@@ -128,7 +135,6 @@ class CounterBot(
         }
     }
 
-    /** Start the money over, keeping nothing but the settings. */
     fun resetBank() {
         totals = BotBook.Totals()
         store.saveTotals(totals)
@@ -154,14 +160,14 @@ class CounterBot(
                     tick(windowStart, elapsed)
                     backoffMs = 0L
                 } catch (e: Exception) {
-                    lastFault = e.message ?: "сбой контр-бота"
+                    lastFault = e.message ?: "сбой бота по индикаторам"
                     backoffMs = if (backoffMs == 0L) 10_000L else minOf(backoffMs * 2, 60_000L)
                 }
 
                 delay(
                     when {
                         backoffMs > 0L -> backoffMs
-                        elapsed < settings.entryWindowSec -> HUNT_MS
+                        elapsed < settings.untilSec -> HUNT_MS
                         else -> IDLE_MS
                     },
                 )
@@ -169,10 +175,8 @@ class CounterBot(
         }
         engine.log(
             "info",
-            "Контр-бот включён: $${String.format("%.0f", settings.bankUsd)}, " +
-                "по $${String.format("%.0f", settings.clipUsd)} до " +
-                "${(settings.entryUnder * 100).toInt()}¢, цель +" +
-                "${(settings.gainPct * 100).toInt()}%",
+            "Бот по индикаторам включён: $${String.format("%.0f", settings.bankUsd)}, " +
+                "до ${(settings.maxPrice * 100).toInt()}¢, выход лесенкой",
         )
         onStateChanged()
     }
@@ -184,7 +188,7 @@ class CounterBot(
         job = null
         scope?.cancel()
         scope = null
-        engine.log("info", "Контр-бот выключен")
+        engine.log("info", "Бот по индикаторам выключен")
         onStateChanged()
     }
 
@@ -196,36 +200,41 @@ class CounterBot(
         }
         lastFault = null
 
-        // A window that has rolled is a window to score and put away.
         round?.let { if (it.windowStart != windowStart) closeRound(it) }
 
         refreshOrders(session)
-        round?.let { workExits(it) }
+        round?.let { workLadder(it, elapsed) }
 
-        if (elapsed in 0 until settings.entryWindowSec) hunt(windowStart, elapsed)
+        if (elapsed in 0 until settings.untilSec) hunt(windowStart, elapsed)
         onStateChanged()
     }
 
-    /** The open-order listing, shared between the passes that need it. */
     private fun refreshOrders(session: BotEngine.Session) {
         val now = System.currentTimeMillis()
         if (now - lastOrdersAt < ORDERS_TTL_MS && openOrders.isNotEmpty()) return
         openOrders = ClobApi.openOrders(session.creds, session.account.signerAddress)
         lastOrdersAt = now
-        // Nothing else is guaranteed to be running, so the bot keeps its own
-        // record of its orders current: that is how it learns a sell filled.
         OrderLog.reconcile(openOrders) { id ->
             ClobApi.order(session.creds, session.account.signerAddress, id)
         }
     }
 
-    /**
-     * Look for a clip.
-     *
-     * The desk's side comes from the app's own log rather than from the wallet:
-     * a purchase is known the instant it is made, while the data API takes a
-     * minute to admit it exists, and by then the entry band is over.
-     */
+    /** The three gauges, re-read no faster than they can move. */
+    private fun readGauges(): TradingView.Gauges? {
+        val now = System.currentTimeMillis()
+        val held = gauges
+        if (held != null && now - lastGaugesAt < GAUGES_TTL_MS) return held
+        return try {
+            TradingView.read().also {
+                gauges = it
+                lastGaugesAt = now
+            }
+        } catch (e: Exception) {
+            lastFault = "TradingView недоступен"
+            held
+        }
+    }
+
     private fun hunt(windowStart: Long, elapsed: Long) {
         val market = engine.currentMarket()
         if (market == null || market.windowStart != windowStart) {
@@ -237,49 +246,57 @@ class CounterBot(
             return
         }
 
-        val current = round ?: run {
-            val deskSide = deskSideIn(windowStart) ?: return
-            val side = CounterPlan.opposite(deskSide)
-            val outcome = if (side == "Up") market.up else market.down
-            Round(
-                windowStart = windowStart,
-                deskSide = deskSide,
-                side = side,
-                asset = outcome.tokenId,
-                conditionId = market.conditionId,
-            ).also { round = it }
-        }
-
-        val ask = try {
-            ClobApi.bestAsk(current.asset)
-        } catch (e: Exception) {
-            current.note = "цена недоступна"
+        // The gauges decide the side once per window and then stop mattering:
+        // a position taken on a call is not re-argued halfway through it.
+        val current = round
+        val side = current?.side ?: SignalPlan.direction(readGauges())
+        if (side == null) {
+            // Still worth saying why nothing is happening.
+            gauges?.let {
+                round?.note = "индикаторы не согласны"
+            }
             return
         }
-        current.lastAsk = ask
-        current.checks += 1
+
+        val outcome = if (side == "Up") market.up else market.down
+        val live = current ?: Round(
+            windowStart = windowStart,
+            side = side,
+            asset = outcome.tokenId,
+            conditionId = market.conditionId,
+        ).also { round = it }
+
+        val ask = try {
+            ClobApi.bestAsk(live.asset)
+        } catch (e: Exception) {
+            live.note = "цена недоступна"
+            return
+        }
+        live.lastAsk = ask
         if (ask != null && ask > 0.0) {
-            current.bestAsk = minOf(current.bestAsk ?: ask, ask)
+            live.bestAsk = minOf(live.bestAsk ?: ask, ask)
+            if (ask > live.highWater) live.highWater = ask
         }
 
-        val blocked = CounterPlan.blockedBecause(
+        val blocked = SignalPlan.blockedBecause(
+            side = side,
             ask = ask,
             elapsedSec = elapsed,
-            buys = current.lots.size,
-            lastEntry = current.lastEntry,
+            buys = live.lots.size,
+            lastEntry = live.lastEntry,
             tick = market.tickSize,
             cashUsd = cash,
             settings = settings,
         )
-        current.note = blocked
+        live.note = blocked
         if (blocked != null || ask == null) return
 
-        buy(current, market, ask)
+        buy(live, market, ask)
     }
 
     private fun buy(current: Round, market: Market, ask: Double) {
-        val shares = CounterPlan.clipShares(ask, market.minimumOrderSize, settings)
-        val limit = CounterPlan.crossPrice(ask, market.tickSize)
+        val shares = SignalPlan.clipShares(ask, market.minimumOrderSize, settings)
+        val limit = SignalPlan.crossPrice(ask, market.tickSize)
 
         val result = try {
             engine.placeManualOrder(
@@ -298,20 +315,18 @@ class CounterBot(
 
         if (!result.success) {
             current.note = result.error ?: "отказ CLOB"
-            engine.log("error", "Контр-бот: ${current.note}")
+            engine.log("error", "Бот по индикаторам: ${current.note}")
             return
         }
 
         val fill = Orders.filled("BUY", result.makingAmount, result.takingAmount)
         if (fill.shares <= 1e-6) {
-            // A crossing limit that did not take is a dip that moved. Pull it
-            // rather than leave it resting at a price the bot no longer wants.
             result.orderId?.let { id ->
                 engine.session()?.let { s ->
                     try {
                         ClobApi.cancelOrder(s.creds, s.account.signerAddress, id)
                     } catch (e: Exception) {
-                        // It may have filled between the two calls; the log knows.
+                        // It may have filled in between; the log will say so.
                     }
                 }
             }
@@ -335,23 +350,37 @@ class CounterBot(
         totals = totals.copy(buys = totals.buys + 1, spent = totals.spent + fill.shares * price)
         store.saveTotals(totals)
 
+        val g = gauges
         engine.log(
             "trade",
-            "Контр-бот взял " + String.format("%.1f", fill.shares) + " ${current.side} по " +
-                "${(price * 100).toInt()}¢ (моя сторона ${current.deskSide})",
+            "Индикаторы: взял " + String.format("%.1f", fill.shares) + " ${current.side} по " +
+                "${(price * 100).toInt()}¢" +
+                (g?.let { " (${SignalPlan.verdict(it.summary)})" } ?: ""),
         )
     }
 
     /**
-     * Offer every clip back, and notice when one is taken.
+     * Keep one offer on the book at the rung the ladder is on.
      *
-     * The offer goes out as soon as the venue will accept it — which is not the
-     * instant of purchase, and how long it actually is has been measured rather
-     * than assumed.
+     * The rung only ever goes up — by the clock, and by any price the side has
+     * already reached — so an offer left behind is one that would cap a winning
+     * position at an early minute's price. It is pulled and replaced in the same
+     * pass, because waiting for the next one leaves the shares unoffered.
      */
-    private fun workExits(current: Round) {
-        val tick = engine.currentMarket()?.tickSize ?: 0.01
+    private fun workLadder(current: Round, elapsed: Long) {
+        val market = engine.currentMarket()
+        val tick = market?.tickSize ?: 0.01
+        val minOrder = market?.minimumOrderSize ?: 5.0
         val now = System.currentTimeMillis()
+
+        current.step = SellLadder.stepFor(
+            elapsedSec = elapsed,
+            highWater = current.highWater.takeIf { it > 0.0 },
+            ladder = ladder(),
+            floor = current.step,
+        )
+        val rungs = ladder()
+        val target = snapUp(rungs.getOrElse(current.step) { rungs.lastOrNull() ?: 0.9 }, tick)
 
         for (lot in current.lots) {
             val id = lot.sellOrderId
@@ -368,24 +397,35 @@ class CounterBot(
                     store.saveTotals(totals)
                     engine.log(
                         "trade",
-                        "Контр-бот продал " + String.format("%.1f", gained) + " по " +
+                        "Индикаторы: продал " + String.format("%.1f", gained) + " по " +
                             "${(lot.sellPrice * 100).toInt()}¢",
                     )
                 }
-                if (lot.open <= 1e-6) lot.note = null
-                continue
-            }
-            if (lot.open <= 1e-6) continue
+                if (lot.open <= 1e-6) continue
 
-            // Wait out the venue's lock on fresh shares rather than firing
-            // refusals at it. Zero until the app has timed that lock.
+                // The ladder has moved on; the offer has to move with it.
+                if (abs(lot.sellPrice - target) > tick / 2) {
+                    val session = engine.session() ?: continue
+                    try {
+                        ClobApi.cancelOrder(session.creds, session.account.signerAddress, id)
+                        lot.sellOrderId = null
+                        lot.note = "переставляю"
+                    } catch (e: Exception) {
+                        lot.note = e.message ?: "не снять ордер"
+                        continue
+                    }
+                } else {
+                    continue
+                }
+            }
+            if (lot.open < minOrder - 1e-6) continue
+
             val hold = Timings.holdMs(lot.boughtAt, now)
             if (hold > 0L) {
                 lot.note = "жду ${(hold + 999) / 1000} с"
                 continue
             }
 
-            val target = CounterPlan.exitPrice(lot.price, tick, settings)
             Timings.sellTried(lot.asset, lot.boughtAt, now)
             val result = try {
                 engine.placeManualOrder(
@@ -415,18 +455,9 @@ class CounterBot(
         }
     }
 
-    /**
-     * Put a finished window away.
-     *
-     * Anything still held when the window closed settles at a dollar or at
-     * nothing, decided by the same price series Polymarket settles on. A round
-     * that ended holding the losing side is a round that lost its stake, and
-     * the record says so rather than leaving it open forever.
-     */
     private fun closeRound(current: Round) {
         round = null
 
-        // Pull anything still resting: its market is gone.
         engine.session()?.let { session ->
             for (lot in current.lots) {
                 val id = lot.sellOrderId ?: continue
@@ -434,19 +465,14 @@ class CounterBot(
                 try {
                     ClobApi.cancelOrder(session.creds, session.account.signerAddress, id)
                 } catch (e: Exception) {
-                    // Already gone, which is the outcome wanted anyway.
+                    // Already gone, which is what was wanted.
                 }
             }
         }
 
         val held = current.lots.sumOf { it.open }
         val winner = EventStats.winnerFor(current.windowStart, Clock.nowSec())
-        val settlement = when {
-            held <= 1e-6 -> 0.0
-            winner.isEmpty() -> 0.0
-            winner == current.side -> held
-            else -> 0.0
-        }
+        val settlement = if (held > 1e-6 && winner == current.side) held else 0.0
         val pnl = current.got + settlement - current.spent
 
         totals = totals.copy(
@@ -481,30 +507,16 @@ class CounterBot(
         if (current.lots.isNotEmpty()) {
             engine.log(
                 if (pnl >= 0) "trade" else "warn",
-                "Контр-бот закрыл окно: " + (if (pnl >= 0) "+" else "−") +
-                    "$" + String.format("%.2f", kotlin.math.abs(pnl)),
+                "Индикаторы закрыли окно: " + (if (pnl >= 0) "+" else "−") +
+                    "$" + String.format("%.2f", abs(pnl)),
             )
         }
     }
 
-    /**
-     * The side the desk is on this window, or null while it is on neither.
-     *
-     * Read from the app's own order log and only from orders placed by hand —
-     * the bot's own clips are in there too, and fading itself would be a
-     * machine arguing with a machine.
-     */
-    private fun deskSideIn(windowStart: Long): String? {
-        val mine = OrderLog.forWindow(windowStart).filter {
-            it.action == "BUY" && !it.auto && it.outcome.isNotEmpty()
-        }
-        if (mine.isEmpty()) return null
-        // The biggest commitment wins if both sides were touched; a resting
-        // limit counts, because it is a side the user has chosen.
-        return mine
-            .groupBy { it.outcome }
-            .mapValues { (_, rows) -> rows.sumOf { maxOf(it.matched, it.size) * it.price } }
-            .maxByOrNull { it.value }
-            ?.key
+    /** A sell must never round down onto a worse price than the rung asks. */
+    private fun snapUp(price: Double, tick: Double): Double {
+        if (tick <= 0.0) return price
+        val snapped = kotlin.math.ceil(price / tick - 1e-9) * tick
+        return (Math.round(snapped * 10000.0) / 10000.0).coerceIn(tick, 1.0 - tick)
     }
 }

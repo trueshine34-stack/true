@@ -268,6 +268,17 @@ export interface PolyBotPlugin {
   }): Promise<void>;
   counterReset(): Promise<void>;
   counterState(): Promise<CounterState>;
+  signalUpdate(args: {
+    enabled?: boolean;
+    bankUsd?: number;
+    clipUsd?: number;
+    maxBuys?: number;
+    maxPrice?: number;
+    fromSec?: number;
+    untilSec?: number;
+  }): Promise<void>;
+  signalReset(): Promise<void>;
+  signalState(): Promise<SignalState>;
   addListener(
     event: 'state',
     fn: (state: NativeState) => void,
@@ -413,6 +424,58 @@ export type CounterState = {
   losses: number;
   pnl: number;
   round?: CounterRound | null;
+  past: CounterPast[];
+};
+
+// ----------------------------------------------------------- indicator bot
+
+/** TradingView's three gauges, as the page itself prints them. */
+export type SignalGauges = {
+  summary: number;
+  movingAverages: number;
+  oscillators: number;
+  summaryWord: string;
+  maWord: string;
+  oscWord: string;
+  /** "Up", "Down", or null when the three do not agree. */
+  direction?: string | null;
+  close: number;
+  at: number;
+};
+
+export type SignalRound = {
+  windowStart: number;
+  side: string;
+  lastAsk?: number | null;
+  bestAsk?: number | null;
+  /** Which rung of the sell ladder its offers are on. */
+  step: number;
+  note?: string | null;
+  lots: CounterLot[];
+};
+
+export type SignalState = {
+  enabled: boolean;
+  running: boolean;
+  bankUsd: number;
+  clipUsd: number;
+  maxBuys: number;
+  maxPrice: number;
+  fromSec: number;
+  untilSec: number;
+  cash: number;
+  lastFault?: string | null;
+  rounds: number;
+  buys: number;
+  sells: number;
+  spent: number;
+  got: number;
+  settled: number;
+  wins: number;
+  losses: number;
+  pnl: number;
+  gauges?: SignalGauges | null;
+  round?: SignalRound | null;
   past: CounterPast[];
 };
 
@@ -679,6 +742,29 @@ const webStub: PolyBotPlugin = {
     entryWindowSec: 120,
     gainPct: 0.25,
     cash: 5,
+    rounds: 0,
+    buys: 0,
+    sells: 0,
+    spent: 0,
+    got: 0,
+    settled: 0,
+    wins: 0,
+    losses: 0,
+    pnl: 0,
+    past: [],
+  }),
+  signalUpdate: async () => {},
+  signalReset: async () => {},
+  signalState: async () => ({
+    enabled: false,
+    running: false,
+    bankUsd: 6,
+    clipUsd: 1,
+    maxBuys: 3,
+    maxPrice: 0.6,
+    fromSec: 10,
+    untilSec: 240,
+    cash: 6,
     rounds: 0,
     buys: 0,
     sells: 0,

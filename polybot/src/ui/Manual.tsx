@@ -38,6 +38,9 @@ import {
   type LoggedOrder,
   type NativeMarket,
   type CounterState,
+  type CounterLot,
+  type CounterPast,
+  type SignalState,
   type Timings,
   type NativePosition,
   type OpenOrder,
@@ -129,6 +132,8 @@ export function Manual({
   const [logged, setLogged] = useState<LoggedOrder[]>([]);
   const [counter, setCounter] = useState<CounterState | null>(null);
   const [counterOpen, setCounterOpen] = useState(false);
+  const [signal, setSignal] = useState<SignalState | null>(null);
+  const [signalOpen, setSignalOpen] = useState(false);
   const [lookAhead, setLookAhead] = useState(false);
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [sessionPnl, setSessionPnl] = useState(0);
@@ -340,14 +345,19 @@ export function Manual({
     };
   }, [tokenFor]);
 
-  // The counter bot runs on its own money in the service; the panel only
-  // reads it. Three seconds is enough to watch a two-minute entry band.
+  // Both small bots run on their own money in the service; the panel only
+  // reads them. Three seconds is enough to watch a two-minute entry band.
   useEffect(() => {
     let cancelled = false;
     const read = () => {
       void PolyBot.counterState()
         .then((s) => {
           if (!cancelled) setCounter(s);
+        })
+        .catch(() => {});
+      void PolyBot.signalState()
+        .then((s) => {
+          if (!cancelled) setSignal(s);
         })
         .catch(() => {});
     };
@@ -484,15 +494,25 @@ export function Manual({
   }, [committed, onCommitted]);
 
   const exposure = useMemo(
-    // The counter bot's bank is in the same wallet and is not the desk's to
-    // spend, so it is held back exactly like anything else in the container.
+    // The bots' banks are in the same wallet and are not the desk's to spend,
+    // so they are held back exactly like anything else in the container.
     () =>
       exposureFor(
         balance ?? 0,
         committed,
-        containerLocked + (counter?.enabled ? Math.max(0, counter.cash) : 0),
+        containerLocked +
+          (counter?.enabled ? Math.max(0, counter.cash) : 0) +
+          (signal?.enabled ? Math.max(0, signal.cash) : 0),
       ),
-    [balance, committed, containerLocked, counter?.enabled, counter?.cash],
+    [
+      balance,
+      committed,
+      containerLocked,
+      counter?.enabled,
+      counter?.cash,
+      signal?.enabled,
+      signal?.cash,
+    ],
   );
 
   const guard = settings.exposureGuard && balance != null;
@@ -864,6 +884,26 @@ export function Manual({
             void PolyBot.counterReset()
               .then(() => PolyBot.counterState())
               .then(setCounter)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+        />
+      )}
+
+      {signal && (
+        <SignalStrip
+          state={signal}
+          open={signalOpen}
+          onToggle={() => setSignalOpen((v) => !v)}
+          onEnable={(enabled) => {
+            void PolyBot.signalUpdate({ enabled })
+              .then(() => PolyBot.signalState())
+              .then(setSignal)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onReset={() => {
+            void PolyBot.signalReset()
+              .then(() => PolyBot.signalState())
+              .then(setSignal)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
         />
@@ -1639,46 +1679,68 @@ function EventStrip({
   );
 }
 
+/** What every walled-off bot has in common: its own money and its own record. */
+type BotAccount = {
+  enabled: boolean;
+  running: boolean;
+  bankUsd: number;
+  cash: number;
+  pnl: number;
+  rounds: number;
+  buys: number;
+  sells: number;
+  wins: number;
+  losses: number;
+  lastFault?: string | null;
+  past: CounterPast[];
+};
+
 /**
- * The counter bot, in one line and then in full.
+ * A bot in one line, and then in full.
  *
- * Shut, it is the only three numbers that matter while trading: its own money,
- * what it has made, and what it is doing this window. Open, it is the whole
- * account — because a bot with five dollars of its own is only worth running if
- * you can see, at a glance, whether the five dollars is growing.
+ * Shut, it is the only three things worth knowing while trading: its own
+ * money, what it has made, and what it is doing this window. Open, it is the
+ * whole account — because a bot with five dollars of its own is only worth
+ * running if you can see at a glance whether the five dollars is growing.
+ *
+ * Both bots present the same account, so they share this; what differs is the
+ * rule they follow and what their live window looks like, and those come in as
+ * they are written.
  */
-function CounterStrip({
-  state,
+function BotStrip({
+  title,
+  account,
+  doing,
+  rule,
+  live,
+  side,
+  lots,
   open,
   onToggle,
   onEnable,
   onReset,
 }: {
-  state: CounterState;
+  title: string;
+  account: BotAccount;
+  doing: string;
+  rule: ReactNode;
+  live: ReactNode;
+  side: string | null;
+  lots: CounterLot[];
   open: boolean;
   onToggle: () => void;
   onEnable: (enabled: boolean) => void;
   onReset: () => void;
 }) {
-  const round = state.round;
-  const held = round?.lots.reduce((a, l) => a + (l.shares - l.sold), 0) ?? 0;
-  const tone = state.pnl > 0 ? 'up' : state.pnl < 0 ? 'down' : 'muted';
-
-  // What it is doing, in as few words as it can be said.
-  const doing = !state.enabled
-    ? 'выключен'
-    : round == null
-      ? 'ждёт мою сторону'
-      : held > 0
-        ? `держит ${held.toFixed(1)} ${round.side}`
-        : (round.note ?? `следит за ${round.side}`);
+  const tone = account.pnl > 0 ? 'up' : account.pnl < 0 ? 'down' : 'muted';
 
   return (
     <div className={`counter${open ? ' open' : ''}`}>
       <button className="counterbar" onClick={onToggle}>
-        <span className={`counterdot${state.running ? ' live' : ''}`} aria-hidden />
-        <span className="countercash">{usd(state.cash)}</span>
-        <span className={`counterpnl ${tone}`}>{signedUsd(state.pnl)}</span>
+        <span className={`counterdot${account.running ? ' live' : ''}`} aria-hidden />
+        <span className="countertitle">{title}</span>
+        <span className="countercash">{usd(account.cash)}</span>
+        <span className={`counterpnl ${tone}`}>{signedUsd(account.pnl)}</span>
         <span className="counterdoing muted">{doing}</span>
         <span className="foldarrow" aria-hidden>
           {open ? '−' : '+'}
@@ -1688,75 +1750,56 @@ function CounterStrip({
       {open && (
         <div className="counterbody">
           <div className="counterhead">
-            <span>Контр-бот</span>
+            <span>{title}</span>
             <button
-              className={`switch ${state.enabled ? 'on' : ''}`}
-              onClick={() => onEnable(!state.enabled)}
+              className={`switch ${account.enabled ? 'on' : ''}`}
+              onClick={() => onEnable(!account.enabled)}
             />
           </div>
 
-          {/*
-            The rule, spelled out. It is three sentences and it decides every
-            order this bot sends, so it is worth the four lines.
-          */}
-          <div className="counterrule muted">
-            Первые {Math.round(state.entryWindowSec / 60)} мин покупает сторону,
-            противоположную моей, по {usd(state.clipUsd)} —{' '}
-            {state.maxBuys} раза, каждый раз на тик ниже, пока дешевле{' '}
-            {cents(state.entryUnder)}. Продаёт сразу с целью +
-            {Math.round(state.gainPct * 100)}%.
-          </div>
+          <div className="counterrule muted">{rule}</div>
 
           <div className="countergrid">
             <div>
               <span className="muted">свои деньги</span>
-              <b>{usd(state.cash)}</b>
+              <b>{usd(account.cash)}</b>
             </div>
             <div>
               <span className="muted">старт</span>
-              <b>{usd(state.bankUsd)}</b>
+              <b>{usd(account.bankUsd)}</b>
             </div>
             <div>
               <span className="muted">итог</span>
-              <b className={tone}>{signedUsd(state.pnl)}</b>
+              <b className={tone}>{signedUsd(account.pnl)}</b>
             </div>
             <div>
               <span className="muted">окон</span>
-              <b>{state.rounds}</b>
+              <b>{account.rounds}</b>
             </div>
             <div>
               <span className="muted">плюс / минус</span>
               <b>
-                <span className="up">{state.wins}</span>
+                <span className="up">{account.wins}</span>
                 {' / '}
-                <span className="down">{state.losses}</span>
+                <span className="down">{account.losses}</span>
               </b>
             </div>
             <div>
               <span className="muted">покупок / продаж</span>
               <b>
-                {state.buys} / {state.sells}
+                {account.buys} / {account.sells}
               </b>
             </div>
           </div>
 
-          {round && (
+          {live}
+
+          {lots.length > 0 && (
             <div className="counterround">
-              <div className="listhead">
-                <span>Сейчас · {clockOf(round.windowStart)}</span>
-                <span className="muted">
-                  моя {round.deskSide} → берёт {round.side}
-                </span>
-              </div>
-              <div className="counterlive muted">
-                {round.lastAsk != null ? `цена ${cents(round.lastAsk)}` : 'нет цены'}
-                {round.bestAsk != null ? ` · лучшая ${cents(round.bestAsk)}` : ''}
-                {round.note ? ` · ${round.note}` : ''}
-              </div>
-              {round.lots.map((l, i) => (
+              {lots.map((l, i) => (
                 <div className="listrow static" key={i}>
-                  <span className={round.side === 'Up' ? 'up tag-side' : 'down tag-side'}>
-                    {round.side}
+                  <span className={side === 'Up' ? 'up tag-side' : 'down tag-side'}>
+                    {side}
                   </span>
                   <span className="listrow-main">
                     {l.shares.toFixed(1)} × {cents(l.price)}
@@ -1774,12 +1817,12 @@ function CounterStrip({
             </div>
           )}
 
-          {state.past.length > 0 && (
+          {account.past.length > 0 && (
             <div className="counterpast">
               <div className="listhead">
                 <span>Прошлые окна</span>
               </div>
-              {state.past.slice(0, 8).map((p) => (
+              {account.past.slice(0, 8).map((p) => (
                 <div className="listrow static" key={p.windowStart}>
                   <span className="muted tag-side">{clockOf(p.windowStart)}</span>
                   <span className="listrow-main">
@@ -1798,7 +1841,9 @@ function CounterStrip({
             </div>
           )}
 
-          {state.lastFault && <div className="counterlive warn">{state.lastFault}</div>}
+          {account.lastFault && (
+            <div className="counterlive warn">{account.lastFault}</div>
+          )}
 
           <button className="ghost compact counterreset" onClick={onReset}>
             обнулить счёт бота
@@ -1808,6 +1853,160 @@ function CounterStrip({
     </div>
   );
 }
+
+/** The bot that fades whichever side the desk is on. */
+function CounterStrip({
+  state,
+  open,
+  onToggle,
+  onEnable,
+  onReset,
+}: {
+  state: CounterState;
+  open: boolean;
+  onToggle: () => void;
+  onEnable: (enabled: boolean) => void;
+  onReset: () => void;
+}) {
+  const round = state.round;
+  const held = round?.lots.reduce((a, l) => a + (l.shares - l.sold), 0) ?? 0;
+
+  const doing = !state.enabled
+    ? 'выключен'
+    : round == null
+      ? 'ждёт мою сторону'
+      : held > 0
+        ? `держит ${held.toFixed(1)} ${round.side}`
+        : (round.note ?? `следит за ${round.side}`);
+
+  return (
+    <BotStrip
+      title="Контр-бот"
+      account={state}
+      doing={doing}
+      side={round?.side ?? null}
+      lots={round?.lots ?? []}
+      onToggle={onToggle}
+      open={open}
+      onEnable={onEnable}
+      onReset={onReset}
+      rule={
+        <>
+          Первые {Math.round(state.entryWindowSec / 60)} мин покупает сторону,
+          противоположную моей, по {usd(state.clipUsd)} — {state.maxBuys} раза,
+          каждый раз на тик ниже, пока дешевле {cents(state.entryUnder)}. Продаёт
+          сразу с целью +{Math.round(state.gainPct * 100)}%.
+        </>
+      }
+      live={
+        round && (
+          <div className="counterround">
+            <div className="listhead">
+              <span>Сейчас · {clockOf(round.windowStart)}</span>
+              <span className="muted">
+                моя {round.deskSide} → берёт {round.side}
+              </span>
+            </div>
+            <div className="counterlive muted">
+              {round.lastAsk != null ? `цена ${cents(round.lastAsk)}` : 'нет цены'}
+              {round.bestAsk != null ? ` · лучшая ${cents(round.bestAsk)}` : ''}
+              {round.note ? ` · ${round.note}` : ''}
+            </div>
+          </div>
+        )
+      }
+    />
+  );
+}
+
+/** The bot that trades TradingView's five-minute read. */
+function SignalStrip({
+  state,
+  open,
+  onToggle,
+  onEnable,
+  onReset,
+}: {
+  state: SignalState;
+  open: boolean;
+  onToggle: () => void;
+  onEnable: (enabled: boolean) => void;
+  onReset: () => void;
+}) {
+  const round = state.round;
+  const g = state.gauges;
+  const held = round?.lots.reduce((a, l) => a + (l.shares - l.sold), 0) ?? 0;
+
+  const doing = !state.enabled
+    ? 'выключен'
+    : held > 0
+      ? `держит ${held.toFixed(1)} ${round?.side}`
+      : (round?.note ??
+        (g?.direction ? `сигнал ${g.direction}` : 'индикаторы не согласны'));
+
+  return (
+    <BotStrip
+      title="Индикаторы"
+      account={state}
+      doing={doing}
+      side={round?.side ?? null}
+      lots={round?.lots ?? []}
+      onToggle={onToggle}
+      open={open}
+      onEnable={onEnable}
+      onReset={onReset}
+      rule={
+        <>
+          TradingView 5м, BTC на Binance. Когда сводка, скользящие и осцилляторы
+          все три показывают Buy — берёт Up, все три Sell — берёт Down. С{' '}
+          {state.fromSec}-й секунды по {usd(state.clipUsd)}, {state.maxBuys} раза,
+          каждый раз на тик ниже, не дороже {cents(state.maxPrice)}. Выход —
+          лесенкой продаж.
+        </>
+      }
+      live={
+        <>
+          <div className="gauges">
+            <div>
+              <span className="muted">сводка</span>
+              <b className={verdictTone(g?.summaryWord)}>{g?.summaryWord ?? '—'}</b>
+            </div>
+            <div>
+              <span className="muted">скользящие</span>
+              <b className={verdictTone(g?.maWord)}>{g?.maWord ?? '—'}</b>
+            </div>
+            <div>
+              <span className="muted">осцилляторы</span>
+              <b className={verdictTone(g?.oscWord)}>{g?.oscWord ?? '—'}</b>
+            </div>
+          </div>
+          {round && (
+            <div className="counterround">
+              <div className="listhead">
+                <span>Сейчас · {clockOf(round.windowStart)}</span>
+                <span className="muted">
+                  {round.side} · ступень {round.step + 1}
+                </span>
+              </div>
+              <div className="counterlive muted">
+                {round.lastAsk != null ? `цена ${cents(round.lastAsk)}` : 'нет цены'}
+                {round.bestAsk != null ? ` · лучшая ${cents(round.bestAsk)}` : ''}
+                {round.note ? ` · ${round.note}` : ''}
+              </div>
+            </div>
+          )}
+        </>
+      }
+    />
+  );
+}
+
+const verdictTone = (word?: string) =>
+  word == null || word === '—' || word === 'Neutral'
+    ? 'muted'
+    : word.endsWith('Buy')
+      ? 'up'
+      : 'down';
 
 /**
  * Every order that went through one event, as it happened.

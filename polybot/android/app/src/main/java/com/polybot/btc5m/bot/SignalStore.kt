@@ -4,39 +4,31 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * The counter bot's own books, kept across restarts.
- *
- * It trades its own walled-off money, so "what has it made" is a question only
- * it can answer — the wallet's balance mixes it with the desk's. The running
- * totals and the last few rounds are therefore written down rather than
- * recomputed, and they survive the service being killed mid-window.
- */
-class CounterStore(context: Context) {
+/** The indicator bot's own books, kept across restarts and apart from the desk's. */
+class SignalStore(context: Context) {
 
     private val prefs = context.applicationContext
-        .getSharedPreferences("polybot_counter", Context.MODE_PRIVATE)
+        .getSharedPreferences("polybot_signal", Context.MODE_PRIVATE)
 
-    fun loadSettings(): CounterPlan.Settings = CounterPlan.Settings(
+    fun loadSettings(): SignalPlan.Settings = SignalPlan.Settings(
         enabled = prefs.getBoolean("enabled", false),
-        bankUsd = prefs.getFloat("bankUsd", CounterPlan.DEFAULT_BANK_USD.toFloat()).toDouble(),
-        clipUsd = prefs.getFloat("clipUsd", CounterPlan.DEFAULT_CLIP_USD.toFloat()).toDouble(),
-        maxBuys = prefs.getInt("maxBuys", CounterPlan.DEFAULT_MAX_BUYS),
-        entryUnder = prefs.getFloat("entryUnder", CounterPlan.DEFAULT_ENTRY_UNDER.toFloat())
-            .toDouble(),
-        entryWindowSec = prefs.getLong("entryWindowSec", CounterPlan.DEFAULT_ENTRY_WINDOW_SEC),
-        gainPct = prefs.getFloat("gainPct", CounterPlan.DEFAULT_GAIN.toFloat()).toDouble(),
+        bankUsd = prefs.getFloat("bankUsd", SignalPlan.DEFAULT_BANK_USD.toFloat()).toDouble(),
+        clipUsd = prefs.getFloat("clipUsd", SignalPlan.DEFAULT_CLIP_USD.toFloat()).toDouble(),
+        maxBuys = prefs.getInt("maxBuys", SignalPlan.DEFAULT_MAX_BUYS),
+        maxPrice = prefs.getFloat("maxPrice", SignalPlan.DEFAULT_MAX_PRICE.toFloat()).toDouble(),
+        fromSec = prefs.getLong("fromSec", SignalPlan.DEFAULT_FROM_SEC),
+        untilSec = prefs.getLong("untilSec", SignalPlan.DEFAULT_UNTIL_SEC),
     )
 
-    fun saveSettings(settings: CounterPlan.Settings) {
+    fun saveSettings(settings: SignalPlan.Settings) {
         prefs.edit()
             .putBoolean("enabled", settings.enabled)
             .putFloat("bankUsd", settings.bankUsd.toFloat())
             .putFloat("clipUsd", settings.clipUsd.toFloat())
             .putInt("maxBuys", settings.maxBuys)
-            .putFloat("entryUnder", settings.entryUnder.toFloat())
-            .putLong("entryWindowSec", settings.entryWindowSec)
-            .putFloat("gainPct", settings.gainPct.toFloat())
+            .putFloat("maxPrice", settings.maxPrice.toFloat())
+            .putLong("fromSec", settings.fromSec)
+            .putLong("untilSec", settings.untilSec)
             .apply()
     }
 
