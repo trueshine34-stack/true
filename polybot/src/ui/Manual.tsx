@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   DEFAULT_MANUAL_SETTINGS,
   balanceShares,
@@ -14,7 +14,6 @@ import {
   type Exposure,
   type ManualSettings,
 } from '../core/manual';
-import { findLevels } from '../core/levels';
 import { pairOrders, realised, type TradeRow } from '../core/trades';
 import {
   SELL_GAINS,
@@ -27,11 +26,6 @@ import {
   targetPrice,
   usd,
 } from '../core/money';
-import {
-  appendPositionHistory,
-  loadPositionHistory,
-  type PositionRecord,
-} from '../core/history';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
 import {
   PolyBot,
@@ -43,6 +37,8 @@ import {
   type EventSummary,
   type LoggedOrder,
   type NativeMarket,
+  type CounterState,
+  type Timings,
   type NativePosition,
   type OpenOrder,
 } from '../native/polybot';
@@ -68,11 +64,10 @@ const ago = (at: number) => {
 const WINDOW_SEC = 300;
 
 /**
- * Forty minutes on screen. Ninety made every candle two pixels wide, which is a
- * price history rather than something you can read a turn off; forty leaves
- * eight windows of context and candles wide enough to have shape.
+ * Enough candles to find the current window's open and the one before it.
+ * Nothing is drawn any more, so anything longer is bytes for their own sake.
  */
-const CHART_MINUTES = 40;
+const PRICE_MINUTES = 10;
 
 type Draft = {
   side: 'Up' | 'Down';
@@ -130,10 +125,10 @@ export function Manual({
   });
   const [draft, setDraft] = useState<Draft | null>(null);
   const [positions, setPositions] = useState<NativePosition[]>([]);
-  const [history, setHistory] = useState<PositionRecord[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [logged, setLogged] = useState<LoggedOrder[]>([]);
+  const [counter, setCounter] = useState<CounterState | null>(null);
+  const [counterOpen, setCounterOpen] = useState(false);
   const [lookAhead, setLookAhead] = useState(false);
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [sessionPnl, setSessionPnl] = useState(0);
@@ -209,18 +204,13 @@ export function Manual({
   const livePositions = market
     ? positions.filter((p) => p.conditionId === market.conditionId)
     : [];
-  const closedPositions = market
-    ? positions.filter((p) => p.conditionId !== market.conditionId)
-    : positions;
-
-  // Chart. Candles are a slow-moving thing between windows, but the moment one
-  // rolls the whole picture changes — a new open, a new shaded stretch, levels
-  // that now sit relative to a different price — so the window is a dependency
-  // and the fetch happens on the boundary rather than up to ten seconds later.
+  // The window's opening price and where BTC is against it. Read on the
+  // boundary rather than up to ten seconds later: the moment a window rolls,
+  // the open changes and every number derived from it is stale.
   useEffect(() => {
     let cancelled = false;
     const read = () => {
-      void PolyBot.polyCandles({ minutes: CHART_MINUTES })
+      void PolyBot.polyCandles({ minutes: PRICE_MINUTES })
         .then((r) => {
           if (cancelled) return;
           setCandles(r.candles);
@@ -350,6 +340,25 @@ export function Manual({
     };
   }, [tokenFor]);
 
+  // The counter bot runs on its own money in the service; the panel only
+  // reads it. Three seconds is enough to watch a two-minute entry band.
+  useEffect(() => {
+    let cancelled = false;
+    const read = () => {
+      void PolyBot.counterState()
+        .then((s) => {
+          if (!cancelled) setCounter(s);
+        })
+        .catch(() => {});
+    };
+    read();
+    const timer = window.setInterval(read, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   // Sizing off the wallet needs the wallet. It only moves when an order fills,
   // so a slow poll is enough.
   useEffect(() => {
@@ -446,29 +455,6 @@ export function Manual({
     };
   }, []);
 
-  useEffect(() => {
-    void loadPositionHistory().then(setHistory);
-  }, []);
-
-  // Archive what has dropped out of the current window. Keyed by window, so a
-  // position seen on several polls is recorded once.
-  useEffect(() => {
-    if (closedPositions.length === 0) return;
-    const records: PositionRecord[] = closedPositions.map((p) => ({
-      windowStart: windowStart - WINDOW_SEC,
-      conditionId: p.conditionId,
-      outcome: p.outcome,
-      size: p.size,
-      avgPrice: p.avgPrice,
-      lastPrice: p.curPrice,
-      pnlUsd: p.cashPnl,
-    }));
-    void appendPositionHistory(records).then(setHistory);
-    // Only the identity of what closed matters here; re-running on every price
-    // tick would rewrite the same rows continuously.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [closedPositions.map((p) => p.asset).join(','), windowStart]);
-
   const apply = useCallback((next: ManualSettings) => {
     setSettings(next);
     void saveManualSettings(next);
@@ -498,8 +484,15 @@ export function Manual({
   }, [committed, onCommitted]);
 
   const exposure = useMemo(
-    () => exposureFor(balance ?? 0, committed, containerLocked),
-    [balance, committed, containerLocked],
+    // The counter bot's bank is in the same wallet and is not the desk's to
+    // spend, so it is held back exactly like anything else in the container.
+    () =>
+      exposureFor(
+        balance ?? 0,
+        committed,
+        containerLocked + (counter?.enabled ? Math.max(0, counter.cash) : 0),
+      ),
+    [balance, committed, containerLocked, counter?.enabled, counter?.cash],
   );
 
   const guard = settings.exposureGuard && balance != null;
@@ -856,6 +849,26 @@ export function Manual({
 
   return (
     <>
+      {counter && (
+        <CounterStrip
+          state={counter}
+          open={counterOpen}
+          onToggle={() => setCounterOpen((v) => !v)}
+          onEnable={(enabled) => {
+            void PolyBot.counterUpdate({ enabled })
+              .then(() => PolyBot.counterState())
+              .then(setCounter)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onReset={() => {
+            void PolyBot.counterReset()
+              .then(() => PolyBot.counterState())
+              .then(setCounter)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+        />
+      )}
+
       <EventStrip
         events={events}
         session={sessionPnl}
@@ -868,25 +881,20 @@ export function Manual({
         <div className="deskbar">
           <div>
             <div className="muted" style={{ fontSize: 10 }}>
-              BTC · Polymarket TWAP
+              открытие 5м
             </div>
             <div className="deskprice">
-              {spot != null ? `$${spot.toFixed(0)}` : '—'}
+              {windowOpen != null ? windowOpen.toFixed(0) : '—'}
             </div>
           </div>
           <div style={{ textAlign: 'center' }}>
             <div className="muted" style={{ fontSize: 10 }}>
-              открытие 5м
+              изменение
             </div>
-            <div className="deskprice small">
-              {windowOpen != null ? windowOpen.toFixed(0) : '—'}
-              {drift != null && (
-                <span className={drift >= 0 ? 'up' : 'down'}>
-                  {' '}
-                  {drift >= 0 ? '+' : '−'}
-                  {Math.abs(drift).toFixed(0)}
-                </span>
-              )}
+            <div className={`deskprice ${drift == null ? '' : drift >= 0 ? 'up' : 'down'}`}>
+              {drift == null
+                ? '—'
+                : `${drift >= 0 ? '+' : '−'}${Math.abs(drift).toFixed(0)}`}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -913,40 +921,33 @@ export function Manual({
             ⚙
           </button>
         </div>
-        <Chart candles={candles} spot={spot} windowOpen={windowOpen} />
       </div>
 
       {tab === 'settings' ? (
-        <ManualSettingsForm settings={settings} onChange={apply} onNote={setNote} />
+        <ManualSettingsForm
+          settings={settings}
+          timings={autoSell.timings}
+          onChange={apply}
+          onNote={setNote}
+        />
       ) : (
         <>
           <div className="card tight">
             <div className="listhead">
               <span>{viewWindow != null ? `Событие ${clockOf(viewWindow)}` : 'Позиции'}</span>
-              {viewWindow != null ? (
+              {viewWindow != null && (
                 <button className="linkbtn" onClick={() => setViewWindow(null)}>
                   к текущему
-                </button>
-              ) : (
-                <button
-                  className="linkbtn"
-                  onClick={() => setShowHistory((v) => !v)}
-                >
-                  {showHistory ? 'скрыть' : `история ${history.length || ''}`}
                 </button>
               )}
             </div>
             {/*
-              A closed window's positions are gone from the exchange; what is
-              left is what was archived when it closed. Showing the live ones
-              under a past event would attribute this window's money to it.
+              A closed window's positions are gone from the exchange, so a past
+              event shows nothing here — its record is the order history at the
+              bottom, which is the thing actually worth reading afterwards.
             */}
             {viewWindow != null ? (
-              <PositionHistory
-                records={history.filter((r) => r.windowStart === viewWindow)}
-              />
-            ) : showHistory ? (
-              <PositionHistory records={history} />
+              <div className="muted empty">Позиции события закрыты</div>
             ) : livePositions.length === 0 ? (
               <div className="muted empty">Открытых позиций нет</div>
             ) : (
@@ -1255,6 +1256,14 @@ export function Manual({
               (autoSell.rebuysDone?.length ?? 0) > 0) && (
               <RebuyCard state={autoSell} now={now} />
             )}
+
+          {/*
+            A past event is read, not traded. Its whole record is the orders
+            that went through it, newest first — which is what "what happened
+            at 14:35" actually means, and it belongs at the bottom, under the
+            numbers it explains.
+          */}
+          {viewWindow != null && <OrderHistory orders={logged} />}
 
           {!draft && (
             <RuleBar
@@ -1630,169 +1639,240 @@ function EventStrip({
   );
 }
 
-function PositionHistory({ records }: { records: PositionRecord[] }) {
-  if (records.length === 0) {
-    return <div className="muted empty">История пуста</div>;
-  }
-  return (
-    <>
-      {records.slice(0, 20).map((r) => (
-        <div className="listrow static" key={`${r.windowStart}${r.outcome}`}>
-          <span className={r.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
-            {r.outcome}
-          </span>
-          <span className="listrow-main">
-            {r.size.toFixed(1)} × {r.avgPrice > 0 ? cents(r.avgPrice) : '…'}
-          </span>
-          <span className="muted listrow-now">
-            {new Date(r.windowStart * 1000).toLocaleTimeString('ru-RU', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </span>
-          <span className={`listrow-pnl ${r.pnlUsd >= 0 ? 'up' : 'down'}`}>
-            {r.pnlUsd >= 0 ? '+' : '−'}
-            {Math.abs(r.pnlUsd).toFixed(2)}
-          </span>
-        </div>
-      ))}
-    </>
-  );
-}
-
-
 /**
- * One-minute candles from GMX.
+ * The counter bot, in one line and then in full.
  *
- * The five-minute grid is drawn in because that is what is actually being
- * traded: the dashed line is where the current window opened, and every bar
- * after it is the move that decides Up or Down. The price itself is GMX's own
- * oracle — close to the settlement feed but not it, so nothing here is a strike.
+ * Shut, it is the only three numbers that matter while trading: its own money,
+ * what it has made, and what it is doing this window. Open, it is the whole
+ * account — because a bot with five dollars of its own is only worth running if
+ * you can see, at a glance, whether the five dollars is growing.
  */
-function Chart({
-  candles,
-  spot,
-  windowOpen,
+function CounterStrip({
+  state,
+  open,
+  onToggle,
+  onEnable,
+  onReset,
 }: {
-  candles: GmxCandle[];
-  spot: number | null;
-  windowOpen: number | null;
+  state: CounterState;
+  open: boolean;
+  onToggle: () => void;
+  onEnable: (enabled: boolean) => void;
+  onReset: () => void;
 }) {
-  const levels = useMemo(() => findLevels(candles), [candles]);
+  const round = state.round;
+  const held = round?.lots.reduce((a, l) => a + (l.shares - l.sold), 0) ?? 0;
+  const tone = state.pnl > 0 ? 'up' : state.pnl < 0 ? 'down' : 'muted';
 
-  const view = useMemo(() => {
-    if (candles.length === 0) return null;
-    const W = 340;
-    const H = 82;
-    let lo = Math.min(...candles.map((c) => c.low));
-    let hi = Math.max(...candles.map((c) => c.high));
-    if (spot != null) {
-      lo = Math.min(lo, spot);
-      hi = Math.max(hi, spot);
-    }
-    const pad = (hi - lo) * 0.08 || 1;
-    lo -= pad;
-    hi += pad;
-
-    const step = W / candles.length;
-    const y = (p: number) => H - ((p - lo) / (hi - lo)) * H;
-
-    const windowStart =
-      Math.floor(candles[candles.length - 1].time / WINDOW_SEC) * WINDOW_SEC;
-    const openIndex = candles.findIndex((c) => c.time >= windowStart);
-
-    return { W, H, lo, hi, step, y, openIndex };
-  }, [candles, spot]);
-
-  if (!view) {
-    return <div className="chart-empty muted">График загружается…</div>;
-  }
-  const { W, H, lo, hi, step, y, openIndex } = view;
-  const openPrice = windowOpen;
-  const inView = (p: number) => p > lo && p < hi;
-
-  const visible = levels.filter((l) => inView(l.price));
-  const labelled: typeof visible = [];
-  for (const l of visible) {
-    // Eleven pixels of chart is about one line of the label's own text.
-    if (labelled.every((k) => Math.abs(y(k.price) - y(l.price)) > 11)) labelled.push(l);
-  }
+  // What it is doing, in as few words as it can be said.
+  const doing = !state.enabled
+    ? 'выключен'
+    : round == null
+      ? 'ждёт мою сторону'
+      : held > 0
+        ? `держит ${held.toFixed(1)} ${round.side}`
+        : (round.note ?? `следит за ${round.side}`);
 
   return (
-    <div className="chartwrap">
-      <svg className="chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-        {openIndex >= 0 && (
-          <rect
-            x={openIndex * step}
-            y={0}
-            width={W - openIndex * step}
-            height={H}
-            className="chart-window"
-          />
-        )}
-        {visible.map((l) => (
-          <line
-            key={`${l.kind}${l.price}`}
-            x1={0}
-            x2={W}
-            y1={y(l.price)}
-            y2={y(l.price)}
-            className={`chart-level ${l.kind}`}
-            strokeWidth={l.touches >= 3 ? 1.4 : 0.8}
-          />
-        ))}
-        {candles.map((c, i) => {
-          const x = i * step + step / 2;
-          const up = c.close >= c.open;
-          const top = y(Math.max(c.open, c.close));
-          const bottom = y(Math.min(c.open, c.close));
-          return (
-            <g key={c.time} className={up ? 'c-up' : 'c-down'}>
-              <line x1={x} x2={x} y1={y(c.high)} y2={y(c.low)} strokeWidth={0.9} />
-              <rect
-                x={i * step + 0.8}
-                width={Math.max(step - 1.6, 1)}
-                y={top}
-                height={Math.max(bottom - top, 1)}
-              />
-            </g>
-          );
-        })}
-        {openPrice != null && inView(openPrice) && (
-          <line
-            x1={0}
-            x2={W}
-            y1={y(openPrice)}
-            y2={y(openPrice)}
-            className="chart-open"
-          />
-        )}
-        {spot != null && inView(spot) && (
-          <line x1={0} x2={W} y1={y(spot)} y2={y(spot)} className="chart-spot" />
-        )}
-      </svg>
-
-      {/*
-        Labels sit outside the SVG: the chart is stretched to fill its box, so
-        text drawn inside it would be squashed with the candles. Levels close
-        together get one label between them — two overlapping numbers are less
-        readable than one, and the lines themselves are still both drawn. They
-        hug the left edge: the newest candles are on the right and must stay
-        clear. The window open needs no label here — it is in the header.
-      */}
-      {labelled.map((l) => (
-        <span
-          key={`t${l.kind}${l.price}`}
-          className={`chart-tag ${l.kind}`}
-          style={{ top: `${(y(l.price) / H) * 100}%` }}
-        >
-          {l.price.toFixed(0)}
-          <i>{'·'.repeat(Math.min(l.touches, 4))}</i>
+    <div className={`counter${open ? ' open' : ''}`}>
+      <button className="counterbar" onClick={onToggle}>
+        <span className={`counterdot${state.running ? ' live' : ''}`} aria-hidden />
+        <span className="countercash">{usd(state.cash)}</span>
+        <span className={`counterpnl ${tone}`}>{signedUsd(state.pnl)}</span>
+        <span className="counterdoing muted">{doing}</span>
+        <span className="foldarrow" aria-hidden>
+          {open ? '−' : '+'}
         </span>
-      ))}
+      </button>
+
+      {open && (
+        <div className="counterbody">
+          <div className="counterhead">
+            <span>Контр-бот</span>
+            <button
+              className={`switch ${state.enabled ? 'on' : ''}`}
+              onClick={() => onEnable(!state.enabled)}
+            />
+          </div>
+
+          {/*
+            The rule, spelled out. It is three sentences and it decides every
+            order this bot sends, so it is worth the four lines.
+          */}
+          <div className="counterrule muted">
+            Первые {Math.round(state.entryWindowSec / 60)} мин покупает сторону,
+            противоположную моей, по {usd(state.clipUsd)} —{' '}
+            {state.maxBuys} раза, каждый раз на тик ниже, пока дешевле{' '}
+            {cents(state.entryUnder)}. Продаёт сразу с целью +
+            {Math.round(state.gainPct * 100)}%.
+          </div>
+
+          <div className="countergrid">
+            <div>
+              <span className="muted">свои деньги</span>
+              <b>{usd(state.cash)}</b>
+            </div>
+            <div>
+              <span className="muted">старт</span>
+              <b>{usd(state.bankUsd)}</b>
+            </div>
+            <div>
+              <span className="muted">итог</span>
+              <b className={tone}>{signedUsd(state.pnl)}</b>
+            </div>
+            <div>
+              <span className="muted">окон</span>
+              <b>{state.rounds}</b>
+            </div>
+            <div>
+              <span className="muted">плюс / минус</span>
+              <b>
+                <span className="up">{state.wins}</span>
+                {' / '}
+                <span className="down">{state.losses}</span>
+              </b>
+            </div>
+            <div>
+              <span className="muted">покупок / продаж</span>
+              <b>
+                {state.buys} / {state.sells}
+              </b>
+            </div>
+          </div>
+
+          {round && (
+            <div className="counterround">
+              <div className="listhead">
+                <span>Сейчас · {clockOf(round.windowStart)}</span>
+                <span className="muted">
+                  моя {round.deskSide} → берёт {round.side}
+                </span>
+              </div>
+              <div className="counterlive muted">
+                {round.lastAsk != null ? `цена ${cents(round.lastAsk)}` : 'нет цены'}
+                {round.bestAsk != null ? ` · лучшая ${cents(round.bestAsk)}` : ''}
+                {round.note ? ` · ${round.note}` : ''}
+              </div>
+              {round.lots.map((l, i) => (
+                <div className="listrow static" key={i}>
+                  <span className={round.side === 'Up' ? 'up tag-side' : 'down tag-side'}>
+                    {round.side}
+                  </span>
+                  <span className="listrow-main">
+                    {l.shares.toFixed(1)} × {cents(l.price)}
+                    <span className="sub muted">
+                      {usd(l.shares * l.price)}
+                      {l.sellPrice > 0 ? ` · продажа ${cents(l.sellPrice)}` : ''}
+                      {l.note ? ` · ${l.note}` : ''}
+                    </span>
+                  </span>
+                  <span className="listrow-pnl muted">
+                    {l.sold > 0 ? usd(l.proceeds) : '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {state.past.length > 0 && (
+            <div className="counterpast">
+              <div className="listhead">
+                <span>Прошлые окна</span>
+              </div>
+              {state.past.slice(0, 8).map((p) => (
+                <div className="listrow static" key={p.windowStart}>
+                  <span className="muted tag-side">{clockOf(p.windowStart)}</span>
+                  <span className="listrow-main">
+                    {p.note}
+                    <span className="sub muted">
+                      {p.shares > 0
+                        ? `${p.shares.toFixed(1)} ${p.side} · ${usd(p.spent)} → ${usd(p.got)}`
+                        : '—'}
+                    </span>
+                  </span>
+                  <span className={`listrow-pnl ${p.pnl >= 0 ? 'up' : 'down'}`}>
+                    {p.shares > 0 ? signedUsd(p.pnl) : '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {state.lastFault && <div className="counterlive warn">{state.lastFault}</div>}
+
+          <button className="ghost compact counterreset" onClick={onReset}>
+            обнулить счёт бота
+          </button>
+        </div>
+      )}
     </div>
   );
 }
+
+/**
+ * Every order that went through one event, as it happened.
+ *
+ * The rows above pair a buy with its sell and answer "what did this round
+ * make". This answers the other question — what was actually sent, at what
+ * price, and what became of it — which is the only way to see a limit that
+ * never filled or a sale that went out in three pieces.
+ */
+function OrderHistory({ orders }: { orders: LoggedOrder[] }) {
+  const rows = [...orders].sort((a, b) => b.placedAt - a.placedAt);
+  return (
+    <div className="card tight">
+      <div className="listhead">
+        <span>История ордеров</span>
+        <span className="muted">{rows.length}</span>
+      </div>
+      {rows.length === 0 ? (
+        <div className="muted empty">Ордеров не было</div>
+      ) : (
+        rows.map((o) => (
+          <div className="listrow static hist" key={o.id}>
+            <span className={o.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
+              {o.outcome || '—'}
+            </span>
+            <span className="listrow-main">
+              <span className={o.action === 'BUY' ? 'hist-buy' : 'hist-sell'}>
+                {o.action === 'BUY' ? 'покупка' : 'продажа'}
+              </span>
+              <i>×</i>
+              {cents(o.price)}
+              <span className="sub muted">
+                {o.matched > 0 ? o.matched.toFixed(1) : o.size.toFixed(1)} долей ·{' '}
+                {usd((o.matched > 0 ? o.matched : o.size) * o.price)}
+                {o.auto ? ' · правило' : ''}
+              </span>
+            </span>
+            <span className="listrow-now">
+              {new Date(o.placedAt).toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              })}
+              <span className={`sub ${statusTone(o.status)}`}>
+                {statusWord(o.status)}
+              </span>
+            </span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+const statusWord = (status: string) =>
+  status === 'filled'
+    ? 'исполнен'
+    : status === 'partial'
+      ? 'частично'
+      : status === 'cancelled'
+        ? 'снят'
+        : 'в стакане';
+
+const statusTone = (status: string) =>
+  status === 'filled' ? 'up' : status === 'cancelled' ? 'muted' : 'warn';
 
 /**
  * What the buy-back is doing, while it is doing it.
@@ -2134,12 +2214,54 @@ function RuleBar({
   );
 }
 
+/**
+ * A section that stays shut until it is wanted.
+ *
+ * The settings had grown to four screens of fields, which is four screens to
+ * scroll past to change the one thing you came for. Folded, the whole page is
+ * a list of headings you can see at once.
+ */
+function Fold({
+  title,
+  note,
+  children,
+}: {
+  title: string;
+  note?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`card fold${open ? ' open' : ''}`}>
+      <button className="foldhead" onClick={() => setOpen((v) => !v)}>
+        <span>{title}</span>
+        {note && <span className="muted foldnote">{note}</span>}
+        <span className="foldarrow" aria-hidden>
+          {open ? '−' : '+'}
+        </span>
+      </button>
+      {open && <div className="foldbody">{children}</div>}
+    </div>
+  );
+}
+
+/** A measured delay, or an honest word about why there is not one yet. */
+function measured(ms: number | null | undefined, samples: number | undefined) {
+  const n = samples ?? 0;
+  if (ms == null || n < 2) {
+    return { text: n > 0 ? `замер ${n} из 2` : 'ещё не замерено', tone: 'muted' };
+  }
+  return { text: `${(ms / 1000).toFixed(1)} с`, tone: 'up' };
+}
+
 function ManualSettingsForm({
   settings,
+  timings,
   onChange,
   onNote,
 }: {
   settings: ManualSettings;
+  timings?: Timings;
   onChange: (next: ManualSettings) => void;
   onNote: (text: string | null) => void;
 }) {
@@ -2181,10 +2303,36 @@ function ManualSettingsForm({
     });
   };
 
+  const ready = measured(timings?.sellReadyMs, timings?.sellReadySamples);
+  const cash = measured(timings?.cashMs, timings?.cashSamples);
+
   return (
     <>
-    <div className="card">
-      <h2>Покупка по клику</h2>
+    {/*
+      Two waits the venue imposes and never states. The app times them itself
+      on ordinary trades — the first sell it accepts after a purchase, and the
+      first balance that shows a sale's money — and once it has two of each it
+      stops guessing and starts placing on the clock.
+    */}
+    <div className="card measures">
+      <h2>Замеры</h2>
+      <div className="measure">
+        <span>Продажа доступна через</span>
+        <b className={ready.tone}>{ready.text}</b>
+      </div>
+      <div className="measure">
+        <span>Деньги после продажи через</span>
+        <b className={cash.tone}>
+          {cash.text}
+          {timings?.cashPending ? ' · считаю' : ''}
+        </b>
+      </div>
+    </div>
+
+    <Fold
+      title="Покупка по клику"
+      note={`${Math.round(settings.balanceSharePct * 100)}% · $${settings.defaultStakeUsd}`}
+    >
 
       <label className="field">
         <span>Доля баланса на клик, %</span>
@@ -2254,10 +2402,9 @@ function ManualSettingsForm({
         </div>
       )}
 
-    </div>
+    </Fold>
 
-    <div className="card">
-      <h2>Контейнер</h2>
+    <Fold title="Контейнер" note={settings.exposureGuard ? 'включён' : 'выключен'}>
       <div className="toggle">
         <span>Не пускать в рынок то, что в контейнере</span>
         <button
@@ -2268,11 +2415,18 @@ function ManualSettingsForm({
         />
       </div>
 
-    </div>
+    </Fold>
 
-    <div className="card">
-      <h2>Автопродажа</h2>
-
+    <Fold
+      title="Автопродажа"
+      note={
+        settings.autoSellEnabled
+          ? settings.autoSellPercentMode
+            ? `+${Math.round(settings.autoSellProfitPct * 100)}%`
+            : 'лесенкой'
+          : 'выключена'
+      }
+    >
       {/*
         Two ways to price an exit. The ladder asks a fixed price at a fixed
         minute, which ignores what the position cost — 84¢ is a good sale bought
@@ -2468,7 +2622,7 @@ function ManualSettingsForm({
           }
         />
       </label>
-    </div>
+    </Fold>
     </>
   );
 }

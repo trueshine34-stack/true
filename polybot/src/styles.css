@@ -1846,3 +1846,233 @@ button.step.big {
   border-color: rgba(35, 192, 123, 0.4);
   color: var(--text);
 }
+
+/* ---------------------------------------------- one event's order history */
+
+/*
+ * Wider clock column than the position rows: a history is read by when, and
+ * seconds matter when three sells go out two seconds apart.
+ */
+.listrow.hist .listrow-now {
+  flex: 0 0 62px;
+}
+
+.listrow.hist .listrow-main i {
+  font-style: normal;
+  color: var(--muted);
+  margin: 0 5px;
+}
+
+.hist-buy {
+  color: var(--up);
+  font-weight: 600;
+}
+
+.hist-sell {
+  color: var(--down);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------- folded settings */
+
+.card.fold {
+  padding: 0;
+  overflow: hidden;
+}
+
+.foldhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 13px 14px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.foldhead:active {
+  background: var(--surface-2);
+}
+
+/* The setting's current value, so the fold can stay shut and still inform. */
+.foldnote {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.foldarrow {
+  flex: 0 0 16px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.foldnote + .foldarrow {
+  margin-left: 0;
+}
+
+.foldhead > span:first-child + .foldarrow {
+  margin-left: auto;
+}
+
+.foldbody {
+  padding: 0 14px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.foldbody > .field:first-child,
+.foldbody > .toggle:first-child {
+  margin-top: 10px;
+}
+
+/* ------------------------------------------------------ measured delays */
+
+.measures .measure {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.measures .measure + .measure {
+  border-top: 1px solid var(--line);
+}
+
+.measures .measure b {
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+}
+
+/* ------------------------------------------------------------ counter bot */
+
+/*
+ * Sits directly under the header numbers, which is the one place a second
+ * account can live without competing with the desk for attention: one line
+ * while it works, a full page when it is asked about.
+ */
+.counter {
+  margin: 0 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.counter.open {
+  border-color: var(--accent, var(--line));
+}
+
+.counterbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.counterbar:active {
+  background: var(--surface-2);
+}
+
+/* Green only while the loop is actually up; a switch that lies is worse than
+   no switch at all. */
+.counterdot {
+  flex: 0 0 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.counterdot.live {
+  background: var(--up);
+}
+
+.countercash {
+  font-weight: 600;
+}
+
+.counterpnl {
+  font-weight: 600;
+}
+
+.counterdoing {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 12px;
+}
+
+.counterbody {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.counterhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.counterrule {
+  font-size: 11px;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.countergrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px 6px;
+}
+
+.countergrid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.countergrid span {
+  font-size: 10px;
+}
+
+.countergrid b {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.counterround,
+.counterpast {
+  margin-top: 10px;
+}
+
+.counterlive {
+  font-size: 11px;
+  padding: 4px 0;
+}
+
+.counterreset {
+  margin-top: 10px;
+  width: 100%;
+}

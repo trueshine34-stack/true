@@ -48,9 +48,24 @@ class BotPlugin : Plugin() {
     /** Standing sell rule for the manual desk. */
     private val autoSell: AutoSell get() = EngineHolder.autoSell(context)
 
+    /** The counter-side dip bot, on its own walled-off money. */
+    private val counter: CounterBot get() = EngineHolder.counter(context)
+
     override fun load() {
         EngineHolder.onState = { notifyState() }
         EngineHolder.onLogEntry = { entry -> notifyLog(entry) }
+        // What the app has measured about the venue's own delays outlives the
+        // process; re-measuring on every launch would mean never having a
+        // number when it is wanted.
+        Timings.store = object : Timings.Store {
+            private val prefs = context.applicationContext
+                .getSharedPreferences("polybot_timings", android.content.Context.MODE_PRIVATE)
+
+            override fun read(key: String): String? = prefs.getString(key, null)
+            override fun write(key: String, value: String) {
+                prefs.edit().putString(key, value).apply()
+            }
+        }
     }
 
     override fun handleOnDestroy() {
@@ -223,7 +238,11 @@ class BotPlugin : Plugin() {
     fun getBalance(call: PluginCall) {
         Thread {
             try {
-                call.resolve(JSObject().put("usdc", engine.usdcBalance()))
+                val usdc = engine.usdcBalance()
+                // Every reading is also the baseline the next sale is timed
+                // against, so the desk's own poll feeds the checker too.
+                Timings.balanceRead(usdc, System.currentTimeMillis())
+                call.resolve(JSObject().put("usdc", usdc))
             } catch (e: Exception) {
                 call.reject(e.message ?: "не удалось прочитать баланс")
             }
@@ -1176,6 +1195,12 @@ class BotPlugin : Plugin() {
                 .put("closeFloor", bot.settings.closeFloor)
                 .put("lateFloor", bot.settings.lateFloor)
                 .put("lateBandSec", bot.settings.lateBandSec)
+                .put("timings", JSObject()
+                    .put("sellReadyMs", Timings.readyMs())
+                    .put("sellReadySamples", Timings.readySamples())
+                    .put("cashMs", Timings.cashMs())
+                    .put("cashSamples", Timings.cashSamples())
+                    .put("cashPending", Timings.cashPending()))
                 .put("rebuys", waiting)
                 .put("rebuysDone", JSArray().also { arr ->
                     bot.recentRebuys.forEach {
@@ -1192,6 +1217,101 @@ class BotPlugin : Plugin() {
                     }
                 })
                 .put("rows", rows),
+        )
+    }
+
+    // ---------------------------------------------------------- counter bot
+
+    @PluginMethod
+    fun counterUpdate(call: PluginCall) {
+        val d = counter.settings
+        counter.update(
+            CounterPlan.Settings(
+                enabled = call.getBoolean("enabled") ?: d.enabled,
+                bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
+                clipUsd = call.getDouble("clipUsd") ?: d.clipUsd,
+                maxBuys = call.getInt("maxBuys") ?: d.maxBuys,
+                entryUnder = call.getDouble("entryUnder") ?: d.entryUnder,
+                entryWindowSec = (call.getInt("entryWindowSec")?.toLong()) ?: d.entryWindowSec,
+                gainPct = call.getDouble("gainPct") ?: d.gainPct,
+            ),
+        )
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun counterReset(call: PluginCall) {
+        counter.resetBank()
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun counterState(call: PluginCall) {
+        val bot = counter
+        val totals = bot.totals
+        val round = bot.round
+
+        val lots = JSArray()
+        round?.lots?.forEach {
+            lots.put(
+                JSObject()
+                    .put("shares", it.shares)
+                    .put("price", it.price)
+                    .put("sellPrice", it.sellPrice)
+                    .put("sold", it.sold)
+                    .put("proceeds", it.proceeds)
+                    .put("boughtAt", it.boughtAt)
+                    .put("note", it.note),
+            )
+        }
+
+        val history = JSArray()
+        bot.past.forEach {
+            history.put(
+                JSObject()
+                    .put("windowStart", it.windowStart)
+                    .put("side", it.side)
+                    .put("shares", it.shares)
+                    .put("spent", it.spent)
+                    .put("got", it.got)
+                    .put("pnl", it.pnl)
+                    .put("note", it.note),
+            )
+        }
+
+        call.resolve(
+            JSObject()
+                .put("enabled", bot.settings.enabled)
+                .put("running", bot.running)
+                .put("bankUsd", bot.settings.bankUsd)
+                .put("clipUsd", bot.settings.clipUsd)
+                .put("maxBuys", bot.settings.maxBuys)
+                .put("entryUnder", bot.settings.entryUnder)
+                .put("entryWindowSec", bot.settings.entryWindowSec)
+                .put("gainPct", bot.settings.gainPct)
+                .put("cash", bot.cash)
+                .put("lastFault", bot.lastFault)
+                .put("rounds", totals.rounds)
+                .put("buys", totals.buys)
+                .put("sells", totals.sells)
+                .put("spent", totals.spent)
+                .put("got", totals.got)
+                .put("settled", totals.settled)
+                .put("wins", totals.wins)
+                .put("losses", totals.losses)
+                .put("pnl", totals.pnl)
+                .put("round", round?.let {
+                    JSObject()
+                        .put("windowStart", it.windowStart)
+                        .put("deskSide", it.deskSide)
+                        .put("side", it.side)
+                        .put("lastAsk", it.lastAsk)
+                        .put("bestAsk", it.bestAsk)
+                        .put("checks", it.checks)
+                        .put("note", it.note)
+                        .put("lots", lots)
+                })
+                .put("past", history),
         )
     }
 

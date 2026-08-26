@@ -86,7 +86,10 @@ object DataApi {
                     side = o.optString("side").uppercase(),
                     size = size,
                     price = price,
-                    at = o.optLong("timestamp"),
+                    // The feed stamps trades in seconds; everything here
+                    // works in milliseconds, and a fill filed in seconds sorts
+                    // as though it happened in 1970.
+                    at = o.optLong("timestamp").let { if (it < 1_000_000_000_000L) it * 1000 else it },
                     outcome = o.optString("outcome"),
                 ),
             )

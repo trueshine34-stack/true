@@ -22,6 +22,9 @@ object EngineHolder {
     private var autoSell: AutoSell? = null
 
     @Volatile
+    private var counter: CounterBot? = null
+
+    @Volatile
     var onState: (() -> Unit)? = null
 
     @Volatile
@@ -97,6 +100,33 @@ object EngineHolder {
     }
 
     /**
+     * The counter bot, on its own money and its own loop.
+     *
+     * It is created eagerly on first ask rather than only when switched on, so
+     * the panel can show its books and its settings while it is off.
+     */
+    fun counter(context: Context): CounterBot {
+        counter?.let { return it }
+        val host = get(context)
+        return synchronized(this) {
+            counter ?: CounterBot(
+                engine = host,
+                store = CounterStore(context),
+                onStateChanged = {
+                    onState?.invoke()
+                    onServiceState?.invoke()
+                },
+            ).also {
+                counter = it
+                // A setting that says "on" has to mean on after a restart.
+                if (it.settings.enabled) it.start()
+            }
+        }
+    }
+
+    fun peekCounter(): CounterBot? = counter
+
+    /**
      * How many shares of one outcome the running bots are holding.
      *
      * A dry run holds nothing real, so a paper cycle contributes zero — the
@@ -118,6 +148,10 @@ object EngineHolder {
                 }
             }
         }
+
+        // The counter bot arranges its own exits at its own margin; the desk's
+        // rule blanketing them at a different price would fight it.
+        counter?.takeIf { it.running }?.let { held += it.heldShares(asset) }
 
         pair?.takeIf { it.running }?.book?.let { book ->
             if (!book.dryRun) {

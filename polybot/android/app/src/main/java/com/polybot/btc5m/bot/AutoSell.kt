@@ -189,6 +189,12 @@ class AutoSell(
 
         /** How often to check the price while a buy-back is waiting for a dip. */
         const val REBUY_POLL_MS = 2_000L
+
+        /** Pass interval while the lock after a purchase is still being timed. */
+        const val MEASURE_GAP_MS = 2_000L
+
+        /** How often to look at the balance while a sale's money is awaited. */
+        const val CASH_PROBE_MS = 2_000L
     }
 
     /**
@@ -233,6 +239,7 @@ class AutoSell(
         job = newScope.launch {
             var backoffMs = 0L
             var lastFullMs = 0L
+            var lastCashProbeMs = 0L
             while (isActive && running) {
                 val now = System.currentTimeMillis()
                 val nowSec = Clock.nowSec()
@@ -249,6 +256,19 @@ class AutoSell(
                     }
                 }
 
+                // Timing how long a sale's money takes to become spendable
+                // needs the balance looked at more often than the desk's own
+                // half-minute poll. It runs only while a sale is being timed,
+                // and stops for good once a couple of sales have been.
+                if (Timings.cashPending() && now - lastCashProbeMs >= CASH_PROBE_MS) {
+                    lastCashProbeMs = now
+                    try {
+                        Timings.balanceRead(engine.usdcBalance(), System.currentTimeMillis())
+                    } catch (e: Exception) {
+                        // A missed reading only costs this sale's measurement.
+                    }
+                }
+
                 val windowNow = nowSec - SellLadder.elapsedInWindow(nowSec)
                 val busy = sweepRequested ||
                     watching.isNotEmpty() ||
@@ -257,6 +277,7 @@ class AutoSell(
                     // on yet. Without this the loop could sleep through the one
                     // fill a buy-back exists to answer.
                     TradeSync.hasFresh() ||
+                    Timings.cashPending() ||
                     OrderLog.hasWorkingSells(windowNow) ||
                     OrderLog.hasWorkingBuys(windowNow) ||
                     // A purchase with no exit arranged is unfinished business,
@@ -265,7 +286,17 @@ class AutoSell(
                     // hope: it is read from the app's own log, so it survives a
                     // refusal, a rate limit and an unindexed trade alike.
                     (settings.enabled && OrderLog.hasUncovered(windowNow))
-                val due = now - lastFullMs >= settings.retryEverySec.coerceAtLeast(1) * 1000L
+                // While the lock has never been timed, passes come closer
+                // together: the retry interval is also the resolution of the
+                // measurement, and seven seconds is too coarse to place an
+                // order by. It only lasts until a couple of samples exist, and
+                // only while a purchase is actually being chased.
+                val gapMs = if (Timings.measuring() && watching.isNotEmpty()) {
+                    MEASURE_GAP_MS
+                } else {
+                    settings.retryEverySec.coerceAtLeast(1) * 1000L
+                }
+                val due = now - lastFullMs >= gapMs
 
                 if (busy && due && backoffMs <= 0L) {
                     lastFullMs = now
@@ -291,6 +322,7 @@ class AutoSell(
                         // pending buy-back keeps the loop ticking fast — but only
                         // the price check runs at that pace.
                         rebuys.isNotEmpty() -> REBUY_POLL_MS
+                        Timings.cashPending() -> CASH_PROBE_MS
                         busy -> 1_000L
                         else -> IDLE_MS
                     },
@@ -420,6 +452,21 @@ class AutoSell(
             val rung = trackRung(position, meta?.windowStart ?: windowStart, now)
             val ladderTarget = settings.ladder.getOrElse(rung.step) { settings.ladder.last() }
 
+            // The venue locks freshly bought shares, and how long for is
+            // something the app has measured rather than something the
+            // settings guess at. Once it knows, the first offer waits for that
+            // moment instead of firing a refusal at the exchange every few
+            // seconds from the instant of purchase. Zero while nothing has
+            // been measured — being refused is how the measurement is taken.
+            val lotAt = OrderLog.uncoveredLots(position.asset).firstOrNull()?.at ?: 0L
+            val closesAt = (meta?.windowStart?.takeIf { it > 0 } ?: windowStart) + WINDOW_SECONDS
+            val hold = if (meta == null || closesAt - now <= settings.panicSec) {
+                // Near the close there is no time to be patient with.
+                0L
+            } else {
+                Timings.holdMs(lotAt, nowMs)
+            }
+
             // In percent mode the price comes from what the position cost, so
             // it is worked out per position rather than per minute. Null means
             // the cost is not known yet, and a price cannot be invented.
@@ -441,9 +488,10 @@ class AutoSell(
                 // sweep for good; it is now kept and named for what it is.
                 mine < meta.minimumOrderSize - 1e-6 ->
                     "меньше минимума " + String.format("%.1f", meta.minimumOrderSize)
+                hold > 0L -> "жду ${(hold + 999) / 1000} с по замеру"
                 settings.percentMode ->
                     reconcilePercent(position, open, meta, percentPrice, mine)
-                else -> reconcile(position, open, meta, target, mine)
+                else -> reconcile(position, open, meta, target, mine, lotAt)
             }
             // Covered, settled, or the bot's: nothing left to chase here.
             if (status == "покрыто" || status == "рынок закрыт" || status == "у бота") {
@@ -867,7 +915,7 @@ class AutoSell(
             .coerceAtMost(mine - sells.sumOf { it.remaining })
         if (size < meta.minimumOrderSize - 1e-6) return "покрыто"
 
-        val status = tryPlace(position, size, target)
+        val status = tryPlace(position, size, target, lot.at)
         if (status == "выставлено") lastSlice[position.asset] = now
         return status
     }
@@ -886,6 +934,7 @@ class AutoSell(
         meta: ClobApi.MarketMeta,
         target: Double,
         mine: Double,
+        lotAt: Long,
     ): String {
         val price = snapToTick(target, meta.tickSize)
         val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
@@ -910,7 +959,7 @@ class AutoSell(
         val uncovered = mine - covered
         if (uncovered < meta.minimumOrderSize) return "покрыто"
 
-        return tryPlace(position, uncovered, price)
+        return tryPlace(position, uncovered, price, lotAt)
     }
 
     /**
@@ -963,9 +1012,20 @@ class AutoSell(
         )
     }
 
-    private fun tryPlace(position: Position, size: Double, price: Double): String {
+    /**
+     * @param lotAt when the purchase being covered was made, so the wait the
+     *   venue imposes on fresh shares can be timed rather than guessed.
+     */
+    private fun tryPlace(
+        position: Position,
+        size: Double,
+        price: Double,
+        lotAt: Long,
+    ): String {
         attempts[position.asset] = (attempts[position.asset] ?: 0) + 1
-        lastTry[position.asset] = System.currentTimeMillis()
+        val startedAt = System.currentTimeMillis()
+        lastTry[position.asset] = startedAt
+        Timings.sellTried(position.asset, lotAt, startedAt)
 
         return try {
             val result = engine.placeManualOrder(
@@ -980,14 +1040,21 @@ class AutoSell(
             if (result.success) {
                 attempts.remove(position.asset)
                 lastError.remove(position.asset)
+                // The moment the venue stopped refusing: the one thing that
+                // says how long shares stay locked after a purchase.
+                Timings.sellAccepted(position.asset, lotAt, System.currentTimeMillis())
                 "выставлено"
             } else {
                 // Almost always "shares not sellable yet"; the next sweep retries.
                 val reason = result.error ?: "отказ CLOB"
                 lastError[position.asset] = reason
+                Timings.sellRefused(position.asset, lotAt)
                 reason
             }
         } catch (e: Exception) {
+            // A network failure says nothing about the venue's lock, and
+            // crediting it to the measurement would poison it.
+            Timings.sellDropped(position.asset)
             val reason = e.message ?: "ошибка сети"
             lastError[position.asset] = reason
             reason

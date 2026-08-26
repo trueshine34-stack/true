@@ -257,6 +257,17 @@ export interface PolyBotPlugin {
     lateBandSec?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
+  counterUpdate(args: {
+    enabled?: boolean;
+    bankUsd?: number;
+    clipUsd?: number;
+    maxBuys?: number;
+    entryUnder?: number;
+    entryWindowSec?: number;
+    gainPct?: number;
+  }): Promise<void>;
+  counterReset(): Promise<void>;
+  counterState(): Promise<CounterState>;
   addListener(
     event: 'state',
     fn: (state: NativeState) => void,
@@ -344,6 +355,78 @@ export type AutoSellRebuyDone = {
   at: number;
 };
 
+// ------------------------------------------------------------- counter bot
+
+/** One clip the counter bot is holding, or has already sold. */
+export type CounterLot = {
+  shares: number;
+  price: number;
+  sellPrice: number;
+  sold: number;
+  proceeds: number;
+  boughtAt: number;
+  note?: string | null;
+};
+
+/** The window the counter bot is working right now. */
+export type CounterRound = {
+  windowStart: number;
+  /** The side the desk is on, and the one the bot therefore buys. */
+  deskSide: string;
+  side: string;
+  lastAsk?: number | null;
+  bestAsk?: number | null;
+  checks: number;
+  note?: string | null;
+  lots: CounterLot[];
+};
+
+export type CounterPast = {
+  windowStart: number;
+  side: string;
+  shares: number;
+  spent: number;
+  got: number;
+  pnl: number;
+  note: string;
+};
+
+export type CounterState = {
+  enabled: boolean;
+  running: boolean;
+  bankUsd: number;
+  clipUsd: number;
+  maxBuys: number;
+  entryUnder: number;
+  entryWindowSec: number;
+  gainPct: number;
+  /** What is left of its own money. */
+  cash: number;
+  lastFault?: string | null;
+  rounds: number;
+  buys: number;
+  sells: number;
+  spent: number;
+  got: number;
+  settled: number;
+  wins: number;
+  losses: number;
+  pnl: number;
+  round?: CounterRound | null;
+  past: CounterPast[];
+};
+
+/** What the app has timed for itself about the venue's own delays. */
+export type Timings = {
+  /** Buy to the first sell the venue accepts. */
+  sellReadyMs?: number | null;
+  sellReadySamples?: number;
+  /** Sale to the first balance that shows its money. */
+  cashMs?: number | null;
+  cashSamples?: number;
+  cashPending?: boolean;
+};
+
 export type AutoSellState = {
   enabled: boolean;
   running: boolean;
@@ -359,6 +442,7 @@ export type AutoSellState = {
   rebuyDropPct: number;
   rebuys: AutoSellRebuy[];
   rebuysDone?: AutoSellRebuyDone[];
+  timings?: Timings;
   rows: AutoSellRow[];
 };
 
@@ -580,7 +664,31 @@ const webStub: PolyBotPlugin = {
     rebuyEnabled: false,
     rebuyDropPct: 0.2,
     rebuys: [],
+    timings: {},
     rows: [],
+  }),
+  counterUpdate: async () => {},
+  counterReset: async () => {},
+  counterState: async () => ({
+    enabled: false,
+    running: false,
+    bankUsd: 5,
+    clipUsd: 1,
+    maxBuys: 3,
+    entryUnder: 0.3,
+    entryWindowSec: 120,
+    gainPct: 0.25,
+    cash: 5,
+    rounds: 0,
+    buys: 0,
+    sells: 0,
+    spent: 0,
+    got: 0,
+    settled: 0,
+    wins: 0,
+    losses: 0,
+    pnl: 0,
+    past: [],
   }),
   addListener: async () => ({ remove: async () => {} }) as PluginListenerHandle,
 };

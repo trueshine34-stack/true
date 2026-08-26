@@ -85,6 +85,12 @@ object TradeSync {
                     at = trade.at,
                 )
             }
+            // A sale is the start of the other wait worth knowing: how long
+            // its money takes to become spendable. Armed here rather than in
+            // the sell rule so it is measured whether the rule is on or not.
+            if (!first && trade.side == "SELL") {
+                Timings.sellFilled(trade.size * trade.price, trade.at)
+            }
             if (!first) fresh.add(trade)
         }
 
