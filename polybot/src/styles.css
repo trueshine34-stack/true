@@ -2694,6 +2694,12 @@ button.wide {
   width: 100%;
 }
 
+/* The wheel's price is the considered move; the book's is the quick one. */
+.ghost.wide {
+  padding: 11px;
+  font-size: 14px;
+}
+
 /* Both ends of the price strip, pinned where a thumb already is. */
 .wheelwrap {
   display: flex;

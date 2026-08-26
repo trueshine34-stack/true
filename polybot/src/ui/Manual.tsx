@@ -1178,6 +1178,7 @@ export function Manual({
               draft={draft}
               tick={market?.tickSize ?? 0.01}
               busy={busy}
+              bid={books[draft.side].bids[0]?.price ?? null}
               onPrice={(cents_) => setDraft({ ...draft, price: String(cents_) })}
               onSell={() =>
                 void place(
@@ -1226,6 +1227,19 @@ export function Manual({
           row={editing}
           tick={market?.tickSize ?? 0.01}
           busy={busy}
+          /*
+            The price that would trade now: a resting buy meets the offer, a
+            resting sell meets the bid. That is what "current" means to an
+            order you are moving because you want it done.
+          */
+          marketPrice={(() => {
+            const side = editing.outcome === 'Up' ? 'Up' : 'Down';
+            const level =
+              editing.status === 'buying'
+                ? books[side].asks[0]?.price
+                : books[side].bids[0]?.price;
+            return level != null ? Math.round(level * 100) : null;
+          })()}
           onSave={(price, shares) =>
             void editOrder(
               editing.orderId as string,
@@ -1422,6 +1436,7 @@ function OrderEditor({
   row,
   tick,
   busy,
+  marketPrice,
   onSave,
   onCancelOrder,
   onClose,
@@ -1429,6 +1444,8 @@ function OrderEditor({
   row: TradeRow;
   tick: number;
   busy: boolean;
+  /** Where the book is for this order's side, in cents, if it is known. */
+  marketPrice: number | null;
   onSave: (price: number, shares: number) => void;
   onCancelOrder: () => void;
   onClose: () => void;
@@ -1470,12 +1487,27 @@ function OrderEditor({
 
         <PriceColumn value={cents_} onPick={setCents} />
 
+        {/*
+          What the book is at right now, and one tap to be there. Moving an
+          order is usually not "to seventy-seven" but "to whatever it takes" —
+          and by the time that has been scrolled to, it is a different number.
+        */}
+        {marketPrice != null && (
+          <button
+            className="primary wide"
+            disabled={busy}
+            onClick={() => onSave(marketPrice / 100, row.shares)}
+          >
+            сейчас {marketPrice}¢
+          </button>
+        )}
         <button
-          className="primary wide"
+          className="ghost wide"
+          style={{ marginTop: 8 }}
           disabled={busy || cents_ === opened}
           onClick={() => onSave(cents_ / 100, row.shares)}
         >
-          {cents_ === opened ? `сейчас ${opened}¢` : `перенести на ${cents_}¢`}
+          {cents_ === opened ? `стоит на ${opened}¢` : `перенести на ${cents_}¢`}
         </button>
         <button
           className="danger wide"
@@ -1503,6 +1535,7 @@ function SellSheet({
   draft,
   tick,
   busy,
+  bid,
   onPrice,
   onSell,
   onMarket,
@@ -1511,6 +1544,8 @@ function SellSheet({
   draft: Draft;
   tick: number;
   busy: boolean;
+  /** The top of the bid side: what selling right now would get. */
+  bid: number | null;
   onPrice: (cents: number) => void;
   onSell: () => void;
   onMarket: () => void;
@@ -1573,13 +1608,14 @@ function SellSheet({
         <button className="primary compact" disabled={busy} onClick={onSell}>
           Продать {at}¢
         </button>
+        {/* Not "market" but the number it is: that is the decision. */}
         <button
           className="danger compact"
           disabled={busy}
           onClick={onMarket}
           title="Продать всё по рынку"
         >
-          Рынок
+          {bid != null ? `сейчас ${Math.round(bid * 100)}¢` : 'Рынок'}
         </button>
       </div>
     </div>
