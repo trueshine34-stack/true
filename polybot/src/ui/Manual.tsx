@@ -751,7 +751,14 @@ export function Manual({
    * order's terms are what it was signed with.
    */
   const editOrder = useCallback(
-    async (orderId: string, side: 'Up' | 'Down', price: number, shares: number) => {
+    async (
+      orderId: string,
+      side: 'Up' | 'Down',
+      /** A resting sell moves the same way a resting buy does. */
+      action: 'BUY' | 'SELL',
+      price: number,
+      shares: number,
+    ) => {
       const tokenId = side === 'Up' ? market?.upTokenId : market?.downTokenId;
       if (!market || !tokenId) {
         setNote('Рынок окна ещё не загружен');
@@ -773,7 +780,7 @@ export function Manual({
           orderId,
           tokenId,
           conditionId: market.conditionId,
-          side: 'BUY',
+          side: action,
           price,
           size: shares,
           orderType: 'GTC',
@@ -1078,7 +1085,9 @@ export function Manual({
                   const live = t.orderId
                     ? orders.find((x) => x.id === t.orderId)
                     : undefined;
-                  const editable = t.status === 'buying' && live != null;
+                  // A resting sell is as much a price you might want to move
+                  // as a resting buy — and it is the one you move in a hurry.
+                  const editable = live != null;
                   const price = (t.status === 'buying' ? t.buyPrice : t.sellPrice) ?? 0;
                   return (
                     <div
@@ -1328,6 +1337,7 @@ export function Manual({
             void editOrder(
               editing.orderId as string,
               editing.outcome === 'Up' ? 'Up' : 'Down',
+              editing.status === 'buying' ? 'BUY' : 'SELL',
               price,
               shares,
             )
@@ -1530,7 +1540,11 @@ function OrderEditor({
   onCancelOrder: () => void;
   onClose: () => void;
 }) {
-  const opened = Math.round(((row.buyPrice ?? row.sellPrice) ?? 0) * 100);
+  // The price of the order being moved — which for a resting sell is the sell,
+  // not the buy it sits over.
+  const opened = Math.round(
+    ((row.status === 'buying' ? row.buyPrice : row.sellPrice) ?? 0) * 100,
+  );
   const [cents_, setCents] = useState(opened);
   const step = Math.max(1, Math.round(tick * 100));
   const nudge = (d: number) => setCents((c) => Math.min(99, Math.max(1, c + d)));
