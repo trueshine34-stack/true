@@ -36,6 +36,10 @@ export type ManualSettings = {
   autoSellPanicSec: number;
   /** The least the last minute will sell for, in dollars. */
   autoSellCloseFloor: number;
+  /** The least the stretch before that will sell for. */
+  autoSellLateFloor: number;
+  /** How long that stretch runs, ending where the last minute begins. */
+  autoSellLateBandSec: number;
   /** Buy the same size back if the price falls far enough after a sale. */
   autoRebuyEnabled: boolean;
   /** How far below the sale price the buy-back triggers, as a fraction. */
@@ -71,6 +75,8 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellSliceGapSec: 2,
   autoSellPanicSec: 60,
   autoSellCloseFloor: 0.9,
+  autoSellLateFloor: 0.77,
+  autoSellLateBandSec: 50,
   autoRebuyEnabled: false,
   autoRebuyDropPct: 0.2,
   autoRebuySlicePauseSec: 3,

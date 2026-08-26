@@ -253,6 +253,8 @@ export interface PolyBotPlugin {
     sliceGapSec?: number;
     panicSec?: number;
     closeFloor?: number;
+    lateFloor?: number;
+    lateBandSec?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
   addListener(

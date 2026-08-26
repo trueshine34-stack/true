@@ -2,6 +2,7 @@ package com.polybot.btc5m.bot
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -50,6 +51,47 @@ class SellPercentTest {
 
         assertTrue(second > first)
         assertTrue(third > second)
+    }
+
+    @Test
+    fun theStretchBeforeTheLastMinuteAsksSeventySeven() {
+        val avg = 0.40
+        // Margin alone would ask 50¢ here.
+        val plain = SellPercent.priceFor(avg, 0.2, tick, null, 200, 60, null)
+        assertTrue(plain < 0.77)
+
+        // Inside the fifty seconds before the last minute, the floor lifts it.
+        assertEquals(0.77, SellPercent.priceFor(avg, 0.2, tick, null, 100, 60, null), 1e-9)
+        // The band starts 110 seconds out and ends where the last minute does.
+        assertEquals(0.77, SellPercent.priceFor(avg, 0.2, tick, null, 110, 60, null), 1e-9)
+        assertEquals(plain, SellPercent.priceFor(avg, 0.2, tick, null, 111, 60, null), 1e-9)
+        assertEquals(0.77, SellPercent.priceFor(avg, 0.2, tick, null, 61, 60, null), 1e-9)
+    }
+
+    @Test
+    fun aFloorOnlyEverRaisesTheAsk() {
+        // A dear lot already asks more than seventy-seven; the floor is a
+        // minimum, not a target, and leaves it alone.
+        val dear = SellPercent.targetPrice(0.80, 0.2, tick)
+        assertTrue(dear > 0.77)
+        assertEquals(dear, SellPercent.priceFor(0.80, 0.2, tick, null, 100, 60, null), 1e-9)
+    }
+
+    @Test
+    fun theBandNeverCrossesTheBookTheWayTheCloseDoes() {
+        // 93¢ bid: taken at the close, ignored in the band before it — there is
+        // still time, and the band only sets a floor on what is asked.
+        assertEquals(0.77, SellPercent.priceFor(0.40, 0.2, tick, null, 100, 60, 0.93), 1e-9)
+        assertEquals(0.93, SellPercent.priceFor(0.40, 0.2, tick, null, 30, 60, 0.93), 1e-9)
+    }
+
+    @Test
+    fun theFloorSaysWhichBandTheClockIsIn() {
+        assertNull(SellPercent.floorFor(200, 60))
+        assertEquals(0.77, SellPercent.floorFor(100, 60)!!, 1e-9)
+        assertEquals(0.90, SellPercent.floorFor(30, 60)!!, 1e-9)
+        // Before the window opens there is no floor to apply.
+        assertNull(SellPercent.floorFor(-30, 60))
     }
 
     @Test

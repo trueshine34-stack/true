@@ -21,7 +21,9 @@ import kotlin.math.sqrt
  * the last minute of a window the margin gives way to a floor: ninety cents or
  * better, taken the instant the book reaches it. Not the smallest profit that
  * clears the fee — by then the winning side is walking to a dollar, and a
- * two-cent win sells a position that was about to be worth ninety-odd.
+ * two-cent win sells a position that was about to be worth ninety-odd. The
+ * fifty seconds before that carry a lower floor of their own, seventy-seven,
+ * which only ever raises an offer and never lowers one.
  */
 object SellPercent {
 
@@ -42,6 +44,19 @@ object SellPercent {
      * so the offer sits at ninety and is taken the moment the book touches it.
      */
     const val DEFAULT_CLOSE_FLOOR = 0.90
+
+    /**
+     * The floor for the stretch just before that one.
+     *
+     * The same reasoning, one step earlier and one step lower. By the fourth
+     * minute the window has usually picked a side, and a lot bought cheap is
+     * worth more than its margin asks — so the offer stops going out at fifty-
+     * odd cents and waits at seventy-seven.
+     */
+    const val DEFAULT_LATE_FLOOR = 0.77
+
+    /** How long that stretch runs, ending where the last minute begins. */
+    const val DEFAULT_LATE_BAND_SEC = 50
 
     private const val FEE_RATE = 0.07
 
@@ -79,6 +94,8 @@ object SellPercent {
         panicSec: Int,
         bestBid: Double?,
         closeFloor: Double = DEFAULT_CLOSE_FLOOR,
+        lateFloor: Double = DEFAULT_LATE_FLOOR,
+        lateBandSec: Int = DEFAULT_LATE_BAND_SEC,
     ): Double {
         val target = targetPrice(avgPrice, gain, tick)
 
@@ -92,9 +109,37 @@ object SellPercent {
             return floor
         }
 
+        // The stretch before that one has a floor of its own, and it only ever
+        // raises: a lot whose margin already asks more than seventy-seven keeps
+        // asking it. A floor is a minimum, not a target.
+        if (!holdingOut(secondsLeft, panicSec + lateBandSec.coerceAtLeast(0))) {
+            return maxOf(target, snapUp(lateFloor, tick))
+        }
+
         // Each slice above the last: the fill proved the price was there.
         if (resting != null && resting >= target) return snapUp(resting + tick, tick)
         return target
+    }
+
+    /**
+     * The least this moment will sell for, or null while the margin alone
+     * decides.
+     *
+     * The reason a resting offer can go stale in percent mode at all: each lot
+     * is priced off its own cost and left alone, but a floor applies to every
+     * lot at once, so an offer placed before the floor took effect is now too
+     * cheap and has to be pulled.
+     */
+    fun floorFor(
+        secondsLeft: Long,
+        panicSec: Int,
+        lateBandSec: Int = DEFAULT_LATE_BAND_SEC,
+        closeFloor: Double = DEFAULT_CLOSE_FLOOR,
+        lateFloor: Double = DEFAULT_LATE_FLOOR,
+    ): Double? = when {
+        !holdingOut(secondsLeft, panicSec) -> closeFloor
+        !holdingOut(secondsLeft, panicSec + lateBandSec.coerceAtLeast(0)) -> lateFloor
+        else -> null
     }
 
     /** True while the rule should still be holding out for its margin. */

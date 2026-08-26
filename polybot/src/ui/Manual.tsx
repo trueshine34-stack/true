@@ -163,6 +163,8 @@ export function Manual() {
           sliceGapSec: stored.autoSellSliceGapSec,
           panicSec: stored.autoSellPanicSec,
           closeFloor: stored.autoSellCloseFloor,
+          lateFloor: stored.autoSellLateFloor,
+          lateBandSec: stored.autoSellLateBandSec,
         }).catch(() => {});
       }
     });
@@ -397,6 +399,8 @@ export function Manual() {
               sliceGapSec: settingsRef.current.autoSellSliceGapSec,
               panicSec: settingsRef.current.autoSellPanicSec,
               closeFloor: settingsRef.current.autoSellCloseFloor,
+              lateFloor: settingsRef.current.autoSellLateFloor,
+              lateBandSec: settingsRef.current.autoSellLateBandSec,
             }).catch(() => {});
           }
         })
@@ -1638,6 +1642,8 @@ function RuleBar({
         sliceGapSec: next.autoSellSliceGapSec,
         panicSec: next.autoSellPanicSec,
         closeFloor: next.autoSellCloseFloor,
+        lateFloor: next.autoSellLateFloor,
+        lateBandSec: next.autoSellLateBandSec,
       }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
     },
     [onChange, onNote],
@@ -1851,6 +1857,8 @@ function ManualSettingsForm({
       sliceGapSec: next.autoSellSliceGapSec,
       panicSec: next.autoSellPanicSec,
       closeFloor: next.autoSellCloseFloor,
+      lateFloor: next.autoSellLateFloor,
+      lateBandSec: next.autoSellLateBandSec,
     }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
   };
 
@@ -2089,7 +2097,44 @@ function ManualSettingsForm({
           </label>
 
           <label className="field">
-            <span>Переходить на этот порог за, сек до конца</span>
+            <span>Перед этим не ниже, ¢</span>
+            <input
+              type="number"
+              value={String(Math.round(settings.autoSellLateFloor * 100))}
+              onChange={(e) =>
+                push({
+                  ...settings,
+                  autoSellLateFloor: Number(e.target.value.replace(',', '.')) / 100,
+                })
+              }
+            />
+            <span className="muted" style={{ fontSize: 11 }}>
+              Полоса перед последней минутой:{' '}
+              {settings.autoSellLateBandSec} секунд, которые заканчиваются там,
+              где начинается последняя минута. К четвёртой минуте окно обычно
+              уже выбрало сторону, и дёшево купленный лот стоит больше, чем
+              просит его маржа, — поэтому заявка перестаёт уходить по полтиннику
+              и ждёт здесь. Порог только поднимает цену: лот, который и так
+              просит дороже, остаётся при своём.
+            </span>
+          </label>
+
+          <label className="field">
+            <span>Длина этой полосы, сек</span>
+            <input
+              type="number"
+              value={String(settings.autoSellLateBandSec)}
+              onChange={(e) =>
+                push({
+                  ...settings,
+                  autoSellLateBandSec: Number(e.target.value.replace(',', '.')),
+                })
+              }
+            />
+          </label>
+
+          <label className="field">
+            <span>Переходить на порог 90¢ за, сек до конца</span>
             <input
               type="number"
               value={String(settings.autoSellPanicSec)}

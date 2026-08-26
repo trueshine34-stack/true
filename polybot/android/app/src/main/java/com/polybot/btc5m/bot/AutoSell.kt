@@ -65,6 +65,10 @@ class AutoSell(
         val panicSec: Int = SellPercent.DEFAULT_PANIC_SEC,
         /** The least the last minute will sell for. */
         val closeFloor: Double = SellPercent.DEFAULT_CLOSE_FLOOR,
+        /** The least the stretch before that will sell for. */
+        val lateFloor: Double = SellPercent.DEFAULT_LATE_FLOOR,
+        /** How long that stretch runs, ending where the last minute begins. */
+        val lateBandSec: Int = SellPercent.DEFAULT_LATE_BAND_SEC,
     )
 
     /** One position and what the rule has managed to do about it. */
@@ -747,6 +751,8 @@ class AutoSell(
             panicSec = settings.panicSec,
             bestBid = bid,
             closeFloor = settings.closeFloor,
+            lateFloor = settings.lateFloor,
+            lateBandSec = settings.lateBandSec,
         )
     }
 
@@ -798,15 +804,27 @@ class AutoSell(
     ): String {
         val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
         val closesAt = (meta.windowStart.takeIf { it > 0 } ?: 0L) + WINDOW_SECONDS
-        val lastMinute = closesAt > 0 &&
-            !SellPercent.holdingOut(closesAt - Clock.nowSec(), settings.panicSec)
+        val secondsLeft = if (closesAt > 0) closesAt - Clock.nowSec() else Long.MAX_VALUE
+        val lastMinute = !SellPercent.holdingOut(secondsLeft, settings.panicSec)
 
-        // Out of time: an offer above what the book pays will not fill, so it is
-        // pulled. The lot it covered comes back round as uncovered on the next
-        // pass and is re-offered at a price that can actually trade.
-        if (lastMinute && sells.any { it.price > target + meta.tickSize / 2 }) {
+        // A floor applies to every lot at once, unlike a margin, which is why an
+        // offer can go stale here at all: one placed before the floor took
+        // effect is now under it. Too cheap gets pulled in either band; too high
+        // to ever fill gets pulled only in the last minute.
+        val floor = SellPercent.floorFor(
+            secondsLeft = secondsLeft,
+            panicSec = settings.panicSec,
+            lateBandSec = settings.lateBandSec,
+            closeFloor = settings.closeFloor,
+            lateFloor = settings.lateFloor,
+        )
+        val stale = sells.filter {
+            (floor != null && it.price < floor - meta.tickSize / 2) ||
+                (lastMinute && it.price > target + meta.tickSize / 2)
+        }
+        if (stale.isNotEmpty()) {
             val session = engine.session() ?: return "нет сессии"
-            for (order in sells.filter { it.price > target + meta.tickSize / 2 }) {
+            for (order in stale) {
                 try {
                     ClobApi.cancelOrder(session.creds, session.account.signerAddress, order.id)
                 } catch (e: Exception) {
