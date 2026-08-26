@@ -22,11 +22,32 @@ object LadderPlan {
     /** How often the check comes round, and when the first one is. */
     const val DEFAULT_EVERY_SEC = 60L
 
-    /** Fifteen seconds before the first minute ends. */
-    const val DEFAULT_FIRST_AT_SEC = 45L
+    /**
+     * Fifteen seconds before the *second* minute ends.
+     *
+     * The first minute is skipped on purpose. A window that has just opened
+     * has not picked a side yet — the dearer outcome at forty-five seconds is
+     * as often the one that loses as the one that wins — and the first rung is
+     * the cheapest the ladder ever asks for, so it is the worst exit to buy
+     * into. From a hundred and five seconds the market has had time to mean
+     * something.
+     */
+    const val DEFAULT_FIRST_AT_SEC = 105L
 
     /** Stop entering once the last minute begins; the ladder needs room to run. */
     const val DEFAULT_UNTIL_SEC = 285L
+
+    /**
+     * The shortest gap between two clips.
+     *
+     * A filled clip frees its money and its attention, and sitting out the
+     * rest of the minute for a condition that is true now is sitting out for
+     * nothing — so the rule may buy again as soon as it suits. This is only
+     * long enough to keep one moment from being bought twice while the fill is
+     * still being confirmed; the real limit on how much it can buy is the
+     * money in its container.
+     */
+    const val DEFAULT_PAUSE_SEC = 4L
 
     private const val FEE_RATE = 0.07
 
@@ -38,20 +59,37 @@ object LadderPlan {
         val everySec: Long = DEFAULT_EVERY_SEC,
         val firstAtSec: Long = DEFAULT_FIRST_AT_SEC,
         val untilSec: Long = DEFAULT_UNTIL_SEC,
+        /** The shortest gap between two clips, once one has gone through. */
+        val pauseSec: Long = DEFAULT_PAUSE_SEC,
     )
 
     /**
-     * Which check this moment belongs to, or −1 before the first one.
+     * Which check this moment belongs to, or −1 outside the entry band.
      *
      * Slots rather than an exact second: the loop ticks on its own schedule and
      * a rule that only fired on an exact equality would miss its moment
-     * whenever a request ran long.
+     * whenever a request ran long. The slot is what schedules the *first* look
+     * of each minute; between them the rule may still buy the moment the
+     * conditions suit, which is what [readyAfter] is for.
      */
     fun slotFor(elapsedSec: Long, settings: Settings): Int {
         if (elapsedSec < settings.firstAtSec) return -1
         if (elapsedSec > settings.untilSec) return -1
         val every = settings.everySec.coerceAtLeast(1L)
         return ((elapsedSec - settings.firstAtSec) / every).toInt()
+    }
+
+    /**
+     * May this moment be acted on at all?
+     *
+     * True inside the entry band once the last clip's pause has run out. The
+     * rule used to answer only on the minute, so a clip that filled at the
+     * start of one waited out the rest of it while the same condition that
+     * bought it stayed true.
+     */
+    fun readyAfter(elapsedSec: Long, sinceLastBuyMs: Long, settings: Settings): Boolean {
+        if (elapsedSec < settings.firstAtSec || elapsedSec > settings.untilSec) return false
+        return sinceLastBuyMs >= settings.pauseSec.coerceAtLeast(1L) * 1000L
     }
 
     /** The side the market has picked: the dearer of the two. */

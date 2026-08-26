@@ -53,6 +53,8 @@ class LadderBot(
         val lots: MutableList<Lot> = ArrayList(),
         /** The last check acted on, so one moment cannot buy twice. */
         var lastSlot: Int = -1,
+        /** When the last clip went through, which paces the next one. */
+        var lastBuyAt: Long = 0L,
         var lastSide: String? = null,
         var lastAsk: Double? = null,
         var lastRung: Double = 0.0,
@@ -152,7 +154,8 @@ class LadderBot(
         engine.log(
             "info",
             "Бот лесенки включён: по " + String.format("%.0f", settings.shares) +
-                " долей за ${settings.firstAtSec} с и каждые ${settings.everySec} с",
+                " долей, первая проверка на ${settings.firstAtSec} с, " +
+                "дальше каждые ${settings.everySec} с или сразу после сделки",
         )
         onStateChanged()
     }
@@ -212,7 +215,20 @@ class LadderBot(
             if (current != null && current.lastSlot >= 0) current.note = "ждёт следующей минуты"
             return
         }
-        if (current != null && slot <= current.lastSlot) return
+
+        // Two ways in. The minute's scheduled check is one; the other is that
+        // a clip has already gone through and the conditions still suit, in
+        // which case waiting out the rest of the minute waits for nothing.
+        // What actually limits this is the money in the container.
+        val fresh = current == null || slot > current.lastSlot
+        val again = current != null &&
+            current.lots.isNotEmpty() &&
+            LadderPlan.readyAfter(
+                elapsedSec = elapsed,
+                sinceLastBuyMs = System.currentTimeMillis() - current.lastBuyAt,
+                settings = settings,
+            )
+        if (!fresh && !again) return
 
         val market = engine.currentMarket()
         if (market == null || market.windowStart != windowStart) {
@@ -257,8 +273,7 @@ class LadderBot(
             settings = settings,
         )
         // The slot is used up either way: a check that found nothing is a check
-        // that happened, and retrying it every two seconds would buy the same
-        // minute five times over.
+        // that happened. Between slots the pause does the pacing instead.
         live.lastSlot = slot
         live.note = blocked
         if (blocked != null || side == null || ask == null) return
@@ -325,6 +340,7 @@ class LadderBot(
             ),
         )
         current.note = null
+        current.lastBuyAt = System.currentTimeMillis()
         totals = totals.copy(buys = totals.buys + 1, spent = totals.spent + fill.shares * price)
         store.saveTotals(totals)
 

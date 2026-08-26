@@ -13,7 +13,12 @@ class LadderStore(context: Context) {
         bankUsd = prefs.getFloat("bankUsd", LadderPlan.DEFAULT_BANK_USD.toFloat()).toDouble(),
         shares = prefs.getFloat("shares", LadderPlan.DEFAULT_SHARES.toFloat()).toDouble(),
         everySec = prefs.getLong("everySec", LadderPlan.DEFAULT_EVERY_SEC),
-        firstAtSec = prefs.getLong("firstAtSec", LadderPlan.DEFAULT_FIRST_AT_SEC),
+        // The rule used to start at forty-five seconds, inside the first
+        // minute. A setting saved back then would keep it there forever, so
+        // that exact value is read as "never chosen" and takes the new default.
+        firstAtSec = prefs.getLong("firstAtSec", LadderPlan.DEFAULT_FIRST_AT_SEC)
+            .let { if (it == 45L) LadderPlan.DEFAULT_FIRST_AT_SEC else it },
+        pauseSec = prefs.getLong("pauseSec", LadderPlan.DEFAULT_PAUSE_SEC),
         untilSec = prefs.getLong("untilSec", LadderPlan.DEFAULT_UNTIL_SEC),
     )
 
@@ -24,6 +29,7 @@ class LadderStore(context: Context) {
             .putFloat("shares", s.shares.toFloat())
             .putLong("everySec", s.everySec)
             .putLong("firstAtSec", s.firstAtSec)
+            .putLong("pauseSec", s.pauseSec)
             .putLong("untilSec", s.untilSec)
             .apply()
     }

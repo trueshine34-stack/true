@@ -1,7 +1,9 @@
 package com.polybot.btc5m.bot
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The rule the ladder bot buys the favourite by. */
@@ -18,14 +20,22 @@ class LadderPlanTest {
      */
     @Test
     fun theCheckComesFifteenSecondsBeforeEachMinute() {
+        assertEquals(0, LadderPlan.slotFor(105, on))
+        assertEquals(1, LadderPlan.slotFor(165, on))
+        assertEquals(2, LadderPlan.slotFor(225, on))
+        assertEquals(3, LadderPlan.slotFor(285, on))
+    }
+
+    /**
+     * The first minute is sat out. A window that has just opened has not
+     * picked a side, and the first rung is the cheapest exit the ladder ever
+     * offers — the worst one to buy into.
+     */
+    @Test
+    fun theFirstMinuteIsSkipped() {
         assertEquals(-1, LadderPlan.slotFor(0, on))
-        assertEquals(-1, LadderPlan.slotFor(44, on))
-        assertEquals(0, LadderPlan.slotFor(45, on))
-        assertEquals(0, LadderPlan.slotFor(104, on))
-        assertEquals(1, LadderPlan.slotFor(105, on))
-        assertEquals(2, LadderPlan.slotFor(165, on))
-        assertEquals(3, LadderPlan.slotFor(225, on))
-        assertEquals(4, LadderPlan.slotFor(285, on))
+        assertEquals(-1, LadderPlan.slotFor(45, on))
+        assertEquals(-1, LadderPlan.slotFor(104, on))
     }
 
     /** Past the last check there is no ladder left to climb. */
@@ -33,6 +43,25 @@ class LadderPlanTest {
     fun itStopsLookingBeforeTheClose() {
         assertEquals(-1, LadderPlan.slotFor(286, on))
         assertEquals(-1, LadderPlan.slotFor(299, on))
+    }
+
+    /**
+     * A clip that has gone through frees its money and its attention. Waiting
+     * out the rest of the minute for a condition that is true now is waiting
+     * for nothing; the pause is only long enough to keep one moment from being
+     * bought twice.
+     */
+    @Test
+    fun afterAClipItMayBuyAgainWithoutWaitingOutTheMinute() {
+        assertTrue(LadderPlan.readyAfter(120, sinceLastBuyMs = 4_000, settings = on))
+        assertFalse(LadderPlan.readyAfter(120, sinceLastBuyMs = 3_999, settings = on))
+    }
+
+    @Test
+    fun andNeverOutsideTheEntryBand() {
+        assertFalse(LadderPlan.readyAfter(104, sinceLastBuyMs = 60_000, settings = on))
+        assertFalse(LadderPlan.readyAfter(286, sinceLastBuyMs = 60_000, settings = on))
+        assertTrue(LadderPlan.readyAfter(285, sinceLastBuyMs = 60_000, settings = on))
     }
 
     // ------------------------------------------------------ which side
@@ -62,7 +91,7 @@ class LadderPlanTest {
         side: String? = "Up",
         ask: Double? = 0.78,
         rung: Double = 0.84,
-        elapsed: Long = 45,
+        elapsed: Long = 105,
         cash: Double = 5.0,
         settings: LadderPlan.Settings = on,
     ) = LadderPlan.blockedBecause(side, ask, rung, elapsed, cash, settings)
