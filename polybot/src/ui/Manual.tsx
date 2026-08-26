@@ -535,12 +535,19 @@ export function Manual({
     const ask = books[which].asks[0]?.price ?? null;
     if (ask == null) return null;
 
-    const wanted =
-      settings.useBalanceShare && balance != null
+    // The size chosen in the row above wins. Picking ten shares and then
+    // tapping a button that buys five is the panel disagreeing with itself,
+    // and the tap is the faster of the two ways to buy — so it follows.
+    const chosen = Number(limitSize.replace(',', '.'));
+    const wanted = Number.isFinite(chosen) && chosen > 0
+      ? chosen
+      : settings.useBalanceShare && balance != null
         ? balanceShares(ask, balance, settings.balanceSharePct, minSize)
         : sharesFor(ask, settings, minSize);
     const short = wanted == null;
-    const size = wanted ?? minShares(ask, minSize);
+    // Whatever was asked for, never under what the venue will take: five
+    // shares at ten cents is fifty cents and is simply refused.
+    const size = Math.max(wanted ?? 0, minShares(ask, minSize));
 
     // The guard trims rather than refuses: a tap that buys a little less still
     // works, and the button says what it will actually do.
