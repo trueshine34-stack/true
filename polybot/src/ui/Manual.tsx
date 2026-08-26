@@ -67,6 +67,20 @@ const ago = (at: number) => {
 };
 const WINDOW_SEC = 300;
 
+/**
+ * The window's phase, as a colour on its clock.
+ *
+ * Amber while the first minute settles, green through the middle where a
+ * position has room to work, red in the last minute — where the rule stops
+ * holding out for a margin and the only thing left to do is get out.
+ */
+const clockTone = (secondsLeft: number, lookAhead: boolean): string => {
+  if (lookAhead) return 'muted';
+  if (secondsLeft <= 60) return 'down';
+  if (secondsLeft > WINDOW_SEC - 60) return 'warn';
+  return 'up';
+};
+
 type Draft = {
   side: 'Up' | 'Down';
   action: 'BUY' | 'SELL';
@@ -913,47 +927,57 @@ export function Manual({
 
       <div className="card tight">
         <div className="deskbar">
-          <div>
+          {/*
+            The open and the move are one reading, not two — where the window
+            started and how far it has gone — so they sit together, the move in
+            brackets beside its own baseline. That leaves the clock the middle
+            of the bar to itself, which is where the eye goes back to.
+          */}
+          <div className="deskopen">
             <div className="muted" style={{ fontSize: 10 }}>
               открытие 5м
             </div>
             <div className="deskprice">
               {windowOpen != null ? windowOpen.toFixed(0) : '—'}
+              {drift != null && (
+                <span className={`deskdrift ${drift >= 0 ? 'up' : 'down'}`}>
+                  ({drift >= 0 ? '+' : '−'}
+                  {Math.abs(drift).toFixed(0)})
+                </span>
+              )}
             </div>
           </div>
-          <div style={{ textAlign: 'center' }}>
-            <div className="muted" style={{ fontSize: 10 }}>
-              изменение
-            </div>
-            <div className={`deskprice ${drift == null ? '' : drift >= 0 ? 'up' : 'down'}`}>
-              {drift == null
-                ? '—'
-                : `${drift >= 0 ? '+' : '−'}${Math.abs(drift).toFixed(0)}`}
-            </div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
+          <div className="deskclock">
             <div className={`${lookAhead ? 'warn' : 'muted'}`} style={{ fontSize: 10 }}>
               {lookAhead ? 'до старта' : 'до конца'}
             </div>
-            <div className="deskprice">
+            {/*
+              The colour is the phase of the window, which is the thing being
+              traded: the first minute is still finding its price, the middle
+              three are where a position is worth taking, and the last one is
+              the one you cannot be caught in.
+            */}
+            <div className={`deskprice ${clockTone(secondsLeft, lookAhead)}`}>
               {`${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}
             </div>
           </div>
-          <button
-            className={`gear${lookAhead ? ' on' : ''}`}
-            onClick={() => setLookAhead((v) => !v)}
-            aria-label="Следующее окно"
-            title="Следующее окно"
-          >
-            {lookAhead ? '↩' : '»'}
-          </button>
-          <button
-            className={`gear${tab === 'settings' ? ' on' : ''}`}
-            onClick={() => setTab(tab === 'settings' ? 'desk' : 'settings')}
-            aria-label="Настройки"
-          >
-            ⚙
-          </button>
+          <div className="deskbtns">
+            <button
+              className={`gear${lookAhead ? ' on' : ''}`}
+              onClick={() => setLookAhead((v) => !v)}
+              aria-label="Следующее окно"
+              title="Следующее окно"
+            >
+              {lookAhead ? '↩' : '»'}
+            </button>
+            <button
+              className={`gear${tab === 'settings' ? ' on' : ''}`}
+              onClick={() => setTab(tab === 'settings' ? 'desk' : 'settings')}
+              aria-label="Настройки"
+            >
+              ⚙
+            </button>
+          </div>
         </div>
       </div>
 
