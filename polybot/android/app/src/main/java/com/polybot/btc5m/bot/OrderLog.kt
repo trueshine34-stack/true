@@ -223,6 +223,24 @@ object OrderLog {
             (it.status == "resting" || it.status == "partial")
     }
 
+    /**
+     * Outcomes with an order of ours still on the book.
+     *
+     * A position covered by a resting sell counts as finished business
+     * everywhere else — which is why the sweep stopped looking at it, and why a
+     * floor that came into force afterwards never reached the offer sitting
+     * under it. While one of our orders is working, its position is still the
+     * rule's to manage.
+     */
+    fun workingAssets(action: String, windowStart: Long): Set<String> = entries
+        .filter {
+            it.action == action &&
+                (it.status == "resting" || it.status == "partial") &&
+                it.windowStart >= windowStart - WINDOW_SECONDS
+        }
+        .map { it.asset }
+        .toSet()
+
     private fun working(action: String, windowStart: Long): Boolean = entries.any {
         it.action == action &&
             (it.status == "resting" || it.status == "partial") &&

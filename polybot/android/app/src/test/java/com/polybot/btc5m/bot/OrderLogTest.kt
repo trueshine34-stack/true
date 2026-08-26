@@ -301,6 +301,26 @@ class OrderLogTest {
     }
 
     @Test
+    fun anOfferStillOnTheBookKeepsItsPositionInTheSweep() {
+        record("BUY", 0.54, 5.0, matched = 5.0)
+        record("SELL", 0.67, 5.0, matched = 0.0)
+
+        // Covered, so nothing is uncovered — and that is exactly why the sweep
+        // stopped looking, and why a floor that came into force afterwards
+        // never reached the 67¢ offer sitting under it.
+        assertFalse(OrderLog.hasUncovered(nowWindow()))
+        assertTrue(OrderLog.workingAssets("SELL", nowWindow()).contains("token-a"))
+    }
+
+    @Test
+    fun anOfferThatIsGoneIsNoLongerTheRulesBusiness() {
+        val sell = record("SELL", 0.67, 5.0, matched = 5.0)
+        sell.status = "filled"
+
+        assertTrue(OrderLog.workingAssets("SELL", nowWindow()).isEmpty())
+    }
+
+    @Test
     fun aBoughtLotWithNoSellIsUncovered() {
         record("BUY", 0.43, 5.0, matched = 5.0)
 

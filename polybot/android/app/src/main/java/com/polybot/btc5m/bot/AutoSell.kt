@@ -359,11 +359,15 @@ class AutoSell(
         val nowMs = System.currentTimeMillis()
         val nowSec = Clock.nowSec()
 
-        // Positions the log says are still without an exit. They are looked at
+        // Positions the log says are still the rule's business: a purchase with
+        // no exit yet, or an offer of ours still on the book. Both are looked at
         // on every pass, watch or no watch — the watch is a timer, and a timer
-        // is exactly what let a blocked sell be forgotten.
-        val uncoveredAssets = if (settings.enabled) {
-            OrderLog.uncovered(nowSec - SellLadder.elapsedInWindow(nowSec)).keys
+        // is exactly what let a blocked sell be forgotten. The resting offer
+        // matters just as much: a floor that comes into force while it sits
+        // there has to be able to reach it.
+        val windowNow = nowSec - SellLadder.elapsedInWindow(nowSec)
+        val pending = if (settings.enabled) {
+            OrderLog.uncovered(windowNow).keys + OrderLog.workingAssets("SELL", windowNow)
         } else {
             emptySet()
         }
@@ -399,7 +403,7 @@ class AutoSell(
             if (position.redeemable || position.size <= 0.0) continue
             if (!fullSweep &&
                 !watching.containsKey(position.asset) &&
-                position.asset !in uncoveredAssets
+                position.asset !in pending
             ) {
                 continue
             }
@@ -437,12 +441,8 @@ class AutoSell(
                 // sweep for good; it is now kept and named for what it is.
                 mine < meta.minimumOrderSize - 1e-6 ->
                     "меньше минимума " + String.format("%.1f", meta.minimumOrderSize)
-                // Waiting for the average, not failing: data-api reports a fresh
-                // position with its size already right and its cost basis still
-                // at zero, and pricing a margin off zero asks a cent.
-                settings.percentMode && percentPrice == null -> "ждём среднюю цену"
                 settings.percentMode ->
-                    reconcilePercent(position, open, meta, percentPrice!!, mine)
+                    reconcilePercent(position, open, meta, percentPrice, mine)
                 else -> reconcile(position, open, meta, target, mine)
             }
             // Covered, settled, or the bot's: nothing left to chase here.
@@ -725,9 +725,21 @@ class AutoSell(
         meta: ClobApi.MarketMeta,
         windowStart: Long,
     ): Double? {
-        val lot = nextLot(position, open, meta) ?: return null
+        val lot = nextLot(position, open, meta)
         val closesAt = (meta.windowStart.takeIf { it > 0 } ?: windowStart) + WINDOW_SECONDS
         val secondsLeft = closesAt - Clock.nowSec()
+
+        // With everything already offered there is no lot to price — but a
+        // floor still has a price, and it is the one that says whether the
+        // offer already on the book is too cheap to leave there.
+        val floor = SellPercent.floorFor(
+            secondsLeft = secondsLeft,
+            panicSec = settings.panicSec,
+            lateBandSec = settings.lateBandSec,
+            closeFloor = settings.closeFloor,
+            lateFloor = settings.lateFloor,
+        )
+        if (lot == null && floor == null) return null
 
         // The book is only worth a request when the answer can change what we
         // do — that is, in the last minute.
@@ -742,7 +754,9 @@ class AutoSell(
         }
 
         return SellPercent.priceFor(
-            avgPrice = lot.price,
+            // Without a lot the margin is meaningless and the floor decides;
+            // that case is only reached when a floor exists.
+            avgPrice = lot?.price ?: 0.0,
             gain = settings.profitPct,
             tick = meta.tickSize,
             // Each lot carries its own price, so there is nothing to step over.
@@ -799,7 +813,8 @@ class AutoSell(
         position: Position,
         open: List<ClobApi.OpenOrder>,
         meta: ClobApi.MarketMeta,
-        target: Double,
+        /** Null while the margin alone decides and no lot has a price yet. */
+        target: Double?,
         mine: Double,
     ): String {
         val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
@@ -820,7 +835,7 @@ class AutoSell(
         )
         val stale = sells.filter {
             (floor != null && it.price < floor - meta.tickSize / 2) ||
-                (lastMinute && it.price > target + meta.tickSize / 2)
+                (lastMinute && target != null && it.price > target + meta.tickSize / 2)
         }
         if (stale.isNotEmpty()) {
             val session = engine.session() ?: return "нет сессии"
@@ -835,6 +850,10 @@ class AutoSell(
         }
 
         val lot = nextLot(position, open, meta) ?: return "покрыто"
+        // A lot with no price is one whose cost is not known yet: data-api
+        // reports a fresh position with its size already right and its basis
+        // still at zero, and a margin over zero asks a single cent.
+        if (target == null) return "ждём среднюю цену"
 
         // A pause between lots: the price has room to move, and the next lot is
         // priced off its own cost anyway.
