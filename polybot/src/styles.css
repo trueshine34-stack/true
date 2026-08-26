@@ -2266,7 +2266,7 @@ button.step.big {
   cursor: pointer;
 }
 
-/* Fifty is the one the wheel opens on, so it is marked as the landmark it is. */
+/* The price the wheel opens on, marked as the landmark it is. */
 .wheelnum.half {
   color: var(--text);
   border-color: var(--line);

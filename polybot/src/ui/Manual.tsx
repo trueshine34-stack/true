@@ -830,6 +830,19 @@ export function Manual({
       ? limitPriceNum
       : (quickUp?.ask ?? quickDown?.ask ?? 0);
 
+  /**
+   * Three cents under the dearer side.
+   *
+   * A hand-placed limit here is nearly always a bid just below the favourite,
+   * waiting for a dip that the five minutes usually provides. With no book to
+   * read yet it falls back to the middle of the range.
+   */
+  const wheelCenter = (() => {
+    const dearest = Math.max(quickUp?.ask ?? 0, quickDown?.ask ?? 0);
+    if (!(dearest > 0)) return 50;
+    return Math.min(99, Math.max(1, Math.round(dearest * 100) - 3));
+  })();
+
   const nudgeLimit = (delta: number) => {
     const base = Number.isFinite(limitPriceNum) && limitPriceNum > 0
       ? Math.round(limitPriceNum * 100)
@@ -1441,6 +1454,7 @@ export function Manual({
         */}
         {pickingPrice && (
           <PriceWheel
+            center={wheelCenter}
             value={
               Number.isFinite(limitPriceNum) && limitPriceNum > 0
                 ? Math.round(limitPriceNum * 100)
@@ -2353,20 +2367,25 @@ function PositionPair({
 }
 
 /**
- * A wheel of cents, scrolled to fifty.
+ * A wheel of cents, opening where the next order probably belongs.
  *
  * Every price here is a whole number between one and ninety-nine, which is a
  * list — so it is shown as one and flicked through, rather than typed on a
- * keypad that covers the book you are pricing against. It always opens
- * centred on fifty: the middle of the range is the same place every time, and
- * a picker that opens somewhere different each time has to be read before it
- * can be used.
+ * keypad that covers the book you are pricing against.
+ *
+ * It opens three cents under whichever side is currently dearer. A limit here
+ * is nearly always a bid just under the favourite, so that is the number under
+ * the thumb when the wheel appears; fifty was the middle of the range and
+ * almost never the middle of the decision.
  */
 function PriceWheel({
   value,
+  center,
   onPick,
 }: {
   value: number | null;
+  /** Where the wheel lands when it opens, in cents. */
+  center: number;
   onPick: (cents: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -2374,7 +2393,7 @@ function PriceWheel({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const mid = el.querySelector<HTMLElement>('[data-cents="50"]');
+    const mid = el.querySelector<HTMLElement>(`[data-cents="${center}"]`);
     if (mid) {
       el.scrollLeft = mid.offsetLeft - el.clientWidth / 2 + mid.offsetWidth / 2;
     }
@@ -2389,7 +2408,9 @@ function PriceWheel({
         <button
           key={c}
           data-cents={c}
-          className={`wheelnum${c === value ? ' on' : ''}${c === 50 ? ' half' : ''}`}
+          className={`wheelnum${c === value ? ' on' : ''}${
+            c === center ? ' half' : ''
+          }`}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => onPick(c)}
         >
