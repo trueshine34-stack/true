@@ -2319,37 +2319,71 @@ function PriceWheel({
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  /** Bring a price to the middle of the strip. */
+  const scrollTo = (cents: number, smooth: boolean) => {
     const el = ref.current;
     if (!el) return;
-    const mid = el.querySelector<HTMLElement>(`[data-cents="${center}"]`);
-    if (mid) {
-      el.scrollLeft = mid.offsetLeft - el.clientWidth / 2 + mid.offsetWidth / 2;
-    }
+    const at = el.querySelector<HTMLElement>(`[data-cents="${cents}"]`);
+    if (!at) return;
+    const left = at.offsetLeft - el.clientWidth / 2 + at.offsetWidth / 2;
+    if (smooth) el.scrollTo({ left, behavior: 'smooth' });
+    else el.scrollLeft = left;
+  };
+
+  useEffect(() => {
+    scrollTo(center, false);
     // Opening is the only time it is positioned; after that it is the user's.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <div className="wheel" ref={ref}>
-      <div className="wheelpad" />
-      {Array.from({ length: 99 }, (_, i) => i + 1).map((c) => (
-        <button
-          key={c}
-          data-cents={c}
-          className={`wheelnum${c === value ? ' on' : ''}${
-            c === center ? ' half' : ''
-          }`}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => onPick(c)}
-        >
-          {c}
-        </button>
-      ))}
-      <div className="wheelpad" />
+    /*
+      Two ends pinned to the sides. Ninety-nine prices is a long strip to flick
+      through, and the two worth reaching in one tap are the cheap end you buy
+      a dip at and the dear end you sell a decided window at — so they stay put
+      and carry the wheel to themselves.
+    */
+    <div className="wheelwrap">
+      <button
+        className="wheeljump"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => scrollTo(WHEEL_LOW, true)}
+      >
+        {WHEEL_LOW}
+      </button>
+
+      <div className="wheel" ref={ref}>
+        <div className="wheelpad" />
+        {Array.from({ length: 99 }, (_, i) => i + 1).map((c) => (
+          <button
+            key={c}
+            data-cents={c}
+            className={`wheelnum${c === value ? ' on' : ''}${
+              c === center ? ' half' : ''
+            }`}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onPick(c)}
+          >
+            {c}
+          </button>
+        ))}
+        <div className="wheelpad" />
+      </div>
+
+      <button
+        className="wheeljump"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => scrollTo(WHEEL_HIGH, true)}
+      >
+        {WHEEL_HIGH}
+      </button>
     </div>
   );
 }
+
+/** The two ends of the strip that are worth one tap. */
+const WHEEL_LOW = 15;
+const WHEEL_HIGH = 85;
 
 function ManualSettingsForm({
   settings,

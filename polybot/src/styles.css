@@ -2634,3 +2634,37 @@ button.step.big {
 button.wide {
   width: 100%;
 }
+
+/* Both ends of the price strip, pinned where a thumb already is. */
+.wheelwrap {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.wheelwrap .wheel {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+.wheeljump {
+  flex: 0 0 40px;
+  margin: 4px 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.wheeljump:active {
+  color: var(--text);
+  border-color: var(--text);
+}
