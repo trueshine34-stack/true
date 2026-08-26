@@ -42,14 +42,6 @@ class SellPercentTest {
     }
 
     @Test
-    fun breakEvenIsAProfitAndNotARoundingOne() {
-        for (avg in listOf(0.05, 0.3, 0.62, 0.9)) {
-            val floor = SellPercent.breakEven(avg, tick)
-            assertTrue(SellPercent.netSell(floor) > avg)
-        }
-    }
-
-    @Test
     fun eachSliceGoesOutAboveTheLast() {
         val avg = 0.40
         val first = SellPercent.priceFor(avg, 0.2, tick, null, 200, 60, null)
@@ -61,36 +53,45 @@ class SellPercentTest {
     }
 
     @Test
-    fun inTheLastMinuteAnyProfitWillDo() {
+    fun theLastMinuteAsksNinetyAndTakesItOnTouch() {
         val avg = 0.40
-        // A bid well under the margin, but still a win after the fee.
-        val bid = 0.45
-        assertTrue(SellPercent.netSell(bid) > avg)
 
-        val holding = SellPercent.priceFor(avg, 0.2, tick, null, 200, 60, bid)
-        val panicking = SellPercent.priceFor(avg, 0.2, tick, null, 30, 60, bid)
+        // While there is time, the price is the lot's own margin — whatever the
+        // book happens to be bidding.
+        val holding = SellPercent.priceFor(avg, 0.2, tick, null, 200, 60, 0.62)
+        assertEquals(SellPercent.targetPrice(avg, 0.2, tick), holding, 1e-9)
+        assertTrue(holding < 0.90)
 
-        assertTrue("still holding out for the margin", holding > bid)
-        assertEquals("takes the bid", bid, panicking, 1e-9)
+        // In the last minute the offer sits at ninety, whatever the lot cost…
+        assertEquals(0.90, SellPercent.priceFor(avg, 0.2, tick, null, 30, 60, 0.62), 1e-9)
+        // …and is taken the moment the book reaches it.
+        assertEquals(0.93, SellPercent.priceFor(avg, 0.2, tick, null, 30, 60, 0.93), 1e-9)
+    }
+
+    @Test
+    fun aSmallProfitIsNoLongerEnoughAtTheClose() {
+        // 45c on a 40c lot clears the fee, and used to be taken. It is not a
+        // reason to sell a position the market is about to price at a dollar.
+        val price = SellPercent.priceFor(0.40, 0.2, tick, null, 20, 60, 0.45)
+
+        assertEquals(0.90, price, 1e-9)
+    }
+
+    @Test
+    fun theFloorIsSettable() {
+        assertEquals(
+            0.95,
+            SellPercent.priceFor(0.40, 0.2, tick, null, 20, 60, 0.45, closeFloor = 0.95),
+            1e-9,
+        )
     }
 
     @Test
     fun aLosingBidIsNotTakenEvenAtTheClose() {
-        val avg = 0.40
-        val bid = 0.38
-        val price = SellPercent.priceFor(avg, 0.2, tick, null, 20, 60, bid)
+        val price = SellPercent.priceFor(0.40, 0.2, tick, null, 20, 60, 0.38)
 
-        assertTrue("never sells at a loss", price > bid)
-        assertTrue(SellPercent.netSell(price) > avg)
-    }
-
-    @Test
-    fun aBidThatOnlyCoversTheFeeIsNotAProfit() {
-        val avg = 0.50
-        // Marked up, but the fee eats the difference.
-        val bid = 0.51
-        assertTrue(SellPercent.netSell(bid) < avg)
-        assertTrue(SellPercent.priceFor(avg, 0.2, tick, null, 10, 60, bid) > bid)
+        assertTrue("never sells into a bid this far down", price > 0.38)
+        assertEquals(0.90, price, 1e-9)
     }
 
     @Test
@@ -108,7 +109,6 @@ class SellPercentTest {
         // and its cost basis still at zero, and a margin over zero is the tick
         // floor — which sells the position for nothing.
         assertEquals(tick, SellPercent.targetPrice(0.0, 0.2, tick), 1e-9)
-        assertEquals(tick, SellPercent.breakEven(0.0, tick), 1e-9)
     }
 
     @Test

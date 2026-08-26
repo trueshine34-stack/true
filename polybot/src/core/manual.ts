@@ -32,8 +32,10 @@ export type ManualSettings = {
   autoSellProfitPct: number;
   /** Pause between slices when a position was built out of several buys. */
   autoSellSliceGapSec: number;
-  /** Inside this much of the close, any profit will do. */
+  /** Inside this much of the close, the floor below replaces the margin. */
   autoSellPanicSec: number;
+  /** The least the last minute will sell for, in dollars. */
+  autoSellCloseFloor: number;
   /** Buy the same size back if the price falls far enough after a sale. */
   autoRebuyEnabled: boolean;
   /** How far below the sale price the buy-back triggers, as a fraction. */
@@ -68,6 +70,7 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellProfitPct: 0.2,
   autoSellSliceGapSec: 2,
   autoSellPanicSec: 60,
+  autoSellCloseFloor: 0.9,
   autoRebuyEnabled: false,
   autoRebuyDropPct: 0.2,
   autoRebuySlicePauseSec: 3,

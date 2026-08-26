@@ -61,8 +61,10 @@ class AutoSell(
         val profitPct: Double = SellPercent.DEFAULT_GAIN,
         /** Seconds between slices when a position was built out of several buys. */
         val sliceGapSec: Int = SellPercent.DEFAULT_SLICE_GAP_SEC,
-        /** Inside this much of the close, any profit will do. */
+        /** Inside this much of the close, the floor below replaces the margin. */
         val panicSec: Int = SellPercent.DEFAULT_PANIC_SEC,
+        /** The least the last minute will sell for. */
+        val closeFloor: Double = SellPercent.DEFAULT_CLOSE_FLOOR,
     )
 
     /** One position and what the rule has managed to do about it. */
@@ -740,6 +742,7 @@ class AutoSell(
             secondsLeft = secondsLeft,
             panicSec = settings.panicSec,
             bestBid = bid,
+            closeFloor = settings.closeFloor,
         )
     }
 

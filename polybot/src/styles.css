@@ -1721,3 +1721,11 @@ button.pill.balance {
 .goal button.ghost {
   width: 100%;
 }
+
+/* Three things in the trades header: the name, the one-tap cancel, the total. */
+.listhead .linkbtn {
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: auto;
+  margin-right: 10px;
+}

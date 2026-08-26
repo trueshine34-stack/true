@@ -16,13 +16,12 @@ import kotlin.math.sqrt
  * proceeds; solving for the price whose *net* is `avg x 1.2` is a quadratic
  * with a closed form, so the number asked for is the number received.
  *
- * Two things bend it. Several buys are sold in slices a few seconds apart, each
- * at a higher price than the last — if the first slice filled, the market is
- * still climbing, and dumping the rest at the same price would be selling the
- * move to the person who noticed it. And in the last minute of a window, a
- * position that never reached its margin is sold at whatever the book will pay,
- * so long as that still clears the cost after the fee: a small win beats
- * holding a five-minute market to settlement on hope.
+ * Two things bend it. A position built out of several purchases is sold one
+ * purchase at a time, a few seconds apart, each priced off its own cost. And in
+ * the last minute of a window the margin gives way to a floor: ninety cents or
+ * better, taken the instant the book reaches it. Not the smallest profit that
+ * clears the fee — by then the winning side is walking to a dollar, and a
+ * two-cent win sells a position that was about to be worth ninety-odd.
  */
 object SellPercent {
 
@@ -33,6 +32,16 @@ object SellPercent {
 
     /** How near the close the rule stops holding out for its margin. */
     const val DEFAULT_PANIC_SEC = 60
+
+    /**
+     * The least the rule will sell for in the last minute.
+     *
+     * Not "any profit": a five-minute market in its last minute is nearly
+     * decided, and the winning side is on its way to a dollar. Taking two cents
+     * of profit there sells a position that was about to be worth ninety-odd —
+     * so the offer sits at ninety and is taken the moment the book touches it.
+     */
+    const val DEFAULT_CLOSE_FLOOR = 0.90
 
     private const val FEE_RATE = 0.07
 
@@ -53,19 +62,13 @@ object SellPercent {
         return snapUp(price, tick)
     }
 
-    /** The cheapest sale that still comes out ahead once the fee is paid. */
-    fun breakEven(avgPrice: Double, tick: Double): Double {
-        val price = targetPrice(avgPrice, 0.0, tick)
-        return if (netSell(price) > avgPrice) price else snapUp(price + tick, tick)
-    }
-
     /**
-     * Where the next slice should rest.
+     * Where the next lot should rest.
      *
      * @param resting the highest price already resting for this position, if any
      * @param secondsLeft until the window closes
      * @param bestBid what the book would pay right now
-     * @return the price to ask, or null to leave what is resting alone
+     * @param closeFloor the least the last minute will sell for
      */
     fun priceFor(
         avgPrice: Double,
@@ -75,14 +78,18 @@ object SellPercent {
         secondsLeft: Long,
         panicSec: Int,
         bestBid: Double?,
+        closeFloor: Double = DEFAULT_CLOSE_FLOOR,
     ): Double {
         val target = targetPrice(avgPrice, gain, tick)
 
-        // Out of time: take what the book pays, as long as it is still a win
-        // after the fee. Below that, keep asking — a loss is not an exit.
-        if (secondsLeft in 0..panicSec.toLong() && bestBid != null) {
-            val floor = breakEven(avgPrice, tick)
-            if (bestBid >= floor) return snapDown(bestBid, tick)
+        // Out of time: ninety or better, taken the instant the book reaches it.
+        // Not the smallest profit that clears the fee — in the last minute of a
+        // five-minute market the winning side is walking to a dollar, and a
+        // two-cent win sells a position that was about to be worth ninety-odd.
+        if (!holdingOut(secondsLeft, panicSec)) {
+            val floor = snapUp(closeFloor, tick)
+            if (bestBid != null && bestBid >= floor) return snapDown(bestBid, tick)
+            return floor
         }
 
         // Each slice above the last: the fill proved the price was there.

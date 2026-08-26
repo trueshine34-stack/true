@@ -432,7 +432,21 @@ object ClobApi {
         }
 
         val headers = authHeaders(creds, signerAddress, "POST", "/order", payload)
-        val text = Http.postJson("${Endpoints.CLOB}/order", payload, headers)
+        // A refused order is an answer, not a crash: the venue says why in the
+        // body of a 400, and that body is worth more than the stack it would
+        // otherwise become.
+        val text = try {
+            Http.postJson("${Endpoints.CLOB}/order", payload, headers)
+        } catch (e: ApiException) {
+            return OrderResult(
+                success = false,
+                orderId = null,
+                status = null,
+                makingAmount = null,
+                takingAmount = null,
+                error = humanError(e.message ?: "", e.status),
+            )
+        }
         val json = JSONObject(text)
         val error = json.optString("errorMsg").ifEmpty { null }
         return OrderResult(
@@ -441,8 +455,37 @@ object ClobApi {
             status = json.optString("status").ifEmpty { null },
             makingAmount = json.optString("makingAmount").toDoubleOrNull(),
             takingAmount = json.optString("takingAmount").toDoubleOrNull(),
-            error = error,
+            error = error?.let { humanError(it, 0) },
         )
+    }
+
+    /**
+     * The venue's refusal, in words.
+     *
+     * What comes back is a URL, a status code and a JSON body with raw token
+     * amounts in it — true, complete and unreadable on a phone mid-trade. Every
+     * refusal that can actually happen here has a plain name, and the ones that
+     * do not keep their text, trimmed.
+     */
+    fun humanError(raw: String, status: Int): String {
+        val text = raw.lowercase()
+        return when {
+            text.contains("not enough balance") || text.contains("allowance") ->
+                "Не хватает баланса"
+            status == 429 || text.contains("too many requests") ->
+                "Биржа просит подождать"
+            text.contains("not accepting orders") || text.contains("market closed") ->
+                "Рынок больше не принимает заявки"
+            text.contains("invalid amount") || text.contains("minimum") ->
+                "Заявка меньше минимума биржи"
+            text.contains("invalid price") || text.contains("tick") ->
+                "Цена не по сетке рынка"
+            text.contains("timeout") || text.contains("unable to resolve host") ->
+                "Нет связи с биржей"
+            else -> raw.substringAfter("{").substringBefore("}").take(120).ifEmpty {
+                raw.take(120)
+            }
+        }
     }
 }
 

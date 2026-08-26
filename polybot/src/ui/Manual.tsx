@@ -162,6 +162,7 @@ export function Manual() {
           profitPct: stored.autoSellProfitPct,
           sliceGapSec: stored.autoSellSliceGapSec,
           panicSec: stored.autoSellPanicSec,
+          closeFloor: stored.autoSellCloseFloor,
         }).catch(() => {});
       }
     });
@@ -395,6 +396,7 @@ export function Manual() {
               profitPct: settingsRef.current.autoSellProfitPct,
               sliceGapSec: settingsRef.current.autoSellSliceGapSec,
               panicSec: settingsRef.current.autoSellPanicSec,
+              closeFloor: settingsRef.current.autoSellCloseFloor,
             }).catch(() => {});
           }
         })
@@ -631,6 +633,40 @@ export function Manual() {
     [books, market, place],
   );
 
+  /** Every limit buy still on the book, which is what "лимитки" means here. */
+  const restingLimits = useMemo(
+    () => orders.filter((o) => o.side === 'BUY' && o.remaining > 1e-9),
+    [orders],
+  );
+
+  /**
+   * Pull them all in one tap.
+   *
+   * Only buys: a resting sell is an exit the rule arranged, and cancelling
+   * those would have it place them straight back. Each ✕ on a row still pulls
+   * one sell individually.
+   */
+  const cancelLimits = useCallback(async () => {
+    if (restingLimits.length === 0) return;
+    setBusy(true);
+    let done = 0;
+    try {
+      for (const order of restingLimits) {
+        const r = await PolyBot.cancelOrder({ orderId: order.id }).catch(() => null);
+        if (r?.cancelled) done += 1;
+      }
+      setNote(
+        done === restingLimits.length
+          ? `Снято лимиток: ${done}`
+          : `Снято ${done} из ${restingLimits.length} — остальные уже неактивны`,
+      );
+      const fresh = await PolyBot.getOpenOrders().catch(() => null);
+      if (fresh) setOrders(fresh.orders);
+    } finally {
+      setBusy(false);
+    }
+  }, [restingLimits]);
+
   const cancel = useCallback(async (orderId: string) => {
     setBusy(true);
     try {
@@ -852,6 +888,11 @@ export function Manual() {
 
             <div className="listhead second">
               <span>Сделки окна</span>
+              {restingLimits.length > 0 && (
+                <button className="linkbtn" disabled={busy} onClick={() => void cancelLimits()}>
+                  снять лимитки ({restingLimits.length})
+                </button>
+              )}
               <span className={realisedPnl >= 0 ? 'up sessum' : 'down sessum'}>
                 {trades.some((t) => t.status === 'closed') ? signedUsd(realisedPnl) : ''}
               </span>
@@ -1596,6 +1637,7 @@ function RuleBar({
         profitPct: next.autoSellProfitPct,
         sliceGapSec: next.autoSellSliceGapSec,
         panicSec: next.autoSellPanicSec,
+        closeFloor: next.autoSellCloseFloor,
       }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
     },
     [onChange, onNote],
@@ -1808,6 +1850,7 @@ function ManualSettingsForm({
       profitPct: next.autoSellProfitPct,
       sliceGapSec: next.autoSellSliceGapSec,
       panicSec: next.autoSellPanicSec,
+      closeFloor: next.autoSellCloseFloor,
     }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
   };
 
@@ -2024,7 +2067,29 @@ function ManualSettingsForm({
           </label>
 
           <label className="field">
-            <span>Добирать любой плюс за, сек до конца</span>
+            <span>В последнюю минуту продавать не ниже, ¢</span>
+            <input
+              type="number"
+              value={String(Math.round(settings.autoSellCloseFloor * 100))}
+              onChange={(e) =>
+                push({
+                  ...settings,
+                  autoSellCloseFloor:
+                    Number(e.target.value.replace(',', '.')) / 100,
+                })
+              }
+            />
+            <span className="muted" style={{ fontSize: 11 }}>
+              В последнюю минуту пятиминутка почти решена, и выигравшая сторона
+              идёт к доллару. Поэтому не «любой плюс после комиссии» — заявка
+              встаёт на 90¢ и забирается сразу, как только стакан её касается.
+              Два цента прибыли там продают позицию, которая вот-вот стоила бы
+              девяносто с лишним.
+            </span>
+          </label>
+
+          <label className="field">
+            <span>Переходить на этот порог за, сек до конца</span>
             <input
               type="number"
               value={String(settings.autoSellPanicSec)}

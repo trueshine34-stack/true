@@ -1094,6 +1094,7 @@ class BotPlugin : Plugin() {
             profitPct = call.getDouble("profitPct") ?: defaults.profitPct,
             sliceGapSec = call.getInt("sliceGapSec") ?: defaults.sliceGapSec,
             panicSec = call.getInt("panicSec") ?: defaults.panicSec,
+            closeFloor = call.getDouble("closeFloor") ?: defaults.closeFloor,
         )
         if (next.enabled && !engine.isConfigured()) {
             call.reject("Сначала подключите кошелёк")
@@ -1167,6 +1168,7 @@ class BotPlugin : Plugin() {
                 .put("profitPct", bot.settings.profitPct)
                 .put("sliceGapSec", bot.settings.sliceGapSec)
                 .put("panicSec", bot.settings.panicSec)
+                .put("closeFloor", bot.settings.closeFloor)
                 .put("rebuys", waiting)
                 .put("rebuysDone", JSArray().also { arr ->
                     bot.recentRebuys.forEach {

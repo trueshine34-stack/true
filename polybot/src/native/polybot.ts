@@ -252,6 +252,7 @@ export interface PolyBotPlugin {
     profitPct?: number;
     sliceGapSec?: number;
     panicSec?: number;
+    closeFloor?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
   addListener(
