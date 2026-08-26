@@ -208,16 +208,43 @@ button:disabled {
   opacity: 0.45;
 }
 
+/*
+ * A number with its name under it, sized for a thumb.
+ *
+ * The caption used to sit above a full-width input, which meant one setting
+ * per line and a settings page four screens tall. Column-reverse keeps the
+ * label first in the markup — where a screen reader wants it — and draws it
+ * under the box, where it takes no room of its own.
+ */
 label.field {
-  display: block;
-  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+  margin: 0;
+  min-width: 0;
 }
 
 label.field > span {
   display: block;
-  font-size: 12px;
+  font-size: 10px;
+  line-height: 1.2;
   color: var(--muted);
-  margin-bottom: 5px;
+  text-align: center;
+  margin: 0;
+}
+
+label.field input {
+  padding: 9px 4px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Three across, which is as many numbers as fit legibly on a phone. */
+.fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px 6px;
+  margin: 10px 0 4px;
 }
 
 input,
@@ -1927,7 +1954,6 @@ button.step.big {
   border-top: 1px solid var(--line);
 }
 
-.foldbody > .field:first-child,
 .foldbody > .toggle:first-child {
   margin-top: 10px;
 }
@@ -2106,4 +2132,165 @@ button.step.big {
 
 .gauges b {
   font-size: 12px;
+}
+
+/* ------------------------------------------------------------- price wheel */
+
+/*
+ * A flick-through strip of cents. Snap points mean a flick always lands on a
+ * number rather than between two, and the padders let the first and last
+ * price reach the middle like every other one.
+ */
+.wheel {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 4px 0 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.wheel::-webkit-scrollbar {
+  display: none;
+}
+
+.wheelpad {
+  flex: 0 0 44%;
+}
+
+.wheelnum {
+  flex: 0 0 auto;
+  scroll-snap-align: center;
+  min-width: 38px;
+  padding: 7px 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+/* Fifty is the one the wheel opens on, so it is marked as the landmark it is. */
+.wheelnum.half {
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.wheelnum.on {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+  font-weight: 600;
+}
+
+/* The price is picked, not typed; the box is a display that opens the wheel. */
+.limitprice input[readonly] {
+  cursor: pointer;
+}
+
+/* ------------------------------------------------- the window's two sides */
+
+/*
+ * One row for the whole window: Up, the money, Down. Two stacked rows read as
+ * two unrelated positions, which is exactly what they are not — only one of
+ * them can settle at a dollar.
+ */
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr 1fr;
+  gap: 6px;
+  align-items: stretch;
+  padding: 4px 0 2px;
+}
+
+.pairleg {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.pairleg:active {
+  border-color: var(--text);
+}
+
+.pairleg.idle {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pairleg b {
+  font-size: 12px;
+}
+
+.pairleg.up b {
+  color: var(--up);
+}
+
+.pairleg.down b {
+  color: var(--down);
+}
+
+.pairsize {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.pairavg {
+  font-size: 10px;
+}
+
+.pairmid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  text-align: center;
+}
+
+.pairmid > b {
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.pairlabel {
+  font-size: 9px;
+  text-transform: lowercase;
+}
+
+/* The two ways an untouched window can end, side by side. */
+.pairends {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.pairends i {
+  font-style: normal;
+  color: var(--muted);
+  margin: 0 3px;
+}
+
+.pairlocked {
+  font-size: 9px;
+  font-weight: 600;
 }

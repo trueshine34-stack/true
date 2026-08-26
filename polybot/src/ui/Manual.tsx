@@ -4,6 +4,7 @@ import {
   balanceShares,
   cappedShares,
   exposureFor,
+  LIMIT_LADDER_COUNT,
   orderCost,
   sellableShares,
   stakeShares,
@@ -19,10 +20,10 @@ import {
   SELL_GAINS,
   limitLadder,
   limitUpside,
-  positionPnl,
   potentialProfit,
   signedPct,
   signedUsd,
+  standingOf,
   targetPrice,
   usd,
 } from '../core/money';
@@ -31,7 +32,6 @@ import {
   PolyBot,
   type AutoSellState,
   type BookLevels,
-  type GmxCandle,
   type AutoSellRebuy,
   type AutoSellRebuyDone,
   type EventSummary,
@@ -65,12 +65,6 @@ const ago = (at: number) => {
   return secs < 90 ? `${secs}с назад` : `${Math.round(secs / 60)}м назад`;
 };
 const WINDOW_SEC = 300;
-
-/**
- * Enough candles to find the current window's open and the one before it.
- * Nothing is drawn any more, so anything longer is bytes for their own sake.
- */
-const PRICE_MINUTES = 10;
 
 type Draft = {
   side: 'Up' | 'Down';
@@ -119,8 +113,8 @@ export function Manual({
 }) {
   const [settings, setSettings] = useState<ManualSettings>(DEFAULT_MANUAL_SETTINGS);
   const [tab, setTab] = useState<'desk' | 'settings'>('desk');
-  const [candles, setCandles] = useState<GmxCandle[]>([]);
-  const [spot, setSpot] = useState<number | null>(null);
+  /** Binance's candle in progress: where the five minutes opened, and now. */
+  const [btc, setBtc] = useState<{ open: number; last: number } | null>(null);
   const [market, setMarket] = useState<NativeMarket | null>(null);
   const [books, setBooks] = useState<Record<'Up' | 'Down', BookLevels>>({
     Up: { bids: [], asks: [] },
@@ -147,6 +141,7 @@ export function Manual({
   const [limitSize, setLimitSize] = useState('');
   /** The size field is being edited: that is when sizing by wallet is useful. */
   const [sizingLimit, setSizingLimit] = useState(false);
+  const [pickingPrice, setPickingPrice] = useState(false);
   /** A resting order opened for editing. */
   const [editing, setEditing] = useState<TradeRow | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
@@ -209,29 +204,28 @@ export function Manual({
   const livePositions = market
     ? positions.filter((p) => p.conditionId === market.conditionId)
     : [];
-  // The window's opening price and where BTC is against it. Read on the
-  // boundary rather than up to ten seconds later: the moment a window rolls,
-  // the open changes and every number derived from it is stale.
+  // The window's opening price and where BTC is against it, from Binance —
+  // the price everyone is actually watching. Polymarket settles Up or Down on
+  // its own thirty-second TWAP, so this is a reference to trade by eye
+  // against, not the number the window is decided on.
   useEffect(() => {
     let cancelled = false;
     const read = () => {
-      void PolyBot.polyCandles({ minutes: PRICE_MINUTES })
+      void PolyBot.binancePrice()
         .then((r) => {
-          if (cancelled) return;
-          setCandles(r.candles);
-          setSpot(r.ticker?.mid ?? r.candles[r.candles.length - 1]?.close ?? null);
+          if (!cancelled && r.open > 0) setBtc({ open: r.open, last: r.last });
         })
-        .catch((e) => {
-          if (!cancelled) setNote(e instanceof Error ? e.message : String(e));
-        });
+        .catch(() => {});
     };
     read();
-    const timer = window.setInterval(read, 10_000);
+    // The move against the open is the number being watched second by second,
+    // and it costs one small request.
+    const timer = window.setInterval(read, 3000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [windowStart]);
+  }, []);
 
   // How each five-minute event went. Slow on purpose: a window's result cannot
   // change once it has closed, and the running one only moves when an order does.
@@ -547,13 +541,8 @@ export function Manual({
    * the level the window turns on, so it belongs in the header next to the
    * price rather than only as a line on the chart.
    */
-  const windowOpen = useMemo(() => {
-    if (candles.length === 0) return null;
-    const start = Math.floor(candles[candles.length - 1].time / WINDOW_SEC) * WINDOW_SEC;
-    return candles.find((c) => c.time >= start)?.open ?? null;
-  }, [candles]);
-
-  const drift = spot != null && windowOpen != null ? spot - windowOpen : null;
+  const windowOpen = btc?.open ?? null;
+  const drift = btc != null ? btc.last - btc.open : null;
 
   // From the clock, not the market: the countdown must keep running even in the
   // seconds where the new window's market has not loaded yet.
@@ -653,7 +642,9 @@ export function Manual({
         side: which,
         action: 'SELL',
         price: String(Math.round(bid * 100)),
-        shares: sellableShares(position.size, bid).toFixed(1),
+        // The whole position. Tapping it means "close this", and a size that
+        // quietly leaves a few shares behind is a position still open.
+        shares: String(sellableShares(position.size)),
         avg: position.avgPrice > 0 ? position.avgPrice : undefined,
       });
       setNote(null);
@@ -856,7 +847,7 @@ export function Manual({
     const rungs = settings.limitLadder
       ? limitLadder(
           limitPriceNum,
-          settings.limitLadderCount,
+          LIMIT_LADDER_COUNT,
           settings.limitLadderStep,
           market?.tickSize ?? 0.01,
         )
@@ -991,54 +982,18 @@ export function Manual({
             ) : livePositions.length === 0 ? (
               <div className="muted empty">Открытых позиций нет</div>
             ) : (
-              livePositions.map((p) => (
-                <button
-                  className="listrow"
-                  key={p.asset}
-                  onClick={() => sellPosition(p)}
-                >
-                  <span className={p.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
-                    {p.outcome}
-                  </span>
-                  <span className="listrow-main">
-                    {/*
-                      Money first. A share count means something different at
-                      10¢ than at 90¢, and nothing at all at a glance — while a
-                      zero average means the trade is not indexed yet, not that
-                      it was free, so it shows a dash rather than a price that
-                      never happened.
-                    */}
-                    {p.avgPrice > 0 ? usd(p.size * p.avgPrice) : '…'}
-                    <span className="sub muted">
-                      {p.size.toFixed(1)} × {p.avgPrice > 0 ? cents(p.avgPrice) : '…'}
-                    </span>
-                  </span>
-                  <span className="listrow-now">
-                    {p.curPrice != null ? usd(p.size * p.curPrice) : '—'}
-                    <span className="sub muted">
-                      {p.curPrice != null ? cents(p.curPrice) : '—'}
-                    </span>
-                  </span>
-                  {(() => {
-                    // What selling right now would actually pay, fee included —
-                    // the exchange's own figure is the mark, which is a bigger
-                    // number than the money.
-                    const pnl = positionPnl(p.size, p.avgPrice, p.curPrice ?? 0);
-                    return (
-                      <span
-                        className={`listrow-pnl ${
-                          p.avgPrice > 0 ? (pnl.pnl >= 0 ? 'up' : 'down') : 'muted'
-                        }`}
-                      >
-                        {p.avgPrice > 0 ? signedUsd(pnl.pnl) : '…'}
-                        <span className="sub">
-                          {p.avgPrice > 0 ? signedPct(pnl.pct) : ''}
-                        </span>
-                      </span>
-                    );
-                  })()}
-                </button>
-              ))
+              /*
+                Both sides at once, side by side, with the window's whole
+                result between them. A window is one trade with two legs, and
+                two stacked rows made it look like two unrelated positions —
+                which hid the number that actually matters when both are held:
+                only one side can win, so the outcome is already one of two
+                known figures.
+              */
+              <PositionPair
+                positions={livePositions}
+                onSell={sellPosition}
+              />
             )}
 
             <div className="listhead second">
@@ -1389,10 +1344,28 @@ export function Manual({
             </span>
           </div>
         )}
+        {/*
+          Tapping the price opens a wheel rather than the keyboard. A limit
+          price here is two digits chosen in a second, and a numeric keypad
+          covers half the screen to enter them.
+        */}
+        {pickingPrice && (
+          <PriceWheel
+            value={
+              Number.isFinite(limitPriceNum) && limitPriceNum > 0
+                ? Math.round(limitPriceNum * 100)
+                : null
+            }
+            onPick={(c) => {
+              setLimitPrice(String(c));
+              setPickingPrice(false);
+            }}
+          />
+        )}
         <div className="limitmeta">
           <span className="muted">
             {settings.limitLadder
-              ? `лесенка ×${settings.limitLadderCount + 1} · шаг ${Math.round(
+              ? `лесенка ×${LIMIT_LADDER_COUNT + 1} · шаг ${Math.round(
                   settings.limitLadderStep * 100,
                 )}¢`
               : 'лимитка'}
@@ -1401,7 +1374,7 @@ export function Manual({
             {limitSizeNum > 0 && limitBasis > 0
               ? `+${usd(
                   limitUpside(limitSizeNum, limitBasis) *
-                    (settings.limitLadder ? settings.limitLadderCount + 1 : 1),
+                    (settings.limitLadder ? LIMIT_LADDER_COUNT + 1 : 1),
                 )}`
               : '—'}
           </span>
@@ -1420,11 +1393,12 @@ export function Manual({
                 −
               </button>
               <input
-                type="number"
-                inputMode="numeric"
+                type="text"
+                inputMode="none"
+                readOnly
                 placeholder={quickUp ? String(Math.round(quickUp.ask * 100)) : '¢'}
                 value={limitPrice}
-                onChange={(e) => setLimitPrice(e.target.value)}
+                onClick={() => setPickingPrice((v) => !v)}
               />
               <button className="step" onClick={() => nudgeLimit(1)}>
                 +
@@ -2310,19 +2284,8 @@ function RuleBar({
           }
         />
         <span className="rule-name">Лесенка лимиток</span>
-        <span className="pcts">
-          {[2, 3, 4].map((n) => (
-            <button
-              key={n}
-              className={settings.limitLadderCount === n ? 'on' : undefined}
-              onClick={() => onChange({ ...settings, limitLadderCount: n })}
-            >
-              +{n}
-            </button>
-          ))}
-        </span>
         <span className="rule-note muted">
-          шаг {Math.round(settings.limitLadderStep * 100)}¢
+          +{LIMIT_LADDER_COUNT} · шаг {Math.round(settings.limitLadderStep * 100)}¢
         </span>
       </div>
 
@@ -2444,6 +2407,162 @@ function Fold({
   );
 }
 
+/**
+ * The window's two sides, and what it comes to.
+ *
+ * Up on the left, Down on the right, each a share count over what it cost, and
+ * between them the money. Two numbers live there: what selling both right now
+ * would pay after the fee, and — when both sides are held — what doing nothing
+ * pays instead, which is one of exactly two figures because only one side can
+ * settle at a dollar. When the worse of those two is still positive the window
+ * is already won, and the panel says so rather than leaving it to be worked
+ * out from two rows of percentages.
+ */
+function PositionPair({
+  positions,
+  onSell,
+}: {
+  positions: NativePosition[];
+  onSell: (position: NativePosition) => void;
+}) {
+  const standing = standingOf(
+    positions.map((p) => ({
+      outcome: p.outcome,
+      size: p.size,
+      avgPrice: p.avgPrice,
+      curPrice: p.curPrice ?? 0,
+    })),
+  );
+  const priced = positions.some((p) => p.avgPrice > 0);
+
+  const leg = (name: 'Up' | 'Down') => {
+    const mine = positions.filter((p) => p.outcome === name);
+    if (mine.length === 0) return null;
+    const size = mine.reduce((a, p) => a + p.size, 0);
+    const cost = mine.reduce((a, p) => a + p.size * p.avgPrice, 0);
+    return { position: mine[0], size, avg: size > 0 ? cost / size : 0, cost };
+  };
+
+  const up = leg('Up');
+  const down = leg('Down');
+
+  const side = (name: 'Up' | 'Down', held: ReturnType<typeof leg>) => (
+    <button
+      className={`pairleg ${name === 'Up' ? 'up' : 'down'}${held ? '' : ' idle'}`}
+      disabled={!held}
+      onClick={() => held && onSell(held.position)}
+    >
+      <b>{name}</b>
+      {held ? (
+        <>
+          <span className="pairsize">{held.size.toFixed(1)}</span>
+          <span className="muted pairavg">
+            {held.avg > 0 ? `ср ${cents(held.avg)}` : 'ср …'}
+          </span>
+          <span className="muted pairavg">{usd(held.cost)}</span>
+        </>
+      ) : (
+        <span className="muted pairsize">—</span>
+      )}
+    </button>
+  );
+
+  return (
+    <div className="pair">
+      {side('Up', up)}
+
+      <div className="pairmid">
+        <span className="muted pairlabel">продать сейчас</span>
+        <b className={!priced ? 'muted' : standing.now >= 0 ? 'up' : 'down'}>
+          {priced ? signedUsd(standing.now) : '…'}
+        </b>
+
+        {standing.both ? (
+          <>
+            <span className="muted pairlabel">если не трогать</span>
+            <span className="pairends">
+              <span className={standing.ifUp >= 0 ? 'up' : 'down'}>
+                {signedUsd(standing.ifUp)}
+              </span>
+              <i>/</i>
+              <span className={standing.ifDown >= 0 ? 'up' : 'down'}>
+                {signedUsd(standing.ifDown)}
+              </span>
+            </span>
+            {standing.worst > 0 && (
+              <span className="up pairlocked">окно уже в плюсе</span>
+            )}
+          </>
+        ) : (
+          priced && (
+            <>
+              <span className="muted pairlabel">если досидеть</span>
+              <span className={`pairends ${standing.worst > 0 ? 'up' : ''}`}>
+                <span className="up">
+                  {signedUsd(Math.max(standing.ifUp, standing.ifDown))}
+                </span>
+                <i>/</i>
+                <span className="down">{signedUsd(-standing.cost)}</span>
+              </span>
+            </>
+          )
+        )}
+      </div>
+
+      {side('Down', down)}
+    </div>
+  );
+}
+
+/**
+ * A wheel of cents, scrolled to fifty.
+ *
+ * Every price here is a whole number between one and ninety-nine, which is a
+ * list — so it is shown as one and flicked through, rather than typed on a
+ * keypad that covers the book you are pricing against. It always opens
+ * centred on fifty: the middle of the range is the same place every time, and
+ * a picker that opens somewhere different each time has to be read before it
+ * can be used.
+ */
+function PriceWheel({
+  value,
+  onPick,
+}: {
+  value: number | null;
+  onPick: (cents: number) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const mid = el.querySelector<HTMLElement>('[data-cents="50"]');
+    if (mid) {
+      el.scrollLeft = mid.offsetLeft - el.clientWidth / 2 + mid.offsetWidth / 2;
+    }
+    // Opening is the only time it is positioned; after that it is the user's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="wheel" ref={ref}>
+      <div className="wheelpad" />
+      {Array.from({ length: 99 }, (_, i) => i + 1).map((c) => (
+        <button
+          key={c}
+          data-cents={c}
+          className={`wheelnum${c === value ? ' on' : ''}${c === 50 ? ' half' : ''}`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onPick(c)}
+        >
+          {c}
+        </button>
+      ))}
+      <div className="wheelpad" />
+    </div>
+  );
+}
+
 /** A measured delay, or an honest word about why there is not one yet. */
 function measured(ms: number | null | undefined, samples: number | undefined) {
   const n = samples ?? 0;
@@ -2533,34 +2652,50 @@ function ManualSettingsForm({
       note={`${Math.round(settings.balanceSharePct * 100)}% · $${settings.defaultStakeUsd}`}
     >
 
-      <label className="field">
-        <span>Доля баланса на клик, %</span>
-        <input
-          type="number"
-          value={String(Math.round(settings.balanceSharePct * 100))}
-          onChange={(e) =>
-            onChange({
-              ...settings,
-              balanceSharePct: Number(e.target.value.replace(',', '.')) / 100,
-            })
-          }
-        />
-      </label>
+      <div className="fields">
+        <label className="field">
+          <span>доля, %</span>
+          <input
+            type="number"
+            value={String(Math.round(settings.balanceSharePct * 100))}
+            onChange={(e) =>
+              onChange({
+                ...settings,
+                balanceSharePct: Number(e.target.value.replace(',', '.')) / 100,
+              })
+            }
+          />
+        </label>
 
-      <label className="field">
-        <span>Сумма по умолчанию, $</span>
-        <input
-          type="number"
-          step="0.5"
-          value={String(settings.defaultStakeUsd)}
-          onChange={(e) =>
-            onChange({
-              ...settings,
-              defaultStakeUsd: Number(e.target.value.replace(',', '.')),
-            })
-          }
-        />
-      </label>
+        <label className="field">
+          <span>сумма, $</span>
+          <input
+            type="number"
+            step="0.5"
+            value={String(settings.defaultStakeUsd)}
+            onChange={(e) =>
+              onChange({
+                ...settings,
+                defaultStakeUsd: Number(e.target.value.replace(',', '.')),
+              })
+            }
+          />
+        </label>
+
+        <label className="field">
+          <span>шаг лесенки, ¢</span>
+          <input
+            type="number"
+            value={String(Math.round(settings.limitLadderStep * 100))}
+            onChange={(e) =>
+              onChange({
+                ...settings,
+                limitLadderStep: Number(e.target.value.replace(',', '.')) / 100,
+              })
+            }
+          />
+        </label>
+      </div>
 
       <div className="toggle">
         <span>Лесенка по цене</span>
@@ -2647,10 +2782,10 @@ function ManualSettingsForm({
       </div>
 
       {settings.autoSellPercentMode ? (
-        <>
+        <div className="fields">
 
           <label className="field">
-            <span>Продавать при плюсе, %</span>
+            <span>плюс, %</span>
             <input
               type="number"
               value={String(Math.round(settings.autoSellProfitPct * 100))}
@@ -2664,7 +2799,7 @@ function ManualSettingsForm({
           </label>
 
           <label className="field">
-            <span>Пауза между частями, сек</span>
+            <span>пауза, с</span>
             <input
               type="number"
               value={String(settings.autoSellSliceGapSec)}
@@ -2678,7 +2813,7 @@ function ManualSettingsForm({
           </label>
 
           <label className="field">
-            <span>В последнюю минуту продавать не ниже, ¢</span>
+            <span>финал, ¢</span>
             <input
               type="number"
               value={String(Math.round(settings.autoSellCloseFloor * 100))}
@@ -2693,7 +2828,7 @@ function ManualSettingsForm({
           </label>
 
           <label className="field">
-            <span>Перед этим не ниже, ¢</span>
+            <span>до финала, ¢</span>
             <input
               type="number"
               value={String(Math.round(settings.autoSellLateFloor * 100))}
@@ -2707,7 +2842,7 @@ function ManualSettingsForm({
           </label>
 
           <label className="field">
-            <span>Длина этой полосы, сек</span>
+            <span>полоса, с</span>
             <input
               type="number"
               value={String(settings.autoSellLateBandSec)}
@@ -2721,7 +2856,7 @@ function ManualSettingsForm({
           </label>
 
           <label className="field">
-            <span>Переходить на порог 90¢ за, сек до конца</span>
+            <span>финал за, с</span>
             <input
               type="number"
               value={String(settings.autoSellPanicSec)}
@@ -2733,11 +2868,12 @@ function ManualSettingsForm({
               }
             />
           </label>
-        </>
+        </div>
       ) : (
         <>
+      <div className="fields">
       <label className="field">
-        <span>Переключать ступень за, сек до минуты</span>
+        <span>упреждение, с</span>
         <input
           type="number"
           value={String(settings.autoSellLeadSec)}
@@ -2749,6 +2885,7 @@ function ManualSettingsForm({
           }
         />
       </label>
+      </div>
 
       <div className="rungs">
         {settings.autoSellLadder.map((price, i) => (
@@ -2766,8 +2903,9 @@ function ManualSettingsForm({
         </>
       )}
 
-      <label className="field" style={{ marginTop: 12 }}>
-        <span>Сколько добиваться после покупки, сек</span>
+      <div className="fields">
+      <label className="field">
+        <span>добиваться, с</span>
         <input
           type="number"
           value={String(settings.autoSellWatchSec)}
@@ -2781,7 +2919,7 @@ function ManualSettingsForm({
       </label>
 
       <label className="field">
-        <span>Повтор, сек</span>
+        <span>повтор, с</span>
         <input
           type="number"
           value={String(settings.autoSellRetrySec)}
@@ -2795,7 +2933,7 @@ function ManualSettingsForm({
       </label>
 
       <label className="field">
-        <span>Пауза между докупами, сек</span>
+        <span>пауза докупа, с</span>
         <input
           type="number"
           value={String(settings.autoRebuySlicePauseSec)}
@@ -2809,7 +2947,7 @@ function ManualSettingsForm({
       </label>
 
       <label className="field">
-        <span>Автодокуп при падении на, %</span>
+        <span>докуп при −%</span>
         <input
           type="number"
           value={String(Math.round(settings.autoRebuyDropPct * 100))}
@@ -2821,6 +2959,7 @@ function ManualSettingsForm({
           }
         />
       </label>
+      </div>
     </Fold>
     </>
   );

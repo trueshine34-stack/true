@@ -49,6 +49,58 @@ export function positionPnl(size: number, avgPrice: number, curPrice: number): P
   return { value, net, cost, pnl, pct: cost > 0 ? pnl / cost : 0 };
 }
 
+/** What a window's positions come to, sold now or left alone. */
+export type Standing = {
+  /** Everything paid for what is held. */
+  cost: number;
+  /** Selling both sides at the screen price right now, fee deducted. */
+  now: number;
+  /** Doing nothing and letting the window settle, if Up wins / if Down wins. */
+  ifUp: number;
+  ifDown: number;
+  /** Held on both sides, so the result is one of those two and nothing else. */
+  both: boolean;
+  /** The worse of the two — what the window pays at minimum from here. */
+  worst: number;
+};
+
+/**
+ * Where a window stands, sold now or left to settle.
+ *
+ * Two very different numbers, and the position rows only ever showed the first.
+ * Selling now pays the bid less the taker fee. Doing nothing pays a flat dollar
+ * for every share on the winning side and nothing for the other — settlement is
+ * a contract call, not a trade, so no fee is taken out of it. That is why a
+ * position that looks red at the bid can still be the better one to sit on.
+ *
+ * With both sides held the outcome is one of exactly two numbers, both known
+ * now: the market cannot surprise you, it can only pick. When the cheaper side
+ * was bought well enough that both are positive, the window is already won.
+ */
+export function standingOf(held: Held[]): Standing {
+  const clean = (v: number) => (Number.isFinite(v) ? v : 0);
+  const sideSize = (name: string) =>
+    held.filter((h) => h.outcome === name).reduce((a, h) => a + clean(h.size), 0);
+
+  const cost = held.reduce((a, h) => a + clean(h.size) * clean(h.avgPrice), 0);
+  const now = held.reduce(
+    (a, h) => a + positionPnl(h.size, h.avgPrice, h.curPrice ?? 0).pnl,
+    0,
+  );
+
+  const up = sideSize('Up');
+  const down = sideSize('Down');
+
+  return {
+    cost,
+    now,
+    ifUp: up - cost,
+    ifDown: down - cost,
+    both: up > 0 && down > 0,
+    worst: Math.min(up - cost, down - cost),
+  };
+}
+
 /**
  * The price to sell at for a given gain over the buy price, after the fee.
  *
@@ -95,30 +147,28 @@ export const signedPct = (fraction: number): string =>
 export const SELL_GAINS = [0.25, 0.5, 1, 2, 3];
 
 /** A position as the desk knows it, for the arithmetic below. */
-export type Held = { outcome: string; size: number; avgPrice: number };
+export type Held = {
+  outcome: string;
+  size: number;
+  avgPrice: number;
+  /** The bid on the screen; only "sell it now" needs it. */
+  curPrice?: number;
+};
 
 /**
- * What the round makes if it goes your way.
+ * What the round makes if it goes your way: the better of the two settlements.
  *
- * A share of the winning side settles at a dollar and pays no fee to do it, so
- * the best case is that side's share count less everything the window cost.
- * Holding both sides only one of them can win, so the sides are scored
- * separately and the better one is the potential.
+ * The same arithmetic as `standingOf`, and deliberately the same code — two
+ * numbers on one screen that disagree about one window are worse than either
+ * of them alone. It used to add the buy fee on top of what was paid, which
+ * double-counted it: the taker fee on a buy is taken in shares, so the average
+ * price already carries it.
  */
 export function potentialProfit(positions: Held[]): number {
   const live = positions.filter((p) => p.size > 0);
   if (live.length === 0) return 0;
-
-  const cost = live.reduce(
-    (sum, p) => sum + p.size * p.avgPrice + feePerShare(p.avgPrice) * p.size,
-    0,
-  );
-
-  const bySide = new Map<string, number>();
-  for (const p of live) {
-    bySide.set(p.outcome, (bySide.get(p.outcome) ?? 0) + p.size);
-  }
-  return Math.max(...[...bySide.values()].map((shares) => shares - cost));
+  const standing = standingOf(live);
+  return Math.max(standing.ifUp, standing.ifDown);
 }
 
 /** What one limit adds to that best case if it fills. */

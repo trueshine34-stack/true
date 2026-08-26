@@ -257,6 +257,13 @@ export interface PolyBotPlugin {
     lateBandSec?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
+  /** Binance's five-minute candle in progress: its open and the last price. */
+  binancePrice(): Promise<{
+    openTime: number;
+    open: number;
+    last: number;
+    at: number;
+  }>;
   counterUpdate(args: {
     enabled?: boolean;
     bankUsd?: number;
@@ -730,6 +737,7 @@ const webStub: PolyBotPlugin = {
     timings: {},
     rows: [],
   }),
+  binancePrice: async () => ({ openTime: 0, open: 0, last: 0, at: 0 }),
   counterUpdate: async () => {},
   counterReset: async () => {},
   counterState: async () => ({

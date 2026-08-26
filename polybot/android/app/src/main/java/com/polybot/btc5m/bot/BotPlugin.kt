@@ -1223,6 +1223,25 @@ class BotPlugin : Plugin() {
         )
     }
 
+    /** Binance's current five-minute candle, for the header's open and move. */
+    @PluginMethod
+    fun binancePrice(call: PluginCall) {
+        Thread {
+            try {
+                val candle = BinanceApi.current()
+                call.resolve(
+                    JSObject()
+                        .put("openTime", candle.openTime)
+                        .put("open", candle.open)
+                        .put("last", candle.last)
+                        .put("at", candle.at),
+                )
+            } catch (e: Exception) {
+                call.reject(e.message ?: "Binance недоступен")
+            }
+        }.start()
+    }
+
     // ---------------------------------------------------------- counter bot
 
     @PluginMethod

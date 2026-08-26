@@ -244,30 +244,27 @@ describe('balance sizing leaves room for the fee', () => {
 });
 
 describe('sellableShares', () => {
-  it('trims three percent off the position', () => {
-    expect(sellableShares(100)).toBeCloseTo(97, 6);
+  it('offers the whole position', () => {
+    // The fee comes out of the proceeds in dollars, not out of the shares, so
+    // holding a percentage back was money left in a closed position.
+    expect(sellableShares(100)).toBeCloseTo(100, 6);
+    expect(sellableShares(15.69)).toBeCloseTo(15.69, 6);
   });
 
   it('never asks for more than is held', () => {
-    // 15.69 held: rounding to a tenth alone asks for 15.7 and is refused.
-    expect(sellableShares(15.69)).toBeLessThanOrEqual(15.69);
-    expect(sellableShares(15.69)).toBeCloseTo(15.2, 6);
-  });
-
-  it('trims by the fee where the fee is bigger than three percent', () => {
-    // At 20c the fee is 5.6% of the share count, so 3% would still over-ask.
-    expect(sellableShares(100, 0.2)).toBeCloseTo(94.4, 6);
-    expect(sellableShares(100, 0.9)).toBeCloseTo(97, 6);
-  });
-
-  it('lands on a tenth, without float dust', () => {
-    for (const size of [15.69, 7.77, 42.03, 5.5, 100]) {
-      const s = sellableShares(size, 0.43);
-      expect(Math.abs(s * 10 - Math.round(s * 10))).toBeLessThan(1e-9);
+    for (const size of [15.694, 7.7777, 42.039, 5.555, 0.109]) {
+      expect(sellableShares(size)).toBeLessThanOrEqual(size);
     }
   });
 
-  it('offers a dust position whole rather than nothing', () => {
+  it('lands on the venue step, without float dust', () => {
+    for (const size of [15.69, 7.77, 42.03, 5.5, 100]) {
+      const s = sellableShares(size);
+      expect(Math.abs(s * 100 - Math.round(s * 100))).toBeLessThan(1e-9);
+    }
+  });
+
+  it('keeps a dust position whole', () => {
     expect(sellableShares(0.1)).toBeCloseTo(0.1, 6);
   });
 

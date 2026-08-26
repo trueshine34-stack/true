@@ -4,6 +4,7 @@ import {
   ceilToTick,
   feePerShare,
   limitLadder,
+  standingOf,
   limitUpside,
   potentialProfit,
   netSellPrice,
@@ -104,10 +105,13 @@ describe('formatting', () => {
 
 describe('potentialProfit', () => {
   it('is the winning side less what the window cost', () => {
-    // 10 shares of Up at 40c: 10 back if Up wins, about 4.17 paid.
-    const p = potentialProfit([{ outcome: 'Up', size: 10, avgPrice: 0.4 }]);
-    expect(p).toBeGreaterThan(5.8);
-    expect(p).toBeLessThan(6);
+    // 10 shares of Up at 40c: $4 paid, $10 back if Up wins. The taker fee on a
+    // buy is taken in shares, so the average price already carries it and the
+    // shares held are what is left — counting it again here charged it twice.
+    expect(potentialProfit([{ outcome: 'Up', size: 10, avgPrice: 0.4 }])).toBeCloseTo(
+      6,
+      6,
+    );
   });
 
   it('scores the sides separately, since only one can win', () => {
@@ -115,8 +119,8 @@ describe('potentialProfit', () => {
       { outcome: 'Up', size: 10, avgPrice: 0.4 },
       { outcome: 'Down', size: 4, avgPrice: 0.5 },
     ]);
-    // Up winning pays 10; both sides together cost about 6.3.
-    expect(p).toBeCloseTo(10 - (4 + 0.0168 * 10 + 2 + 0.0175 * 4), 6);
+    // Up winning pays 10; both sides together cost 6.
+    expect(p).toBeCloseTo(4, 6);
   });
 
   it('has nothing to say with nothing held', () => {
@@ -142,5 +146,59 @@ describe('limitLadder', () => {
 
   it('is just the one price when the ladder is off', () => {
     expect(limitLadder(0.6, 0, 0.03)).toEqual([0.6]);
+  });
+});
+
+describe('standingOf', () => {
+  const held = (outcome: string, size: number, avgPrice: number, curPrice: number) => ({
+    outcome,
+    size,
+    avgPrice,
+    curPrice,
+  });
+
+  it('is empty when nothing is held', () => {
+    const s = standingOf([]);
+    expect(s.cost).toBe(0);
+    expect(s.now).toBe(0);
+    expect(s.both).toBe(false);
+  });
+
+  it('prices one side at the bid less the fee, and at a dollar if it wins', () => {
+    // 10 shares bought at 40c, now bid 60c.
+    const s = standingOf([held('Up', 10, 0.4, 0.6)]);
+    expect(s.cost).toBeCloseTo(4, 6);
+    // net(0.6) = 0.6 - 0.07*0.6*0.4 = 0.5832
+    expect(s.now).toBeCloseTo(10 * 0.5832 - 4, 6);
+    // Settlement is a contract call, not a trade: a winning share pays a flat
+    // dollar with nothing taken out of it.
+    expect(s.ifUp).toBeCloseTo(6, 6);
+    expect(s.ifDown).toBeCloseTo(-4, 6);
+    expect(s.both).toBe(false);
+  });
+
+  it('knows a two-sided window can only end two ways', () => {
+    // 10 Up at 40c and 10 Down at 45c: $8.50 in, $10 back either way.
+    const s = standingOf([held('Up', 10, 0.4, 0.55), held('Down', 10, 0.45, 0.45)]);
+    expect(s.cost).toBeCloseTo(8.5, 6);
+    expect(s.ifUp).toBeCloseTo(1.5, 6);
+    expect(s.ifDown).toBeCloseTo(1.5, 6);
+    expect(s.both).toBe(true);
+    expect(s.worst).toBeCloseTo(1.5, 6);
+  });
+
+  it('shows the lopsided case as the two numbers it is', () => {
+    // 20 Up at 30c and 5 Down at 50c: $8.50 in, $20 or $5 back.
+    const s = standingOf([held('Up', 20, 0.3, 0.6), held('Down', 5, 0.5, 0.4)]);
+    expect(s.ifUp).toBeCloseTo(11.5, 6);
+    expect(s.ifDown).toBeCloseTo(-3.5, 6);
+    expect(s.worst).toBeCloseTo(-3.5, 6);
+    expect(s.both).toBe(true);
+  });
+
+  it('adds up several lots of the same side', () => {
+    const s = standingOf([held('Up', 5, 0.2, 0.5), held('Up', 5, 0.6, 0.5)]);
+    expect(s.cost).toBeCloseTo(4, 6);
+    expect(s.ifUp).toBeCloseTo(6, 6);
   });
 });

@@ -52,12 +52,19 @@ export type ManualSettings = {
   balanceSharePct: number;
   /** A hand-placed limit also goes out at lower prices, same size. */
   limitLadder: boolean;
-  /** How many extra rungs, and how far apart. */
-  limitLadderCount: number;
+  /** How far apart the rungs are. How many there are is not a choice. */
   limitLadderStep: number;
   /** Keep the container's share out of reach of any order. */
   exposureGuard: boolean;
 };
+
+/**
+ * Extra rungs a laddered limit puts out below the price asked for.
+ *
+ * Three, always. It was a choice between two, three and four, which is a
+ * setting nobody changes and a row of buttons in the way of the ones they do.
+ */
+export const LIMIT_LADDER_COUNT = 3;
 
 export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   defaultStakeUsd: 2,
@@ -86,7 +93,6 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   useBalanceShare: false,
   balanceSharePct: 0.25,
   limitLadder: false,
-  limitLadderCount: 3,
   limitLadderStep: 0.03,
   exposureGuard: true,
 };
@@ -190,52 +196,24 @@ export function sharesFor(
   return Math.max(band ? band.shares : fromStake, floor);
 }
 
-/** The least a sell is trimmed by, whatever the fee works out to. */
-export const SELL_HEADROOM = 0.03;
-
-/**
- * How much smaller than the reported size a sell order has to be.
- *
- * Polymarket takes its fee out of what the trade pays out, so a buy delivers
- * fewer shares than it asked for: `rate x p x (1 - p)` per share in dollars is
- * `rate x (1 - p)` of the share count. At 50c that is three and a half percent,
- * which is why a position reported as 15.7 cannot sell 15.7. Three percent is
- * the floor; where the fee is larger — anything under about 57c — the fee wins,
- * because trimming less would be refused exactly as before.
- */
-export function sellHeadroom(price?: number): number {
-  if (price == null || !Number.isFinite(price) || price <= 0 || price >= 1) {
-    return SELL_HEADROOM;
-  }
-  return Math.max(SELL_HEADROOM, TAKER_FEE_RATE * (1 - price));
-}
-
 /**
  * How many shares a position can actually be sold for.
  *
- * Two things make the reported size unsellable. The fee above is one. The other
- * is display rounding: rounding a size of 15.69 to a tenth gives 15.7, more than
- * is held, and the venue simply refuses it. So the trim comes off first and the
- * result always rounds *down*.
+ * The whole position, rounded down. The fee is charged out of the proceeds in
+ * dollars, not taken in shares, so every share held is a share that can be
+ * offered — a percentage held back here was money left in a position the user
+ * had asked to close.
  *
- * A position too small to trim is offered whole: selling slightly too much is
- * refused, but so is selling nothing, and the untrimmed size is the one with a
- * chance of clearing the venue floor.
+ * The rounding is not cosmetic. A size of 15.694 shown as 15.7 is more than is
+ * held, and the venue refuses the order outright; flooring at the venue's own
+ * size step is what makes "sell the position" mean the position.
  */
-export function sellableShares(
-  size: number,
-  price?: number,
-  step = 0.1,
-): number {
+export function sellableShares(size: number, step = 0.01): number {
   if (!Number.isFinite(size) || size <= 0) return 0;
-  const trimmed = size * (1 - sellHeadroom(price));
-  // Round before flooring: 15.7 / 0.1 comes through as 156.999... in floats,
-  // and flooring that alone would quietly drop another whole tenth.
-  const units = Math.floor(Number((trimmed / step).toFixed(6)));
-  const snapped = units * step;
-  return snapped > 0
-    ? Number(snapped.toFixed(4))
-    : Number((Math.floor(Number((size / step).toFixed(6))) * step).toFixed(4));
+  // Round before flooring: 15.7 / 0.01 comes through as 1569.999... in floats,
+  // and flooring that alone would quietly drop another whole step.
+  const units = Math.floor(Number((size / step).toFixed(6)));
+  return Number((units * step).toFixed(4));
 }
 
 /**
