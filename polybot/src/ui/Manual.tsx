@@ -1167,136 +1167,29 @@ export function Manual({
         </>
       ) : (
         <>
+          {/*
+            Selling a position: one price, chosen the way the limit editor
+            chooses one. Buying from here made no sense — the desk has two
+            buttons for that an inch below — and every field between the
+            position and the sale is a second the book has to move in.
+          */}
           {draft && (
-            <div className="card tight">
-              <div className="draftrow">
-                <label className="mini">
-                  <span>цена, ¢</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={draft.price}
-                    onChange={(e) => setDraft({ ...draft, price: e.target.value })}
-                  />
-                </label>
-                <label className="mini">
-                  <span>долей</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={draft.shares}
-                    onChange={(e) => setDraft({ ...draft, shares: e.target.value })}
-                  />
-                </label>
-                <div className="mini">
-                  <span>итого</span>
-                  <div className="draftsum">
-                    {(
-                      (Number(draft.price) / 100) * Number(draft.shares) || 0
-                    ).toFixed(2)}{' '}
-                    $
-                  </div>
-                </div>
-              </div>
-              {/*
-                Selling asks a different question from buying. Not "what price"
-                — the price is a means — but "how much more than it cost". The
-                fee comes out of the proceeds, so each chip solves for the price
-                whose *net* is the gain it names.
-              */}
-              {draft.action === 'SELL' && draft.avg != null && (
-                <div className="draftpcts pcts">
-                  {SELL_GAINS.map((gain) => {
-                    const price = targetPrice(draft.avg as number, gain, market?.tickSize ?? 0.01);
-                    return (
-                      <button
-                        key={gain}
-                        className={
-                          Math.round(price * 100) === Math.round(Number(draft.price))
-                            ? 'on'
-                            : undefined
-                        }
-                        onClick={() =>
-                          setDraft({ ...draft, price: String(Math.round(price * 100)) })
-                        }
-                        title={`${cents(price)} · ${usd(
-                          Number(draft.shares.replace(',', '.')) * price || 0,
-                        )}`}
-                      >
-                        +{Math.round(gain * 100)}%
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-              {draft.action !== 'SELL' && balance != null && balance > 0 && (
-                <div className="draftpcts pcts">
-                  {[25, 50, 100].map((pct) => {
-                    const price = Number(draft.price) / 100;
-                    const shares = stakeShares(price, balance, pct / 100, minSize);
-                    return (
-                      <button
-                        key={pct}
-                        disabled={shares == null}
-                        onClick={() =>
-                          shares != null &&
-                          setDraft({ ...draft, shares: String(shares) })
-                        }
-                        title={
-                          shares == null
-                            ? 'Меньше минимального ордера'
-                            : `${shares} долей`
-                        }
-                      >
-                        {pct}%
-                      </button>
-                    );
-                  })}
-                  <span className="muted draftpct-hint">от баланса</span>
-                </div>
-              )}
-              <div className="draftrow">
-                <button
-                  className="primary compact"
-                  disabled={busy}
-                  onClick={() =>
-                    void place(
-                      draft.side,
-                      'BUY',
-                      Number(draft.price) / 100,
-                      Number(draft.shares),
-                    )
-                  }
-                >
-                  Купить {draft.side}
-                </button>
-                <button
-                  className="danger compact"
-                  disabled={busy}
-                  onClick={() =>
-                    void place(
-                      draft.side,
-                      'SELL',
-                      Number(draft.price) / 100,
-                      Number(draft.shares),
-                    )
-                  }
-                >
-                  Продать
-                </button>
-                <button
-                  className="danger compact"
-                  disabled={busy}
-                  onClick={() => void marketSell(draft)}
-                  title="Продать всё по рынку"
-                >
-                  Рынок
-                </button>
-                <button className="ghost compact narrow" onClick={() => setDraft(null)}>
-                  ✕
-                </button>
-              </div>
-            </div>
+            <SellSheet
+              draft={draft}
+              tick={market?.tickSize ?? 0.01}
+              busy={busy}
+              onPrice={(cents_) => setDraft({ ...draft, price: String(cents_) })}
+              onSell={() =>
+                void place(
+                  draft.side,
+                  'SELL',
+                  Number(draft.price) / 100,
+                  Number(draft.shares),
+                )
+              }
+              onMarket={() => void marketSell(draft)}
+              onClose={() => setDraft(null)}
+            />
           )}
 
           {!draft &&
@@ -1598,6 +1491,102 @@ function OrderEditor({
 }
 
 /**
+ * Selling what is held, at a price picked the same way an order is moved.
+ *
+ * One number, a step either side, the wheel under it, and the gains the sale
+ * could be asked for — each of which is a price, solved so that what arrives
+ * after the fee is the gain it names. The size is whatever the position is:
+ * tapping it means "close this", and a field to argue with that was a field
+ * nobody used.
+ */
+function SellSheet({
+  draft,
+  tick,
+  busy,
+  onPrice,
+  onSell,
+  onMarket,
+  onClose,
+}: {
+  draft: Draft;
+  tick: number;
+  busy: boolean;
+  onPrice: (cents: number) => void;
+  onSell: () => void;
+  onMarket: () => void;
+  onClose: () => void;
+}) {
+  const at = Math.max(1, Math.min(99, Math.round(Number(draft.price) || 0)));
+  const step = Math.max(1, Math.round(tick * 100));
+  const shares = Number(draft.shares.replace(',', '.')) || 0;
+
+  return (
+    <div className="card tight sellsheet">
+      <div className="sheet-head">
+        <h2>
+          <span className={draft.side === 'Up' ? 'up' : 'down'}>{draft.side}</span>{' '}
+          {shares.toFixed(shares % 1 ? 1 : 0)}
+        </h2>
+        <button className="xbtn" onClick={onClose} aria-label="Закрыть">
+          ✕
+        </button>
+      </div>
+
+      <div className="pricepick">
+        <button className="step big" onClick={() => onPrice(Math.max(1, at - step))}>
+          −
+        </button>
+        <div className="pricepick-now">
+          <b>{at}</b>
+          <span className="muted">¢</span>
+        </div>
+        <button className="step big" onClick={() => onPrice(Math.min(99, at + step))}>
+          +
+        </button>
+      </div>
+
+      {/*
+        The gain, not the price. Selling asks "how much more than it cost", and
+        the fee comes out of the proceeds — so each chip solves for the price
+        whose net is the gain it names.
+      */}
+      {draft.avg != null && (
+        <div className="draftpcts pcts">
+          {SELL_GAINS.map((gain) => {
+            const price = targetPrice(draft.avg as number, gain, tick);
+            return (
+              <button
+                key={gain}
+                className={Math.round(price * 100) === at ? 'on' : undefined}
+                onClick={() => onPrice(Math.round(price * 100))}
+              >
+                +{Math.round(gain * 100)}%
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <PriceColumn value={at} onPick={onPrice} />
+
+      <div className="draftrow">
+        <button className="primary compact" disabled={busy} onClick={onSell}>
+          Продать {at}¢
+        </button>
+        <button
+          className="danger compact"
+          disabled={busy}
+          onClick={onMarket}
+          title="Продать всё по рынку"
+        >
+          Рынок
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * The same wheel of cents as the dock's, stood on end.
  *
  * Vertical because this sheet has the height to spare and a thumb travels up
@@ -1612,15 +1601,20 @@ function PriceColumn({
   onPick: (cents: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  /** The last price this wheel itself chose, so it does not chase its own scroll. */
+  const mine = useRef<number | null>(null);
 
   useEffect(() => {
+    if (mine.current === value) return;
     const el = ref.current;
     if (!el) return;
     const at = el.querySelector<HTMLElement>(`[data-cents="${value}"]`);
-    if (at) el.scrollTop = at.offsetTop - el.clientHeight / 2 + at.offsetHeight / 2;
-    // Opening is the only time it is positioned; after that it is the user's.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!at) return;
+    const top = at.offsetTop - el.clientHeight / 2 + at.offsetHeight / 2;
+    // Jump on open, glide when a step or a chip moved it from outside.
+    el.scrollTo({ top, behavior: mine.current == null ? 'auto' : 'smooth' });
+    mine.current = value;
+  }, [value]);
 
   return (
     <div className="wheel vertical" ref={ref}>
@@ -1630,7 +1624,10 @@ function PriceColumn({
           key={c}
           data-cents={c}
           className={`wheelnum${c === value ? ' on' : ''}`}
-          onClick={() => onPick(c)}
+          onClick={() => {
+            mine.current = c;
+            onPick(c);
+          }}
         >
           {c}
         </button>

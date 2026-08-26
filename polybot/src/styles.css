@@ -2727,3 +2727,20 @@ button.wide {
   color: var(--text);
   border-color: var(--text);
 }
+
+/* Selling a position: the price, and nothing to argue with it. */
+.sellsheet .sheet-head {
+  margin-bottom: 2px;
+}
+
+.sellsheet .draftpcts {
+  margin-bottom: 8px;
+}
+
+.sellsheet .draftrow {
+  gap: 8px;
+}
+
+.sellsheet .primary.compact {
+  flex: 2;
+}
