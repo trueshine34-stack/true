@@ -937,6 +937,24 @@ export function Manual({
             </b>
           </button>
         )}
+
+        <div className="deskbtns">
+          <button
+            className={`gear${lookAhead ? ' on' : ''}`}
+            onClick={() => setLookAhead((v) => !v)}
+            aria-label="Следующее окно"
+            title="Следующее окно"
+          >
+            {lookAhead ? '↩' : '»'}
+          </button>
+          <button
+            className={`gear${tab === 'settings' ? ' on' : ''}`}
+            onClick={() => setTab(tab === 'settings' ? 'desk' : 'settings')}
+            aria-label="Настройки"
+          >
+            ⚙
+          </button>
+        </div>
       </div>
 
       {sessionOpen && (
@@ -983,62 +1001,6 @@ export function Manual({
         />
       )}
 
-      <div className="card tight">
-        <div className="deskbar">
-          {/*
-            The open and the move are one reading, not two — where the window
-            started and how far it has gone — so they sit together, the move in
-            brackets beside its own baseline. That leaves the clock the middle
-            of the bar to itself, which is where the eye goes back to.
-          */}
-          <div className="deskopen">
-            <div className="muted" style={{ fontSize: 10 }}>
-              открытие 5м
-            </div>
-            <div className="deskprice">
-              {windowOpen != null ? windowOpen.toFixed(0) : '—'}
-              {drift != null && (
-                <span className={`deskdrift ${drift >= 0 ? 'up' : 'down'}`}>
-                  ({drift >= 0 ? '+' : '−'}
-                  {Math.abs(drift).toFixed(0)})
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="deskclock">
-            <div className={`${lookAhead ? 'warn' : 'muted'}`} style={{ fontSize: 10 }}>
-              {lookAhead ? 'до старта' : 'до конца'}
-            </div>
-            {/*
-              The colour is the phase of the window, which is the thing being
-              traded: the first minute is still finding its price, the middle
-              three are where a position is worth taking, and the last one is
-              the one you cannot be caught in.
-            */}
-            <div className={`deskprice ${clockTone(secondsLeft, lookAhead)}`}>
-              {`${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}
-            </div>
-          </div>
-          <div className="deskbtns">
-            <button
-              className={`gear${lookAhead ? ' on' : ''}`}
-              onClick={() => setLookAhead((v) => !v)}
-              aria-label="Следующее окно"
-              title="Следующее окно"
-            >
-              {lookAhead ? '↩' : '»'}
-            </button>
-            <button
-              className={`gear${tab === 'settings' ? ' on' : ''}`}
-              onClick={() => setTab(tab === 'settings' ? 'desk' : 'settings')}
-              aria-label="Настройки"
-            >
-              ⚙
-            </button>
-          </div>
-        </div>
-      </div>
-
       {tab !== 'settings' && (
           <div className="card tight">
             <div className="listhead">
@@ -1056,19 +1018,19 @@ export function Manual({
             */}
             {viewWindow != null ? (
               <div className="muted empty">Позиции события закрыты</div>
-            ) : livePositions.length === 0 ? (
-              <div className="muted empty">Открытых позиций нет</div>
             ) : (
               /*
-                Both sides at once, side by side, with the window's whole
-                result between them. A window is one trade with two legs, and
-                two stacked rows made it look like two unrelated positions —
-                which hid the number that actually matters when both are held:
-                only one side can win, so the outcome is already one of two
-                known figures.
+                Both sides at once with the clock between them. A window is one
+                trade with two legs, and the thing you look at while deciding
+                between them is how long is left and how far price has moved —
+                which used to be a bar of its own two blocks further up.
               */
               <PositionPair
                 positions={livePositions}
+                secondsLeft={secondsLeft}
+                lookAhead={lookAhead}
+                windowOpen={windowOpen}
+                drift={drift}
                 onSell={sellPosition}
               />
             )}
@@ -2272,27 +2234,43 @@ function RuleBar({
  */
 function PositionPair({
   positions,
+  secondsLeft,
+  lookAhead,
+  windowOpen,
+  drift,
   onSell,
 }: {
   positions: NativePosition[];
+  secondsLeft: number;
+  lookAhead: boolean;
+  windowOpen: number | null;
+  drift: number | null;
   onSell: (position: NativePosition) => void;
 }) {
-  const standing = standingOf(
-    positions.map((p) => ({
-      outcome: p.outcome,
-      size: p.size,
-      avgPrice: p.avgPrice,
-      curPrice: p.curPrice ?? 0,
-    })),
-  );
-  const priced = positions.some((p) => p.avgPrice > 0);
-
   const leg = (name: 'Up' | 'Down') => {
     const mine = positions.filter((p) => p.outcome === name);
     if (mine.length === 0) return null;
     const size = mine.reduce((a, p) => a + p.size, 0);
     const cost = mine.reduce((a, p) => a + p.size * p.avgPrice, 0);
-    return { position: mine[0], size, avg: size > 0 ? cost / size : 0, cost };
+    const standing = standingOf(
+      mine.map((p) => ({
+        outcome: p.outcome,
+        size: p.size,
+        avgPrice: p.avgPrice,
+        curPrice: p.curPrice ?? 0,
+      })),
+    );
+    return {
+      position: mine[0],
+      size,
+      avg: size > 0 ? cost / size : 0,
+      cost,
+      /** Selling this leg right now, fee deducted. */
+      now: standing.now,
+      /** And what it pays if this side is the one that settles at a dollar. */
+      ifWins: size - cost,
+      priced: mine.some((p) => p.avgPrice > 0),
+    };
   };
 
   const up = leg('Up');
@@ -2311,7 +2289,17 @@ function PositionPair({
           <span className="muted pairavg">
             {held.avg > 0 ? `ср ${cents(held.avg)}` : 'ср …'}
           </span>
-          <span className="muted pairavg">{usd(held.cost)}</span>
+          {/*
+            Two numbers per leg, which is what the middle used to carry for
+            both at once: what selling it now pays after the fee, and what it
+            pays if this is the side the window settles on.
+          */}
+          <span className={`pairleg-pnl ${held.now >= 0 ? 'up' : 'down'}`}>
+            {held.priced ? signedUsd(held.now) : '…'}
+          </span>
+          <span className="muted pairavg">
+            {held.priced ? `${signedUsd(held.ifWins)} если выиграет` : ''}
+          </span>
         </>
       ) : (
         <span className="muted pairsize">—</span>
@@ -2323,42 +2311,29 @@ function PositionPair({
     <div className="pair">
       {side('Up', up)}
 
+      {/*
+        The clock and the open sit between the two sides, where the decision
+        is actually made. They had a bar of their own two blocks up the page,
+        which is the wrong place to read them from: the question is always
+        "this side or that one, and how long have I got".
+      */}
       <div className="pairmid">
-        <span className="muted pairlabel">продать сейчас</span>
-        <b className={!priced ? 'muted' : standing.now >= 0 ? 'up' : 'down'}>
-          {priced ? signedUsd(standing.now) : '…'}
+        <span className={`pairlabel ${lookAhead ? 'warn' : 'muted'}`}>
+          {lookAhead ? 'до старта' : 'до конца'}
+        </span>
+        <b className={clockTone(secondsLeft, lookAhead)}>
+          {`${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}
         </b>
-
-        {standing.both ? (
-          <>
-            <span className="muted pairlabel">если не трогать</span>
-            <span className="pairends">
-              <span className={standing.ifUp >= 0 ? 'up' : 'down'}>
-                {signedUsd(standing.ifUp)}
-              </span>
-              <i>/</i>
-              <span className={standing.ifDown >= 0 ? 'up' : 'down'}>
-                {signedUsd(standing.ifDown)}
-              </span>
-            </span>
-            {standing.worst > 0 && (
-              <span className="up pairlocked">окно уже в плюсе</span>
-            )}
-          </>
-        ) : (
-          priced && (
-            <>
-              <span className="muted pairlabel">если досидеть</span>
-              <span className={`pairends ${standing.worst > 0 ? 'up' : ''}`}>
-                <span className="up">
-                  {signedUsd(Math.max(standing.ifUp, standing.ifDown))}
-                </span>
-                <i>/</i>
-                <span className="down">{signedUsd(-standing.cost)}</span>
-              </span>
-            </>
-          )
-        )}
+        <span className="muted pairlabel">открытие 5м</span>
+        <span className="pairopen">
+          {windowOpen != null ? windowOpen.toFixed(0) : '—'}
+          {drift != null && (
+            <i className={drift >= 0 ? 'up' : 'down'}>
+              ({drift >= 0 ? '+' : '−'}
+              {Math.abs(drift).toFixed(0)})
+            </i>
+          )}
+        </span>
       </div>
 
       {side('Down', down)}

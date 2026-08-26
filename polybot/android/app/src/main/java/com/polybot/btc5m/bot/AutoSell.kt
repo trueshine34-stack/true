@@ -189,8 +189,8 @@ class AutoSell(
         /** How often to check the price while a buy-back is waiting for a dip. */
         const val REBUY_POLL_MS = 2_000L
 
-        /** Pass interval while the lock after a purchase is still being timed. */
-        const val MEASURE_GAP_MS = 2_000L
+        /** Pass interval while a fresh purchase is still waiting for its exit. */
+        const val CHASE_GAP_MS = 1_000L
 
         /** How often to look at the balance while a sale's money is awaited. */
         const val CASH_PROBE_MS = 2_000L
@@ -285,13 +285,17 @@ class AutoSell(
                     // hope: it is read from the app's own log, so it survives a
                     // refusal, a rate limit and an unindexed trade alike.
                     (settings.enabled && OrderLog.hasUncovered(windowNow))
-                // While the lock has never been timed, passes come closer
-                // together: the retry interval is also the resolution of the
-                // measurement, and seven seconds is too coarse to place an
-                // order by. It only lasts until a couple of samples exist, and
-                // only while a purchase is actually being chased.
-                val gapMs = if (Timings.measuring() && watching.isNotEmpty()) {
-                    MEASURE_GAP_MS
+                // A purchase with no exit yet is chased at the pace of the
+                // thing being waited for, not at the retry interval. The
+                // retry interval is for a venue that keeps refusing; here the
+                // shares become sellable at a moment the app has measured, and
+                // a seven-second sweep would sit on that moment for six of
+                // them. It lasts only until the sell is placed, because a
+                // covered position is no longer uncovered.
+                val chasing = watching.isNotEmpty() &&
+                    (Timings.measuring() || OrderLog.hasUncovered(windowNow))
+                val gapMs = if (chasing) {
+                    CHASE_GAP_MS
                 } else {
                     settings.retryEverySec.coerceAtLeast(1) * 1000L
                 }

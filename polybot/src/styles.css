@@ -660,38 +660,11 @@ button.stat.quote:active {
   margin-bottom: 5px;
 }
 
-/*
- * The clock takes the middle by construction: the open sits in a column that
- * grows, the buttons in one that does not, and the time between them. Laying
- * it out as three equal cells put the clock wherever the widest number was.
- */
-.deskbar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: start;
-  gap: 10px;
-  margin-bottom: 4px;
-}
-
-.deskopen {
-  min-width: 0;
-}
-
-.deskclock {
-  text-align: center;
-}
-
+/* The window buttons, at the end of the folded rail. */
 .deskbtns {
   display: flex;
   gap: 6px;
-  justify-content: flex-end;
-}
-
-/* The move belongs to the open it is measured from, in brackets beside it. */
-.deskdrift {
-  margin-left: 6px;
-  font-size: 17px;
-  font-weight: 600;
+  margin-left: 8px;
 }
 
 .gear {
@@ -712,17 +685,6 @@ button.stat.quote:active {
   border-color: var(--accent);
 }
 
-.deskprice.small {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.deskprice {
-  font-size: 19px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
 
 .chartwrap {
   position: relative;
@@ -2354,10 +2316,30 @@ button.step.big {
 }
 
 .pairmid > b {
-  font-size: 20px;
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+/* The window's opening price, with the move against it in brackets. */
+.pairopen {
+  font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+}
+
+.pairopen i {
+  font-style: normal;
+  margin-left: 4px;
+}
+
+/* What this leg pays if it is sold now — the number the middle used to hold. */
+.pairleg-pnl {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .pairlabel {

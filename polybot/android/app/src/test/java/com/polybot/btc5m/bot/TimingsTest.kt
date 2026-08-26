@@ -46,12 +46,12 @@ class TimingsTest {
         assertEquals(2, Timings.readySamples())
         assertFalse(Timings.measuring())
 
-        // The next purchase is left alone until the measured moment, plus a
-        // second of margin — and not a moment longer.
+        // The next purchase is left alone until the measured moment, plus half
+        // a second of margin — and not a moment longer.
         val bought = now + 60_000
-        assertEquals(9_000L, Timings.holdMs(bought, bought))
-        assertEquals(4_000L, Timings.holdMs(bought, bought + 5_000))
-        assertEquals(0L, Timings.holdMs(bought, bought + 9_000))
+        assertEquals(8_500L, Timings.holdMs(bought, bought))
+        assertEquals(3_500L, Timings.holdMs(bought, bought + 5_000))
+        assertEquals(0L, Timings.holdMs(bought, bought + 8_500))
         assertEquals(0L, Timings.holdMs(bought, bought + 30_000))
     }
 

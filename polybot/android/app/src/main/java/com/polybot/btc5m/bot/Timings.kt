@@ -59,8 +59,14 @@ object Timings {
     /** Never sit on sellable shares longer than this, whatever was measured. */
     const val MAX_HOLD_MS = 25_000L
 
-    /** A little past the measured moment, so the wait is not cut fine. */
-    private const val MARGIN_MS = 1_000L
+    /**
+     * A little past the measured moment, so the wait is not cut fine.
+     *
+     * Half a second, not a whole one: this sits on top of a measurement that
+     * is already an upper bound, and every tenth of it is time the shares are
+     * held without an exit arranged.
+     */
+    private const val MARGIN_MS = 500L
 
     /** How much of the expected proceeds must show up to call the money there. */
     private const val COVER = 0.6
