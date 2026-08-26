@@ -904,12 +904,28 @@ button.compact.narrow {
  * so it needs nothing from the app shell around it.
  */
 .dock {
-  position: sticky;
-  bottom: -12px;
-  z-index: 2;
-  padding-top: 6px;
-  margin-bottom: -12px;
-  background: linear-gradient(to bottom, transparent, var(--bg) 14px);
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  padding: 8px 14px calc(6px + var(--safe-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+/* On the settings screen there is nothing to trade against. */
+.dock.away {
+  display: none;
+}
+
+/*
+ * The docked row floats over the bottom edge, so the page ends behind it. This
+ * gives the last card somewhere to end that is not underneath the buttons —
+ * and it exists only on the desk, so the settings do not scroll into a void.
+ */
+.dockgap {
+  height: 190px;
 }
 
 .limitrow {
@@ -2502,4 +2518,32 @@ button.step.big {
 .botbank-now b {
   font-size: 17px;
   font-variant-numeric: tabular-nums;
+}
+
+/* A fold headed by its own switch: the toggle acts, the rest opens. */
+.foldhead.switchhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: default;
+}
+
+.foldhead-rest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 3px 0;
+  cursor: pointer;
+}
+
+.foldhead-rest > span:first-child + .foldarrow {
+  margin-left: auto;
 }

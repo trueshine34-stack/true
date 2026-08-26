@@ -28,7 +28,9 @@ import {
   usd,
 } from '../core/money';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
-import { Fold } from './Fold';
+import { Fold, SwitchFold } from './Fold';
+import { ContainerCard } from './ContainerCard';
+import type { Container, ContainerSplit } from '../core/container';
 import {
   PolyBot,
   type AutoSellState,
@@ -115,6 +117,9 @@ export function Manual({
   onSummary,
   onCommitted,
   containerLocked = 0,
+  container,
+  containerSplit,
+  onContainer,
   counter = null,
   signal = null,
   onCounter,
@@ -128,6 +133,10 @@ export function Manual({
   onCommitted?: (usd: number) => void;
   /** What the container holds back, in dollars. */
   containerLocked?: number;
+  /** The container itself, so its own settings live with its switch. */
+  container?: Container;
+  containerSplit?: ContainerSplit;
+  onContainer?: (next: Container) => void;
   /** The bots' accounts, polled above because the container needs them too. */
   counter?: CounterState | null;
   signal?: SignalState | null;
@@ -1141,6 +1150,9 @@ export function Manual({
           <ManualSettingsForm
             settings={settings}
             timings={autoSell.timings}
+            container={container}
+            containerSplit={containerSplit}
+            onContainer={onContainer}
             onChange={apply}
             onNote={setNote}
           />
@@ -1342,7 +1354,15 @@ export function Manual({
 
       {note && <div className="banner info">{note}</div>}
 
-      <div className="dock">
+      {tab !== 'settings' && <div className="dockgap" aria-hidden />}
+
+      {/*
+        The trading row is pinned to the bottom edge of the screen, not to the
+        end of the page. It is the one thing here that is used rather than
+        read, and a row that drifts up when the window is quiet is a row you
+        have to look for.
+      */}
+      <div className={`dock${tab === 'settings' ? ' away' : ''}`}>
         {/*
           Chips for the size field, shown while it is being edited. A limit is
           usually sized as "some of the wallet", and the arithmetic — balance,
@@ -2609,11 +2629,17 @@ function measured(ms: number | null | undefined, samples: number | undefined) {
 function ManualSettingsForm({
   settings,
   timings,
+  container,
+  containerSplit,
+  onContainer,
   onChange,
   onNote,
 }: {
   settings: ManualSettings;
   timings?: Timings;
+  container?: Container;
+  containerSplit?: ContainerSplit;
+  onContainer?: (next: Container) => void;
   onChange: (next: ManualSettings) => void;
   onNote: (text: string | null) => void;
 }) {
@@ -2772,18 +2798,35 @@ function ManualSettingsForm({
 
     </Fold>
 
-    <Fold title="Контейнер" note={settings.exposureGuard ? 'включён' : 'выключен'}>
-      <div className="toggle">
-        <span>Не пускать в рынок то, что в контейнере</span>
-        <button
-          className={`switch ${settings.exposureGuard ? 'on' : ''}`}
-          onClick={() =>
-            onChange({ ...settings, exposureGuard: !settings.exposureGuard })
-          }
+    {/*
+      One row for the container: the switch that enforces it is the heading,
+      and everything it is made of opens underneath. A fold whose only content
+      was another switch was a fold for nothing.
+    */}
+    <SwitchFold
+      title="Контейнер"
+      on={settings.exposureGuard}
+      note={
+        containerSplit
+          ? `${usd(containerSplit.locked)} заперто`
+          : settings.exposureGuard
+            ? 'включён'
+            : 'выключен'
+      }
+      onToggle={() =>
+        onChange({ ...settings, exposureGuard: !settings.exposureGuard })
+      }
+    >
+      {container && containerSplit && onContainer ? (
+        <ContainerCard
+          container={container}
+          split={containerSplit}
+          onChange={onContainer}
         />
-      </div>
-
-    </Fold>
+      ) : (
+        <div className="muted empty">Контейнер ещё не загружен</div>
+      )}
+    </SwitchFold>
 
     <Fold
       title="Автопродажа"

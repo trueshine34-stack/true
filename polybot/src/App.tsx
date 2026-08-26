@@ -339,9 +339,6 @@ export function App() {
           adjustments={adjustments}
           balance={balance}
           goal={goal}
-          container={container ?? { corePct: 0.3, reserves: [] }}
-          split={split}
-          onContainer={applyContainer}
           onRestart={(withdrawn) => {
             restart(withdrawn);
             setShowBalance(false);
@@ -477,6 +474,9 @@ export function App() {
           onSummary={setPotential}
           onCommitted={setCommitted}
           containerLocked={split.locked}
+          container={container ?? { corePct: 0.3, reserves: [] }}
+          containerSplit={split}
+          onContainer={applyContainer}
           locked={locked}
           counter={counter}
           signal={signal}

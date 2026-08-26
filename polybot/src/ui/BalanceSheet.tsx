@@ -11,12 +11,6 @@ import {
 } from '../core/balance';
 import { signedPct, signedUsd, usd } from '../core/money';
 import { GOAL_GAIN, WITHDRAW_SHARE, goalProgress, type GoalState } from '../core/goal';
-import {
-  addReserve,
-  removeReserve,
-  type Container,
-  type ContainerSplit,
-} from '../core/container';
 
 const W = 320;
 const H = 132;
@@ -33,9 +27,6 @@ export function BalanceSheet({
   adjustments,
   balance,
   goal,
-  container,
-  split,
-  onContainer,
   onRestart,
   onClose,
 }: {
@@ -43,9 +34,6 @@ export function BalanceSheet({
   adjustments: Adjustment[];
   balance: number | null;
   goal: GoalState | null;
-  container: Container;
-  split: ContainerSplit;
-  onContainer: (next: Container) => void;
   /** The money is out: record how much, and start the run again. */
   onRestart: (withdrawn: number) => void;
   onClose: () => void;
@@ -124,8 +112,6 @@ export function BalanceSheet({
 
         {goal && balance != null && <GoalCard goal={goal} balance={balance} onRestart={onRestart} />}
 
-        <ContainerCard container={container} split={split} onChange={onContainer} />
-
         <div className="pcts spanrow">
           {SPANS.map((s, i) => (
             <button
@@ -159,10 +145,6 @@ export function BalanceSheet({
                 </span>
               </div>
             )}
-            <div className="row">
-              <span className="label">Точек</span>
-              <span className="value muted">{points.length}</span>
-            </div>
           </>
         )}
       </div>
@@ -272,86 +254,3 @@ function GoalCard({
  * particular strategy. The free figure is the one that matters — it is what the
  * buy buttons are allowed to spend — so it is the one in bold.
  */
-function ContainerCard({
-  container,
-  split,
-  onChange,
-}: {
-  container: Container;
-  split: ContainerSplit;
-  onChange: (next: Container) => void;
-}) {
-  const [name, setName] = useState('');
-  const [amount, setAmount] = useState('');
-
-  return (
-    <div className="goal">
-      <div className="goal-head">
-        <span>Контейнер</span>
-        <span className="muted">
-          {usd(split.locked)} заперто · <b className="up">{usd(split.free)}</b> в торговле
-        </span>
-      </div>
-
-      <div className="pcts spanrow" style={{ marginTop: 8 }}>
-        {[20, 30, 40, 50].map((pct) => (
-          <button
-            key={pct}
-            className={Math.round(container.corePct * 100) === pct ? 'on' : undefined}
-            onClick={() => onChange({ ...container, corePct: pct / 100 })}
-          >
-            {pct}%
-          </button>
-        ))}
-      </div>
-
-      <div className="row">
-        <span className="label">Неприкосновенные {Math.round(container.corePct * 100)}%</span>
-        <span className="value">{usd(split.core)}</span>
-      </div>
-
-      {container.reserves.map((r) => (
-        <div className="row" key={r.id}>
-          <span className="label">{r.name}</span>
-          <span className="value">
-            {usd(r.usd)}
-            <button
-              className="xbtn"
-              style={{ marginLeft: 8 }}
-              onClick={() => onChange(removeReserve(container, r.id))}
-              aria-label="Убрать"
-            >
-              ✕
-            </button>
-          </span>
-        </div>
-      ))}
-
-      <div className="draftrow" style={{ marginTop: 10 }}>
-        <label className="mini">
-          <span>для бота</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Парный" />
-        </label>
-        <label className="mini">
-          <span>сумма, $</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-        </label>
-        <button
-          className="ghost compact narrow"
-          onClick={() => {
-            onChange(addReserve(container, name, Number(amount.replace(',', '.'))));
-            setName('');
-            setAmount('');
-          }}
-        >
-          +
-        </button>
-      </div>
-    </div>
-  );
-}
