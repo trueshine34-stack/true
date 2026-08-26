@@ -1007,6 +1007,7 @@ class BotPlugin : Plugin() {
                         JSObject()
                             .put("id", it.id)
                             .put("orderId", it.orderId)
+                            .put("asset", it.asset)
                             .put("outcome", it.outcome)
                             .put("action", it.action)
                             .put("price", it.price)

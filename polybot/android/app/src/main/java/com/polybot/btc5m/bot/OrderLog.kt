@@ -288,7 +288,12 @@ object OrderLog {
             orderId = null,
             asset = asset,
             conditionId = conditionId,
-            outcome = outcome,
+            // The feed does not always name the side. The token id does, and
+            // anything already filed against it knows the name.
+            outcome = outcome.ifEmpty {
+                entries.firstOrNull { it.asset == asset && it.outcome.isNotEmpty() }
+                    ?.outcome.orEmpty()
+            },
             action = action,
             price = price,
             size = size,

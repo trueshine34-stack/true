@@ -23,6 +23,7 @@ const order = (
 ): LoggedOrder => ({
   id: ++id,
   orderId: `o${id}`,
+  asset: outcome === 'Up' ? 'token-up' : 'token-down',
   outcome,
   action,
   price,
@@ -181,6 +182,32 @@ describe('pairOrders', () => {
     // The 0.001 left over is rounding, and read as "0.0 → 0.0" on screen.
     expect(rows).toHaveLength(1);
     expect(rows[0].shares).toBeCloseTo(4.999, 6);
+  });
+
+  it('pairs by token when the venue reported a fill with no label', () => {
+    const rows = pairOrders([
+      order('BUY', 0.54, 5, { outcome: 'Down', at: 1 }),
+      // A fill from the trade feed that arrived without an outcome name.
+      { ...order('SELL', 0.78, 5, { outcome: 'Down', at: 2 }), outcome: '' },
+    ]);
+
+    // Filed under "" it closed nothing, and the purchase read as still open.
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe('closed');
+    expect(rows[0].outcome).toBe('Down');
+  });
+
+  it('puts a freshly closed round above an older purchase', () => {
+    const rows = pairOrders([
+      order('BUY', 0.36, 5, { outcome: 'Up', at: 1 }),
+      order('BUY', 0.54, 5, { outcome: 'Down', at: 2 }),
+      // The Down round closes last, so it is the newest thing that happened.
+      order('SELL', 0.78, 5, { outcome: 'Down', at: 9 }),
+    ]);
+
+    expect(rows[0].status).toBe('closed');
+    expect(rows[0].outcome).toBe('Down');
+    expect(rows[1].status).toBe('open');
   });
 
   it('marks a row as automatic when either leg was', () => {

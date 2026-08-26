@@ -283,6 +283,8 @@ export type GmxTicker = { min: number; max: number; mid: number; at: number };
 export type LoggedOrder = {
   id: number;
   orderId?: string | null;
+  /** Token id — the unambiguous name of the side, where the label may be empty. */
+  asset?: string;
   outcome: string;
   action: 'BUY' | 'SELL';
   price: number;

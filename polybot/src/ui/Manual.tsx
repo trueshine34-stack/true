@@ -46,6 +46,9 @@ import {
 
 const cents = (p: number) => `${Math.round(p * 100)}¢`;
 
+/** How many rounds the window's list shows before it says how many are left. */
+const TRADE_ROWS = 12;
+
 /** A window's opening time, which is how an event is named on this screen. */
 const clockOf = (windowStart: number) =>
   new Date(windowStart * 1000).toLocaleTimeString('ru-RU', {
@@ -901,10 +904,15 @@ export function Manual() {
                 {trades.some((t) => t.status === 'closed') ? signedUsd(realisedPnl) : ''}
               </span>
             </div>
+            {trades.length > TRADE_ROWS && (
+              <div className="muted empty">
+                ещё {trades.length - TRADE_ROWS} — итог сверху считает все
+              </div>
+            )}
             {trades.length === 0 ? (
               <div className="muted empty">В этом окне сделок не было</div>
             ) : (
-              trades.slice(0, 8).map((t) => {
+              trades.slice(0, TRADE_ROWS).map((t) => {
                 const live = t.orderId
                   ? orders.find((x) => x.id === t.orderId)
                   : undefined;

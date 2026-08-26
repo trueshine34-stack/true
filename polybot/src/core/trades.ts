@@ -37,7 +37,16 @@ export type TradeRow = {
    * decision, one made by the ladder is the rule doing its job.
    */
   closedBy?: 'rule' | 'hand' | null;
+  /** When the purchase happened. */
   at: number;
+  /**
+   * The row's most recent moment — the sale, where there is one.
+   *
+   * A round that closed is news now, not at the moment it was opened. Sorting
+   * by the purchase buried freshly closed rounds under later, still-open buys,
+   * which reads on screen as "sold but not shown".
+   */
+  movedAt: number;
 };
 
 /** What the shares cost, fee included — the same arithmetic the event score uses. */
@@ -65,17 +74,23 @@ type Lot = {
  * all is not a lot yet — it is an order, and says so.
  */
 export function pairOrders(orders: LoggedOrder[]): TradeRow[] {
+  // Grouped by token id where there is one: two outcomes never share a token,
+  // while the printed label can be empty on a fill the venue reported without
+  // one — and a sell filed under "" closes nothing, leaving every purchase it
+  // paid for still reading as open.
   const byOutcome = new Map<string, LoggedOrder[]>();
   for (const order of orders) {
-    const list = byOutcome.get(order.outcome) ?? [];
+    const key = order.asset || order.outcome;
+    const list = byOutcome.get(key) ?? [];
     list.push(order);
-    byOutcome.set(order.outcome, list);
+    byOutcome.set(key, list);
   }
 
   const rows: TradeRow[] = [];
 
-  for (const [outcome, group] of byOutcome) {
+  for (const [, group] of byOutcome) {
     const chronological = [...group].sort((a, b) => a.placedAt - b.placedAt);
+    const outcome = group.find((o) => o.outcome)?.outcome ?? '';
     const lots: Lot[] = [];
 
     for (const order of chronological) {
@@ -102,6 +117,7 @@ export function pairOrders(orders: LoggedOrder[]): TradeRow[] {
           pct: null,
           auto: order.auto,
           at: order.placedAt,
+          movedAt: order.placedAt,
         });
       }
     }
@@ -145,6 +161,7 @@ export function pairOrders(orders: LoggedOrder[]): TradeRow[] {
           pct: cost > 0 ? (proceeds - cost) / cost : null,
           auto: lot.auto || sell.auto,
           at: lot.at,
+          movedAt: sell.placedAt,
         });
       }
     };
@@ -178,11 +195,12 @@ export function pairOrders(orders: LoggedOrder[]): TradeRow[] {
         pct: null,
         auto: lot.auto,
         at: lot.at,
+        movedAt: lot.at,
       });
     }
   }
 
-  return rows.sort((a, b) => b.at - a.at);
+  return rows.sort((a, b) => b.movedAt - a.movedAt);
 }
 
 /** What the paired rows come to — the same figure the window's score shows. */
