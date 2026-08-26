@@ -9,8 +9,10 @@ import { Preferences } from '@capacitor/preferences';
  * fixed part of the deposit that no order can reach, so a five-minute market
  * can never have all of it.
  *
- * It also holds what is set aside for a particular strategy. Those are fixed
- * amounts rather than shares, because a bot is given a stake, not a percentage.
+ * It can also still hold named stakes set aside by an older version of the app.
+ * Nothing creates them any more — the strategies they belonged to are gone —
+ * but they are honoured and can be removed, so an upgraded install does not
+ * quietly keep money locked with no way to free it.
  */
 export type BotReserve = {
   id: string;
@@ -48,50 +50,8 @@ export async function saveContainer(container: Container): Promise<void> {
   await Preferences.set({ key: KEY, value: JSON.stringify(container) });
 }
 
-export function addReserve(container: Container, name: string, usd: number): Container {
-  if (!Number.isFinite(usd) || usd <= 0) return container;
-  return {
-    ...container,
-    reserves: [
-      ...container.reserves,
-      {
-        // Two stakes added in the same millisecond would otherwise share an id,
-        // and removing one would remove both.
-        id: `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-        name: name.trim() || 'Бот',
-        usd,
-      },
-    ],
-  };
-}
-
 export function removeReserve(container: Container, id: string): Container {
   return { ...container, reserves: container.reserves.filter((r) => r.id !== id) };
-}
-
-/**
- * The container as it stands with the running bots' money in it.
- *
- * A bot's stake is a reserve like any other — money in the same wallet that no
- * hand-placed order may reach — but it is not stored here: the bot owns its own
- * books, and its stake grows and shrinks with what it makes. Copying it into
- * the stored container would give the same dollar two homes and let them
- * disagree. So it is merged in when the split is worked out, and the header,
- * the guard and the desk all read one number.
- */
-export function withBots(
-  container: Container,
-  bots: { name: string; usd: number }[],
-): Container {
-  const live = bots.filter((b) => Number.isFinite(b.usd) && b.usd > 0);
-  if (live.length === 0) return container;
-  return {
-    ...container,
-    reserves: [
-      ...container.reserves,
-      ...live.map((b, i) => ({ id: `bot:${i}:${b.name}`, name: b.name, usd: b.usd })),
-    ],
-  };
 }
 
 /** What the named stakes come to. */

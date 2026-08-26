@@ -1,5 +1,4 @@
 import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
-import type { StrategySettings } from '../core/settings';
 
 /**
  * Handle on the native trading service.
@@ -107,60 +106,16 @@ export type PlaceOrderResult = {
   error?: string | null;
 };
 
-export type NativeCycle = {
-  windowStart: number;
-  windowEnd: number;
-  state: 'waiting' | 'armed' | 'entered' | 'skipped' | 'settled' | 'failed';
-  strike?: number | null;
-  spotAtEntry?: number | null;
-  winner?: 'Up' | 'Down' | null;
-  pnlUsd?: number | null;
-  note?: string | null;
-  fair?: { pUp: number; rawPUp?: number; sigmaHorizon: number; drift: number };
-  entry?: NativeEntry;
-  market?: NativeMarket;
-  exits?: NativeExit[];
-  exitFrozen?: boolean;
-  takeProfitDone?: boolean;
-  averageDownCount?: number;
-  soldAtMarket?: number;
-  marketProceedsUsd?: number;
-};
-
-export type NativeStats = {
-  trades: number;
-  wins: number;
-  losses: number;
-  consecutiveLosses: number;
-  realisedPnlUsd: number;
-  stakedUsd: number;
-};
-
 export type NativeState = {
   serviceAlive: boolean;
-  running: boolean;
-  haltReason?: string | null;
   feedStatus: 'live' | 'connecting' | 'stalled' | 'closed';
   clockOffsetSec: number;
-  /** Local calendar day the stats belong to, yyyy-MM-dd. */
-  statsDay?: string;
-  /** What the model has learned about its own confidence. */
-  calibration?: {
-    samples: number;
-    /** How much of the model's lean is actually traded on, 0–1. */
-    shrinkage: number;
-    /** Mean Brier score; 0.25 is a coin flip, lower is better. */
-    brier?: number | null;
-  };
   lastTick?: NativeTick;
   spotTick?: NativeTick;
   /** Thirty-second TWAP — the number Polymarket shows and settles on. */
   twapTick?: NativeTick;
   quotes?: NativeQuotes;
   positions?: NativePosition[];
-  stats?: NativeStats;
-  current?: NativeCycle;
-  history?: NativeCycle[];
 };
 
 export type NativeLog = {
@@ -174,7 +129,6 @@ export type ConnectArgs = {
   privateKey: string;
   funderAddress: string;
   signatureType: number;
-  settings: StrategySettings;
 };
 
 export type ConnectResult = {
@@ -198,10 +152,8 @@ export type DiagnosticCheck = {
 export interface PolyBotPlugin {
   connect(args: ConnectArgs): Promise<ConnectResult>;
   diagnose(): Promise<{ checks: DiagnosticCheck[] }>;
-  updateSettings(args: { settings: StrategySettings }): Promise<void>;
   start(): Promise<void>;
   stop(): Promise<void>;
-  resetStats(): Promise<void>;
   getState(): Promise<NativeState>;
   getLogs(): Promise<{ entries: NativeLog[] }>;
   getBalance(): Promise<{ usdc: number }>;
@@ -218,11 +170,6 @@ export interface PolyBotPlugin {
   ): Promise<PlaceOrderResult>;
   requestBatteryExemption(): Promise<{ exempt: boolean }>;
   isBatteryExempt(): Promise<{ exempt: boolean }>;
-  pairStart(args?: { settings?: PairSettings }): Promise<void>;
-  pairStop(): Promise<void>;
-  pairReset(): Promise<void>;
-  pairUpdateSettings(args: { settings: PairSettings }): Promise<void>;
-  pairGetState(): Promise<PairState>;
   gmxCandles(args?: { symbol?: string; period?: string; limit?: number }): Promise<{
     candles: GmxCandle[];
     ticker?: GmxTicker;
@@ -257,6 +204,16 @@ export interface PolyBotPlugin {
     lateBandSec?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
+  ladderUpdate(args: {
+    enabled?: boolean;
+    bankUsd?: number;
+    shares?: number;
+    everySec?: number;
+    firstAtSec?: number;
+    untilSec?: number;
+  }): Promise<void>;
+  ladderReset(): Promise<void>;
+  ladderState(): Promise<LadderState>;
   /** Binance's five-minute candle in progress: its open and the last price. */
   binancePrice(): Promise<{
     openTime: number;
@@ -264,28 +221,6 @@ export interface PolyBotPlugin {
     last: number;
     at: number;
   }>;
-  counterUpdate(args: {
-    enabled?: boolean;
-    bankUsd?: number;
-    clipUsd?: number;
-    maxBuys?: number;
-    entryUnder?: number;
-    entryWindowSec?: number;
-    gainPct?: number;
-  }): Promise<void>;
-  counterReset(): Promise<void>;
-  counterState(): Promise<CounterState>;
-  signalUpdate(args: {
-    enabled?: boolean;
-    bankUsd?: number;
-    clipUsd?: number;
-    maxBuys?: number;
-    maxPrice?: number;
-    fromSec?: number;
-    untilSec?: number;
-  }): Promise<void>;
-  signalReset(): Promise<void>;
-  signalState(): Promise<SignalState>;
   addListener(
     event: 'state',
     fn: (state: NativeState) => void,
@@ -373,102 +308,38 @@ export type AutoSellRebuyDone = {
   at: number;
 };
 
-// ------------------------------------------------------------- counter bot
+// -------------------------------------------------------------- ladder bot
 
-/** One clip the counter bot is holding, or has already sold. */
-export type CounterLot = {
+/** One clip the ladder bot is holding, or has already sold. */
+export type LadderLot = {
+  outcome: string;
   shares: number;
   price: number;
   sellPrice: number;
   sold: number;
   proceeds: number;
-  boughtAt: number;
   note?: string | null;
 };
 
-/** The window the counter bot is working right now. */
-export type CounterRound = {
+export type LadderRound = {
   windowStart: number;
-  /** The side the desk is on, and the one the bot therefore buys. */
-  deskSide: string;
-  side: string;
-  lastAsk?: number | null;
-  bestAsk?: number | null;
-  checks: number;
-  note?: string | null;
-  lots: CounterLot[];
-};
-
-export type CounterPast = {
-  windowStart: number;
-  side: string;
-  shares: number;
-  spent: number;
-  got: number;
-  pnl: number;
-  note: string;
-};
-
-export type CounterState = {
-  enabled: boolean;
-  running: boolean;
-  bankUsd: number;
-  clipUsd: number;
-  maxBuys: number;
-  entryUnder: number;
-  entryWindowSec: number;
-  gainPct: number;
-  /** What is left of its own money. */
-  cash: number;
-  lastFault?: string | null;
-  rounds: number;
-  buys: number;
-  sells: number;
-  spent: number;
-  got: number;
-  settled: number;
-  wins: number;
-  losses: number;
-  pnl: number;
-  round?: CounterRound | null;
-  past: CounterPast[];
-};
-
-// ----------------------------------------------------------- indicator bot
-
-/** TradingView's three gauges, as the page itself prints them. */
-export type SignalGauges = {
-  summary: number;
-  movingAverages: number;
-  oscillators: number;
-  summaryWord: string;
-  maWord: string;
-  oscWord: string;
-  /** "Up", "Down", or null when the three do not agree. */
-  direction?: string | null;
-  close: number;
-  at: number;
-};
-
-export type SignalRound = {
-  windowStart: number;
-  side: string;
-  lastAsk?: number | null;
-  bestAsk?: number | null;
-  /** Which rung of the sell ladder its offers are on. */
+  /** The side the market had picked at the last check. */
+  side?: string | null;
+  ask?: number | null;
+  /** The rung it was compared against, and the one the lots are offered at. */
+  rung: number;
   step: number;
   note?: string | null;
-  lots: CounterLot[];
+  lots: LadderLot[];
 };
 
-export type SignalState = {
+export type LadderState = {
   enabled: boolean;
   running: boolean;
   bankUsd: number;
-  clipUsd: number;
-  maxBuys: number;
-  maxPrice: number;
-  fromSec: number;
+  shares: number;
+  everySec: number;
+  firstAtSec: number;
   untilSec: number;
   cash: number;
   lastFault?: string | null;
@@ -478,12 +349,8 @@ export type SignalState = {
   spent: number;
   got: number;
   settled: number;
-  wins: number;
-  losses: number;
   pnl: number;
-  gauges?: SignalGauges | null;
-  round?: SignalRound | null;
-  past: CounterPast[];
+  round?: LadderRound | null;
 };
 
 /** What the app has timed for itself about the venue's own delays. */
@@ -516,166 +383,21 @@ export type AutoSellState = {
   rows: AutoSellRow[];
 };
 
-// ------------------------------------------------------------ pair strategy
-
-export type PairSettings = {
-  dryRun: boolean;
-  lotShares: number;
-  /** Extra size on the cheaper side, and how far it may lead the other. */
-  cheapSideBonusPct: number;
-  minIntervalSec: number;
-  maxIntervalSec: number;
-  maxSeedPrice: number;
-  maxPairAvg: number;
-  minPairProfitPct: number;
-  rotateProfitPct: number;
-  cheapLegUnder: number;
-  cheapRotateProfitPct: number;
-  rotateFraction: number;
-  takerEntry: boolean;
-  maxExposureUsd: number;
-  maxImbalanceShares: number;
-  flattenSec: number;
-  paperStartUsd: number;
-  /** How far from the window low to bid, in cents. */
-  lowBiasCents: number;
-};
-
-export type PairOrder = {
-  localId: number;
-  orderId?: string | null;
-  side: 'Up' | 'Down';
-  action: 'BUY' | 'SELL';
-  price: number;
-  size: number;
-  matched: number;
-  dryRun: boolean;
-  placedAt: number;
-  note: string;
-};
-
-export type PairFill = {
-  at: number;
-  side: 'Up' | 'Down';
-  action: 'BUY' | 'SELL';
-  shares: number;
-  price: number;
-  feeUsd: number;
-  dryRun: boolean;
-  note: string;
-};
-
-export type PairBook = {
-  windowStart: number;
-  windowEnd: number;
-  upShares: number;
-  upAvg: number;
-  downShares: number;
-  downAvg: number;
-  pairs: number;
-  pairAvg: number;
-  imbalance: number;
-  exposureUsd: number;
-  spentUsd: number;
-  proceedsUsd: number;
-  feesUsd: number;
-  lockedProfitUsd: number;
-};
-
-export type PairWindow = {
-  windowStart: number;
-  pairs: number;
-  pairAvg: number;
-  winner?: 'Up' | 'Down' | null;
-  pnlUsd?: number | null;
-  feesUsd: number;
-};
-
-/** One price level and how many times the window's price arrived there. */
-export type PairLevel = { level: number; visits: number };
-
-export type PairTrack = {
-  levels: PairLevel[];
-  /** Cheapest offer seen this window — what the bot anchors its bids to. */
-  lowAsk?: number | null;
-  lowMid?: number | null;
-  highMid?: number | null;
-};
-
-export type PairProfile = {
-  tickSize: number;
-  up: PairTrack;
-  down: PairTrack;
-};
-
-export type PairState = {
-  running: boolean;
-  dryRun: boolean;
-  haltReason?: string | null;
-  quotes?: NativeQuotes;
-  book?: PairBook;
-  profile?: PairProfile;
-  orders: PairOrder[];
-  fills: PairFill[];
-  windows: PairWindow[];
-  stats: PairStats;
-  /** Kept apart so a paper run can never flatter the live figures. */
-  testStats?: PairStats;
-  liveStats?: PairStats;
-  /** Cash in the paper account, carried across every session. */
-  paperCash?: number;
-  /** Paper cash plus what the open legs would fetch at the bid. */
-  paperEquity?: number;
-};
-
-export type PairStats = {
-  windows: number;
-  buys: number;
-  sells: number;
-  pairsLocked: number;
-  feesUsd: number;
-  realisedPnlUsd: number;
-};
-
-const IDLE_STATE: NativeState = {
-  serviceAlive: false,
-  running: false,
-  feedStatus: 'closed',
-  clockOffsetSec: 0,
-};
-
-const IDLE_PAIR_STATE: PairState = {
-  running: false,
-  dryRun: true,
-  orders: [],
-  fills: [],
-  windows: [],
-  stats: {
-    windows: 0,
-    buys: 0,
-    sells: 0,
-    pairsLocked: 0,
-    feesUsd: 0,
-    realisedPnlUsd: 0,
-  },
-};
-
-/**
- * Browser fallback so `npm run dev` still renders. It reports an idle service
- * rather than pretending to trade — the engine genuinely does not exist here.
- */
 const webStub: PolyBotPlugin = {
   connect: async () => {
     throw new Error('Подключение доступно только в приложении Android');
   },
   diagnose: async () => ({ checks: [] }),
-  updateSettings: async () => {},
   start: async () => {
     throw new Error('Торговый сервис доступен только в приложении Android');
   },
   stop: async () => {},
-  resetStats: async () => {},
-  getState: async () => IDLE_STATE,
+  getState: async () => ({
+    serviceAlive: false,
+    feedStatus: 'closed' as const,
+    clockOffsetSec: 0,
+    positions: [],
+  }),
   getLogs: async () => ({ entries: [] }),
   getBalance: async () => {
     throw new Error('Баланс доступен только в приложении Android');
@@ -699,13 +421,6 @@ const webStub: PolyBotPlugin = {
   },
   requestBatteryExemption: async () => ({ exempt: true }),
   isBatteryExempt: async () => ({ exempt: true }),
-  pairStart: async () => {
-    throw new Error('Торговый сервис доступен только в приложении Android');
-  },
-  pairStop: async () => {},
-  pairReset: async () => {},
-  pairUpdateSettings: async () => {},
-  pairGetState: async () => IDLE_PAIR_STATE,
   gmxCandles: async () => {
     throw new Error('График доступен только в приложении Android');
   },
@@ -738,17 +453,16 @@ const webStub: PolyBotPlugin = {
     rows: [],
   }),
   binancePrice: async () => ({ openTime: 0, open: 0, last: 0, at: 0 }),
-  counterUpdate: async () => {},
-  counterReset: async () => {},
-  counterState: async () => ({
+  ladderUpdate: async () => {},
+  ladderReset: async () => {},
+  ladderState: async () => ({
     enabled: false,
     running: false,
     bankUsd: 5,
-    clipUsd: 1,
-    maxBuys: 3,
-    entryUnder: 0.3,
-    entryWindowSec: 120,
-    gainPct: 0.25,
+    shares: 5,
+    everySec: 60,
+    firstAtSec: 45,
+    untilSec: 285,
     cash: 5,
     rounds: 0,
     buys: 0,
@@ -756,33 +470,7 @@ const webStub: PolyBotPlugin = {
     spent: 0,
     got: 0,
     settled: 0,
-    wins: 0,
-    losses: 0,
     pnl: 0,
-    past: [],
-  }),
-  signalUpdate: async () => {},
-  signalReset: async () => {},
-  signalState: async () => ({
-    enabled: false,
-    running: false,
-    bankUsd: 6,
-    clipUsd: 1,
-    maxBuys: 3,
-    maxPrice: 0.6,
-    fromSec: 10,
-    untilSec: 240,
-    cash: 6,
-    rounds: 0,
-    buys: 0,
-    sells: 0,
-    spent: 0,
-    got: 0,
-    settled: 0,
-    wins: 0,
-    losses: 0,
-    pnl: 0,
-    past: [],
   }),
   addListener: async () => ({ remove: async () => {} }) as PluginListenerHandle,
 };

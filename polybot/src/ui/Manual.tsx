@@ -40,10 +40,7 @@ import {
   type EventSummary,
   type LoggedOrder,
   type NativeMarket,
-  type CounterState,
-  type CounterLot,
-  type CounterPast,
-  type SignalState,
+  type LadderState,
   type Timings,
   type NativePosition,
   type OpenOrder,
@@ -120,10 +117,6 @@ export function Manual({
   container,
   containerSplit,
   onContainer,
-  counter = null,
-  signal = null,
-  onCounter,
-  onSignal,
   appSettings,
   locked,
 }: {
@@ -137,11 +130,6 @@ export function Manual({
   container?: Container;
   containerSplit?: ContainerSplit;
   onContainer?: (next: Container) => void;
-  /** The bots' accounts, polled above because the container needs them too. */
-  counter?: CounterState | null;
-  signal?: SignalState | null;
-  onCounter?: (state: CounterState) => void;
-  onSignal?: (state: SignalState) => void;
   /** The app-wide settings, folded in under the desk's own. */
   appSettings?: ReactNode;
   /** The day's goal is met: no new exposure until midnight. */
@@ -160,8 +148,6 @@ export function Manual({
   const [positions, setPositions] = useState<NativePosition[]>([]);
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [logged, setLogged] = useState<LoggedOrder[]>([]);
-  const [counterOpen, setCounterOpen] = useState(false);
-  const [signalOpen, setSignalOpen] = useState(false);
   const [lookAhead, setLookAhead] = useState(false);
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [sessionPnl, setSessionPnl] = useState(0);
@@ -176,6 +162,10 @@ export function Manual({
   /** The size field is being edited: that is when sizing by wallet is useful. */
   const [sizingLimit, setSizingLimit] = useState(false);
   const [pickingPrice, setPickingPrice] = useState(false);
+  const [ladderBot, setLadderBot] = useState<LadderState | null>(null);
+  const [ladderOpen, setLadderOpen] = useState(false);
+  /** The event strip is folded away until it is asked for. */
+  const [sessionOpen, setSessionOpen] = useState(false);
   /** A resting order opened for editing. */
   const [editing, setEditing] = useState<TradeRow | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
@@ -372,6 +362,24 @@ export function Manual({
       window.clearInterval(timer);
     };
   }, [tokenFor]);
+
+  // The ladder bot runs on its own money in the service; the panel reads it.
+  useEffect(() => {
+    let cancelled = false;
+    const read = () => {
+      void PolyBot.ladderState()
+        .then((s) => {
+          if (!cancelled) setLadderBot(s);
+        })
+        .catch(() => {});
+    };
+    read();
+    const timer = window.setInterval(read, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   // Sizing off the wallet needs the wallet. It only moves when an order fills,
   // so a slow poll is enough.
@@ -840,7 +848,7 @@ export function Manual({
       setNote('Укажите цену лимитки');
       return;
     }
-    const rungs = settings.limitLadder
+    const wanted = settings.limitLadder
       ? limitLadder(
           limitPriceNum,
           LIMIT_LADDER_COUNT,
@@ -848,6 +856,29 @@ export function Manual({
           market?.tickSize ?? 0.01,
         )
       : [limitPriceNum];
+
+    // Only as many rungs as the container leaves room for. Sending all four
+    // and letting the guard refuse the last two put two real orders on the
+    // book and two error banners on the screen, which reads as a broken app
+    // rather than a full container — and the rungs that did go out were the
+    // dearest ones, because they go first.
+    const size = limitSizeNum > 0 ? limitSizeNum : limitDefaultSize;
+    const room = settings.exposureGuard ? exposure.room : (balance ?? 0);
+    const rungs: number[] = [];
+    let spend = 0;
+    for (const price of wanted) {
+      const cost = orderCost(size, price);
+      if (rungs.length > 0 && spend + cost > room + 1e-9) break;
+      rungs.push(price);
+      spend += cost;
+    }
+
+    if (rungs.length < wanted.length) {
+      setNote(
+        `В контейнере хватает на ${rungs.length} из ${wanted.length} — ` +
+          `ставлю ${rungs.length}`,
+      );
+    }
 
     for (const price of rungs) {
       await place(which, 'BUY', price, limitSizeNum);
@@ -865,74 +896,79 @@ export function Manual({
       <div className="deck">
 
       {/*
-        Both bots on one line, tight under the header: two small accounts that
-        are watched rather than worked, and a card each pushed the thing being
-        traded off the screen. Opening one drops its full account underneath.
+        One rail of collapsed things: the session on the left, the bot on the
+        right. Both are read a few times an hour and neither is worth a
+        permanent row — but both want to be one tap away, so they fold rather
+        than hide.
       */}
-      <div className="bots">
-      {counter && (
-        <CounterStrip
-          state={counter}
-          open={counterOpen}
-          onToggle={() => setCounterOpen((v) => !v)}
-          onEnable={(enabled) => {
-            void PolyBot.counterUpdate({ enabled })
-              .then(() => PolyBot.counterState())
-              .then((s) => onCounter?.(s))
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onBank={(usd) => {
-            if (!Number.isFinite(usd) || usd < 0) return;
-            void PolyBot.counterUpdate({ bankUsd: usd })
-              .then(() => PolyBot.counterState())
-              .then((s) => onCounter?.(s))
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onReset={() => {
-            void PolyBot.counterReset()
-              .then(() => PolyBot.counterState())
-              .then((s) => onCounter?.(s))
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-        />
-      )}
+      <div className="rail">
+        <button
+          className={`railchip${sessionOpen ? ' on' : ''}`}
+          onClick={() => setSessionOpen((v) => !v)}
+        >
+          <span className="muted">сессия</span>
+          <b className={sessionPnl >= 0 ? 'up' : 'down'}>{signedUsd(sessionPnl)}</b>
+        </button>
 
-      {signal && (
-        <SignalStrip
-          state={signal}
-          open={signalOpen}
-          onToggle={() => setSignalOpen((v) => !v)}
-          onEnable={(enabled) => {
-            void PolyBot.signalUpdate({ enabled })
-              .then(() => PolyBot.signalState())
-              .then((s) => onSignal?.(s))
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onBank={(usd) => {
-            if (!Number.isFinite(usd) || usd < 0) return;
-            void PolyBot.signalUpdate({ bankUsd: usd })
-              .then(() => PolyBot.signalState())
-              .then((s) => onSignal?.(s))
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onReset={() => {
-            void PolyBot.signalReset()
-              .then(() => PolyBot.signalState())
-              .then((s) => onSignal?.(s))
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-        />
-      )}
-
+        {ladderBot && (
+          <button
+            className={`railchip right${ladderOpen ? ' on' : ''}`}
+            onClick={() => setLadderOpen((v) => !v)}
+          >
+            <span className="muted">
+              <i className={`raildot${ladderBot.running ? ' live' : ''}`} aria-hidden />
+              лесенка
+            </span>
+            <b className={ladderBot.pnl > 0 ? 'up' : ladderBot.pnl < 0 ? 'down' : 'muted'}>
+              {signedUsd(ladderBot.pnl)}
+            </b>
+          </button>
+        )}
       </div>
 
-      <EventStrip
-        events={events}
-        session={sessionPnl}
-        windowStart={windowStart}
-        selected={viewWindow}
-        onSelect={setViewWindow}
-      />
+      {sessionOpen && (
+        <EventStrip
+          events={events}
+          windowStart={windowStart}
+          selected={viewWindow}
+          onSelect={(w) => {
+            setViewWindow(w);
+            setSessionOpen(false);
+          }}
+        />
+      )}
+
+      {ladderOpen && ladderBot && (
+        <LadderCard
+          state={ladderBot}
+          onEnable={(enabled) => {
+            void PolyBot.ladderUpdate({ enabled })
+              .then(() => PolyBot.ladderState())
+              .then(setLadderBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onBank={(usd) => {
+            if (!Number.isFinite(usd) || usd < 0) return;
+            void PolyBot.ladderUpdate({ bankUsd: usd })
+              .then(() => PolyBot.ladderState())
+              .then(setLadderBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onShares={(n) => {
+            if (!Number.isFinite(n) || n <= 0) return;
+            void PolyBot.ladderUpdate({ shares: n })
+              .then(() => PolyBot.ladderState())
+              .then(setLadderBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onReset={() => {
+            void PolyBot.ladderReset()
+              .then(() => PolyBot.ladderState())
+              .then(setLadderBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+        />
+      )}
 
       <div className="card tight">
         <div className="deskbar">
@@ -1647,13 +1683,11 @@ function OrderEditor({
  */
 function EventStrip({
   events,
-  session,
   windowStart,
   selected,
   onSelect,
 }: {
   events: EventSummary[];
-  session: number;
   windowStart: number;
   selected: number | null;
   onSelect: (windowStart: number | null) => void;
@@ -1663,12 +1697,6 @@ function EventStrip({
 
   return (
     <div className="card tight eventcard">
-      <div className="listhead">
-        <span>Сессия</span>
-        <span className={session >= 0 ? 'up sessum' : 'down sessum'}>
-          {signedUsd(session)}
-        </span>
-      </div>
       <div className="eventstrip">
         <button
           className={`eventchip now${selected === null ? ' on' : ''}`}
@@ -1707,364 +1735,120 @@ function EventStrip({
   );
 }
 
-/** What every walled-off bot has in common: its own money and its own record. */
-type BotAccount = {
-  enabled: boolean;
-  running: boolean;
-  bankUsd: number;
-  cash: number;
-  pnl: number;
-  rounds: number;
-  buys: number;
-  sells: number;
-  wins: number;
-  losses: number;
-  lastFault?: string | null;
-  past: CounterPast[];
-};
-
 /**
- * A bot in one line, and then in full.
+ * The ladder bot's account, and the rule it follows.
  *
- * Shut, it is the only three things worth knowing while trading: its own
- * money, what it has made, and what it is doing this window. Open, it is the
- * whole account — because a bot with five dollars of its own is only worth
- * running if you can see at a glance whether the five dollars is growing.
- *
- * Both bots present the same account, so they share this; what differs is the
- * rule they follow and what their live window looks like, and those come in as
- * they are written.
+ * Its whole strategy is two numbers compared once a minute — what the
+ * favourite costs against what the ladder will ask for it — so the card shows
+ * exactly those two, next to what the comparison has been worth.
  */
-function BotStrip({
-  title,
-  account,
-  doing,
-  rule,
-  live,
-  side,
-  lots,
-  open,
-  onToggle,
+function LadderCard({
+  state,
   onEnable,
   onBank,
+  onShares,
   onReset,
 }: {
-  title: string;
-  account: BotAccount;
-  doing: string;
-  rule: ReactNode;
-  live: ReactNode;
-  side: string | null;
-  lots: CounterLot[];
-  open: boolean;
-  onToggle: () => void;
+  state: LadderState;
   onEnable: (enabled: boolean) => void;
   onBank: (usd: number) => void;
+  onShares: (shares: number) => void;
   onReset: () => void;
 }) {
-  const tone = account.pnl > 0 ? 'up' : account.pnl < 0 ? 'down' : 'muted';
+  const round = state.round;
+  const tone = state.pnl > 0 ? 'up' : state.pnl < 0 ? 'down' : 'muted';
 
   return (
-    <>
-      <button className={`botchip${open ? ' open' : ''}`} onClick={onToggle}>
-        <span className="botchip-top">
-          <span className={`counterdot${account.running ? ' live' : ''}`} aria-hidden />
-          <span className="countertitle">{title}</span>
-          <span className={`counterpnl ${tone}`}>{signedUsd(account.pnl)}</span>
-        </span>
-        <span className="botchip-cash">{usd(account.cash)}</span>
-        <span className="counterdoing muted">{doing}</span>
-      </button>
+    <div className="card tight">
+      <div className="counterhead">
+        <span>Бот лесенки</span>
+        <button
+          className={`switch ${state.enabled ? 'on' : ''}`}
+          onClick={() => onEnable(!state.enabled)}
+        />
+      </div>
 
-      {open && (
-        <div className="counterbody">
-          <div className="counterhead">
-            <span>{title}</span>
-            <button
-              className={`switch ${account.enabled ? 'on' : ''}`}
-              onClick={() => onEnable(!account.enabled)}
-            />
-          </div>
+      <div className="counterrule muted">
+        За 15 с до конца каждой минуты смотрит сторону, которая дороже. Если её
+        можно купить дешевле, чем ступень лесенки на этой минуте, берёт{' '}
+        {state.shares.toFixed(0)} долей и сразу ставит продажу на эту же ступень.
+      </div>
 
-          <div className="counterrule muted">{rule}</div>
+      <div className="fields botbank">
+        <label className="field">
+          <span>контейнер, $</span>
+          <input
+            type="number"
+            step="1"
+            value={String(state.bankUsd)}
+            onChange={(e) => onBank(Number(e.target.value.replace(',', '.')))}
+          />
+        </label>
+        <label className="field">
+          <span>долей за раз</span>
+          <input
+            type="number"
+            step="1"
+            value={String(state.shares)}
+            onChange={(e) => onShares(Number(e.target.value.replace(',', '.')))}
+          />
+        </label>
+      </div>
 
-          {/*
-            The stake is the one setting this bot has, and it is what the
-            container holds back for it — so it is set here, next to the money
-            it governs, rather than three folds away.
-          */}
-          <div className="fields botbank">
-            <label className="field">
-              <span>контейнер, $</span>
-              <input
-                type="number"
-                step="1"
-                value={String(account.bankUsd)}
-                onChange={(e) =>
-                  onBank(Number(e.target.value.replace(',', '.')))
-                }
-              />
-            </label>
-            <div className="botbank-now">
-              <span className="muted">сейчас свободно</span>
-              <b>{usd(account.cash)}</b>
-            </div>
-          </div>
+      <div className="countergrid">
+        <div>
+          <span className="muted">свободно</span>
+          <b>{usd(state.cash)}</b>
+        </div>
+        <div>
+          <span className="muted">итог</span>
+          <b className={tone}>{signedUsd(state.pnl)}</b>
+        </div>
+        <div>
+          <span className="muted">окон · сделок</span>
+          <b>
+            {state.rounds} · {state.buys}/{state.sells}
+          </b>
+        </div>
+      </div>
 
-          <div className="countergrid">
-            <div>
-              <span className="muted">свои деньги</span>
-              <b>{usd(account.cash)}</b>
-            </div>
-            <div>
-              <span className="muted">старт</span>
-              <b>{usd(account.bankUsd)}</b>
-            </div>
-            <div>
-              <span className="muted">итог</span>
-              <b className={tone}>{signedUsd(account.pnl)}</b>
-            </div>
-            <div>
-              <span className="muted">окон</span>
-              <b>{account.rounds}</b>
-            </div>
-            <div>
-              <span className="muted">плюс / минус</span>
-              <b>
-                <span className="up">{account.wins}</span>
-                {' / '}
-                <span className="down">{account.losses}</span>
-              </b>
-            </div>
-            <div>
-              <span className="muted">покупок / продаж</span>
-              <b>
-                {account.buys} / {account.sells}
-              </b>
-            </div>
-          </div>
-
-          {live}
-
-          {lots.length > 0 && (
-            <div className="counterround">
-              {lots.map((l, i) => (
-                <div className="listrow static" key={i}>
-                  <span className={side === 'Up' ? 'up tag-side' : 'down tag-side'}>
-                    {side}
-                  </span>
-                  <span className="listrow-main">
-                    {l.shares.toFixed(1)} × {cents(l.price)}
-                    <span className="sub muted">
-                      {usd(l.shares * l.price)}
-                      {l.sellPrice > 0 ? ` · продажа ${cents(l.sellPrice)}` : ''}
-                      {l.note ? ` · ${l.note}` : ''}
-                    </span>
-                  </span>
-                  <span className="listrow-pnl muted">
-                    {l.sold > 0 ? usd(l.proceeds) : '—'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {account.past.length > 0 && (
-            <div className="counterpast">
-              <div className="listhead">
-                <span>Прошлые окна</span>
-              </div>
-              {account.past.slice(0, 8).map((p) => (
-                <div className="listrow static" key={p.windowStart}>
-                  <span className="muted tag-side">{clockOf(p.windowStart)}</span>
-                  <span className="listrow-main">
-                    {p.note}
-                    <span className="sub muted">
-                      {p.shares > 0
-                        ? `${p.shares.toFixed(1)} ${p.side} · ${usd(p.spent)} → ${usd(p.got)}`
-                        : '—'}
-                    </span>
-                  </span>
-                  <span className={`listrow-pnl ${p.pnl >= 0 ? 'up' : 'down'}`}>
-                    {p.shares > 0 ? signedUsd(p.pnl) : '—'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {account.lastFault && (
-            <div className="counterlive warn">{account.lastFault}</div>
-          )}
-
-          <button className="ghost compact counterreset" onClick={onReset}>
-            обнулить счёт бота
-          </button>
+      {round && (
+        <div className="counterlive muted">
+          {round.side ? `${round.side} по ` : 'сторона не выбрана'}
+          {round.ask != null ? cents(round.ask) : '—'}
+          {round.rung > 0 ? ` · ступень ${cents(round.rung)}` : ''}
+          {round.note ? ` · ${round.note}` : ''}
         </div>
       )}
-    </>
-  );
-}
 
-/** The bot that fades whichever side the desk is on. */
-function CounterStrip({
-  state,
-  open,
-  onToggle,
-  onEnable,
-  onBank,
-  onReset,
-}: {
-  state: CounterState;
-  open: boolean;
-  onToggle: () => void;
-  onEnable: (enabled: boolean) => void;
-  onBank: (usd: number) => void;
-  onReset: () => void;
-}) {
-  const round = state.round;
-  const held = round?.lots.reduce((a, l) => a + (l.shares - l.sold), 0) ?? 0;
-
-  const doing = !state.enabled
-    ? 'выключен'
-    : round == null
-      ? 'ждёт мою сторону'
-      : held > 0
-        ? `держит ${held.toFixed(1)} ${round.side}`
-        : (round.note ?? `следит за ${round.side}`);
-
-  return (
-    <BotStrip
-      title="Контр-бот"
-      account={state}
-      doing={doing}
-      side={round?.side ?? null}
-      lots={round?.lots ?? []}
-      onToggle={onToggle}
-      open={open}
-      onEnable={onEnable}
-      onBank={onBank}
-      onReset={onReset}
-      rule={
-        <>
-          Первые {Math.round(state.entryWindowSec / 60)} мин покупает сторону,
-          противоположную моей, по {usd(state.clipUsd)} — {state.maxBuys} раза,
-          каждый раз на тик ниже, пока дешевле {cents(state.entryUnder)}. Продаёт
-          сразу с целью +{Math.round(state.gainPct * 100)}%.
-        </>
-      }
-      live={
-        round && (
-          <div className="counterround">
-            <div className="listhead">
-              <span>Сейчас · {clockOf(round.windowStart)}</span>
-              <span className="muted">
-                моя {round.deskSide} → берёт {round.side}
+      {round && round.lots.length > 0 &&
+        round.lots.map((l, i) => (
+          <div className="listrow static" key={i}>
+            <span className={l.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
+              {l.outcome}
+            </span>
+            <span className="listrow-main">
+              {l.shares.toFixed(1)} × {cents(l.price)}
+              <span className="sub muted">
+                {usd(l.shares * l.price)}
+                {l.sellPrice > 0 ? ` · продажа ${cents(l.sellPrice)}` : ''}
+                {l.note ? ` · ${l.note}` : ''}
               </span>
-            </div>
-            <div className="counterlive muted">
-              {round.lastAsk != null ? `цена ${cents(round.lastAsk)}` : 'нет цены'}
-              {round.bestAsk != null ? ` · лучшая ${cents(round.bestAsk)}` : ''}
-              {round.note ? ` · ${round.note}` : ''}
-            </div>
+            </span>
+            <span className="listrow-pnl muted">
+              {l.sold > 0 ? usd(l.proceeds) : '—'}
+            </span>
           </div>
-        )
-      }
-    />
+        ))}
+
+      {state.lastFault && <div className="counterlive warn">{state.lastFault}</div>}
+
+      <button className="ghost compact counterreset" onClick={onReset}>
+        обнулить счёт бота
+      </button>
+    </div>
   );
 }
-
-/** The bot that trades TradingView's five-minute read. */
-function SignalStrip({
-  state,
-  open,
-  onToggle,
-  onEnable,
-  onBank,
-  onReset,
-}: {
-  state: SignalState;
-  open: boolean;
-  onToggle: () => void;
-  onEnable: (enabled: boolean) => void;
-  onBank: (usd: number) => void;
-  onReset: () => void;
-}) {
-  const round = state.round;
-  const g = state.gauges;
-  const held = round?.lots.reduce((a, l) => a + (l.shares - l.sold), 0) ?? 0;
-
-  const doing = !state.enabled
-    ? 'выключен'
-    : held > 0
-      ? `держит ${held.toFixed(1)} ${round?.side}`
-      : (round?.note ??
-        (g?.direction ? `сигнал ${g.direction}` : 'индикаторы не согласны'));
-
-  return (
-    <BotStrip
-      title="Индикаторы"
-      account={state}
-      doing={doing}
-      side={round?.side ?? null}
-      lots={round?.lots ?? []}
-      onToggle={onToggle}
-      open={open}
-      onEnable={onEnable}
-      onBank={onBank}
-      onReset={onReset}
-      rule={
-        <>
-          TradingView 5м, BTC на Binance. Когда сводка, скользящие и осцилляторы
-          все три показывают Buy — берёт Up, все три Sell — берёт Down. С{' '}
-          {state.fromSec}-й секунды по {usd(state.clipUsd)}, {state.maxBuys} раза,
-          каждый раз на тик ниже, не дороже {cents(state.maxPrice)}. Выход —
-          лесенкой продаж.
-        </>
-      }
-      live={
-        <>
-          <div className="gauges">
-            <div>
-              <span className="muted">сводка</span>
-              <b className={verdictTone(g?.summaryWord)}>{g?.summaryWord ?? '—'}</b>
-            </div>
-            <div>
-              <span className="muted">скользящие</span>
-              <b className={verdictTone(g?.maWord)}>{g?.maWord ?? '—'}</b>
-            </div>
-            <div>
-              <span className="muted">осцилляторы</span>
-              <b className={verdictTone(g?.oscWord)}>{g?.oscWord ?? '—'}</b>
-            </div>
-          </div>
-          {round && (
-            <div className="counterround">
-              <div className="listhead">
-                <span>Сейчас · {clockOf(round.windowStart)}</span>
-                <span className="muted">
-                  {round.side} · ступень {round.step + 1}
-                </span>
-              </div>
-              <div className="counterlive muted">
-                {round.lastAsk != null ? `цена ${cents(round.lastAsk)}` : 'нет цены'}
-                {round.bestAsk != null ? ` · лучшая ${cents(round.bestAsk)}` : ''}
-                {round.note ? ` · ${round.note}` : ''}
-              </div>
-            </div>
-          )}
-        </>
-      }
-    />
-  );
-}
-
-const verdictTone = (word?: string) =>
-  word == null || word === '—' || word === 'Neutral'
-    ? 'muted'
-    : word.endsWith('Buy')
-      ? 'up'
-      : 'down';
 
 /**
  * Every order that went through one event, as it happened.

@@ -1,6 +1,4 @@
-import { useState } from 'react';
 import {
-  addReserve,
   removeReserve,
   type Container,
   type ContainerSplit,
@@ -23,9 +21,6 @@ export function ContainerCard({
   split: ContainerSplit;
   onChange: (next: Container) => void;
 }) {
-  const [name, setName] = useState('');
-  const [amount, setAmount] = useState('');
-
   return (
     <div className="goal">
       <div className="goal-head">
@@ -69,31 +64,6 @@ export function ContainerCard({
         </div>
       ))}
 
-      <div className="draftrow" style={{ marginTop: 10 }}>
-        <label className="mini">
-          <span>для бота</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Парный" />
-        </label>
-        <label className="mini">
-          <span>сумма, $</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-        </label>
-        <button
-          className="ghost compact narrow"
-          onClick={() => {
-            onChange(addReserve(container, name, Number(amount.replace(',', '.'))));
-            setName('');
-            setAmount('');
-          }}
-        >
-          +
-        </button>
-      </div>
     </div>
   );
 }

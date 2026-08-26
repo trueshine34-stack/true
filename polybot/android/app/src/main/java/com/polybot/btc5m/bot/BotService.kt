@@ -14,47 +14,36 @@ import com.polybot.btc5m.MainActivity
 import com.polybot.btc5m.R
 
 /**
- * Foreground service that owns the trading loop.
+ * Foreground service that keeps the standing sell rule alive.
  *
- * The loop cannot live in the WebView: Chromium throttles timers and suspends
- * sockets once the activity stops being visible, which is exactly when the user
- * expects the bot to keep trading. Running it here, on OkHttp and coroutines
- * under a wake lock, is what makes background operation real rather than
- * nominal.
+ * The rule cannot live in the WebView: Chromium throttles timers and suspends
+ * sockets once the activity stops being visible, which is exactly when a
+ * position bought a moment ago still needs its exit placed. Running it here, on
+ * OkHttp and coroutines under a wake lock, is what makes "every buy gets a
+ * sell" true with the screen off.
  *
  * The signing key is handed in from the unlocked UI and lives only in this
  * process's memory — never in an Intent extra, never on disk. That is why the
  * service does not restart itself after the process dies: without the app being
- * opened and unlocked again there is nothing to sign with.
+ * opened again there is nothing to sign with.
  */
 class BotService : Service() {
 
     companion object {
         const val ACTION_START = "com.polybot.btc5m.START"
         const val ACTION_STOP = "com.polybot.btc5m.STOP"
-        const val ACTION_START_PAIR = "com.polybot.btc5m.START_PAIR"
-        const val ACTION_STOP_PAIR = "com.polybot.btc5m.STOP_PAIR"
         const val ACTION_START_AUTOSELL = "com.polybot.btc5m.START_AUTOSELL"
         const val ACTION_STOP_AUTOSELL = "com.polybot.btc5m.STOP_AUTOSELL"
 
         private const val CHANNEL_ID = "polybot_engine"
         private const val NOTIFICATION_ID = 4201
 
-        fun isRunning(): Boolean = EngineHolder.peek()?.running == true
-
-        /** True while either strategy is trading. */
-        fun anyRunning(): Boolean =
-            EngineHolder.peek()?.running == true ||
-                EngineHolder.peekPair()?.running == true ||
-                EngineHolder.peekAutoSell()?.running == true
+        /** True while the sell rule is still working. */
+        fun anyRunning(): Boolean = EngineHolder.peekAutoSell()?.running == true
 
         fun start(context: Context) = send(context, ACTION_START, foreground = true)
 
         fun stop(context: Context) = send(context, ACTION_STOP, foreground = false)
-
-        fun startPair(context: Context) = send(context, ACTION_START_PAIR, foreground = true)
-
-        fun stopPair(context: Context) = send(context, ACTION_STOP_PAIR, foreground = false)
 
         fun startAutoSell(context: Context) =
             send(context, ACTION_START_AUTOSELL, foreground = true)
@@ -90,13 +79,7 @@ class BotService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
-                EngineHolder.peek()?.shutdown()
-                releaseUnlessBusy()
-                return START_NOT_STICKY
-            }
-
-            ACTION_STOP_PAIR -> {
-                EngineHolder.peekPair()?.stop()
+                EngineHolder.peekAutoSell()?.stop()
                 releaseUnlessBusy()
                 return START_NOT_STICKY
             }
@@ -107,8 +90,6 @@ class BotService : Service() {
                 return START_NOT_STICKY
             }
 
-            ACTION_START_PAIR -> startPairEngine()
-
             ACTION_START_AUTOSELL -> {
                 startForeground(NOTIFICATION_ID, buildNotification("Автопродажа…"))
                 acquireWakeLock()
@@ -116,41 +97,27 @@ class BotService : Service() {
                 updateNotification()
             }
 
-            else -> startEngine()
+            else -> startDesk()
         }
         // Deliberately not sticky: the key is memory-only, so a restarted
         // service could not trade and would only show a misleading notification.
         return START_NOT_STICKY
     }
 
-    private fun startEngine() {
-        startForeground(NOTIFICATION_ID, buildNotification("Запуск…"))
+    private fun startDesk() {
+        startForeground(NOTIFICATION_ID, buildNotification("Стол открыт"))
         acquireWakeLock()
 
         val bot = EngineHolder.get(this)
         if (!bot.isConfigured()) {
-            bot.log(
-                "error",
-                "Кошелёк не подключён — откройте приложение и введите PIN",
-            )
-            updateNotification()
-            return
+            bot.log("error", "Кошелёк не подключён — откройте приложение")
         }
-        bot.start()
-        updateNotification()
-    }
-
-    private fun startPairEngine() {
-        startForeground(NOTIFICATION_ID, buildNotification("Запуск пары…"))
-        acquireWakeLock()
-        EngineHolder.pair(this).start()
         updateNotification()
     }
 
     /**
-     * Stops trading only. The engines keep the day's statistics, the price feed
-     * and the credentials so the user can still manage orders — and the service
-     * stays up while the other strategy is still trading.
+     * Stands down the rule only. The engine keeps the price feed and the
+     * credentials, so the user can still manage their orders.
      */
     private fun releaseUnlessBusy() {
         if (anyRunning()) {
@@ -164,8 +131,6 @@ class BotService : Service() {
 
     override fun onDestroy() {
         if (EngineHolder.onServiceState === stateHook) EngineHolder.onServiceState = null
-        EngineHolder.peek()?.shutdown()
-        EngineHolder.peekPair()?.stop()
         EngineHolder.peekAutoSell()?.stop()
         releaseWakeLock()
         super.onDestroy()
@@ -234,32 +199,14 @@ class BotService : Service() {
     }
 
     private fun updateNotification() {
-        val bot = EngineHolder.peek() ?: return
-        val stats = bot.stats
-        val mode = if (bot.settings.dryRun) "тест" else "реальные сделки"
-        val pairBot = EngineHolder.peekPair()
-        val state = when {
-            bot.running -> {
-                val pnl = String.format("%+.2f", stats.realisedPnlUsd)
-                "$mode · сделок ${stats.trades} · $pnl $"
-            }
-
-            pairBot?.running == true -> {
-                val pairMode = if (pairBot.settings.dryRun) "тест" else "реальные сделки"
-                val pnl = String.format("%+.2f", pairBot.stats.realisedPnlUsd)
-                "пара · $pairMode · пар " +
-                    String.format("%.0f", pairBot.stats.pairsLocked) + " · $pnl $"
-            }
-
-            EngineHolder.peekAutoSell()?.running == true -> {
-                val rule = EngineHolder.peekAutoSell()
-                val rung = rule?.rows?.maxOfOrNull { it.target }
-                "автопродажа" +
-                    (rung?.let { " по " + String.format("%.0f", it * 100) + "¢" } ?: "") +
-                    " · позиций ${rule?.rows?.size ?: 0}"
-            }
-
-            else -> bot.haltReason?.let { "остановлен: $it" } ?: "остановлен"
+        val rule = EngineHolder.peekAutoSell()
+        val state = if (rule?.running == true) {
+            val rung = rule.rows.maxOfOrNull { it.target }
+            "автопродажа" +
+                (rung?.let { " по " + String.format("%.0f", it * 100) + "¢" } ?: "") +
+                " · позиций ${rule.rows.size}"
+        } else {
+            "стол открыт"
         }
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ID, buildNotification(state))

@@ -5,10 +5,9 @@ import android.content.Context
 /**
  * Process-wide owner of the trading engine.
  *
- * The engine deliberately outlives the foreground service. Stopping the bot
- * should stop trading, not forget the day's statistics or lock the user out of
- * managing their resting orders, so the service now owns only the foreground
- * lifecycle and the wake lock.
+ * The engine deliberately outlives the foreground service. Stopping the service
+ * should stop the standing sell rule, not lock the user out of managing their
+ * resting orders or forget the window's order log.
  */
 object EngineHolder {
 
@@ -16,16 +15,10 @@ object EngineHolder {
     private var engine: BotEngine? = null
 
     @Volatile
-    private var pair: PairEngine? = null
-
-    @Volatile
     private var autoSell: AutoSell? = null
 
     @Volatile
-    private var counter: CounterBot? = null
-
-    @Volatile
-    private var signal: SignalBot? = null
+    private var ladderBot: LadderBot? = null
 
     @Volatile
     var onState: (() -> Unit)? = null
@@ -41,7 +34,6 @@ object EngineHolder {
         engine?.let { return it }
         return synchronized(this) {
             engine ?: BotEngine(
-                statsStore = StatsStore(context),
                 journal = Journal(context).also { it.prune() },
                 onStateChanged = {
                     onState?.invoke()
@@ -51,33 +43,9 @@ object EngineHolder {
             ).also {
                 engine = it
                 // Quotes, positions and the price feed are screen data: they
-                // must flow from the moment the app opens, not only once the
-                // bot is started.
+                // must flow from the moment the app opens.
                 it.startFeed()
             }
-        }
-    }
-
-    /**
-     * The pair strategy shares the price feed, the journal and the signing
-     * session with the main engine; it runs its own loop and its own book.
-     */
-    fun pair(context: Context): PairEngine {
-        pair?.let { return it }
-        val host = get(context)
-        return synchronized(this) {
-            pair ?: PairEngine(
-                feed = host.feed,
-                journal = host.journal,
-                store = PairStore(context),
-                session = { host.session() },
-                marketNow = { host.currentMarket() },
-                onStateChanged = {
-                    onState?.invoke()
-                    onServiceState?.invoke()
-                },
-                onLog = { entry -> onLogEntry?.invoke(entry) },
-            ).also { pair = it }
         }
     }
 
@@ -88,7 +56,10 @@ object EngineHolder {
         return synchronized(this) {
             autoSell ?: AutoSell(
                 engine = host,
-                botShares = { asset -> heldByBots(host, asset) },
+                // Shares the ladder bot is holding are its own to exit: it
+                // offers them at the same rung, and two rules pulling each
+                // other's orders would leave the position naked between them.
+                botShares = { asset -> ladderBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0 },
                 onStateChanged = {
                     onState?.invoke()
                     onServiceState?.invoke()
@@ -103,100 +74,33 @@ object EngineHolder {
     }
 
     /**
-     * The counter bot, on its own money and its own loop.
-     *
-     * It is created eagerly on first ask rather than only when switched on, so
-     * the panel can show its books and its settings while it is off.
+     * The bot that buys the favourite while it is still under its own exit.
+     * Created on first ask rather than only when switched on, so the panel can
+     * show its books while it is off.
      */
-    fun counter(context: Context): CounterBot {
-        counter?.let { return it }
+    fun ladder(context: Context): LadderBot {
+        ladderBot?.let { return it }
         val host = get(context)
         return synchronized(this) {
-            counter ?: CounterBot(
+            ladderBot ?: LadderBot(
                 engine = host,
-                store = CounterStore(context),
-                onStateChanged = {
-                    onState?.invoke()
-                    onServiceState?.invoke()
-                },
-            ).also {
-                counter = it
-                // A setting that says "on" has to mean on after a restart.
-                if (it.settings.enabled) it.start()
-            }
-        }
-    }
-
-    fun peekCounter(): CounterBot? = counter
-
-    /**
-     * The indicator bot. Its exits are the desk's own sell ladder, read live so
-     * changing the ladder in settings changes every exit in the app at once.
-     */
-    fun signal(context: Context): SignalBot {
-        signal?.let { return it }
-        val host = get(context)
-        return synchronized(this) {
-            signal ?: SignalBot(
-                engine = host,
-                store = SignalStore(context),
+                store = LadderStore(context),
                 ladder = { autoSell(context).settings.ladder },
                 onStateChanged = {
                     onState?.invoke()
                     onServiceState?.invoke()
                 },
             ).also {
-                signal = it
+                ladderBot = it
                 if (it.settings.enabled) it.start()
             }
         }
     }
 
-    fun peekSignal(): SignalBot? = signal
-
-    /**
-     * How many shares of one outcome the running bots are holding.
-     *
-     * A dry run holds nothing real, so a paper cycle contributes zero — the
-     * wallet's shares in that case are all the user's.
-     */
-    private fun heldByBots(host: BotEngine, asset: String): Double {
-        var held = 0.0
-
-        if (host.running) {
-            val cycle = host.current
-            val market = cycle?.market
-            val entry = cycle?.entry
-            if (market != null && entry != null && !entry.dryRun) {
-                val token =
-                    if (entry.side == "Up") market.up.tokenId else market.down.tokenId
-                if (token == asset) {
-                    val gone = cycle.exits.sumOf { it.matched } + cycle.soldAtMarket
-                    held += (entry.shares - gone).coerceAtLeast(0.0)
-                }
-            }
-        }
-
-        // The counter bot arranges its own exits at its own margin; the desk's
-        // rule blanketing them at a different price would fight it.
-        counter?.takeIf { it.running }?.let { held += it.heldShares(asset) }
-        signal?.takeIf { it.running }?.let { held += it.heldShares(asset) }
-
-        pair?.takeIf { it.running }?.book?.let { book ->
-            if (!book.dryRun) {
-                when (asset) {
-                    book.market?.up?.tokenId -> held += book.up.shares
-                    book.market?.down?.tokenId -> held += book.down.shares
-                }
-            }
-        }
-        return held
-    }
+    fun peekLadder(): LadderBot? = ladderBot
 
     /** Null when nothing has touched the engine yet this process. */
     fun peek(): BotEngine? = engine
 
     fun peekAutoSell(): AutoSell? = autoSell
-
-    fun peekPair(): PairEngine? = pair
 }

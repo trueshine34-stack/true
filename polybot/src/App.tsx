@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AccountConfig } from './core/account';
-import { DEFAULT_SETTINGS, type StrategySettings } from './core/settings';
-import { loadAccount, loadSettings, saveSettings } from './core/storage';
-import {
-  PolyBot,
-  type CounterState,
-  type SignalState,
-} from './native/polybot';
+import { loadAccount } from './core/storage';
+import { PolyBot } from './native/polybot';
 import { Manual } from './ui/Manual';
 import { SettingsScreen } from './ui/Settings';
 import { Setup } from './ui/Setup';
@@ -37,7 +32,6 @@ import {
   loadContainer,
   saveContainer,
   splitFor,
-  withBots,
   type Container,
 } from './core/container';
 import {
@@ -74,7 +68,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 const STARTUP_MS = 12_000;
 export function App() {
   const [phase, setPhase] = useState<Phase>('loading');
-  const [settings, setSettings] = useState<StrategySettings>(DEFAULT_SETTINGS);
   const [account, setAccount] = useState<AccountConfig | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   const [showBalance, setShowBalance] = useState(false);
@@ -89,18 +82,14 @@ export function App() {
   const [dayAsked, setDayAsked] = useState(false);
   const [dayInput, setDayInput] = useState('');
   const [container, setContainer] = useState<Container | null>(null);
-  /** The bots' own money, which is in this wallet and is not the desk's. */
-  const [counter, setCounter] = useState<CounterState | null>(null);
-  const [signal, setSignal] = useState<SignalState | null>(null);
   /** What the desk says is already in the market, for the container's split. */
   const [committed, setCommitted] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [stored, acct] = await Promise.all([loadSettings(), loadAccount()]);
+      const acct = await loadAccount();
       if (cancelled) return;
-      setSettings(stored);
       setAccount(acct);
 
       // The service outlives the UI, so a bot started earlier is still trading;
@@ -134,7 +123,6 @@ export function App() {
           privateKey: vault.privateKey,
           funderAddress: acct.funderAddress,
           signatureType: Number(acct.signatureType),
-          settings: stored,
         }),
         STARTUP_MS,
       );
@@ -254,40 +242,10 @@ export function App() {
    * The deposit is cash plus what is in the market, so the locked share does
    * not shrink as the cash is spent.
    */
-  // Both small bots run on their own money in the service; the panel only
-  // reads them, and it reads them here because the container's arithmetic
-  // needs them as much as the desk does.
-  useEffect(() => {
-    let cancelled = false;
-    const read = () => {
-      void PolyBot.counterState()
-        .then((s) => {
-          if (!cancelled) setCounter(s);
-        })
-        .catch(() => {});
-      void PolyBot.signalState()
-        .then((s) => {
-          if (!cancelled) setSignal(s);
-        })
-        .catch(() => {});
-    };
-    read();
-    const timer = window.setInterval(read, 3000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  // One definition of what is locked, shared by the header, the guard and the
-  // desk. A bot's stake is a reserve like any other; it is merged in here
-  // rather than stored, because the bot owns it and it moves with what it
-  // makes — two copies of the same dollar would sooner or later disagree.
-  const held = withBots(container ?? { corePct: 0.3, reserves: [] }, [
-    { name: 'Контр-бот', usd: counter?.enabled ? counter.cash : 0 },
-    { name: 'Индикаторы', usd: signal?.enabled ? signal.cash : 0 },
-  ]);
-  const split = splitFor(held, (balance ?? 0) + committed);
+  const split = splitFor(
+    container ?? { corePct: 0.3, reserves: [] },
+    (balance ?? 0) + committed,
+  );
 
   const applyContainer = useCallback((next: Container) => {
     setContainer(next);
@@ -299,14 +257,6 @@ export function App() {
 
   const remind = balance != null && shouldRemind(goal, balance);
   const progress = goal && balance != null ? goalProgress(goal, balance) : null;
-
-  const applySettings = useCallback((next: StrategySettings) => {
-    setSettings(next);
-    void saveSettings(next);
-    void PolyBot.updateSettings({ settings: next }).catch(() => {
-      // Not connected yet; connect() carries the settings across.
-    });
-  }, []);
 
   const onSetupDone = useCallback((acct: AccountConfig) => {
     setAccount(acct);
@@ -328,7 +278,7 @@ export function App() {
   }
 
   if (phase === 'setup') {
-    return <Setup settings={settings} onDone={onSetupDone} />;
+    return <Setup onDone={onSetupDone} />;
   }
 
   return (
@@ -383,20 +333,6 @@ export function App() {
               Начать день
             </button>
           </div>
-        </div>
-      )}
-
-      {/*
-        The bots' stakes are real money in this wallet. When they and the core
-        add up to more than the deposit, the desk has nothing to trade with —
-        which shows up as "container full" on every buy and is otherwise a
-        mystery. Say it once, plainly, where the money is.
-      */}
-      {split.free <= 0 && split.bots > 0 && (
-        <div className="banner warn">
-          Контейнеры ботов ({usd(split.bots)}) и запас ({usd(split.core)}) заняли
-          весь депозит — руками торговать нечем. Уменьшите суммы ботов или
-          пополните баланс.
         </div>
       )}
 
@@ -478,17 +414,8 @@ export function App() {
           containerSplit={split}
           onContainer={applyContainer}
           locked={locked}
-          counter={counter}
-          signal={signal}
-          onCounter={setCounter}
-          onSignal={setSignal}
           appSettings={
-            <SettingsScreen
-              settings={settings}
-              account={account}
-              onChange={applySettings}
-              onForget={onForget}
-            />
+            <SettingsScreen account={account} onForget={onForget} />
           }
         />
       </div>

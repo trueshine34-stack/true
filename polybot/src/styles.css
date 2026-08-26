@@ -2547,3 +2547,58 @@ button.step.big {
 .foldhead-rest > span:first-child + .foldarrow {
   margin-left: auto;
 }
+
+/* -------------------------------------------------------- the folded rail */
+
+/*
+ * Two collapsed things on one line: the session on the left, the bot on the
+ * right. Both are glanced at a few times an hour, so neither earns a row of
+ * its own — but both are one tap from being open.
+ */
+.rail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.railchip {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.railchip.on {
+  border-color: var(--line);
+  background: var(--surface-2);
+}
+
+.railchip b {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.railchip.right {
+  margin-left: auto;
+}
+
+.raildot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.raildot.live {
+  background: var(--up);
+}

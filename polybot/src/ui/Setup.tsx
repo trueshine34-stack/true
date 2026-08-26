@@ -5,7 +5,6 @@ import {
   SignatureType,
   type AccountConfig,
 } from '../core/account';
-import type { StrategySettings } from '../core/settings';
 import { saveAccount } from '../core/storage';
 import { PolyBot } from '../native/polybot';
 import { Diagnostics } from './Diagnostics';
@@ -19,10 +18,8 @@ const KIND_TO_SIGTYPE: Record<WalletKind, SignatureType> = {
 };
 
 export function Setup({
-  settings,
   onDone,
 }: {
-  settings: StrategySettings;
   onDone: (account: AccountConfig) => void;
 }) {
   const [privateKey, setPrivateKey] = useState('');
@@ -54,7 +51,6 @@ export function Setup({
         privateKey: key,
         funderAddress,
         signatureType: Number(signatureType),
-        settings,
       });
 
       const account: AccountConfig = {

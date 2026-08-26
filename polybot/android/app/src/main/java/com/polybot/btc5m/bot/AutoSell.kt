@@ -27,14 +27,13 @@ import kotlinx.coroutines.launch
 class AutoSell(
     private val engine: BotEngine,
     /**
-     * Shares of an outcome a running bot is holding right now.
+     * Shares of an outcome a bot is holding right now.
      *
-     * Those are left alone: the terminal bot's ladder and the pair bot's legs
-     * are part of strategies that decide their own exits, and blanketing them
-     * with a sell at one price would break both. Everything else in the same
-     * position is the user's and gets sold — the wallet is shared, so a
-     * market-wide skip would silently ignore a hand-placed buy for as long as a
-     * bot happened to be trading that window.
+     * Those are left alone: the bot arranges its own exit at its own rung, and
+     * blanketing them from here would mean two rules cancelling each other's
+     * orders. Everything else in the same position is the user's and gets sold
+     * — the wallet is shared, so a market-wide skip would silently ignore a
+     * hand-placed buy for as long as a bot happened to be trading that window.
      */
     private val botShares: (String) -> Double,
     private val onStateChanged: () -> Unit,
@@ -480,12 +479,9 @@ class AutoSell(
             val status = when {
                 meta == null -> "нет данных рынка"
                 meta.closed || !meta.acceptingOrders -> "рынок закрыт"
-                // Held by a running strategy, which arranges its own exit.
-                botShares(position.asset) > 1e-9 && mine < meta.minimumOrderSize - 1e-6 ->
-                    "у бота"
-                // Not the bot's, just too small for the venue to take an order
-                // for. Saying "у бота" here dropped the position out of the
-                // sweep for good; it is now kept and named for what it is.
+                // Too small for the venue to take an order for. Named rather
+                // than skipped: a position dropped out of the sweep for being
+                // awkward is a position that never gets an exit.
                 mine < meta.minimumOrderSize - 1e-6 ->
                     "меньше минимума " + String.format("%.1f", meta.minimumOrderSize)
                 hold > 0L -> "жду ${(hold + 999) / 1000} с по замеру"
@@ -494,7 +490,7 @@ class AutoSell(
                 else -> reconcile(position, open, meta, target, mine, lotAt)
             }
             // Covered, settled, or the bot's: nothing left to chase here.
-            if (status == "покрыто" || status == "рынок закрыт" || status == "у бота") {
+            if (status == "покрыто" || status == "рынок закрыт") {
                 watching.remove(position.asset)
             } else {
                 // Anything else is unfinished, and the attention renews until
