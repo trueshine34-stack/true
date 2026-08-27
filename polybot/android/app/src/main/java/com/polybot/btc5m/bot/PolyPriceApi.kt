@@ -6,11 +6,17 @@ import org.json.JSONArray
 /**
  * The price series Polymarket itself draws.
  *
- * Their chart is not the raw Chainlink tick: it is the thirty-second TWAP, the
- * same average the five-minute markets settle against. Charting anything else —
- * a spot exchange, another oracle's aggregation — puts a visibly different
- * number next to the one the market is judged by, which is worse than useless
- * on a desk where that judgement is the whole trade.
+ * Their chart is not the raw Chainlink tick: it is a sixty-second TWAP, the
+ * same average the five-minute markets settle against — the markets name
+ * `btc-usd-twap-60s` as their resolution source, and asking this endpoint for
+ * sixty reproduces the site's own figures to the cent. Charting anything else —
+ * a spot exchange, a shorter average, another oracle's aggregation — puts a
+ * visibly different number next to the one the market is judged by, which is
+ * worse than useless on a desk where that judgement is the whole trade.
+ *
+ * The first point of a window is the price the window must beat: the markets
+ * resolve Up when the window's average finishes at or above the price it
+ * opened at, so that point is the target line, not a chart decoration.
  *
  * The endpoint answers one five-minute window per call, so a longer chart is
  * several calls stitched together. Windows that have closed can never change,
@@ -19,7 +25,7 @@ import org.json.JSONArray
 object PolyPriceApi {
 
     private const val HOST = "https://polymarket.com"
-    private const val TWAP_LOOKBACK_SEC = 30
+    private const val TWAP_LOOKBACK_SEC = 60
 
     data class Point(val timestamp: Long, val value: Double)
 

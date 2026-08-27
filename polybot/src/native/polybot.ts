@@ -178,6 +178,16 @@ export interface PolyBotPlugin {
     candles: GmxCandle[];
     ticker?: { mid: number; at: number };
   }>;
+  /**
+   * One five-minute window of Polymarket's own price series, as flat
+   * `[timestampMs, price]` pairs, and the opening price that window resolves
+   * against.
+   */
+  polyWindow(args: { windowStart: number }): Promise<{
+    windowStart: number;
+    points: [number, number][];
+    target?: number;
+  }>;
   getBookLevels(args: { tokenId: string; depth?: number }): Promise<BookLevels>;
   getPositions(): Promise<{ positions: NativePosition[] }>;
   getOrderLog(args?: { windowStart?: number }): Promise<{ orders: LoggedOrder[] }>;
@@ -436,6 +446,7 @@ const webStub: PolyBotPlugin = {
   polyCandles: async () => {
     throw new Error('График доступен только в приложении Android');
   },
+  polyWindow: async () => ({ windowStart: 0, points: [] }),
   getBookLevels: async () => ({ bids: [], asks: [] }),
   getPositions: async () => ({ positions: [] }),
   getOrderLog: async () => ({ orders: [] }),

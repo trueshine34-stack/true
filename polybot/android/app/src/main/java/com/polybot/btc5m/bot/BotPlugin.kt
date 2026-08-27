@@ -665,6 +665,44 @@ class BotPlugin : Plugin() {
     }
 
     /**
+     * One five-minute window of Polymarket's own price series, and the price
+     * that window has to beat.
+     *
+     * This is the series their chart draws — a sixty-second TWAP sampled every
+     * five seconds — and the first point of it is the opening price the market
+     * resolves against, so the target line is read out of the same answer
+     * rather than guessed from a second source that would disagree.
+     *
+     * Points go out as flat pairs. A live window is asked for every couple of
+     * seconds and sixty-one `{timestamp, value}` objects a time is a lot of
+     * bridge traffic for two numbers each.
+     */
+    @PluginMethod
+    fun polyWindow(call: PluginCall) {
+        val windowStart = call.getInt("windowStart")?.toLong()
+        if (windowStart == null || windowStart <= 0L) {
+            call.reject("windowStart required")
+            return
+        }
+        Thread {
+            try {
+                val points = PolyPriceApi.window(windowStart)
+                val out = JSArray()
+                points.forEach {
+                    out.put(JSArray().apply { put(it.timestamp); put(it.value) })
+                }
+                val result = JSObject()
+                    .put("windowStart", windowStart)
+                    .put("points", out)
+                points.firstOrNull()?.let { result.put("target", it.value) }
+                call.resolve(result)
+            } catch (e: Exception) {
+                call.reject(e.message ?: "цены Polymarket недоступны")
+            }
+        }.start()
+    }
+
+    /**
      * GMX candles for the chart. This runs natively for the same reason every
      * other request does: the WebView reports transport failures as an opaque
      * "Failed to fetch", which is impossible to act on.

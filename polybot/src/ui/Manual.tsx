@@ -29,6 +29,7 @@ import {
 } from '../core/money';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
 import { Fold } from './Fold';
+import { WindowChart } from './WindowChart';
 import {
   PolyBot,
   type AutoSellState,
@@ -1082,6 +1083,18 @@ export function Manual({
                 onSell={sellPosition}
               />
             )}
+
+            {/*
+              The window's price against the price it has to beat — Polymarket's
+              own series, so the number on the desk is the number the market is
+              judged by. It sits in the middle, under the clock and over the
+              orders: the decision reads top to bottom as time left, distance to
+              the line, what is working.
+            */}
+            <WindowChart
+              windowStart={viewWindow ?? windowStart}
+              live={viewWindow == null}
+            />
 
             {/*
               Only what is still working. A round that has closed is history and
