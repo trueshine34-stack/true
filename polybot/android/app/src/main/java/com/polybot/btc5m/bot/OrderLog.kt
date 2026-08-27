@@ -234,6 +234,17 @@ object OrderLog {
         return lots.filter { it.shares > 1e-6 }
     }
 
+    /**
+     * Was this order's price chosen by hand?
+     *
+     * A sell the user placed or moved themselves is a decision, and the ladder
+     * re-pricing it a few seconds later throws that decision away. Everything
+     * the rules send is marked `auto`, so what is left is the person.
+     */
+    fun byHand(orderId: String): Boolean = entries.any {
+        it.orderId == orderId && !it.auto
+    }
+
     /** Is one particular asset's buy still working? */
     fun hasWorkingBuy(asset: String): Boolean = entries.any {
         it.asset == asset &&

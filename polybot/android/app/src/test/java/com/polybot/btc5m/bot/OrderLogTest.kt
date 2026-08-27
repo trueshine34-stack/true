@@ -571,4 +571,40 @@ class OrderWindowTest {
         // Five at fifty and five at forty is ten at forty-five.
         assertEquals(0.45, OrderLog.uncoveredLots("up").single().price, 1e-9)
     }
+
+    /**
+     * Everything the rules send is marked auto, so what is left is the person
+     * — and a price they chose is not the ladder's to move.
+     */
+    @Test
+    fun aHandSetPriceIsToldApartFromTheRulesOwn() {
+        OrderLog.record(
+            orderId = "mine",
+            asset = "up",
+            conditionId = "c",
+            outcome = "Up",
+            action = "SELL",
+            price = 0.90,
+            size = 5.0,
+            matched = 0.0,
+            auto = false,
+            windowStart = 1_000,
+        )
+        OrderLog.record(
+            orderId = "rule",
+            asset = "up",
+            conditionId = "c",
+            outcome = "Up",
+            action = "SELL",
+            price = 0.84,
+            size = 5.0,
+            matched = 0.0,
+            auto = true,
+            windowStart = 1_000,
+        )
+
+        assertTrue(OrderLog.byHand("mine"))
+        assertFalse(OrderLog.byHand("rule"))
+        assertFalse(OrderLog.byHand("never heard of it"))
+    }
 }

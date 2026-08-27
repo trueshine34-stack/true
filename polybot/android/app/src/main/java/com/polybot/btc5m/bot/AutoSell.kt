@@ -194,6 +194,16 @@ class AutoSell(
 
         /** How often to look at the balance while a sale's money is awaited. */
         const val CASH_PROBE_MS = 2_000L
+
+        /**
+         * How close to the close a hand-set price stops being honoured.
+         *
+         * A price the user chose is theirs to keep — the ladder moving it a
+         * few seconds later throws the decision away. In the last half-minute
+         * that stops being true: the window is about to settle, and an offer
+         * the book will never reach is worth nothing at all.
+         */
+        const val PIN_RELEASE_SEC = 30L
     }
 
     /**
@@ -882,8 +892,9 @@ class AutoSell(
             lateFloor = settings.lateFloor,
         )
         val stale = sells.filter {
-            (floor != null && it.price < floor - meta.tickSize / 2) ||
-                (lastMinute && target != null && it.price > target + meta.tickSize / 2)
+            !held(it, meta) &&
+                ((floor != null && it.price < floor - meta.tickSize / 2) ||
+                    (lastMinute && target != null && it.price > target + meta.tickSize / 2))
         }
         if (stale.isNotEmpty()) {
             val session = engine.session() ?: return "нет сессии"
@@ -946,13 +957,18 @@ class AutoSell(
         val base = snapToTick(target, meta.tickSize)
         // Best price first: that is the order the steps are counted in, and
         // the order the book will reach them in.
-        val sells = open
+        val all = open
             .filter { it.assetId == position.asset && it.side == "SELL" }
             .sortedByDescending { it.price }
 
+        // A price the user set is theirs until the window is nearly over.
+        val (pinned, sells) = all.partition { held(it, meta) }
+
         val onStep = { i: Int, order: ClobApi.OpenOrder ->
-            abs(order.price - SellLadder.stackedPrice(base, i, meta.tickSize)) <=
-                meta.tickSize / 2
+            abs(
+                order.price -
+                    SellLadder.stackedPrice(base, i + pinned.size, meta.tickSize),
+            ) <= meta.tickSize / 2
         }
         val stale = sells.filterIndexed { i, order -> !onStep(i, order) }
 
@@ -971,12 +987,16 @@ class AutoSell(
         // just pulled. Replacing in the same pass matters — waiting for the next
         // sweep would leave the position naked for a whole retry interval.
         val standing = sells.filterIndexed(onStep)
-        val covered = standing.sumOf { it.remaining }
+        val covered = standing.sumOf { it.remaining } + pinned.sumOf { it.remaining }
         val uncovered = mine - covered
         if (uncovered < meta.minimumOrderSize) return "покрыто"
 
         // The new offer goes a step under the last one still standing.
-        val price = SellLadder.stackedPrice(base, standing.size, meta.tickSize)
+        val price = SellLadder.stackedPrice(
+            base,
+            standing.size + pinned.size,
+            meta.tickSize,
+        )
         return tryPlace(position, uncovered, price, lotAt)
     }
 
@@ -1077,6 +1097,20 @@ class AutoSell(
             lastError[position.asset] = reason
             reason
         }
+    }
+
+    /**
+     * Is this offer's price the user's own, and still theirs?
+     *
+     * Everything the rules send is marked `auto`, so a sell that is not is one
+     * the person placed or moved — and until the last half-minute the rule
+     * leaves it exactly where they put it.
+     */
+    private fun held(order: ClobApi.OpenOrder, meta: ClobApi.MarketMeta): Boolean {
+        if (!OrderLog.byHand(order.id)) return false
+        val closesAt = (meta.windowStart.takeIf { it > 0 } ?: 0L) + WINDOW_SECONDS
+        if (closesAt <= 0L) return true
+        return closesAt - Clock.nowSec() > PIN_RELEASE_SEC
     }
 
     /** A sell must never round down onto a worse price than asked for. */
