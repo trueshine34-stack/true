@@ -1050,6 +1050,10 @@ export function Manual({
             {viewWindow == null && (
               <PositionPair
                 positions={livePositions}
+                bids={{
+                  Up: books.Up.bids[0]?.price ?? null,
+                  Down: books.Down.bids[0]?.price ?? null,
+                }}
                 secondsLeft={secondsLeft}
                 lookAhead={lookAhead}
                 onSell={sellPosition}
@@ -2119,11 +2123,14 @@ function RuleBar({
  */
 function PositionPair({
   positions,
+  bids,
   secondsLeft,
   lookAhead,
   onSell,
 }: {
   positions: NativePosition[];
+  /** Top of the bid side per outcome, for pricing what a close would pay. */
+  bids: { Up: number | null; Down: number | null };
   secondsLeft: number;
   lookAhead: boolean;
   onSell: (position: NativePosition) => void;
@@ -2131,12 +2138,16 @@ function PositionPair({
   const leg = (name: 'Up' | 'Down') => {
     const mine = positions.filter((p) => p.outcome === name);
     if (mine.length === 0) return null;
+    const bid = bids[name];
     const size = mine.reduce((a, p) => a + p.size, 0);
     const cost = mine.reduce((a, p) => a + p.size * p.avgPrice, 0);
-    // What selling it right now would pay, less the taker fee — the money,
-    // not the mark the exchange shows.
+    // What selling it right now would pay, less the taker fee — the money, not
+    // the mark the exchange shows. Priced off the book when the data API has
+    // not caught up: it lags a fresh position by a minute or so, and a number
+    // that only appears after the window is half over is no use in it.
+    const now = bid ?? 0;
     const pnl = mine.reduce(
-      (a, p) => a + positionPnl(p.size, p.avgPrice, p.curPrice ?? 0).pnl,
+      (a, p) => a + positionPnl(p.size, p.avgPrice, p.curPrice || now).pnl,
       0,
     );
     return {
@@ -2144,7 +2155,9 @@ function PositionPair({
       size,
       avg: size > 0 ? cost / size : 0,
       pnl,
-      priced: mine.some((p) => p.avgPrice > 0 && (p.curPrice ?? 0) > 0),
+      // The cost is the half that cannot be guessed; without it there is no
+      // profit to show, only a price.
+      priced: cost > 0 && (mine.some((p) => p.curPrice > 0) || now > 0),
     };
   };
 

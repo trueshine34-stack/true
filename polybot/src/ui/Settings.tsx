@@ -5,6 +5,7 @@ import { PolyBot } from '../native/polybot';
 import { Diagnostics } from './Diagnostics';
 import { Logs } from './Logs';
 import { Fold } from './Fold';
+import { APP_VERSION } from '../version';
 
 export function SettingsScreen({
   account,
@@ -127,6 +128,8 @@ export function SettingsScreen({
       <Fold title="Журнал">
         <Logs />
       </Fold>
+
+      <div className="buildmark muted">PolyBot {APP_VERSION}</div>
     </>
   );
 }

@@ -2738,3 +2738,11 @@ button.wide {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+/* Which build this is — the answer to "did the new one install". */
+.buildmark {
+  text-align: center;
+  font-size: 10px;
+  padding: 10px 0 4px;
+  font-variant-numeric: tabular-nums;
+}
