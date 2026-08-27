@@ -1,14 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   DEFAULT_MANUAL_SETTINGS,
-  cappedShares,
   exposureFor,
   DEFAULT_CLICK_SHARES,
   LIMIT_LADDER_COUNT,
   orderCost,
   sellableShares,
   stakeShares,
-  limitShares,
   minShares,
   type Exposure,
   type ManualSettings,
@@ -535,36 +541,6 @@ export function Manual({
   const guard = settings.exposureGuard && balance != null;
 
   /**
-   * What one tap on a buy button does, worked out once so the label and the
-   * order can never disagree. `short` marks the case where the wallet share
-   * cannot reach the venue's floor: the order is still possible, but it spends
-   * more than the rule allows and the button says so.
-   */
-  const quickFor = (which: 'Up' | 'Down') => {
-    const ask = books[which].asks[0]?.price ?? null;
-    if (ask == null) return null;
-
-    // The size chosen in the row above wins. Picking ten shares and then
-    // tapping a button that buys five is the panel disagreeing with itself,
-    // and the tap is the faster of the two ways to buy — so it follows.
-    const chosen = Number(limitSize.replace(',', '.'));
-    const wanted =
-      Number.isFinite(chosen) && chosen > 0 ? chosen : DEFAULT_CLICK_SHARES;
-    // Whatever was asked for, never under what the venue will take: five
-    // shares at ten cents is fifty cents and is simply refused.
-    const floor = minShares(ask, minSize);
-    const short = wanted < floor - 1e-9;
-    const size = Math.max(wanted, floor);
-
-    // The guard trims rather than refuses: a tap that buys a little less still
-    // works, and the button says what it will actually do.
-    if (!guard) return { ask, shares: size, short, capped: false };
-    const allowed = cappedShares(size, ask, exposure.room, minSize);
-    if (allowed == null) return { ask, shares: 0, short, capped: true, blocked: true };
-    return { ask, shares: allowed, short, capped: allowed < size - 1e-9 };
-  };
-
-  /**
    * Where the current five-minute window opened, in GMX's own series. It is
    * the level the window turns on, so it belongs in the header next to the
    * price rather than only as a line on the chart.
@@ -835,8 +811,9 @@ export function Manual({
     }
   }, []);
 
-  const quickUp = quickFor('Up');
-  const quickDown = quickFor('Down');
+  /** The offer on each side, which is what a limit is priced against. */
+  const askUp = books.Up.asks[0]?.price ?? null;
+  const askDown = books.Down.asks[0]?.price ?? null;
 
   /**
    * What a tap would close on this side: the position, or the size set above
@@ -853,69 +830,20 @@ export function Manual({
     return { position: mine[0], size, bid: books[which].bids[0]?.price ?? null };
   };
 
-  /**
-   * Close a side at the book.
-   *
-   * This is the button you reach for when the window has turned, so it takes
-   * the bid rather than joining the queue — and the standing offers of ours
-   * are pulled on the way, because a tap now outranks a price set a minute
-   * ago.
-   */
-  const quickSell = (which: 'Up' | 'Down') => {
-    const held = quickSellFor(which);
-    if (!held) {
-      setNote(`Нет позиции ${which}`);
-      return;
-    }
-    void marketSell({
-      side: which,
-      action: 'SELL',
-      price: '0',
-      shares: String(held.size),
-      avg: held.position.avgPrice > 0 ? held.position.avgPrice : undefined,
-    });
-  };
-
-  const quickBuy = (which: 'Up' | 'Down') => {
-    const quick = which === 'Up' ? quickUp : quickDown;
-    if (!quick) {
-      setNote(`Стакан ${which} пуст`);
-      return;
-    }
-    if (quick.blocked) {
-      setNote(
-        `Контейнер: в рынке уже ${usd(exposure.committed)} из ${usd(exposure.cap)}`,
-      );
-      return;
-    }
-    if (quick.short) {
-      setNote(
-        `Минимум — ${minShares(quick.ask, minSize).toFixed(0)} долей: ` +
-          `биржа не берёт заявку дешевле 1 $`,
-      );
-    }
-    if (quick.capped) {
-      setNote(
-        `Контейнер: свободно ${usd(exposure.room)}, беру ${quick.shares.toFixed(1)} долей`,
-      );
-    }
-    void place(which, 'BUY', quick.ask, quick.shares);
-  };
-
-  /**
-   * The limit row seeds itself from whichever side is on the button, and the
-   * size follows the price: under 20¢ five shares is under a dollar of
-   * exposure, so cheap prices are sized by money instead.
-   */
   const limitPriceNum = Number(limitPrice.replace(',', '.')) / 100;
-  const limitDefaultSize = limitShares(limitPriceNum, minSize);
+  // Five shares unless the venue's floor is higher at this price — which it is
+  // under twenty cents, where five shares is under a dollar and refused.
+  const limitDefaultSize = Math.max(
+    DEFAULT_CLICK_SHARES,
+    minShares(limitPriceNum, minSize),
+  );
   const limitSizeNum = limitSize === '' ? limitDefaultSize : Number(limitSize.replace(',', '.'));
 
   /** What the size is priced at: the typed limit, or the ask it would default to. */
   const limitBasis =
     Number.isFinite(limitPriceNum) && limitPriceNum > 0
       ? limitPriceNum
-      : (quickUp?.ask ?? quickDown?.ask ?? 0);
+      : (askUp ?? askDown ?? 0);
 
   /**
    * Three cents under the dearer side.
@@ -925,7 +853,7 @@ export function Manual({
    * read yet it falls back to the middle of the range.
    */
   const wheelCenter = (() => {
-    const dearest = Math.max(quickUp?.ask ?? 0, quickDown?.ask ?? 0);
+    const dearest = Math.max(askUp ?? 0, askDown ?? 0);
     if (!(dearest > 0)) return 50;
     return Math.min(99, Math.max(1, Math.round(dearest * 100) - 3));
   })();
@@ -933,7 +861,7 @@ export function Manual({
   const nudgeLimit = (delta: number) => {
     const base = Number.isFinite(limitPriceNum) && limitPriceNum > 0
       ? Math.round(limitPriceNum * 100)
-      : Math.round((quickUp?.ask ?? 0.5) * 100);
+      : Math.round((askUp ?? 0.5) * 100);
     setLimitPrice(String(Math.min(99, Math.max(1, base + delta))));
   };
 
@@ -948,6 +876,19 @@ export function Manual({
       setNote('Укажите цену лимитки');
       return;
     }
+
+    // Selling has no ladder and no container to fit into: it is one order for
+    // what is held, at the price on the screen.
+    if (selling) {
+      const held = quickSellFor(which);
+      if (!held) {
+        setNote(`Нет позиции ${which}`);
+        return;
+      }
+      await place(which, 'SELL', limitPriceNum, held.size);
+      return;
+    }
+
     const wanted = settings.limitLadder
       ? limitLadder(
           limitPriceNum,
@@ -1435,7 +1376,7 @@ export function Manual({
                 type="text"
                 inputMode="none"
                 readOnly
-                placeholder={quickUp ? String(Math.round(quickUp.ask * 100)) : '¢'}
+                placeholder={askUp != null ? String(Math.round(askUp * 100)) : '¢'}
                 value={limitPrice}
                 onClick={() => setPickingPrice((v) => !v)}
               />
@@ -1464,53 +1405,59 @@ export function Manual({
           taps in the same two places, and a mode that says which is one glance
           against a second row of buttons for the rest of the screen's life.
         */}
+        {/*
+          The two sides are quotes, not orders. Tapping one loads its price
+          into the field above, where the size already is — the order itself
+          goes out from that row, so nothing is ever sent by a thumb landing
+          on a number it was only reading.
+        */}
         <div className={`buybar${selling ? ' selling' : ''}`}>
-          {(['Up', 'Down'] as const).map((which) => {
-            const quick = which === 'Up' ? quickUp : quickDown;
+          {(['Up', 'Down'] as const).map((which, i) => {
+            const book = books[which];
+            // What this side is worth for what the dock is about to do: the
+            // offer if buying, the bid if selling.
+            const price = selling
+              ? (book.bids[0]?.price ?? null)
+              : (book.asks[0]?.price ?? null);
             const held = selling ? quickSellFor(which) : null;
-            return (
+            const chip = (
               <button
                 key={which}
                 className={`buy ${which === 'Up' ? 'up' : 'down'}`}
-                disabled={
-                  selling
-                    ? busy || held == null || held.bid == null
-                    : busy || !quick || quick.blocked || locked
+                disabled={price == null}
+                onClick={() =>
+                  price != null && setLimitPrice(String(Math.round(price * 100)))
                 }
-                onClick={() => (selling ? quickSell(which) : quickBuy(which))}
               >
-                <b>
-                  {selling
-                    ? held?.bid != null
-                      ? cents(held.bid)
-                      : '—'
-                    : quick
-                      ? cents(quick.ask)
-                      : '—'}
-                </b>
+                <b>{price != null ? cents(price) : '—'}</b>
                 <s>
-                  {selling
-                    ? held == null
-                      ? 'нет позиции'
-                      : held.bid == null
-                        ? 'нет спроса'
+                  {price == null
+                    ? 'стакан пуст'
+                    : selling
+                      ? held == null
+                        ? 'нет позиции'
                         : `${held.size.toFixed(1)} долей`
-                    : !quick
-                      ? 'стакан пуст'
-                      : quick.blocked
-                        ? 'контейнер'
-                        : `${quick.shares.toFixed(0)} долей${quick.capped ? ' ·огр' : ''}`}
+                      : which}
                 </s>
               </button>
             );
+            // The switch sits between the two sides, which is where the eye
+            // already is when it is choosing one.
+            return i === 0 ? (
+              <Fragment key={which}>
+                {chip}
+                <button
+                  className={`buymode${selling ? ' on' : ''}`}
+                  onClick={() => setSelling((v) => !v)}
+                  aria-label={selling ? 'Режим покупки' : 'Режим продажи'}
+                >
+                  {selling ? 'прод' : 'куп'}
+                </button>
+              </Fragment>
+            ) : (
+              chip
+            );
           })}
-          <button
-            className={`buymode${selling ? ' on' : ''}`}
-            onClick={() => setSelling((v) => !v)}
-            aria-label={selling ? 'Режим покупки' : 'Режим продажи'}
-          >
-            {selling ? 'прод' : 'куп'}
-          </button>
         </div>
       </div>
     </>

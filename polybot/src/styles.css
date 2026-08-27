@@ -2696,9 +2696,9 @@ button.wide {
   width: 100%;
 }
 
-/* Which of the two jobs the big buttons are doing right now. */
+/* Which of the two jobs the dock is doing, between the two sides it does it on. */
 .buymode {
-  flex: 0 0 44px;
+  flex: 0 0 52px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface-2);
