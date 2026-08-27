@@ -1245,10 +1245,12 @@ export function Manual({
         {sizingLimit && (
           <div className="limitpcts pcts" onMouseDown={(e) => e.preventDefault()}>
             {[25, 50, 100].map((pct) => {
+              // A share of what this window may still take, not of the whole
+              // wallet: a hundred percent that the guard then refuses is a
+              // button that lies about what it does.
+              const budget = settings.exposureGuard ? exposure.room : (balance ?? 0);
               const shares =
-                balance != null && balance > 0
-                  ? stakeShares(limitBasis, balance, pct / 100, minSize)
-                  : null;
+                budget > 0 ? stakeShares(limitBasis, budget, pct / 100, minSize) : null;
               return (
                 <button
                   key={pct}
