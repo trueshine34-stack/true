@@ -2833,3 +2833,66 @@ button.wide {
 .wchart-goal {
   margin-left: auto;
 }
+
+/*
+  Binance's book, under the window's price.
+
+  Both sides out from the mid on one scale, so the lean is the picture and the
+  numbers under it are only the confirmation.
+*/
+.depth {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.depth-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.depth-bid {
+  fill: rgba(35, 192, 123, 0.22);
+  stroke: var(--up);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.depth-ask {
+  fill: rgba(255, 90, 106, 0.2);
+  stroke: var(--down);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.depth-mid {
+  stroke: rgba(230, 235, 245, 0.22);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.depth-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 10px 5px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.depth-foot i {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.depth-foot b {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.depth-foot span {
+  font-weight: 600;
+  font-size: 11px;
+}

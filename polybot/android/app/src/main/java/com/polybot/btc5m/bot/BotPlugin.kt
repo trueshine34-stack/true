@@ -730,6 +730,38 @@ class BotPlugin : Plugin() {
     }
 
     /**
+     * Binance's book for BTC/USDT, as a depth curve.
+     *
+     * The book is kept locally off the hundred-millisecond diff stream, so
+     * this reads memory rather than the network and can be asked for as often
+     * as the screen can draw. Sizes come out bucketed by distance from the
+     * mid, nearest bucket first; the running total is the curve.
+     */
+    @PluginMethod
+    fun binanceDepth(call: PluginCall) {
+        val depth = BinanceBook.depth()
+        if (depth == null) {
+            // Not an error: the book is still syncing, and the panel says so.
+            call.resolve(JSObject().put("ready", false))
+            return
+        }
+        val bids = JSArray()
+        depth.bids.forEach { bids.put(it) }
+        val asks = JSArray()
+        depth.asks.forEach { asks.put(it) }
+        call.resolve(
+            JSObject()
+                .put("ready", true)
+                .put("bid", depth.bid)
+                .put("ask", depth.ask)
+                .put("at", depth.at)
+                .put("span", BinanceBook.SPAN)
+                .put("bids", bids)
+                .put("asks", asks),
+        )
+    }
+
+    /**
      * GMX candles for the chart. This runs natively for the same reason every
      * other request does: the WebView reports transport failures as an opaque
      * "Failed to fetch", which is impossible to act on.

@@ -183,6 +183,17 @@ export interface PolyBotPlugin {
    * `[timestampMs, price]` pairs, and the opening price that window resolves
    * against.
    */
+  /** Binance's book as a depth curve, from the locally kept order book. */
+  binanceDepth(): Promise<{
+    ready: boolean;
+    bid?: number;
+    ask?: number;
+    at?: number;
+    span?: number;
+    /** Size per bucket walking away from the mid, nearest bucket first. */
+    bids?: number[];
+    asks?: number[];
+  }>;
   polyWindow(args: {
     windowStart: number;
     /** Newest timestamp already held, as a string — millis overflow an int. */
@@ -450,6 +461,7 @@ const webStub: PolyBotPlugin = {
   polyCandles: async () => {
     throw new Error('График доступен только в приложении Android');
   },
+  binanceDepth: async () => ({ ready: false }),
   polyWindow: async () => ({ windowStart: 0, points: [] }),
   getBookLevels: async () => ({ bids: [], asks: [] }),
   getPositions: async () => ({ positions: [] }),

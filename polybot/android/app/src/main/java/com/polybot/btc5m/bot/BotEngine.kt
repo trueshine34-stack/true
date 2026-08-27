@@ -96,6 +96,9 @@ class BotEngine(
 
     fun startFeed() {
         feed.start()
+        // The Binance book is screen data too, and it is the only thing here
+        // that says what the next few dollars of price would cost.
+        BinanceBook.start()
         startAmbient()
     }
 

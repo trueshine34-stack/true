@@ -32,6 +32,7 @@ import {
 import { loadManualSettings, saveManualSettings } from '../core/storage';
 import { Fold } from './Fold';
 import { WindowChart } from './WindowChart';
+import { DepthPanel } from './DepthPanel';
 import {
   PolyBot,
   type AutoSellState,
@@ -1128,6 +1129,13 @@ export function Manual({
               windowStart={viewWindow ?? windowStart}
               live={viewWindow == null}
             />
+
+            {/*
+              And under it, what is holding that price up: Binance's book, both
+              sides out from the mid. The window's line says where price is,
+              the book says what it would cost to move it.
+            */}
+            {viewWindow == null && <DepthPanel />}
 
             {/*
               Only what is still working. A round that has closed is history and
