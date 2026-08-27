@@ -24,14 +24,27 @@ object OrderLog {
         val conditionId: String,
         val outcome: String,
         val action: String,
+        /** The price asked for. What was paid can be better — see below. */
         val price: Double,
         val size: Double,
         val placedAt: Long,
         val windowStart: Long,
         var matched: Double,
+        /**
+         * The average price actually paid or received for [matched] shares.
+         *
+         * A marketable limit at 81c that sweeps offers at 78 and 79 is filled
+         * at neither 81 nor one of them but at their average — and that is the
+         * number every later decision rests on, because the exit is priced off
+         * what the position cost. Null until something has actually traded.
+         */
+        var fillPrice: Double? = null,
         var status: String,
         var auto: Boolean = false,
-    )
+    ) {
+        /** What this entry cost per share, as well as it is known. */
+        val realPrice: Double get() = fillPrice ?: price
+    }
 
     private val entries = CopyOnWriteArrayList<Entry>()
     private val ids = AtomicLong(0)
@@ -46,6 +59,8 @@ object OrderLog {
         price: Double,
         size: Double,
         matched: Double,
+        /** The average price the matched part actually went at, if it is known. */
+        fillPrice: Double? = null,
         auto: Boolean,
         /**
          * The window this order's market belongs to. Stamping it from the clock
@@ -68,6 +83,7 @@ object OrderLog {
             placedAt = now,
             windowStart = if (windowStart > 0L) windowStart else nowSec - (nowSec % WINDOW_SECONDS),
             matched = matched,
+            fillPrice = fillPrice?.takeIf { it > 0.0 && matched > 1e-9 },
             status = statusFor(matched, size, resting = true),
             auto = auto,
         )
@@ -196,7 +212,9 @@ object OrderLog {
 
         for (entry in mine) {
             if (entry.action != "BUY") continue
-            if (entry.matched > 1e-9) lots.add(Lot(entry.matched, entry.price, entry.placedAt))
+            if (entry.matched > 1e-9) {
+                lots.add(Lot(entry.matched, entry.realPrice, entry.placedAt))
+            }
         }
 
         for (entry in mine) {
@@ -273,7 +291,12 @@ object OrderLog {
             val room = entry.size - entry.matched
             if (room <= 1e-9) continue
             val take = minOf(room, left)
-            entry.matched += take
+            // The trade carries the price it actually went at, so the entry's
+            // average is re-weighted rather than left at what was asked for.
+            val had = entry.matched
+            val was = entry.fillPrice ?: entry.price
+            entry.matched = had + take
+            entry.fillPrice = (was * had + price * take) / entry.matched
             entry.status = statusFor(entry.matched, entry.size, resting = true)
             left -= take
         }
@@ -318,6 +341,8 @@ object OrderLog {
             placedAt = at,
             windowStart = if (windowStart > 0L) windowStart else nowSec - (nowSec % WINDOW_SECONDS),
             matched = size,
+            // A fill with no order behind it is the price it happened at.
+            fillPrice = price,
             status = "filled",
             auto = false,
         )

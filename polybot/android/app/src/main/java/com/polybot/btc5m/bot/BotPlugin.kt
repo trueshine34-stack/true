@@ -820,6 +820,9 @@ class BotPlugin : Plugin() {
                             .put("outcome", it.outcome)
                             .put("action", it.action)
                             .put("price", it.price)
+                            // What it actually went at, where that is known —
+                            // the exit is priced off this, not off the ask.
+                            .put("fillPrice", it.fillPrice)
                             .put("size", it.size)
                             .put("matched", it.matched)
                             .put("status", it.status)

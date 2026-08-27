@@ -2652,42 +2652,39 @@ button.step.big {
   font-variant-numeric: tabular-nums;
 }
 
-.pricepick-now b {
+/*
+ * The number is the wheel. A list of prices under it was two things saying the
+ * same thing, and this is the one being read — so it scrolls, snapped, one
+ * price at a time.
+ */
+.pricespin {
+  height: 68px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pricespin::-webkit-scrollbar {
+  display: none;
+}
+
+.spinnum {
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  scroll-snap-align: center;
   font-size: 46px;
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .pricepick-now span {
   font-size: 20px;
-}
-
-/*
- * The wheel stood on end. This sheet has the height to spare, and a thumb runs
- * up and down it more naturally than across.
- */
-.wheel.vertical {
-  flex-direction: column;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  scroll-snap-type: y mandatory;
-  height: 168px;
-  padding: 0 4px;
-  margin-bottom: 12px;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-
-.wheel.vertical .wheelpad {
-  flex: 0 0 62px;
-}
-
-.wheel.vertical .wheelnum {
-  width: 100%;
-  min-width: 0;
-  font-size: 17px;
 }
 
 button.wide {

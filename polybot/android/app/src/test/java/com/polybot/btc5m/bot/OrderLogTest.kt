@@ -500,4 +500,75 @@ class OrderWindowTest {
         place(next)
         assertTrue(OrderLog.hasWorkingSells(current))
     }
+
+    /**
+     * A marketable limit at 81c that sweeps offers at 78 and 79 costs neither
+     * of those and not 81 either. The exit is priced off what the position
+     * cost, so the lot has to carry the fill and not the ask.
+     */
+    @Test
+    fun aLotIsWorthWhatItActuallyCost() {
+        OrderLog.record(
+            orderId = "a",
+            asset = "up",
+            conditionId = "c",
+            outcome = "Up",
+            action = "BUY",
+            price = 0.81,
+            size = 5.0,
+            matched = 5.0,
+            fillPrice = 0.785,
+            auto = false,
+            windowStart = 1_000,
+        )
+
+        val lot = OrderLog.uncoveredLots("up").single()
+        assertEquals(5.0, lot.shares, 1e-9)
+        assertEquals(0.785, lot.price, 1e-9)
+    }
+
+    /** With nothing traded there is nothing better than the price asked for. */
+    @Test
+    fun anUnfilledOrderKeepsItsAskingPrice() {
+        OrderLog.record(
+            orderId = "a",
+            asset = "up",
+            conditionId = "c",
+            outcome = "Up",
+            action = "BUY",
+            price = 0.4,
+            size = 5.0,
+            matched = 5.0,
+            auto = false,
+            windowStart = 1_000,
+        )
+
+        assertEquals(0.4, OrderLog.uncoveredLots("up").single().price, 1e-9)
+    }
+
+    /**
+     * A resting order that fills later fills at the trade's price, and the
+     * entry's average is re-weighted rather than left at what was asked for.
+     */
+    @Test
+    fun aLaterFillReweightsTheAverage() {
+        OrderLog.record(
+            orderId = "a",
+            asset = "up",
+            conditionId = "c",
+            outcome = "Up",
+            action = "BUY",
+            price = 0.50,
+            size = 10.0,
+            matched = 5.0,
+            fillPrice = 0.50,
+            auto = false,
+            windowStart = 1_000,
+        )
+
+        OrderLog.applyTrade("up", "BUY", price = 0.40, size = 5.0, tick = 0.11)
+
+        // Five at fifty and five at forty is ten at forty-five.
+        assertEquals(0.45, OrderLog.uncoveredLots("up").single().price, 1e-9)
+    }
 }

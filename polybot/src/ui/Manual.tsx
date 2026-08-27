@@ -1477,15 +1477,13 @@ function OrderEditor({
             −
           </button>
           <div className="pricepick-now">
-            <b>{cents_}</b>
+            <PriceSpinner value={cents_} onPick={setCents} />
             <span className="muted">¢</span>
           </div>
           <button className="step big" onClick={() => nudge(step)}>
             +
           </button>
         </div>
-
-        <PriceColumn value={cents_} onPick={setCents} />
 
         {/*
           What the book is at right now, and one tap to be there. Moving an
@@ -1572,7 +1570,7 @@ function SellSheet({
           −
         </button>
         <div className="pricepick-now">
-          <b>{at}</b>
+          <PriceSpinner value={at} onPick={onPrice} />
           <span className="muted">¢</span>
         </div>
         <button className="step big" onClick={() => onPrice(Math.min(99, at + step))}>
@@ -1602,8 +1600,6 @@ function SellSheet({
         </div>
       )}
 
-      <PriceColumn value={at} onPick={onPrice} />
-
       <div className="draftrow">
         <button className="primary compact" disabled={busy} onClick={onSell}>
           Продать {at}¢
@@ -1623,13 +1619,16 @@ function SellSheet({
 }
 
 /**
- * The same wheel of cents as the dock's, stood on end.
+ * The price, scrolled.
  *
- * Vertical because this sheet has the height to spare and a thumb travels up
- * and down it more naturally than across; snapped, so a flick always lands on
- * a price rather than between two.
+ * A list of prices under the number was two things saying the same thing, and
+ * the number was the one being read. So the number is the list: flick it up or
+ * down and it counts, snapped so a flick always lands on a price. The steps
+ * either side are for the last cent.
  */
-function PriceColumn({
+const SPIN_H = 68;
+
+function PriceSpinner({
   value,
   onPick,
 }: {
@@ -1637,42 +1636,40 @@ function PriceColumn({
   onPick: (cents: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  /** The last price this wheel itself chose, so it does not chase its own scroll. */
-  const mine = useRef<number | null>(null);
+  /** Set while a scroll of ours is what moved the value, so it is left alone. */
+  const spinning = useRef(false);
 
   useEffect(() => {
-    if (mine.current === value) return;
     const el = ref.current;
     if (!el) return;
-    const at = el.querySelector<HTMLElement>(`[data-cents="${value}"]`);
-    if (!at) return;
-    const top = at.offsetTop - el.clientHeight / 2 + at.offsetHeight / 2;
-    // Jump on open, glide when a step or a chip moved it from outside.
-    el.scrollTo({ top, behavior: mine.current == null ? 'auto' : 'smooth' });
-    mine.current = value;
+    if (spinning.current) {
+      spinning.current = false;
+      return;
+    }
+    el.scrollTop = (value - 1) * SPIN_H;
   }, [value]);
 
   return (
-    <div className="wheel vertical" ref={ref}>
-      <div className="wheelpad" />
+    <div
+      className="pricespin"
+      ref={ref}
+      onScroll={() => {
+        const el = ref.current;
+        if (!el) return;
+        const c = Math.min(99, Math.max(1, Math.round(el.scrollTop / SPIN_H) + 1));
+        if (c === value) return;
+        spinning.current = true;
+        onPick(c);
+      }}
+    >
       {Array.from({ length: 99 }, (_, i) => i + 1).map((c) => (
-        <button
-          key={c}
-          data-cents={c}
-          className={`wheelnum${c === value ? ' on' : ''}`}
-          onClick={() => {
-            mine.current = c;
-            onPick(c);
-          }}
-        >
+        <div className="spinnum" key={c}>
           {c}
-        </button>
+        </div>
       ))}
-      <div className="wheelpad" />
     </div>
   );
 }
-
 
 /**
  * How the last few five-minute events went.

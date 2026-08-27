@@ -88,6 +88,15 @@ export function pairOrders(orders: LoggedOrder[]): TradeRow[] {
 
   const rows: TradeRow[] = [];
 
+  /**
+   * What an order actually went at, falling back to what it asked for.
+   *
+   * A marketable limit is filled at the offers it sweeps, not at its own
+   * price, and the round's result and its exit are both priced off this.
+   */
+  const paid = (order: LoggedOrder) =>
+    order.fillPrice != null && order.fillPrice > 0 ? order.fillPrice : order.price;
+
   for (const [, group] of byOutcome) {
     const chronological = [...group].sort((a, b) => a.placedAt - b.placedAt);
     const outcome = group.find((o) => o.outcome)?.outcome ?? '';
@@ -98,7 +107,7 @@ export function pairOrders(orders: LoggedOrder[]): TradeRow[] {
       if (order.matched > 1e-9) {
         lots.push({
           shares: order.matched,
-          price: order.price,
+          price: paid(order),
           at: order.placedAt,
           auto: order.auto,
           id: order.id,
@@ -147,13 +156,16 @@ export function pairOrders(orders: LoggedOrder[]): TradeRow[] {
         // trade — it showed up as a "0.0 → 0.0" row with a zero result.
         if (lot.shares < 0.01) continue;
         const cost = buyCost(lot.shares, lot.price);
-        const proceeds = sellProceeds(lot.shares, sell.price);
+        // A closed round is priced at what both legs went at; only a resting
+        // sell is still worth what it is asking for.
+        const at = status === 'pending' ? sell.price : paid(sell);
+        const proceeds = sellProceeds(lot.shares, at);
         rows.push({
           key: `${status}${sell.id}-${lot.id}-${lot.shares.toFixed(3)}`,
           outcome,
           shares: lot.shares,
           buyPrice: lot.price,
-          sellPrice: sell.price,
+          sellPrice: at,
           status,
           orderId: status === 'pending' ? sell.orderId : null,
           closedBy: sell.auto ? 'rule' : 'hand',

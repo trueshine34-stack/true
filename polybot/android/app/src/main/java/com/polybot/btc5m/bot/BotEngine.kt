@@ -242,6 +242,14 @@ class BotEngine(
                 price = price,
                 size = size,
                 matched = fill.shares,
+                // What it actually went at. A marketable limit at 81c that
+                // sweeps offers at 78 and 79 costs neither 81 nor either of
+                // them, and the exit is priced off what the position cost.
+                fillPrice = if (fill.shares > 1e-9 && fill.usd > 0.0) {
+                    fill.usd / fill.shares
+                } else {
+                    null
+                },
                 auto = auto,
                 windowStart = meta.windowStart,
             )
@@ -273,7 +281,11 @@ class BotEngine(
             if (result.success) "trade" else "error",
             if (result.success) {
                 "Ручной ордер $side " + String.format("%.2f", size) + " по " +
-                    String.format("%.0f", price * 100) + "¢ (${result.status ?: "ok"})"
+                    String.format(
+                        "%.0f",
+                        (if (fill.shares > 1e-9 && fill.usd > 0.0) fill.usd / fill.shares
+                        else price) * 100,
+                    ) + "¢ (${result.status ?: "ok"})"
             } else {
                 "Ручной ордер отклонён: ${result.error ?: "отказ CLOB"}"
             },

@@ -219,3 +219,59 @@ describe('pairOrders', () => {
     expect(rows[0].auto).toBe(true);
   });
 });
+
+describe('what an order actually went at', () => {
+  const order = (o: Partial<LoggedOrder>): LoggedOrder => ({
+    id: 1,
+    outcome: 'Up',
+    action: 'BUY',
+    price: 0.81,
+    size: 5,
+    matched: 5,
+    status: 'filled',
+    placedAt: 1_000,
+    auto: false,
+    ...o,
+  });
+
+  it('prices a round off the fill, not off the ask', () => {
+    // Asked for 81c, swept offers at 78 and 79, so it cost 78.5.
+    const rows = pairOrders([
+      order({ id: 1, price: 0.81, fillPrice: 0.785 }),
+      order({ id: 2, action: 'SELL', price: 0.9, fillPrice: 0.92, placedAt: 2_000 }),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].buyPrice).toBeCloseTo(0.785, 6);
+    expect(rows[0].sellPrice).toBeCloseTo(0.92, 6);
+    // And the result follows both, not the two prices that were asked for.
+    expect(rows[0].pnl).toBeGreaterThan(0);
+  });
+
+  it('falls back to the asking price when nothing traded yet', () => {
+    const rows = pairOrders([
+      order({ id: 1, price: 0.4, matched: 0, status: 'resting', orderId: 'a' }),
+    ]);
+    expect(rows[0].status).toBe('buying');
+    expect(rows[0].buyPrice).toBeCloseTo(0.4, 6);
+  });
+
+  /** A sell still on the book is worth what it is asking, not what it paid. */
+  it('leaves a resting sell at its own price', () => {
+    const rows = pairOrders([
+      order({ id: 1, price: 0.5, fillPrice: 0.48 }),
+      order({
+        id: 2,
+        action: 'SELL',
+        price: 0.9,
+        matched: 0,
+        status: 'resting',
+        orderId: 's',
+        placedAt: 2_000,
+      }),
+    ]);
+    expect(rows[0].status).toBe('pending');
+    expect(rows[0].sellPrice).toBeCloseTo(0.9, 6);
+    expect(rows[0].buyPrice).toBeCloseTo(0.48, 6);
+  });
+});

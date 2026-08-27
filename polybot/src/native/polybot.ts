@@ -251,7 +251,16 @@ export type LoggedOrder = {
   asset?: string;
   outcome: string;
   action: 'BUY' | 'SELL';
+  /** The price asked for. */
   price: number;
+  /**
+   * The average price the matched part actually went at.
+   *
+   * A marketable limit at 81c that sweeps offers at 78 and 79 costs neither,
+   * and every later decision — what the exit asks for, what the round made —
+   * rests on this rather than on the ask.
+   */
+  fillPrice?: number | null;
   size: number;
   matched: number;
   /** resting | partial | filled | cancelled */
