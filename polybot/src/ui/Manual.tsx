@@ -2168,10 +2168,12 @@ function PositionPair({
     const bid = bids[name];
     const size = mine.reduce((a, p) => a + p.size, 0);
     const cost = mine.reduce((a, p) => a + p.size * p.avgPrice, 0);
-    // The book first, always. The data API carries a price too, but it is a
-    // minute behind — which on a five-minute window is the difference between
-    // "up eighty cents" and a red number from before the move.
-    const now = bid ?? mine.find((p) => p.curPrice > 0)?.curPrice ?? 0;
+    // The bid, and only the bid. This number answers "what does closing pay",
+    // and closing pays what someone is bidding — the data API's own price is a
+    // minute behind, which on a five-minute window is the difference between
+    // "up eighty cents" and a red number from before the move, and with no bid
+    // at all it kept showing a comfortable loss for shares nobody would take.
+    const now = bid ?? 0;
     // And what it cost: the app's own record of this window's buys, which is
     // true the instant they fill, falling back to the API's average for a
     // position it did not place itself.
@@ -2185,8 +2187,9 @@ function PositionPair({
       // not the mark the exchange shows.
       pnl: positionPnl(size, avg, now).pnl,
       // The cost is the half that cannot be guessed; without it there is no
-      // profit to show, only a price.
-      priced: avg > 0 && now > 0,
+      // profit to show, only a price. No bid is not the same as no answer:
+      // nothing bid means closing pays nothing, and that is the answer.
+      priced: avg > 0,
     };
   };
 

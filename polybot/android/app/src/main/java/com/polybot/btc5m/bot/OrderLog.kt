@@ -31,7 +31,18 @@ object OrderLog {
         val windowStart: Long,
         var matched: Double,
         /**
-         * The average price actually paid or received for [matched] shares.
+         * Shares the fill price below is an average over.
+         *
+         * Kept apart from [matched] because the two learn from different
+         * places at different speeds. The open-orders listing says *how much*
+         * filled and is polled every few seconds; the trade feed says *at what
+         * price* and is slower. Without this, a listing that got there first
+         * left no room for the trade to price, and the order kept the price it
+         * had asked for — which is the number every result is built on.
+         */
+        var priced: Double = 0.0,
+        /**
+         * The average price actually paid or received for [priced] shares.
          *
          * A marketable limit at 81c that sweeps offers at 78 and 79 is filled
          * at neither 81 nor one of them but at their average — and that is the
@@ -83,6 +94,7 @@ object OrderLog {
             placedAt = now,
             windowStart = if (windowStart > 0L) windowStart else nowSec - (nowSec % WINDOW_SECONDS),
             matched = matched,
+            priced = if (fillPrice != null && fillPrice > 0.0 && matched > 1e-9) matched else 0.0,
             fillPrice = fillPrice?.takeIf { it > 0.0 && matched > 1e-9 },
             status = statusFor(matched, size, resting = true),
             auto = auto,
@@ -279,10 +291,18 @@ object OrderLog {
     /**
      * Mark volume against a still-working order from a trade that happened.
      *
-     * Matched by outcome, side and price, oldest first — that is everything the
-     * trade feed carries in common with an order. A trade with no order to
-     * match (sold from the Polymarket app, say) simply finds nothing here; the
-     * buy-back works off the trade itself, not off this.
+     * A fill is never worse than the price the order asked for: a buy pays at
+     * most its limit and a sell receives at least it. Matching on "within a
+     * tick either way" therefore threw away every improved fill — an order for
+     * 85c that traded at 87c found no order to belong to, kept the price it had
+     * asked for, and the round's result was wrong by the improvement. Anything
+     * on the right side of the ask can have produced this trade.
+     *
+     * Among those, the venue fills the most aggressive order first — the
+     * dearest buy, the cheapest sell — so that is the order they are tried in,
+     * oldest first where two ask the same. A trade with no order to match (sold
+     * from the Polymarket site, say) simply finds nothing here and is filed as
+     * a fill of its own.
      */
     @Synchronized
     fun applyTrade(
@@ -293,21 +313,50 @@ object OrderLog {
         tick: Double,
     ): Double {
         var left = size
-        for (entry in entries.sortedBy { it.placedAt }) {
-            if (left <= 1e-9) break
-            if (entry.asset != asset || entry.action != action) continue
-            if (entry.status != "resting" && entry.status != "partial") continue
-            if (kotlin.math.abs(entry.price - price) > tick) continue
+        // How much of an order still needs a price put on it. A working order
+        // may yet fill the rest; a finished one only ever needs its matched
+        // part priced — and a cancelled order that never filled needs nothing.
+        fun room(entry: Entry): Double {
+            val ceiling = if (entry.status == "resting" || entry.status == "partial") {
+                entry.size
+            } else {
+                entry.matched
+            }
+            return ceiling - entry.priced
+        }
 
-            val room = entry.size - entry.matched
-            if (room <= 1e-9) continue
-            val take = minOf(room, left)
-            // The trade carries the price it actually went at, so the entry's
-            // average is re-weighted rather than left at what was asked for.
-            val had = entry.matched
+        val candidates = entries
+            .filter {
+                it.asset == asset &&
+                    it.action == action &&
+                    room(it) > 1e-9 &&
+                    if (action == "BUY") {
+                        price <= it.price + tick / 2
+                    } else {
+                        price >= it.price - tick / 2
+                    }
+            }
+            .sortedWith(
+                if (action == "BUY") {
+                    compareByDescending<Entry> { it.price }.thenBy { it.placedAt }
+                } else {
+                    compareBy<Entry> { it.price }.thenBy { it.placedAt }
+                },
+            )
+
+        for (entry in candidates) {
+            if (left <= 1e-9) break
+
+            // Room to price, not room to fill: the listing may already have
+            // counted these shares, and the trade is still the only thing that
+            // knows what they went for.
+            val take = minOf(room(entry), left)
+            if (take <= 1e-9) continue
+
             val was = entry.fillPrice ?: entry.price
-            entry.matched = had + take
-            entry.fillPrice = (was * had + price * take) / entry.matched
+            entry.fillPrice = (was * entry.priced + price * take) / (entry.priced + take)
+            entry.priced += take
+            entry.matched = maxOf(entry.matched, entry.priced)
             entry.status = statusFor(entry.matched, entry.size, resting = true)
             left -= take
         }
@@ -352,6 +401,7 @@ object OrderLog {
             placedAt = at,
             windowStart = if (windowStart > 0L) windowStart else nowSec - (nowSec % WINDOW_SECONDS),
             matched = size,
+            priced = size,
             // A fill with no order behind it is the price it happened at.
             fillPrice = price,
             status = "filled",

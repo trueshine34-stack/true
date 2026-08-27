@@ -69,9 +69,20 @@ class OrderLogTest {
     }
 
     @Test
-    fun aTradeAtAnotherPriceIsNotThisOrder() {
+    fun aSellFilledAboveItsAskIsStillThisOrder() {
+        // The venue never pays a seller less than they asked; anything above is
+        // an improvement, and the order it improved on is this one.
         val entry = record("SELL", 0.77, 5.0)
         OrderLog.applyTrade("token-a", "SELL", 0.93, 5.0, tick = 0.01)
+
+        assertEquals(5.0, entry.matched, 1e-9)
+        assertEquals(0.93, entry.realPrice, 1e-9)
+    }
+
+    @Test
+    fun aSellFilledBelowItsAskIsNotThisOrder() {
+        val entry = record("SELL", 0.77, 5.0)
+        OrderLog.applyTrade("token-a", "SELL", 0.60, 5.0, tick = 0.01)
 
         assertEquals(0.0, entry.matched, 1e-9)
         assertEquals("resting", entry.status)
@@ -606,5 +617,148 @@ class OrderWindowTest {
         assertTrue(OrderLog.byHand("mine"))
         assertFalse(OrderLog.byHand("rule"))
         assertFalse(OrderLog.byHand("never heard of it"))
+    }
+
+    /**
+     * A fill is never worse than the price the order asked for. Matching
+     * "within a tick either way" threw away every improved fill: an order for
+     * 85c that traded at 87c found no order to belong to, kept the price it
+     * had asked for, and the round's result was wrong by the improvement.
+     */
+    @Test
+    fun anImprovedFillStillBelongsToItsOrder() {
+        OrderLog.record(
+            orderId = "s",
+            asset = "down",
+            conditionId = "c",
+            outcome = "Down",
+            action = "SELL",
+            price = 0.85,
+            size = 23.0,
+            matched = 0.0,
+            auto = true,
+            windowStart = 1_000,
+        )
+
+        assertEquals(0.0, OrderLog.applyTrade("down", "SELL", 0.87, 23.0, 0.01), 1e-9)
+
+        val entry = OrderLog.all().single()
+        assertEquals(23.0, entry.matched, 1e-9)
+        assertEquals(0.87, entry.realPrice, 1e-9)
+    }
+
+    /** And a buy pays at most its limit, so anything under it is its own. */
+    @Test
+    fun aBuyThatPaidLessKeepsThePriceItPaid() {
+        OrderLog.record(
+            orderId = "b",
+            asset = "up",
+            conditionId = "c",
+            outcome = "Up",
+            action = "BUY",
+            price = 0.81,
+            size = 5.0,
+            matched = 0.0,
+            auto = false,
+            windowStart = 1_000,
+        )
+
+        OrderLog.applyTrade("up", "BUY", 0.78, 5.0, 0.01)
+        assertEquals(0.78, OrderLog.all().single().realPrice, 1e-9)
+    }
+
+    /** A fill worse than the ask cannot have come from this order. */
+    @Test
+    fun aWorsePriceIsNotThisOrdersFill() {
+        OrderLog.record(
+            orderId = "b",
+            asset = "up",
+            conditionId = "c",
+            outcome = "Up",
+            action = "BUY",
+            price = 0.40,
+            size = 5.0,
+            matched = 0.0,
+            auto = false,
+            windowStart = 1_000,
+        )
+
+        // Nothing to take it, so it is left over for the caller to file.
+        assertEquals(5.0, OrderLog.applyTrade("up", "BUY", 0.55, 5.0, 0.01), 1e-9)
+        assertEquals(0.40, OrderLog.all().single().realPrice, 1e-9)
+    }
+
+    /**
+     * The listing says how much filled and is polled every few seconds; the
+     * trade feed says at what price and is slower. When the listing gets there
+     * first there must still be room for the trade to price the shares — or
+     * the order keeps the price it asked for and a second, phantom fill is
+     * filed alongside it.
+     */
+    @Test
+    fun aTradeStillPricesSharesTheListingAlreadyCounted() {
+        val entry = OrderLog.record(
+            orderId = "s",
+            asset = "down",
+            conditionId = "c",
+            outcome = "Down",
+            action = "SELL",
+            price = 0.85,
+            size = 23.0,
+            matched = 0.0,
+            auto = true,
+            windowStart = 1_000,
+        )
+
+        // The open-orders listing gets there first.
+        OrderLog.reconcile(
+            listOf(
+                ClobApi.OpenOrder(
+                    id = "s",
+                    status = "MATCHED",
+                    market = "c",
+                    assetId = "down",
+                    side = "SELL",
+                    price = 0.85,
+                    originalSize = 23.0,
+                    sizeMatched = 23.0,
+                    outcome = "Down",
+                ),
+            ),
+        ) { null }
+        assertEquals(23.0, entry.matched, 1e-9)
+        assertEquals(0.85, entry.realPrice, 1e-9)
+
+        // And the trade, when it arrives, is what says the price.
+        assertEquals(0.0, OrderLog.applyTrade("down", "SELL", 0.87, 23.0, 0.01), 1e-9)
+        assertEquals(0.87, entry.realPrice, 1e-9)
+        assertEquals(1, OrderLog.all().size)
+    }
+
+    /** Several orders of a side: the venue fills the most aggressive first. */
+    @Test
+    fun aFillGoesToTheOrderThatWouldHaveMadeIt() {
+        for ((id, price) in listOf("dear" to 0.53, "cheap" to 0.46)) {
+            OrderLog.record(
+                orderId = id,
+                asset = "up",
+                conditionId = "c",
+                outcome = "Up",
+                action = "BUY",
+                price = price,
+                size = 12.0,
+                matched = 0.0,
+                auto = false,
+                windowStart = 1_000,
+            )
+        }
+
+        OrderLog.applyTrade("up", "BUY", 0.51, 12.0, 0.01)
+
+        val dear = OrderLog.all().single { it.orderId == "dear" }
+        val cheap = OrderLog.all().single { it.orderId == "cheap" }
+        assertEquals(12.0, dear.matched, 1e-9)
+        assertEquals(0.51, dear.realPrice, 1e-9)
+        assertEquals(0.0, cheap.matched, 1e-9)
     }
 }
