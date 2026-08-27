@@ -309,3 +309,33 @@ export function orderCost(shares: number, price: number): number {
   if (!Number.isFinite(shares) || !Number.isFinite(price)) return 0;
   return shares * price + TAKER_FEE_RATE * price * (1 - price) * shares;
 }
+
+/**
+ * The dearest a buy may be this early in the window.
+ *
+ * A side that already costs 54c in the first minute is being paid for a move
+ * that has barely started: five minutes is long enough for it to come back,
+ * and the shares bought at that price have little left to gain and most of a
+ * dollar to lose. The ceiling lifts as the window runs out of time to reverse
+ * — 77c through the third minute, and nothing after it, when a dear side is
+ * dear because it has nearly won.
+ *
+ * It is a floor on judgement, not a strategy: nothing in the app, by hand or
+ * by rule, sends a buy above it.
+ */
+export const CAP_FIRST_MIN_SEC = 60;
+export const CAP_EARLY_SEC = 180;
+export const CAP_FIRST_MIN = 0.54;
+export const CAP_EARLY = 0.77;
+
+export function buyCeiling(elapsedSec: number): number {
+  if (!Number.isFinite(elapsedSec)) return CAP_FIRST_MIN;
+  if (elapsedSec < CAP_FIRST_MIN_SEC) return CAP_FIRST_MIN;
+  if (elapsedSec < CAP_EARLY_SEC) return CAP_EARLY;
+  return 1;
+}
+
+/** Whether a buy at this price is barred by the ceiling above. */
+export function buyBarred(price: number, elapsedSec: number): boolean {
+  return price > buyCeiling(elapsedSec) + 1e-9;
+}

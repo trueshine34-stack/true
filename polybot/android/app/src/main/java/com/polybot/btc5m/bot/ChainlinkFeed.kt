@@ -55,7 +55,22 @@ class ChainlinkFeed(
     var twap: Tick? = null
         private set
 
+    /**
+     * Latest sixty-second TWAP — the series the five-minute markets settle on
+     * and the one their chart draws, arriving once a second.
+     *
+     * The same numbers can be had over HTTP, but only as a downsampled series
+     * that runs half a minute behind; on a five-minute bet that is most of the
+     * move. Display only, for the same reason as the thirty.
+     */
+    @Volatile
+    var twap60: Tick? = null
+        private set
+
     private val history = CopyOnWriteArrayList<Tick>()
+
+    /** Recent sixty-second TWAP, for drawing the window that is running. */
+    private val twap60History = CopyOnWriteArrayList<Tick>()
     private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
         Thread(r, "chainlink-feed").apply { isDaemon = true }
     }
@@ -75,6 +90,10 @@ class ChainlinkFeed(
         const val CHAINLINK_TOPIC = "crypto_prices_chainlink"
         const val SPOT_TOPIC = "crypto_prices"
         const val TWAP_TOPIC = "crypto_prices_twap_thirty"
+        const val TWAP60_TOPIC = "crypto_prices_twap_sixty"
+        // Twelve minutes at a tick a second: two whole windows and the change,
+        // which is everything a chart on this desk can ask for.
+        const val MAX_TWAP60 = 720
     }
 
     fun start() {
@@ -94,6 +113,10 @@ class ChainlinkFeed(
 
     fun ticksBetween(fromMs: Long, toMs: Long): List<Tick> =
         history.filter { it.timestamp in fromMs..toMs }
+
+    /** The sixty-second TWAP over a span, oldest first. */
+    fun twap60Between(fromMs: Long, toMs: Long): List<Tick> =
+        twap60History.filter { it.timestamp in fromMs..toMs }.sortedBy { it.timestamp }
 
     fun firstTickAtOrAfter(atMs: Long): Tick? = history.firstOrNull { it.timestamp >= atMs }
 
@@ -134,7 +157,8 @@ class ChainlinkFeed(
                             JSONArray()
                                 .put(subscription(CHAINLINK_TOPIC))
                                 .put(subscription(SPOT_TOPIC))
-                                .put(subscription(TWAP_TOPIC)),
+                                .put(subscription(TWAP_TOPIC))
+                                .put(subscription(TWAP60_TOPIC)),
                         )
                     webSocket.send(message.toString())
                 }
@@ -240,9 +264,29 @@ class ChainlinkFeed(
         val topic = json.optString("topic")
         when {
             topic == TWAP_TOPIC && itemSymbol == symbol -> twap = Tick(timestamp, value)
+            topic == TWAP60_TOPIC && itemSymbol == symbol -> pushTwap60(Tick(timestamp, value))
             itemSymbol == symbol -> push(Tick(timestamp, value), live = true)
             itemSymbol == spotSymbol -> spot = Tick(timestamp, value)
         }
+    }
+
+    /**
+     * Keeps one tick per second and no more.
+     *
+     * The service repeats a second now and then, and a repeat drawn as a new
+     * point is a vertical jump in the line. Last value for a second wins.
+     */
+    private fun pushTwap60(tick: Tick) {
+        if (tick.timestamp <= 0L || tick.value <= 0.0) return
+        twap60 = tick
+        val last = twap60History.lastOrNull()
+        if (last != null && last.timestamp == tick.timestamp) {
+            twap60History[twap60History.lastIndex] = tick
+            return
+        }
+        if (last != null && tick.timestamp < last.timestamp) return
+        twap60History.add(tick)
+        while (twap60History.size > MAX_TWAP60) twap60History.removeAt(0)
     }
 
     /**

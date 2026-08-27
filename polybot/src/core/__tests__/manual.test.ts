@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
-  limitShares,
-  minShares,
+  MIN_ROOM_USD,
+  buyBarred,
+  buyCeiling,
   cappedShares,
   exposureFor,
-  MIN_ROOM_USD,
-  windowCapPct,
+  limitShares,
+  minShares,
   orderCost,
   sellableShares,
   spendableBalance,
   stakeShares,
+  windowCapPct,
 } from '../manual';
 
 /**
@@ -294,5 +296,37 @@ describe('windowCapPct', () => {
   it('is what the guard uses unless it is told otherwise', () => {
     expect(exposureFor(400, 100).pct).toBeCloseTo(windowCapPct(500), 9);
     expect(exposureFor(400, 100, 0.5).pct).toBeCloseTo(0.5, 9);
+  });
+});
+
+describe('buyCeiling', () => {
+  it('holds buys to 54c through the first minute', () => {
+    expect(buyCeiling(0)).toBe(0.54);
+    expect(buyCeiling(59)).toBe(0.54);
+  });
+
+  it('lifts to 77c for the second and third minutes', () => {
+    expect(buyCeiling(60)).toBe(0.77);
+    expect(buyCeiling(179)).toBe(0.77);
+  });
+
+  it('stops capping once the window is past its third minute', () => {
+    expect(buyCeiling(180)).toBe(1);
+    expect(buyCeiling(299)).toBe(1);
+  });
+
+  it('treats a window that has not started as its first minute', () => {
+    // Looking ahead to the next window: nothing has happened in it yet, so the
+    // early rule is exactly the rule that applies.
+    expect(buyCeiling(-30)).toBe(0.54);
+  });
+
+  it('bars a price over the ceiling and allows one on it', () => {
+    expect(buyBarred(0.55, 10)).toBe(true);
+    expect(buyBarred(0.54, 10)).toBe(false);
+    expect(buyBarred(0.67, 10)).toBe(true);
+    expect(buyBarred(0.78, 120)).toBe(true);
+    expect(buyBarred(0.77, 120)).toBe(false);
+    expect(buyBarred(0.95, 240)).toBe(false);
   });
 });

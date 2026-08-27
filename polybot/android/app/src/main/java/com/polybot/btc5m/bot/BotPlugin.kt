@@ -668,14 +668,16 @@ class BotPlugin : Plugin() {
      * One five-minute window of Polymarket's own price series, and the price
      * that window has to beat.
      *
-     * This is the series their chart draws — a sixty-second TWAP sampled every
-     * five seconds — and the first point of it is the opening price the market
-     * resolves against, so the target line is read out of the same answer
-     * rather than guessed from a second source that would disagree.
+     * Two sources, because neither is enough alone. The socket carries the
+     * sixty-second TWAP once a second — the number the market settles on, live
+     * — but only from the moment the app connected. The HTTP series covers the
+     * whole window including the opening price the market resolves against,
+     * but it is downsampled and runs about half a minute behind. So the HTTP
+     * answer is the backbone and the socket is the growing end of the line;
+     * where they overlap they agree to the cent, being the same series.
      *
-     * Points go out as flat pairs. A live window is asked for every couple of
-     * seconds and sixty-one `{timestamp, value}` objects a time is a lot of
-     * bridge traffic for two numbers each.
+     * `since` makes the second call onwards cheap: a chart redrawn every
+     * second wants the one new tick, not three hundred old ones.
      */
     @PluginMethod
     fun polyWindow(call: PluginCall) {
@@ -684,17 +686,42 @@ class BotPlugin : Plugin() {
             call.reject("windowStart required")
             return
         }
+        val since = call.getString("since")?.toLongOrNull() ?: 0L
         Thread {
             try {
-                val points = PolyPriceApi.window(windowStart)
-                val out = JSArray()
-                points.forEach {
-                    out.put(JSArray().apply { put(it.timestamp); put(it.value) })
+                val fromMs = windowStart * 1000
+                val toMs = (windowStart + WINDOW_SECONDS) * 1000
+
+                // Missing history is a thinner chart; a missing socket is a
+                // chart that stops moving. Neither is worth failing the call.
+                val backbone = try {
+                    PolyPriceApi.window(windowStart)
+                } catch (e: Exception) {
+                    emptyList()
                 }
+                val merged = sortedMapOf<Long, Double>()
+                backbone.forEach {
+                    if (it.timestamp in fromMs..toMs) merged[it.timestamp] = it.value
+                }
+                engine.feed.twap60Between(fromMs, toMs).forEach {
+                    merged[it.timestamp] = it.value
+                }
+
+                val out = JSArray()
+                merged.forEach { (t, v) ->
+                    if (t > since) out.put(JSArray().apply { put(t); put(v) })
+                }
+
                 val result = JSObject()
                     .put("windowStart", windowStart)
                     .put("points", out)
-                points.firstOrNull()?.let { result.put("target", it.value) }
+                // The target is the price at the very start of the window, not
+                // merely the earliest reading we happen to hold: a window the
+                // app joined late opens with a tick from the middle of it, and
+                // charting that as the line to beat would be a lie.
+                merged.entries.firstOrNull()?.let {
+                    if (it.key <= fromMs + 2_000) result.put("target", it.value)
+                }
                 call.resolve(result)
             } catch (e: Exception) {
                 call.reject(e.message ?: "цены Polymarket недоступны")

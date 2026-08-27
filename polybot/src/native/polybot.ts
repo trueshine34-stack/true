@@ -183,7 +183,11 @@ export interface PolyBotPlugin {
    * `[timestampMs, price]` pairs, and the opening price that window resolves
    * against.
    */
-  polyWindow(args: { windowStart: number }): Promise<{
+  polyWindow(args: {
+    windowStart: number;
+    /** Newest timestamp already held, as a string — millis overflow an int. */
+    since?: string;
+  }): Promise<{
     windowStart: number;
     points: [number, number][];
     target?: number;

@@ -37,11 +37,31 @@ object PolyPriceApi {
         val close: Double,
     )
 
-    /** Closed windows only; the live one is refetched every time. */
+    /** Closed windows, which can never change again. */
     private val cache = ConcurrentHashMap<Long, List<Point>>()
+
+    /**
+     * The running window's last answer.
+     *
+     * A window still open answers with a series that is downsampled and half a
+     * minute behind — the live end of the line comes off the socket instead, so
+     * asking again every second buys nothing but traffic.
+     */
+    private const val LIVE_HOLD_MS = 20_000L
+    private var liveKey = 0L
+    private var liveAt = 0L
+    private var livePoints: List<Point> = emptyList()
 
     fun window(windowStart: Long, symbol: String = "BTC"): List<Point> {
         cache[windowStart]?.let { return it }
+        synchronized(this) {
+            if (liveKey == windowStart &&
+                livePoints.isNotEmpty() &&
+                System.currentTimeMillis() - liveAt < LIVE_HOLD_MS
+            ) {
+                return livePoints
+            }
+        }
 
         val url = "$HOST/api/crypto/price-history?symbol=$symbol" +
             "&eventStartTime=$windowStart&variant=fiveminute" +
@@ -63,6 +83,12 @@ object PolyPriceApi {
             cache[windowStart] = out
             if (cache.size > 48) {
                 cache.keys.minOrNull()?.let { cache.remove(it) }
+            }
+        } else if (out.isNotEmpty()) {
+            synchronized(this) {
+                liveKey = windowStart
+                liveAt = System.currentTimeMillis()
+                livePoints = out
             }
         }
         return out
@@ -112,5 +138,11 @@ object PolyPriceApi {
         }
     }
 
-    fun clear() = cache.clear()
+    fun clear() {
+        cache.clear()
+        synchronized(this) {
+            liveKey = 0L
+            livePoints = emptyList()
+        }
+    }
 }

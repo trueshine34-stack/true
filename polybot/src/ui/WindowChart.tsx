@@ -15,8 +15,8 @@ const H = 88;
 /** Kept clear at the right edge for the live dot. */
 const INSET = 8;
 
-/** A live window is redrawn this often; the series itself ticks every 5s. */
-const LIVE_MS = 2_000;
+/** The socket carries a tick a second, so the line moves a second at a time. */
+const LIVE_MS = 1_000;
 
 /**
  * The window's price against the price it has to beat.
@@ -27,8 +27,9 @@ const LIVE_MS = 2_000;
  * distance between the two: above the line Up pays, below it Down does, and
  * the gap is how much room the price still has to change its mind.
  *
- * A finished window is fetched once and then left alone; only the running one
- * is polled, and only while it is on screen.
+ * The running window is asked once a second and answers with whatever is new
+ * — usually a single tick — so the line advances a second at a time without
+ * re-sending the whole window. A finished one is fetched once and left alone.
  */
 export function WindowChart({
   windowStart,
@@ -45,13 +46,21 @@ export function WindowChart({
   useEffect(() => {
     if (windowStart == null) return;
     let alive = true;
+    // What has already been drawn, kept out of React state so the timer does
+    // not have to be rebuilt every second to see it.
+    let held: PricePoint[] = [];
 
     const pull = () => {
-      void PolyBot.polyWindow({ windowStart })
+      const since = held.length > 0 ? String(held[held.length - 1][0]) : '0';
+      void PolyBot.polyWindow({ windowStart, since })
         .then((r) => {
           if (!alive) return;
-          setPoints((r.points ?? []) as PricePoint[]);
-          setTarget(r.target ?? 0);
+          const fresh = (r.points ?? []) as PricePoint[];
+          if (fresh.length > 0) {
+            held = [...held, ...fresh];
+            setPoints(held);
+          }
+          if (r.target) setTarget(r.target);
           setStart(windowStart);
         })
         .catch(() => {

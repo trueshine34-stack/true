@@ -210,6 +210,15 @@ class BotEngine(
         val keys = keyPair ?: error("ключ не загружен")
 
         val meta = ClobApi.marketMeta(conditionId)
+
+        // The early ceiling, on the one path every order takes. A tap, a
+        // ladder rung and a rebuy are all buys, and the rule is about what is
+        // paid rather than about who asked.
+        if (side == "BUY") {
+            val elapsed = BuyCap.elapsedFor(meta.windowStart)
+            if (BuyCap.blocked(price, elapsed)) error(BuyCap.reason(elapsed))
+        }
+
         val cfg = Orders.roundConfigFor(meta.tickSize)
         val amounts = if (orderType == "FOK" || orderType == "FAK") {
             Orders.marketOrderAmounts(side, size, price, cfg)

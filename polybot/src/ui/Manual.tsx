@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  buyBarred,
+  buyCeiling,
   DEFAULT_MANUAL_SETTINGS,
   exposureFor,
   DEFAULT_CLICK_SHARES,
@@ -551,6 +553,17 @@ export function Manual({
   // seconds where the new window's market has not loaded yet.
   const secondsLeft = Math.max(0, windowStart + WINDOW_SEC - Math.floor(now / 1000));
 
+  /**
+   * How far into the window the desk is trading.
+   *
+   * Looking ahead, the window on the buttons has not started at all, so it is
+   * at second zero — which is exactly the moment the early rules are for.
+   */
+  const elapsed = lookAhead ? 0 : WINDOW_SEC - secondsLeft;
+
+  /** The dearest a buy may be right now. Above it nothing is placed or offered. */
+  const ceiling = buyCeiling(elapsed);
+
   const place = useCallback(
     async (
       which: 'Up' | 'Down',
@@ -583,6 +596,18 @@ export function Manual({
         );
         return;
       }
+      // Nothing dear this early, by any route. A side that costs this much in
+      // the first minutes is paying for a move with most of the window left to
+      // undo it, and the rule is worth nothing if the price field can step
+      // around it.
+      if (action === 'BUY' && buyBarred(price, elapsed)) {
+        setNote(
+          `Первые ${elapsed < 60 ? '60 секунд' : '3 минуты'} — не дороже ` +
+            `${cents(buyCeiling(elapsed))}`,
+        );
+        return;
+      }
+
       // The day's stop comes before everything else: it is the one rule that
       // exists to end trading, not to shape it. Selling stays open — a stop
       // that stranded open positions would work against the win it protects.
@@ -646,7 +671,7 @@ export function Manual({
         setBusy(false);
       }
     },
-    [market, deskWindow, guard, exposure, locked],
+    [market, deskWindow, guard, exposure, locked, elapsed],
   );
 
   /**
@@ -856,11 +881,19 @@ export function Manual({
     return Math.min(99, Math.max(1, Math.round(dearest * 100) - 3));
   })();
 
+  /** Whether the price in the field is one the early rule will not buy at. */
+  const limitBarred =
+    !selling &&
+    Number.isFinite(limitPriceNum) &&
+    limitPriceNum > 0 &&
+    buyBarred(limitPriceNum, elapsed);
+
   const nudgeLimit = (delta: number) => {
     const base = Number.isFinite(limitPriceNum) && limitPriceNum > 0
       ? Math.round(limitPriceNum * 100)
       : Math.round((askUp ?? 0.5) * 100);
-    setLimitPrice(String(Math.min(99, Math.max(1, base + delta))));
+    const top = selling ? 99 : Math.round(ceiling * 100);
+    setLimitPrice(String(Math.min(top, Math.max(1, base + delta))));
   };
 
   /**
@@ -1266,12 +1299,16 @@ export function Manual({
       */}
       <div className={`dock${tab === 'settings' ? ' away' : ''}`}>
         {/*
-          The size is picked, not typed. A limit here is either a share of the
-          wallet or one of three standing clip sizes, and both are one tap —
-          against a keypad that covers the book you are pricing against.
+          The size is picked, not typed: a share of what this window may still
+          take, one tap, against a keypad that covers the book you are pricing
+          against. Tapping a side below fills the field to the hilt, so these
+          are the ways of asking for less than everything.
         */}
         {sizingLimit && (
-          <div className="limitpcts pcts" onMouseDown={(e) => e.preventDefault()}>
+          <div
+            className="limitpcts pcts big"
+            onMouseDown={(e) => e.preventDefault()}
+          >
             {[25, 50, 100].map((pct) => {
               // A share of what this window may still take, not of the whole
               // wallet: a hundred percent that the guard then refuses is a
@@ -1290,15 +1327,6 @@ export function Manual({
                 </button>
               );
             })}
-            {[5, 10, 15].map((n) => (
-              <button
-                key={n}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setLimitSize(String(n))}
-              >
-                {n}
-              </button>
-            ))}
           </div>
         )}
 
@@ -1338,6 +1366,8 @@ export function Manual({
         {pickingPrice && (
           <PriceWheel
             center={wheelCenter}
+            /* Selling has no ceiling — the rule is about what is paid. */
+            max={selling ? 99 : Math.round(ceiling * 100)}
             value={
               Number.isFinite(limitPriceNum) && limitPriceNum > 0
                 ? Math.round(limitPriceNum * 100)
@@ -1352,7 +1382,7 @@ export function Manual({
         <div className="limitrow">
           <button
             className="limit up"
-            disabled={busy || locked}
+            disabled={busy || locked || limitBarred}
             onClick={() => void placeLimit('Up')}
           >
             Up
@@ -1383,7 +1413,7 @@ export function Manual({
           </div>
           <button
             className="limit down"
-            disabled={busy || locked}
+            disabled={busy || locked || limitBarred}
             onClick={() => void placeLimit('Down')}
           >
             Down
@@ -1410,14 +1440,30 @@ export function Manual({
               ? (book.bids[0]?.price ?? null)
               : (book.asks[0]?.price ?? null);
             const held = selling ? quickSellFor(which) : null;
+            // Nothing dear may be bought this early, so a side quoting above
+            // the ceiling is not a price to load — it is a side to leave alone.
+            const barred = !selling && price != null && buyBarred(price, elapsed);
             const chip = (
               <button
                 key={which}
-                className={`buy ${which === 'Up' ? 'up' : 'down'}`}
-                disabled={price == null}
-                onClick={() =>
-                  price != null && setLimitPrice(String(Math.round(price * 100)))
-                }
+                className={`buy ${which === 'Up' ? 'up' : 'down'}${
+                  barred ? ' barred' : ''
+                }`}
+                disabled={price == null || barred}
+                onClick={() => {
+                  if (price == null) return;
+                  setLimitPrice(String(Math.round(price * 100)));
+                  // And the size the field is about to spend: all of it. The
+                  // shares wanted at this price are what the window still has
+                  // room for, and typing that out was the last thing here that
+                  // was typed.
+                  const budget = settings.exposureGuard
+                    ? exposure.room
+                    : (balance ?? 0);
+                  const full =
+                    budget > 0 ? stakeShares(price, budget, 1, minSize) : null;
+                  if (full != null) setLimitSize(String(full));
+                }}
               >
                 <b>{price != null ? cents(price) : '—'}</b>
                 <s>
@@ -1427,7 +1473,9 @@ export function Manual({
                       ? held == null
                         ? 'нет позиции'
                         : `${held.size.toFixed(1)} долей`
-                      : which}
+                      : barred
+                        ? `не выше ${cents(ceiling)}`
+                        : which}
                 </s>
               </button>
             );
@@ -2269,11 +2317,14 @@ function PositionPair({
 function PriceWheel({
   value,
   center,
+  max,
   onPick,
 }: {
   value: number | null;
   /** Where the wheel lands when it opens, in cents. */
   center: number;
+  /** The dearest cent the wheel will offer — the early ceiling, when buying. */
+  max: number;
   onPick: (cents: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -2290,7 +2341,7 @@ function PriceWheel({
   };
 
   useEffect(() => {
-    scrollTo(center, false);
+    scrollTo(Math.min(center, max), false);
     // Opening is the only time it is positioned; after that it is the user's.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2313,7 +2364,7 @@ function PriceWheel({
 
       <div className="wheel" ref={ref}>
         <div className="wheelpad" />
-        {Array.from({ length: 99 }, (_, i) => i + 1).map((c) => (
+        {Array.from({ length: Math.max(1, max) }, (_, i) => i + 1).map((c) => (
           <button
             key={c}
             data-cents={c}
@@ -2332,9 +2383,9 @@ function PriceWheel({
       <button
         className="wheeljump"
         onMouseDown={(e) => e.preventDefault()}
-        onClick={() => scrollTo(WHEEL_HIGH, true)}
+        onClick={() => scrollTo(Math.min(WHEEL_HIGH, max), true)}
       >
-        {WHEEL_HIGH}
+        {Math.min(WHEEL_HIGH, max)}
       </button>
     </div>
   );
