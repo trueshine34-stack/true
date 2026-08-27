@@ -171,6 +171,10 @@ export function Manual({
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
+  /** The book of our own orders, read inside callbacks that must not re-bind. */
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
+
   /**
    * Until the stored settings arrive, `settings` holds the defaults — and the
    * defaults have the rules off. Re-arming from them would push "off" at a
@@ -625,6 +629,24 @@ export function Manual({
 
       setBusy(true);
       try {
+        // A tap to sell outranks whatever is already offered. The shares under
+        // a resting sell are spoken for, so asking for them again is refused
+        // for "not enough balance" — which is true and useless. Pull ours
+        // first: the rule can put its own back afterwards, and the person
+        // holding the phone has decided something the rule has not.
+        if (action === 'SELL') {
+          const mine = ordersRef.current.filter(
+            (o) => o.assetId === tokenId && o.side === 'SELL',
+          );
+          for (const order of mine) {
+            await PolyBot.cancelOrder({ orderId: order.id }).catch(() => {});
+          }
+          if (mine.length > 0) {
+            const fresh = await PolyBot.getOpenOrders().catch(() => null);
+            if (fresh) setOrders(fresh.orders);
+          }
+        }
+
         const r = await PolyBot.placeOrder({
           tokenId,
           conditionId: market.conditionId,
