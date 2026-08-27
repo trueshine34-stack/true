@@ -204,37 +204,25 @@ export function sharesFor(
   return Math.max(band ? band.shares : fromStake, floor);
 }
 
-/** Held back from a sell, so an offer is never for more than is there. */
-export const SELL_HEADROOM = 0.03;
-
 /**
- * How many shares a position can actually be offered.
+ * How many shares a position can actually be offered: all of them.
  *
- * A little under what the wallet is reported to hold, and rounded down. The
- * reported size is a moment old and can already be smaller — a fill counted
- * twice, a sale made elsewhere, dust taken by rounding — and an order for
- * shares that are not there is refused outright for "not enough balance",
- * which is a true and useless thing to be told while trying to close.
+ * The percentage that used to come off here was covering for the wrong thing.
+ * "Not enough balance" on a sell is almost always the shares already sitting
+ * under a resting offer of our own, and that is now pulled before the sale
+ * goes out — so there is nothing left for a haircut to protect against, and a
+ * position asked to close closes.
  *
- * The rounding is not cosmetic either: 15.694 shown as 15.7 is more than is
- * held, and flooring at the venue's own size step is what makes "sell the
- * position" mean the position.
- *
- * The cost is that a few hundredths stay open. That is what the auto-sell rule
- * is for, and it is the cheaper of the two mistakes.
+ * The rounding stays and is not cosmetic: 15.694 shown as 15.7 is more than is
+ * held, and the venue refuses the order outright. Flooring at its own size
+ * step is what makes "sell the position" mean the position.
  */
 export function sellableShares(size: number, step = 0.01): number {
   if (!Number.isFinite(size) || size <= 0) return 0;
-  const trimmed = size * (1 - SELL_HEADROOM);
   // Round before flooring: 15.7 / 0.01 comes through as 1569.999... in floats,
   // and flooring that alone would quietly drop another whole step.
-  const units = Math.floor(Number((trimmed / step).toFixed(6)));
-  const snapped = Number((units * step).toFixed(4));
-  // A position too small to trim is offered whole: asking slightly too much is
-  // refused, but so is asking for nothing.
-  return snapped > 0
-    ? snapped
-    : Number((Math.floor(Number((size / step).toFixed(6))) * step).toFixed(4));
+  const units = Math.floor(Number((size / step).toFixed(6)));
+  return Number((units * step).toFixed(4));
 }
 
 /**

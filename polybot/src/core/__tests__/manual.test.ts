@@ -244,9 +244,9 @@ describe('balance sizing leaves room for the fee', () => {
 });
 
 describe('sellableShares', () => {
-  it('keeps a little back, so the offer is never for more than is there', () => {
-    expect(sellableShares(100)).toBeCloseTo(97, 6);
-    expect(sellableShares(15.69)).toBeCloseTo(15.21, 6);
+  it('offers the whole position', () => {
+    expect(sellableShares(100)).toBeCloseTo(100, 6);
+    expect(sellableShares(15.69)).toBeCloseTo(15.69, 6);
   });
 
   it('never asks for more than is held', () => {
@@ -262,10 +262,8 @@ describe('sellableShares', () => {
     }
   });
 
-  it('does not zero a dust position', () => {
-    expect(sellableShares(0.1)).toBeCloseTo(0.09, 6);
-    // And what cannot be trimmed at all is offered whole: asking slightly too
-    // much is refused, but so is asking for nothing.
+  it('keeps a dust position whole', () => {
+    expect(sellableShares(0.1)).toBeCloseTo(0.1, 6);
     expect(sellableShares(0.01)).toBeCloseTo(0.01, 6);
   });
 
