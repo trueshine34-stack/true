@@ -36,6 +36,30 @@ object SellLadder {
     /** Seconds before each minute boundary that the next rung takes over. */
     const val DEFAULT_LEAD_SEC = 15
 
+    /**
+     * How far each further offer sits under the one before it.
+     *
+     * A position bought in two goes was offered twice at the same rung, which
+     * is one offer for twice the size wearing two hats: the book fills the
+     * first and leaves the second exactly where it was. Stepping each one down
+     * means the second is reached before the price has to climb any further —
+     * the first clip takes the rung, the rest take what the move on the way
+     * there is worth.
+     */
+    const val STACK_STEP = 0.02
+
+    /**
+     * The price the [index]-th standing offer should be asking, best first.
+     *
+     * Never under one tick: a rung two cents from the floor cannot carry a
+     * stack, and an offer at zero is not an offer.
+     */
+    fun stackedPrice(base: Double, index: Int, tick: Double = 0.01): Double {
+        if (index <= 0) return base
+        val stepped = base - STACK_STEP * index
+        return maxOf(stepped, tick)
+    }
+
     fun stepFor(
         elapsedSec: Long,
         highWater: Double?,

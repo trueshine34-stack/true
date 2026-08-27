@@ -178,4 +178,24 @@ class SellLadderLeadTest {
     fun itStillStopsAtTheTopRung() {
         assertEquals(0.97, SellLadder.priceFor(299, null, ladder), 1e-9)
     }
+
+    /**
+     * A position bought in two goes was offered twice at the same rung, which
+     * is one offer for twice the size wearing two hats: the book fills the
+     * first and leaves the second exactly where it was.
+     */
+    @Test
+    fun eachFurtherOfferSitsAStepUnderTheOneBeforeIt() {
+        assertEquals(0.84, SellLadder.stackedPrice(0.84, 0), 1e-9)
+        assertEquals(0.82, SellLadder.stackedPrice(0.84, 1), 1e-9)
+        assertEquals(0.80, SellLadder.stackedPrice(0.84, 2), 1e-9)
+        assertEquals(0.78, SellLadder.stackedPrice(0.84, 3), 1e-9)
+    }
+
+    /** A rung near the floor cannot carry a stack, and zero is not a price. */
+    @Test
+    fun theStackNeverFallsThroughTheFloor() {
+        assertEquals(0.01, SellLadder.stackedPrice(0.03, 5, tick = 0.01), 1e-9)
+        assertEquals(0.01, SellLadder.stackedPrice(0.01, 1, tick = 0.01), 1e-9)
+    }
 }

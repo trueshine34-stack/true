@@ -921,12 +921,19 @@ class AutoSell(
     }
 
     /**
-     * Bring this position's resting sell in line with the rung.
+     * Bring this position's resting sells in line with the rung.
+     *
+     * The first offer asks the rung; every further one sits a couple of cents
+     * under the one before it. A position bought in two goes used to be
+     * offered twice at the same price, which is one offer for twice the size
+     * wearing two hats — the book fills the first and leaves the second
+     * exactly where it was.
      *
      * A sell left at a rung the ladder has moved past would quietly cap the
-     * position at yesterday's price, so it is pulled and replaced. Everything
-     * else is a top-up: only the shares not already covered are asked for, so a
-     * slow or repeated sweep cannot stack two orders on the same shares.
+     * position at yesterday's price, so anything not on its step is pulled and
+     * replaced. Everything else is a top-up: only the shares not already
+     * covered are asked for, so a slow or repeated sweep cannot stack two
+     * orders on the same shares.
      */
     private fun reconcile(
         position: Position,
@@ -936,9 +943,18 @@ class AutoSell(
         mine: Double,
         lotAt: Long,
     ): String {
-        val price = snapToTick(target, meta.tickSize)
-        val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
-        val stale = sells.filter { abs(it.price - price) > meta.tickSize / 2 }
+        val base = snapToTick(target, meta.tickSize)
+        // Best price first: that is the order the steps are counted in, and
+        // the order the book will reach them in.
+        val sells = open
+            .filter { it.assetId == position.asset && it.side == "SELL" }
+            .sortedByDescending { it.price }
+
+        val onStep = { i: Int, order: ClobApi.OpenOrder ->
+            abs(order.price - SellLadder.stackedPrice(base, i, meta.tickSize)) <=
+                meta.tickSize / 2
+        }
+        val stale = sells.filterIndexed { i, order -> !onStep(i, order) }
 
         if (stale.isNotEmpty()) {
             val session = engine.session() ?: return "нет сессии"
@@ -951,14 +967,16 @@ class AutoSell(
             }
         }
 
-        // Only orders already at the target count as cover; the stale ones were
+        // Only orders on their own step count as cover; the stale ones were
         // just pulled. Replacing in the same pass matters — waiting for the next
         // sweep would leave the position naked for a whole retry interval.
-        val covered = sells.filter { abs(it.price - price) <= meta.tickSize / 2 }
-            .sumOf { it.remaining }
+        val standing = sells.filterIndexed(onStep)
+        val covered = standing.sumOf { it.remaining }
         val uncovered = mine - covered
         if (uncovered < meta.minimumOrderSize) return "покрыто"
 
+        // The new offer goes a step under the last one still standing.
+        val price = SellLadder.stackedPrice(base, standing.size, meta.tickSize)
         return tryPlace(position, uncovered, price, lotAt)
     }
 
