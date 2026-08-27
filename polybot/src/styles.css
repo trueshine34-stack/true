@@ -2766,76 +2766,7 @@ button.wide {
 }
 
 /*
-  The window's price, and the line it has to beat.
-
-  Edge to edge and hairline-separated like everything else on the deck: it is
-  another face of the same running window, not a widget sitting on it.
-*/
-.wchart {
-  position: relative;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, rgba(245, 181, 68, 0.04), transparent 70%);
-}
-
-.wchart-svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.wchart-line {
-  stroke: var(--warn);
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
-/* The target is a reference, not data: dashed, quiet, and all the way across. */
-.wchart-target {
-  stroke: rgba(230, 235, 245, 0.32);
-  stroke-width: 1;
-  stroke-dasharray: 3 4;
-  vector-effect: non-scaling-stroke;
-}
-
-.wchart-dot {
-  fill: var(--warn);
-}
-
-.wchart-halo {
-  fill: var(--warn);
-  opacity: 0.18;
-}
-
-/* The readout: distance from the line, the price, and the line's own value. */
-.wchart-head {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  padding: 5px 10px 0;
-}
-
-.wchart-head b {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.4px;
-  font-variant-numeric: tabular-nums;
-}
-
-.wchart-head span {
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* The price to beat, pushed to the far side of the row. */
-.wchart-goal {
-  margin-left: auto;
-}
-
-/*
-  Binance's book, under the window's price.
+  Binance's book, under the candles.
 
   Both sides out from the mid on one scale, so the lean is the picture and the
   numbers under it are only the confirmation.
@@ -2952,4 +2883,41 @@ button.wide {
 .candles-foot span:last-child {
   margin-left: auto;
   font-weight: 600;
+}
+
+/*
+  The prices the market keeps turning at.
+
+  Quiet lines: they are the background a candle is working against, and a
+  level drawn as loudly as the price would be read as the price.
+*/
+.slevel {
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.slevel-tag {
+  font-size: 7px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 2.5px;
+}
+
+.slevel.resistance {
+  stroke: rgba(255, 90, 106, 0.5);
+}
+
+.slevel.support {
+  stroke: rgba(35, 192, 123, 0.5);
+}
+
+.slevel-tag.resistance {
+  fill: rgba(255, 90, 106, 0.85);
+}
+
+.slevel-tag.support {
+  fill: rgba(35, 192, 123, 0.85);
 }

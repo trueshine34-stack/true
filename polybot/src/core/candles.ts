@@ -29,6 +29,9 @@ export interface CandleShape {
   bars: Bar[];
   low: number;
   high: number;
+  /** The drawn range, padded — what the top and bottom of the box are worth. */
+  top: number;
+  floor: number;
   /** The newest close, and how far the drawn span has moved. */
   last: number;
   changePct: number;
@@ -90,6 +93,8 @@ export function candleShape(
     bars,
     low,
     high,
+    top: hi,
+    floor: lo,
     last,
     changePct: first > 0 ? ((last - first) / first) * 100 : 0,
   };

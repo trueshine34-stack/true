@@ -300,9 +300,9 @@ describe('windowCapPct', () => {
 });
 
 describe('buyCeiling', () => {
-  it('holds buys to 54c through the first minute', () => {
-    expect(buyCeiling(0)).toBe(0.54);
-    expect(buyCeiling(59)).toBe(0.54);
+  it('holds buys to 63c through the first minute', () => {
+    expect(buyCeiling(0)).toBe(0.63);
+    expect(buyCeiling(59)).toBe(0.63);
   });
 
   it('lifts to 77c for the second and third minutes', () => {
@@ -325,13 +325,13 @@ describe('buyCeiling', () => {
   it('treats a window that has not started as its first minute', () => {
     // Looking ahead to the next window: nothing has happened in it yet, so the
     // early rule is exactly the rule that applies.
-    expect(buyCeiling(-30)).toBe(0.54);
+    expect(buyCeiling(-30)).toBe(0.63);
   });
 
   it('bars a price over the ceiling and allows one on it', () => {
-    expect(buyBarred(0.55, 10)).toBe(true);
-    expect(buyBarred(0.54, 10)).toBe(false);
-    expect(buyBarred(0.67, 10)).toBe(true);
+    expect(buyBarred(0.64, 10)).toBe(true);
+    expect(buyBarred(0.63, 10)).toBe(false);
+    expect(buyBarred(0.7, 10)).toBe(true);
     expect(buyBarred(0.78, 120)).toBe(true);
     expect(buyBarred(0.77, 120)).toBe(false);
     expect(buyBarred(0.95, 200)).toBe(false);

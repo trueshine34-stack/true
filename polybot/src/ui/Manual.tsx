@@ -31,7 +31,6 @@ import {
 } from '../core/money';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
 import { Fold } from './Fold';
-import { WindowChart } from './WindowChart';
 import { CandlePanel } from './CandlePanel';
 import { DepthPanel } from './DepthPanel';
 import {
@@ -1120,26 +1119,9 @@ export function Manual({
             )}
 
             {/*
-              The window's price against the price it has to beat — Polymarket's
-              own series, so the number on the desk is the number the market is
-              judged by. It sits in the middle, under the clock and over the
-              orders: the decision reads top to bottom as time left, distance to
-              the line, what is working.
-            */}
-            <WindowChart
-              windowStart={viewWindow ?? windowStart}
-              live={viewWindow == null}
-            />
-
-            {/*
-              And under it, what is holding that price up: Binance's book, both
-              sides out from the mid. The window's line says where price is,
-              the book says what it would cost to move it.
-            */}
-            {/*
-              Between the two: the hours before this window, as Binance's own
-              five-minute candles. The line above is this bet, the book below
-              is the next few dollars, and this is what led to both.
+              The hours before this window, as Binance's own five-minute
+              candles, with the prices the market keeps turning at drawn on
+              them. Under it the book: what the next few dollars would cost.
             */}
             {viewWindow == null && <CandlePanel />}
 
@@ -1456,19 +1438,22 @@ export function Manual({
               ? (book.bids[0]?.price ?? null)
               : (book.asks[0]?.price ?? null);
             const held = selling ? quickSellFor(which) : null;
-            // Nothing dear may be bought this early, so a side quoting above
-            // the ceiling is not a price to load — it is a side to leave alone.
+            // A side quoting above the early ceiling still has a price worth
+            // loading — the highest one the rule allows. Refusing the tap left
+            // the field empty and the decision unmade; this leaves a bid in
+            // it, which is what a buyer at a capped price would place anyway.
             const barred = !selling && price != null && buyBarred(price, elapsed);
+            const wanted = barred ? ceiling : price;
             const chip = (
               <button
                 key={which}
                 className={`buy ${which === 'Up' ? 'up' : 'down'}${
                   barred ? ' barred' : ''
                 }`}
-                disabled={price == null || barred}
+                disabled={price == null}
                 onClick={() => {
-                  if (price == null) return;
-                  setLimitPrice(String(Math.round(price * 100)));
+                  if (wanted == null) return;
+                  setLimitPrice(String(Math.round(wanted * 100)));
                   // And the size the field is about to spend: all of it. The
                   // shares wanted at this price are what the window still has
                   // room for, and typing that out was the last thing here that
@@ -1477,7 +1462,7 @@ export function Manual({
                     ? exposure.room
                     : (balance ?? 0);
                   const full =
-                    budget > 0 ? stakeShares(price, budget, 1, minSize) : null;
+                    budget > 0 ? stakeShares(wanted, budget, 1, minSize) : null;
                   if (full != null) setLimitSize(String(full));
                 }}
               >
@@ -1490,7 +1475,7 @@ export function Manual({
                         ? 'нет позиции'
                         : `${held.size.toFixed(1)} долей`
                       : barred
-                        ? `не выше ${cents(ceiling)}`
+                        ? `→ ${cents(ceiling)}`
                         : which}
                 </s>
               </button>

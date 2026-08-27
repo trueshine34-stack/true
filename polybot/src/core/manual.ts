@@ -313,7 +313,7 @@ export function orderCost(shares: number, price: number): number {
 /**
  * The dearest a buy may be this early in the window.
  *
- * A side that already costs 54c in the first minute is being paid for a move
+ * A side that already costs 63c in the first minute is being paid for a move
  * that has barely started: five minutes is long enough for it to come back,
  * and the shares bought at that price have little left to gain and most of a
  * dollar to lose. The ceiling lifts as the window runs out of time to reverse
@@ -326,7 +326,7 @@ export function orderCost(shares: number, price: number): number {
 export const CAP_FIRST_MIN_SEC = 60;
 export const CAP_EARLY_SEC = 180;
 export const CAP_LAST_MIN_SEC = 240;
-export const CAP_FIRST_MIN = 0.54;
+export const CAP_FIRST_MIN = 0.63;
 export const CAP_EARLY = 0.77;
 export const CAP_LAST_MIN = 0.91;
 

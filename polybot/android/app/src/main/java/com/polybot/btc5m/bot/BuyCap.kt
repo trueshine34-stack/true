@@ -3,7 +3,7 @@ package com.polybot.btc5m.bot
 /**
  * The dearest a buy may be, early in a window.
  *
- * A side that already costs 54c in the first minute is being paid for a move
+ * A side that already costs 63c in the first minute is being paid for a move
  * that has barely started, with the whole window left for it to come back:
  * there is little left to win on those shares and most of a dollar to lose.
  * The ceiling lifts as the window runs out of time to reverse — 77c through
@@ -24,11 +24,11 @@ object BuyCap {
     const val FIRST_MINUTE_SEC = 60L
     const val EARLY_SEC = 180L
     const val LAST_MINUTE_SEC = 240L
-    const val FIRST_MINUTE_MAX = 0.54
+    const val FIRST_MINUTE_MAX = 0.63
     const val EARLY_MAX = 0.77
     const val LAST_MINUTE_MAX = 0.91
 
-    /** Prices are cents; a hair of tolerance keeps 0.54 itself allowed. */
+    /** Prices are cents; a hair of tolerance keeps 0.63 itself allowed. */
     private const val EPS = 1e-9
 
     fun ceiling(elapsedSec: Long): Double = when {

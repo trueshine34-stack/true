@@ -178,11 +178,6 @@ export interface PolyBotPlugin {
     candles: GmxCandle[];
     ticker?: { mid: number; at: number };
   }>;
-  /**
-   * One five-minute window of Polymarket's own price series, as flat
-   * `[timestampMs, price]` pairs, and the opening price that window resolves
-   * against.
-   */
   /** Binance's five-minute candles: open time in seconds, then o/h/l/c. */
   binanceCandles(): Promise<{ candles: [number, number, number, number, number][] }>;
   /** Binance's book as a depth curve, from the locally kept order book. */
@@ -195,15 +190,6 @@ export interface PolyBotPlugin {
     /** Size per bucket walking away from the mid, nearest bucket first. */
     bids?: number[];
     asks?: number[];
-  }>;
-  polyWindow(args: {
-    windowStart: number;
-    /** Newest timestamp already held, as a string — millis overflow an int. */
-    since?: string;
-  }): Promise<{
-    windowStart: number;
-    points: [number, number][];
-    target?: number;
   }>;
   getBookLevels(args: { tokenId: string; depth?: number }): Promise<BookLevels>;
   getPositions(): Promise<{ positions: NativePosition[] }>;
@@ -465,7 +451,6 @@ const webStub: PolyBotPlugin = {
   },
   binanceCandles: async () => ({ candles: [] }),
   binanceDepth: async () => ({ ready: false }),
-  polyWindow: async () => ({ windowStart: 0, points: [] }),
   getBookLevels: async () => ({ bids: [], asks: [] }),
   getPositions: async () => ({ positions: [] }),
   getOrderLog: async () => ({ orders: [] }),
