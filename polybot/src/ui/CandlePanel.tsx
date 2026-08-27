@@ -4,9 +4,8 @@ import { candleShape, signedPct, type Candle } from '../core/candles';
 import { findLevels } from '../core/levels';
 import { priceLabel } from '../core/depth';
 
-/** Chart units, scaled to whatever width the screen gives them. */
+/** Chart width in chart units, scaled to whatever the screen gives it. */
 const W = 360;
-const H = 150;
 
 /** Binance pushes the forming candle every couple of seconds. */
 const TICK_MS = 1_000;
@@ -20,15 +19,23 @@ const TICK_MS = 1_000;
  * has to get through, the one underneath is what a fall has to break.
  *
  * The candles are kept in the app off Binance's own stream, so this reads
- * memory and only redraws.
+ * memory and only redraws. One panel per interval: the five-minute series for
+ * the hours behind the window, the one-minute series for the last hour of it.
  */
-export function CandlePanel() {
+export function CandlePanel({
+  interval = '5m',
+  height = 150,
+}: {
+  interval?: string;
+  /** Chart units tall. The closer view is the shorter one. */
+  height?: number;
+}) {
   const [candles, setCandles] = useState<Candle[]>([]);
 
   useEffect(() => {
     let alive = true;
     const pull = () => {
-      void PolyBot.binanceCandles()
+      void PolyBot.binanceCandles({ interval })
         .then((r) => {
           if (alive) setCandles((r.candles ?? []) as Candle[]);
         })
@@ -42,13 +49,21 @@ export function CandlePanel() {
       alive = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [interval]);
 
-  return <CandleFace candles={candles} />;
+  return <CandleFace candles={candles} interval={interval} height={height} />;
 }
 
 /** The drawing, from candles and nothing else. */
-export function CandleFace({ candles }: { candles: Candle[] }) {
+export function CandleFace({
+  candles,
+  interval = '5m',
+  height: H = 150,
+}: {
+  candles: Candle[];
+  interval?: string;
+  height?: number;
+}) {
   const shape = candleShape(candles, W, H);
   const levels = shape ? findLevels(candles, shape.last) : [];
   // The candles' own scale, so a level lands on the price that made it.
@@ -100,7 +115,12 @@ export function CandleFace({ candles }: { candles: Candle[] }) {
             key={level.price}
             className={`slevel-tag ${level.kind}`}
             x={W - 3}
-            y={(y(level.price) - 2.5).toFixed(1)}
+            /* A level near the ceiling puts its price under the line instead
+               of half off the top of the panel. */
+            y={(y(level.price) < 11
+              ? y(level.price) + 8
+              : y(level.price) - 2.5
+            ).toFixed(1)}
             textAnchor="end"
           >
             {priceLabel(level.price)}
@@ -113,7 +133,7 @@ export function CandleFace({ candles }: { candles: Candle[] }) {
         Nothing else: the axis of a context chart is context.
       */}
       <div className="candles-foot">
-        <span className="muted">5м</span>
+        <span className="muted">{interval.replace('m', 'м')}</span>
         <b>{shape ? priceLabel(shape.last) : '—'}</b>
         <span className={shape && shape.changePct >= 0 ? 'up' : 'down'}>
           {shape ? signedPct(shape.changePct) : ''}

@@ -762,7 +762,7 @@ class BotPlugin : Plugin() {
     }
 
     /**
-     * Binance's five-minute candles, from the stream the app keeps open.
+     * Binance's candles for one interval, from the streams the app keeps open.
      *
      * Flat rows — open time, open, high, low, close — because a chart of fifty
      * candles is two hundred and fifty numbers and none of them need a name.
@@ -770,7 +770,7 @@ class BotPlugin : Plugin() {
     @PluginMethod
     fun binanceCandles(call: PluginCall) {
         val rows = JSArray()
-        BinanceCandles.list().forEach {
+        BinanceCandles.of(call.getString("interval") ?: "5m").list().forEach {
             rows.put(
                 JSArray().apply {
                     put(it.time)

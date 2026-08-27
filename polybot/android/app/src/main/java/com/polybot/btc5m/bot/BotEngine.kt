@@ -99,7 +99,7 @@ class BotEngine(
         // The Binance book is screen data too, and it is the only thing here
         // that says what the next few dollars of price would cost.
         BinanceBook.start()
-        BinanceCandles.start()
+        BinanceCandles.all.forEach { it.start() }
         startAmbient()
     }
 

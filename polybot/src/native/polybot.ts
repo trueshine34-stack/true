@@ -178,8 +178,10 @@ export interface PolyBotPlugin {
     candles: GmxCandle[];
     ticker?: { mid: number; at: number };
   }>;
-  /** Binance's five-minute candles: open time in seconds, then o/h/l/c. */
-  binanceCandles(): Promise<{ candles: [number, number, number, number, number][] }>;
+  /** Binance's candles for one interval: open time in seconds, then o/h/l/c. */
+  binanceCandles(args?: {
+    interval?: string;
+  }): Promise<{ candles: [number, number, number, number, number][] }>;
   /** Binance's book as a depth curve, from the locally kept order book. */
   binanceDepth(): Promise<{
     ready: boolean;

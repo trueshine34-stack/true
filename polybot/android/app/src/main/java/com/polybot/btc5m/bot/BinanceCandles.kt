@@ -11,30 +11,41 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Binance's five-minute candles for BTC/USDT, kept live.
+ * Binance's candles for BTC/USDT, kept live.
  *
- * The window's own chart says what this five minutes has done against the
- * price it must beat; this says what the hours before it did. They answer
- * different questions and the desk wants both — a window opening into the
- * fourth green candle of a run is not the same bet as one opening into chop.
+ * One of these per interval: the five-minute series is the hours behind the
+ * window, the one-minute series is the last hour close up. A window opening
+ * into the fourth green candle of a run is not the same bet as one opening
+ * into chop, and which of those it is depends on how close you look.
  *
  * History comes over REST once and the stream keeps it current: Binance pushes
  * the forming candle every couple of seconds and opens the next one itself, so
  * there is nothing to poll.
  */
-object BinanceCandles {
+class BinanceCandles(
+    private val interval: String,
+    /** How many candles the chart shows. */
+    val limit: Int,
+) {
 
-    private const val REST = "https://data-api.binance.vision"
-    private const val STREAM = "wss://data-stream.binance.vision"
-    private const val SYMBOL = "btcusdt"
-    private const val INTERVAL = "5m"
+    companion object {
+        private const val REST = "https://data-api.binance.vision"
+        private const val STREAM = "wss://data-stream.binance.vision"
+        private const val SYMBOL = "btcusdt"
 
-    /** Four hours of five-minute candles: a screen's worth of context. */
-    const val LIMIT = 48
+        private const val STALE_MS = 30_000L
+        private const val RESYNC_SEC = 600L
+        private const val MAX_BACKOFF_SEC = 20L
 
-    private const val STALE_MS = 30_000L
-    private const val RESYNC_SEC = 600L
-    private const val MAX_BACKOFF_SEC = 20L
+        /** Four hours of context, and the last hour close up. */
+        val fiveMinute = BinanceCandles("5m", 48)
+        val oneMinute = BinanceCandles("1m", 60)
+
+        val all = listOf(fiveMinute, oneMinute)
+
+        fun of(interval: String): BinanceCandles =
+            all.firstOrNull { it.interval == interval } ?: fiveMinute
+    }
 
     data class Candle(
         val time: Long,
@@ -60,7 +71,7 @@ object BinanceCandles {
     private var socket: WebSocket? = null
 
     private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
-        Thread(r, "binance-candles").apply { isDaemon = true }
+        Thread(r, "binance-candles-$interval").apply { isDaemon = true }
     }
 
     fun start() {
@@ -83,14 +94,14 @@ object BinanceCandles {
 
     /** Oldest first — a chart is drawn left to right. */
     fun list(): List<Candle> = synchronized(lock) {
-        candles.values.toList().takeLast(LIMIT)
+        candles.values.toList().takeLast(limit)
     }
 
     private fun history() {
         if (stopped) return
         val rows = try {
             JSONArray(
-                Http.get("$REST/api/v3/klines?symbol=BTCUSDT&interval=$INTERVAL&limit=$LIMIT"),
+                Http.get("$REST/api/v3/klines?symbol=BTCUSDT&interval=$interval&limit=$limit"),
             )
         } catch (e: Exception) {
             return
@@ -128,7 +139,7 @@ object BinanceCandles {
     private fun connect() {
         if (stopped) return
         val request = Request.Builder()
-            .url("$STREAM/ws/$SYMBOL@kline_$INTERVAL")
+            .url("$STREAM/ws/$SYMBOL@kline_$interval")
             .build()
         socket = Http.client.newWebSocket(
             request,
@@ -187,6 +198,6 @@ object BinanceCandles {
     }
 
     private fun trim() {
-        while (candles.size > LIMIT * 2) candles.remove(candles.firstKey())
+        while (candles.size > limit * 2) candles.remove(candles.firstKey())
     }
 }

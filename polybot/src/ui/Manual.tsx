@@ -1137,7 +1137,15 @@ export function Manual({
               candles, with the prices the market keeps turning at drawn on
               them. Under it the book: what the next few dollars would cost.
             */}
-            {viewWindow == null && <CandlePanel />}
+            {viewWindow == null && <CandlePanel interval="5m" height={150} />}
+
+            {/*
+              And the same hour close up. The five-minute chart says which way
+              the day is going; this one says what price is doing right now,
+              which on a bet that lasts five minutes is the half that decides
+              the side.
+            */}
+            {viewWindow == null && <CandlePanel interval="1m" height={110} />}
 
             {viewWindow == null && <DepthPanel />}
 
