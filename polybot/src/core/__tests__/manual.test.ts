@@ -173,40 +173,45 @@ describe('stakeShares', () => {
 
 
 describe('exposureFor', () => {
-  it('measures the cap against cash plus what is already in the market', () => {
-    // 30 free, 30 committed: the deposit is 60, the container holds 30, and the
-    // rest is already used up.
-    const e = exposureFor(30, 30, 30);
-    expect(e.equity).toBe(60);
-    expect(e.cap).toBe(30);
-    expect(e.room).toBe(0);
+  it('caps a window at a quarter of the deposit', () => {
+    // 30 free, 10 committed: the deposit is 40, so this window may hold 10 —
+    // which it already does.
+    const e = exposureFor(30, 10);
+    expect(e.equity).toBe(40);
+    expect(e.cap).toBeCloseTo(10, 9);
+    expect(e.room).toBeCloseTo(0, 9);
     expect(e.full).toBe(true);
   });
 
   it('leaves room while under the line', () => {
-    const e = exposureFor(80, 20, 50);
-    expect(e.cap).toBe(50);
-    expect(e.room).toBe(30);
+    const e = exposureFor(96, 4);
+    expect(e.cap).toBeCloseTo(25, 9);
+    expect(e.room).toBeCloseTo(21, 9);
     expect(e.full).toBe(false);
   });
 
-  it('never offers more room than there is cash', () => {
-    // Nothing committed, so the free part of the deposit is free cash.
-    const e = exposureFor(10, 0, 5);
-    expect(e.room).toBe(5);
+  it('offers nothing once the window is over its share', () => {
+    // 2 free against 8 already in: the deposit is 10, the quarter is 2.50, and
+    // the window is well past it.
+    const e = exposureFor(2, 8);
+    expect(e.cap).toBeCloseTo(2.5, 9);
+    expect(e.room).toBe(0);
+    expect(e.full).toBe(true);
   });
 
   it('is not fooled by the balance falling as it is spent', () => {
     // Buying moves money from cash to committed; the deposit is unchanged, so
     // the cap does not slide down with it.
-    const before = exposureFor(100, 0, 50);
-    const after = exposureFor(60, 40, 50);
-    expect(after.cap).toBe(before.cap);
-    expect(after.room).toBe(10);
+    const before = exposureFor(100, 0);
+    const after = exposureFor(80, 20);
+    expect(after.cap).toBeCloseTo(before.cap, 9);
+    expect(after.room).toBeCloseTo(5, 9);
   });
 
-  it('has no room at all when the container holds everything', () => {
-    expect(exposureFor(100, 0, 100).room).toBe(0);
+  it('takes another share when one is asked for', () => {
+    expect(exposureFor(100, 0, 0.5).cap).toBeCloseTo(50, 9);
+    expect(exposureFor(100, 0, 1).room).toBeCloseTo(100, 9);
+    expect(exposureFor(100, 0, 0).room).toBe(0);
   });
 });
 

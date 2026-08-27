@@ -195,11 +195,14 @@ export function stakeShares(
 /**
  * How much of the deposit is at risk, and how much more may be.
  *
- * The container decides how much is off limits; this decides whether the next
- * order fits in what is left. The deposit is what is on the exchange *plus*
- * what is already in the market — cash and positions are the same money in
- * different shapes — because a cap read off cash alone slides down with every
- * purchase and never actually binds.
+ * A five-minute window is one bet, however many orders it is made of, and the
+ * rule is that no more than a quarter of the deposit may be in it. It resets
+ * with the window: the next five minutes start from nothing, which is what
+ * makes it a rule you can trade under rather than a budget that runs out.
+ *
+ * Measured against the deposit — cash plus what is already in the market —
+ * because cash alone slides down with every purchase, and a cap read off it
+ * never actually binds.
  *
  * What counts as at risk: shares held, at what they cost, and buy orders still
  * resting, at what they would cost. A resting buy is committed money; that it
@@ -213,6 +216,7 @@ export type Exposure = {
   balance: number;
   /** Both together — the deposit the cap is a share of. */
   equity: number;
+  /** The most this window may hold. */
   cap: number;
   /** What one more order may cost. Never negative. */
   room: number;
@@ -220,17 +224,21 @@ export type Exposure = {
   full: boolean;
 };
 
+/** The share of the deposit one five-minute window may hold. */
+export const WINDOW_CAP_PCT = 0.25;
+
 export function exposureFor(
   balance: number,
   committed: number,
-  /** What the container holds back, in dollars. */
-  locked: number,
+  capPct: number = WINDOW_CAP_PCT,
 ): Exposure {
   const cash = Number.isFinite(balance) && balance > 0 ? balance : 0;
   const held = Number.isFinite(committed) && committed > 0 ? committed : 0;
   const equity = cash + held;
-  const kept = Math.max(0, Math.min(equity, Number.isFinite(locked) ? locked : 0));
-  const cap = equity - kept;
+  const share = Number.isFinite(capPct) ? Math.max(0, Math.min(1, capPct)) : WINDOW_CAP_PCT;
+  const cap = equity * share;
+  // Never more than there is: at a quarter this cannot bind, but a share set
+  // to the whole deposit would otherwise promise money already spent.
   const room = Math.max(0, Math.min(cap - held, cash));
   return { committed: held, balance: cash, equity, cap, room, full: room <= 1e-9 };
 }

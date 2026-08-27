@@ -29,12 +29,6 @@ import {
 } from './core/goal';
 import { usd } from './core/money';
 import {
-  loadContainer,
-  saveContainer,
-  splitFor,
-  type Container,
-} from './core/container';
-import {
   DAY_MULTIPLE,
   dayReached,
   dayTarget,
@@ -80,9 +74,6 @@ export function App() {
   const [day, setDay] = useState<DayGoal | null>(null);
   const [dayAsked, setDayAsked] = useState(false);
   const [dayInput, setDayInput] = useState('');
-  const [container, setContainer] = useState<Container | null>(null);
-  /** What the desk says is already in the market, for the container's split. */
-  const [committed, setCommitted] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,7 +162,6 @@ export function App() {
     void loadBalanceHistory().then(setBalanceHistory);
     void loadAdjustments().then(setAdjustments);
     void loadGoal().then(setGoal);
-    void loadContainer().then(setContainer);
     void loadDayGoal().then((d) => {
       setDay(d);
       setDayAsked(true);
@@ -241,15 +231,6 @@ export function App() {
    * The deposit is cash plus what is in the market, so the locked share does
    * not shrink as the cash is spent.
    */
-  const split = splitFor(
-    container ?? { corePct: 0.3, reserves: [] },
-    (balance ?? 0) + committed,
-  );
-
-  const applyContainer = useCallback((next: Container) => {
-    setContainer(next);
-    void saveContainer(next);
-  }, []);
 
   /** A quarter of the wallet per five-minute round. */
 
@@ -383,12 +364,7 @@ export function App() {
       */}
       <div className="scroll">
         <Manual
-          onCommitted={setCommitted}
           onOpenBalance={() => setShowBalance(true)}
-          containerLocked={split.locked}
-          container={container ?? { corePct: 0.3, reserves: [] }}
-          containerSplit={split}
-          onContainer={applyContainer}
           locked={locked}
           appSettings={
             <SettingsScreen account={account} onForget={onForget} />

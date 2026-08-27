@@ -11,6 +11,7 @@ import {
   DEFAULT_MANUAL_SETTINGS,
   exposureFor,
   DEFAULT_CLICK_SHARES,
+  WINDOW_CAP_PCT,
   LIMIT_LADDER_COUNT,
   orderCost,
   sellableShares,
@@ -29,9 +30,7 @@ import {
   usd,
 } from '../core/money';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
-import { Fold, SwitchFold } from './Fold';
-import { ContainerCard } from './ContainerCard';
-import type { Container, ContainerSplit } from '../core/container';
+import { Fold } from './Fold';
 import {
   PolyBot,
   type AutoSellState,
@@ -110,11 +109,7 @@ const IDLE_AUTOSELL: AutoSellState = {
 export function Manual({
   onSummary,
   onCommitted,
-  containerLocked = 0,
   onOpenBalance,
-  container,
-  containerSplit,
-  onContainer,
   appSettings,
   locked,
 }: {
@@ -123,13 +118,8 @@ export function Manual({
   /** What is in the market, so the container can split the whole deposit. */
   onCommitted?: (usd: number) => void;
   /** What the container holds back, in dollars. */
-  containerLocked?: number;
   /** Opens the balance sheet; the balance lives on the desk's own rail now. */
   onOpenBalance?: () => void;
-  /** The container itself, so its own settings live with its switch. */
-  container?: Container;
-  containerSplit?: ContainerSplit;
-  onContainer?: (next: Container) => void;
   /** The app-wide settings, folded in under the desk's own. */
   appSettings?: ReactNode;
   /** The day's goal is met: no new exposure until midnight. */
@@ -137,8 +127,6 @@ export function Manual({
 }) {
   const [settings, setSettings] = useState<ManualSettings>(DEFAULT_MANUAL_SETTINGS);
   const [tab, setTab] = useState<'desk' | 'settings'>('desk');
-  /** Binance's candle in progress: where the five minutes opened, and now. */
-  const [btc, setBtc] = useState<{ open: number; last: number } | null>(null);
   const [market, setMarket] = useState<NativeMarket | null>(null);
   const [books, setBooks] = useState<Record<'Up' | 'Down', BookLevels>>({
     Up: { bids: [], asks: [] },
@@ -240,29 +228,6 @@ export function Manual({
   const livePositions = market
     ? positions.filter((p) => p.conditionId === market.conditionId)
     : [];
-  // The window's opening price and where BTC is against it, from Binance —
-  // the price everyone is actually watching. Polymarket settles Up or Down on
-  // its own thirty-second TWAP, so this is a reference to trade by eye
-  // against, not the number the window is decided on.
-  useEffect(() => {
-    let cancelled = false;
-    const read = () => {
-      void PolyBot.binancePrice()
-        .then((r) => {
-          if (!cancelled && r.open > 0) setBtc({ open: r.open, last: r.last });
-        })
-        .catch(() => {});
-    };
-    read();
-    // The move against the open is the number being watched second by second,
-    // and it costs one small request.
-    const timer = window.setInterval(read, 3000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, []);
-
   // How each five-minute event went. Slow on purpose: a window's result cannot
   // change once it has closed, and the running one only moves when an order does.
   useEffect(() => {
@@ -531,11 +496,8 @@ export function Manual({
   }, [committed, onCommitted]);
 
   const exposure = useMemo(
-    // The bots' stakes are already inside what the container holds back —
-    // they are reserves like any other, merged in one level up so the header
-    // and the guard cannot disagree about the same dollar.
-    () => exposureFor(balance ?? 0, committed, containerLocked),
-    [balance, committed, containerLocked],
+    () => exposureFor(balance ?? 0, committed),
+    [balance, committed],
   );
 
   const guard = settings.exposureGuard && balance != null;
@@ -545,8 +507,6 @@ export function Manual({
    * the level the window turns on, so it belongs in the header next to the
    * price rather than only as a line on the chart.
    */
-  const windowOpen = btc?.open ?? null;
-  const drift = btc != null ? btc.last - btc.open : null;
 
   // From the clock, not the market: the countdown must keep running even in the
   // seconds where the new window's market has not loaded yet.
@@ -948,11 +908,16 @@ export function Manual({
           it. Two cells for one fact read as two facts; the slash says what it
           is — this much money, that much of it spoken for.
         */}
+        {/*
+          The balance, and after the slash what this five minutes is holding of
+          it. Those are the two numbers a size is decided from, and the second
+          one is the one with a line in front of it.
+        */}
         <button className="railbal" onClick={onOpenBalance}>
           <b>{balance === null ? '—' : balance.toFixed(2)}</b>
-          {containerLocked > 0 && (
-            <span className="muted">/{containerLocked.toFixed(2)}</span>
-          )}
+          <span className={exposure.full ? 'warn' : 'muted'}>
+            /{exposure.committed.toFixed(2)}
+          </span>
         </button>
 
         {/*
@@ -1072,8 +1037,6 @@ export function Manual({
                 positions={livePositions}
                 secondsLeft={secondsLeft}
                 lookAhead={lookAhead}
-                windowOpen={windowOpen}
-                drift={drift}
                 onSell={sellPosition}
               />
             )}
@@ -1166,9 +1129,6 @@ export function Manual({
           />
           <ManualSettingsForm
             settings={settings}
-            container={container}
-            containerSplit={containerSplit}
-            onContainer={onContainer}
             onChange={apply}
             onNote={setNote}
           />
@@ -2203,7 +2163,7 @@ function RuleBar({
           }
         >
           <span className={`switch mini ${settings.exposureGuard ? 'on' : ''}`} />
-          <b>контейнер</b>
+          <b>{Math.round(WINDOW_CAP_PCT * 100)}% на окно</b>
           <i className={settings.exposureGuard && exposure.full ? 'warn' : undefined}>
             {!settings.exposureGuard
               ? 'выкл'
@@ -2269,15 +2229,11 @@ function PositionPair({
   positions,
   secondsLeft,
   lookAhead,
-  windowOpen,
-  drift,
   onSell,
 }: {
   positions: NativePosition[];
   secondsLeft: number;
   lookAhead: boolean;
-  windowOpen: number | null;
-  drift: number | null;
   onSell: (position: NativePosition) => void;
 }) {
   const leg = (name: 'Up' | 'Down') => {
@@ -2327,15 +2283,6 @@ function PositionPair({
         <b className={clockTone(secondsLeft, lookAhead)}>
           {`${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}
         </b>
-        <span className="pairopen">
-          {windowOpen != null ? windowOpen.toFixed(0) : '—'}
-          {drift != null && (
-            <i className={drift >= 0 ? 'up' : 'down'}>
-              ({drift >= 0 ? '+' : '−'}
-              {Math.abs(drift).toFixed(0)})
-            </i>
-          )}
-        </span>
       </div>
 
       {side('Down', down)}
@@ -2435,16 +2382,10 @@ const WHEEL_HIGH = 85;
 
 function ManualSettingsForm({
   settings,
-  container,
-  containerSplit,
-  onContainer,
   onChange,
   onNote,
 }: {
   settings: ManualSettings;
-  container?: Container;
-  containerSplit?: ContainerSplit;
-  onContainer?: (next: Container) => void;
   onChange: (next: ManualSettings) => void;
   onNote: (text: string | null) => void;
 }) {
@@ -2483,36 +2424,6 @@ function ManualSettingsForm({
 
   return (
     <>
-    {/*
-      One row for the container: the switch that enforces it is the heading,
-      and everything it is made of opens underneath. A fold whose only content
-      was another switch was a fold for nothing.
-    */}
-    <SwitchFold
-      title="Контейнер"
-      on={settings.exposureGuard}
-      note={
-        containerSplit
-          ? `${usd(containerSplit.locked)} заперто`
-          : settings.exposureGuard
-            ? 'включён'
-            : 'выключен'
-      }
-      onToggle={() =>
-        onChange({ ...settings, exposureGuard: !settings.exposureGuard })
-      }
-    >
-      {container && containerSplit && onContainer ? (
-        <ContainerCard
-          container={container}
-          split={containerSplit}
-          onChange={onContainer}
-        />
-      ) : (
-        <div className="muted empty">Контейнер ещё не загружен</div>
-      )}
-    </SwitchFold>
-
     <Fold
       title="Автопродажа"
       note={
