@@ -37,9 +37,16 @@ class BinanceCandles(
         private const val RESYNC_SEC = 600L
         private const val MAX_BACKOFF_SEC = 20L
 
-        /** Four hours of context, and the last hour close up. */
+        /**
+         * Four hours of context, and the last half hour close up.
+         *
+         * The close view is deliberately short: thirty candles across a phone
+         * is a body wide enough to read one candle at a time, which is what
+         * that chart is for. Everything the rules need from it — three closes
+         * of momentum, ten minutes of volume — fits inside thirty with room.
+         */
         val fiveMinute = BinanceCandles("5m", 48)
-        val oneMinute = BinanceCandles("1m", 60)
+        val oneMinute = BinanceCandles("1m", 30)
 
         val all = listOf(fiveMinute, oneMinute)
 
