@@ -151,8 +151,13 @@ export function Manual({
    */
   const [sizingLimit, setSizingLimit] = useState(true);
   const [pickingPrice, setPickingPrice] = useState(false);
-  /** What the two big buttons do: open a position, or close one at market. */
-  const [selling, setSelling] = useState(false);
+  /**
+   * The side the dock is about to buy.
+   *
+   * Chosen by tapping one of the two quotes, which is the moment the decision
+   * is actually made; the button between them then only has to say "buy".
+   */
+  const [side, setSide] = useState<'Up' | 'Down' | null>(null);
   const [ladderBot, setLadderBot] = useState<LadderState | null>(null);
   const [ladderOpen, setLadderOpen] = useState(false);
   /** The event strip is folded away until it is asked for. */
@@ -857,17 +862,6 @@ export function Manual({
    * What a tap would close on this side: the position, or the size set above
    * it if that is smaller.
    */
-  const quickSellFor = (which: 'Up' | 'Down') => {
-    const mine = livePositions.filter((p) => p.outcome === which);
-    if (mine.length === 0) return null;
-    const held = sellableShares(mine.reduce((a, p) => a + p.size, 0));
-    if (held <= 0) return null;
-    const chosen = Number(limitSize.replace(',', '.'));
-    const size =
-      Number.isFinite(chosen) && chosen > 0 ? Math.min(chosen, held) : held;
-    return { position: mine[0], size, bid: books[which].bids[0]?.price ?? null };
-  };
-
   const limitPriceNum = Number(limitPrice.replace(',', '.')) / 100;
   // Five shares unless the venue's floor is higher at this price — which it is
   // under twenty cents, where five shares is under a dollar and refused.
@@ -898,7 +892,6 @@ export function Manual({
 
   /** Whether the price in the field is one the early rule will not buy at. */
   const limitBarred =
-    !selling &&
     Number.isFinite(limitPriceNum) &&
     limitPriceNum > 0 &&
     buyBarred(limitPriceNum, elapsed);
@@ -907,7 +900,7 @@ export function Manual({
     const base = Number.isFinite(limitPriceNum) && limitPriceNum > 0
       ? Math.round(limitPriceNum * 100)
       : Math.round((askUp ?? 0.5) * 100);
-    const top = selling ? 99 : Math.round(ceiling * 100);
+    const top = Math.round(ceiling * 100);
     setLimitPrice(String(Math.min(top, Math.max(1, base + delta))));
   };
 
@@ -920,18 +913,6 @@ export function Manual({
   const placeLimit = async (which: 'Up' | 'Down') => {
     if (!Number.isFinite(limitPriceNum) || limitPriceNum <= 0) {
       setNote('Укажите цену лимитки');
-      return;
-    }
-
-    // Selling has no ladder and no container to fit into: it is one order for
-    // what is held, at the price on the screen.
-    if (selling) {
-      const held = quickSellFor(which);
-      if (!held) {
-        setNote(`Нет позиции ${which}`);
-        return;
-      }
-      await place(which, 'SELL', limitPriceNum, held.size);
       return;
     }
 
@@ -1388,8 +1369,7 @@ export function Manual({
         {pickingPrice && (
           <PriceWheel
             center={wheelCenter}
-            /* Selling has no ceiling — the rule is about what is paid. */
-            max={selling ? 99 : Math.round(ceiling * 100)}
+            max={Math.round(ceiling * 100)}
             value={
               Number.isFinite(limitPriceNum) && limitPriceNum > 0
                 ? Math.round(limitPriceNum * 100)
@@ -1401,14 +1381,11 @@ export function Manual({
             }}
           />
         )}
+        {/*
+          Price and size, and nothing else. Which side and whether to send it
+          are the row below — this one is only the terms.
+        */}
         <div className="limitrow">
-          <button
-            className="limit up"
-            disabled={busy || locked || limitBarred}
-            onClick={() => void placeLimit('Up')}
-          >
-            Up
-          </button>
           <div className="limitmid">
             <div className="limitprice">
               <button className="step" onClick={() => nudgeLimit(-1)}>
@@ -1433,50 +1410,39 @@ export function Manual({
               {limitSize || limitDefaultSize.toFixed(0)}
             </button>
           </div>
-          <button
-            className="limit down"
-            disabled={busy || locked || limitBarred}
-            onClick={() => void placeLimit('Down')}
-          >
-            Down
-          </button>
         </div>
 
         {/*
-          One pair of buttons, two jobs. Buying and closing are the same two
-          taps in the same two places, and a mode that says which is one glance
-          against a second row of buttons for the rest of the screen's life.
+          The two quotes, and the one thing to do with them.
+
+          Tapping a side is the decision — it loads that price and fills the
+          size, and lights up as the side that is chosen. The button between
+          them then only has to say what it does, which is why it says it:
+          nothing is sent by a thumb landing on a number it was reading.
+
+          Closing is not here. A position is sold by tapping it, at the book,
+          and the ladder offers the rest — putting a second meaning on these
+          two buttons only made the one they already had ambiguous.
         */}
-        {/*
-          The two sides are quotes, not orders. Tapping one loads its price
-          into the field above, where the size already is — the order itself
-          goes out from that row, so nothing is ever sent by a thumb landing
-          on a number it was only reading.
-        */}
-        <div className={`buybar${selling ? ' selling' : ''}`}>
+        <div className="buybar">
           {(['Up', 'Down'] as const).map((which, i) => {
-            const book = books[which];
-            // What this side is worth for what the dock is about to do: the
-            // offer if buying, the bid if selling.
-            const price = selling
-              ? (book.bids[0]?.price ?? null)
-              : (book.asks[0]?.price ?? null);
-            const held = selling ? quickSellFor(which) : null;
+            const price = books[which].asks[0]?.price ?? null;
             // A side quoting above the early ceiling still has a price worth
             // loading — the highest one the rule allows. Refusing the tap left
             // the field empty and the decision unmade; this leaves a bid in
             // it, which is what a buyer at a capped price would place anyway.
-            const barred = !selling && price != null && buyBarred(price, elapsed);
+            const barred = price != null && buyBarred(price, elapsed);
             const wanted = barred ? ceiling : price;
             const chip = (
               <button
                 key={which}
                 className={`buy ${which === 'Up' ? 'up' : 'down'}${
                   barred ? ' barred' : ''
-                }`}
+                }${side === which ? ' on' : ''}`}
                 disabled={price == null}
                 onClick={() => {
                   if (wanted == null) return;
+                  setSide(which);
                   setLimitPrice(String(Math.round(wanted * 100)));
                   // And the size the field is about to spend: all of it. The
                   // shares wanted at this price are what the window still has
@@ -1492,27 +1458,23 @@ export function Manual({
                 <s>
                   {price == null
                     ? 'стакан пуст'
-                    : selling
-                      ? held == null
-                        ? 'нет позиции'
-                        : `${held.size.toFixed(1)} долей`
-                      : barred
-                        ? `→ ${cents(ceiling)}`
-                        : which}
+                    : barred
+                      ? `→ ${cents(ceiling)}`
+                      : which}
                 </s>
               </button>
             );
-            // The switch sits between the two sides, which is where the eye
+            // The button sits between the two sides, which is where the eye
             // already is when it is choosing one.
             return i === 0 ? (
               <Fragment key={which}>
                 {chip}
                 <button
-                  className={`buymode${selling ? ' on' : ''}`}
-                  onClick={() => setSelling((v) => !v)}
-                  aria-label={selling ? 'Режим покупки' : 'Режим продажи'}
+                  className={`buygo${side ? ` on ${side === 'Up' ? 'up' : 'down'}` : ''}`}
+                  disabled={busy || locked || limitBarred || side == null}
+                  onClick={() => side && void placeLimit(side)}
                 >
-                  {selling ? 'прод' : 'куп'}
+                  Купить
                 </button>
               </Fragment>
             ) : (

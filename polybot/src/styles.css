@@ -881,27 +881,6 @@ button.compact.narrow {
   margin-bottom: 6px;
 }
 
-.limitrow button.limit {
-  flex: 0 0 58px;
-  border-radius: 10px;
-  border: 1px solid;
-  background: var(--surface);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.limitrow button.limit.up {
-  color: var(--up);
-  border-color: rgba(35, 192, 123, 0.45);
-}
-
-.limitrow button.limit.down {
-  color: var(--down);
-  border-color: rgba(255, 90, 106, 0.45);
-}
-
 .limitmid {
   flex: 1;
   min-width: 0;
@@ -2672,25 +2651,60 @@ button.wide {
 }
 
 /* Which of the two jobs the dock is doing, between the two sides it does it on. */
-.buymode {
-  flex: 0 0 52px;
+/*
+  The one thing the dock does. It waits, grey, until a side is chosen, and
+  then takes that side's colour — so the button says both what it will do and
+  which way, and the row has one place where anything is actually sent.
+*/
+.buygo {
+  flex: 0 0 92px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface-2);
   color: var(--muted);
   font-family: inherit;
-  font-size: 11px;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
 }
 
-.buymode.on {
+.buygo.on.up {
+  background: rgba(35, 192, 123, 0.16);
+  border-color: var(--up);
+  color: var(--up);
+}
+
+.buygo.on.down {
+  background: rgba(255, 90, 106, 0.16);
   border-color: var(--down);
   color: var(--down);
 }
 
-/* In sell mode both sides read as an exit, whichever one is held. */
-.buybar.selling .buy {
-  border-style: dashed;
+.buygo:disabled {
+  opacity: 0.5;
+}
+
+/*
+  The chosen side, said plainly: the other one is a quote, this one is the
+  order about to go out.
+*/
+.buybar button.buy.on {
+  border-width: 2px;
+}
+
+.buybar button.buy.up.on {
+  background: rgba(35, 192, 123, 0.28);
+  border-color: var(--up);
+}
+
+.buybar button.buy.down.on {
+  background: rgba(255, 90, 106, 0.26);
+  border-color: var(--down);
+}
+
+/* An unchosen side steps back so the chosen one reads first. */
+.buybar button.buy:not(.on):not(.barred) {
+  opacity: 0.72;
 }
 
 /* The wheel's price is the considered move; the book's is the quick one. */
