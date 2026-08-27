@@ -216,16 +216,41 @@ export type Exposure = {
   balance: number;
   /** Both together — the deposit the cap is a share of. */
   equity: number;
-  /** The most this window may hold. */
+  /** The most this window may hold, and the share of the deposit that is. */
   cap: number;
+  pct: number;
   /** What one more order may cost. Never negative. */
   room: number;
   /** Already at or over the line. */
   full: boolean;
 };
 
-/** The share of the deposit one five-minute window may hold. */
-export const WINDOW_CAP_PCT = 0.25;
+/**
+ * The share of the deposit one five-minute window may hold, by deposit.
+ *
+ * A quarter of fifty dollars is twelve, and losing it is an afternoon. A
+ * quarter of ten thousand is two and a half thousand, and losing that on one
+ * five-minute window is not the same kind of event at all — the rule has to
+ * get stricter as there is more to lose, or it stops being a rule about risk
+ * and becomes a rule about arithmetic.
+ *
+ * So the share falls as the deposit grows: a quarter up to fifty dollars, one
+ * percent from ten thousand, and a straight line between them in log-log —
+ * which means it falls by the same proportion for every doubling, rather than
+ * by cliffs the account can be nudged over. In money it still rises the whole
+ * way: $12.50 a window at $50, $31 at $500, $100 at $10,000.
+ */
+export const CAP_TOP_PCT = 0.25;
+export const CAP_TOP_USD = 50;
+export const CAP_LOW_PCT = 0.01;
+export const CAP_LOW_USD = 10_000;
+
+export function windowCapPct(equity: number): number {
+  if (!Number.isFinite(equity) || equity <= CAP_TOP_USD) return CAP_TOP_PCT;
+  if (equity >= CAP_LOW_USD) return CAP_LOW_PCT;
+  const t = Math.log(equity / CAP_TOP_USD) / Math.log(CAP_LOW_USD / CAP_TOP_USD);
+  return CAP_TOP_PCT * (CAP_LOW_PCT / CAP_TOP_PCT) ** t;
+}
 
 /**
  * Room the cap never takes away.
@@ -241,16 +266,18 @@ export const MIN_ROOM_USD = 3.5;
 export function exposureFor(
   balance: number,
   committed: number,
-  capPct: number = WINDOW_CAP_PCT,
+  /** Overrides the share the deposit would otherwise earn. */
+  capPct?: number,
 ): Exposure {
   const cash = Number.isFinite(balance) && balance > 0 ? balance : 0;
   const held = Number.isFinite(committed) && committed > 0 ? committed : 0;
   const equity = cash + held;
-  const share = Number.isFinite(capPct) ? Math.max(0, Math.min(1, capPct)) : WINDOW_CAP_PCT;
+  const wanted = capPct ?? windowCapPct(equity);
+  const share = Number.isFinite(wanted) ? Math.max(0, Math.min(1, wanted)) : CAP_TOP_PCT;
   const cap = equity * share;
   // At least the floor, never more than there is in cash.
   const room = Math.max(0, Math.min(Math.max(cap - held, MIN_ROOM_USD), cash));
-  return { committed: held, balance: cash, equity, cap, room, full: room <= 1e-9 };
+  return { committed: held, balance: cash, equity, cap, pct: share, room, full: room <= 1e-9 };
 }
 
 /**

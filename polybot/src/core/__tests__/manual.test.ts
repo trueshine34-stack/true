@@ -5,6 +5,7 @@ import {
   cappedShares,
   exposureFor,
   MIN_ROOM_USD,
+  windowCapPct,
   orderCost,
   sellableShares,
   spendableBalance,
@@ -174,21 +175,22 @@ describe('stakeShares', () => {
 
 
 describe('exposureFor', () => {
-  it('caps a window at a quarter of the deposit', () => {
-    // 300 free, 100 committed: the deposit is 400, so this window may hold 100
-    // — which it already does.
-    const e = exposureFor(300, 100);
-    expect(e.equity).toBe(400);
-    expect(e.cap).toBeCloseTo(100, 9);
+  it('caps a window at the share the deposit has earned', () => {
+    // 30 free, 10 committed: the deposit is 40, small enough for a quarter, so
+    // this window may hold 10 — which it already does.
+    const e = exposureFor(30, 10);
+    expect(e.equity).toBe(40);
+    expect(e.pct).toBeCloseTo(0.25, 9);
+    expect(e.cap).toBeCloseTo(10, 9);
     // Down to the floor, which the cap never takes away.
     expect(e.room).toBeCloseTo(MIN_ROOM_USD, 9);
     expect(e.full).toBe(false);
   });
 
   it('leaves room while under the line', () => {
-    const e = exposureFor(96, 4);
-    expect(e.cap).toBeCloseTo(25, 9);
-    expect(e.room).toBeCloseTo(21, 9);
+    const e = exposureFor(46, 4);
+    expect(e.cap).toBeCloseTo(12.5, 9);
+    expect(e.room).toBeCloseTo(8.5, 9);
     expect(e.full).toBe(false);
   });
 
@@ -199,7 +201,7 @@ describe('exposureFor', () => {
    */
   it('always leaves the floor, however far past its share the window is', () => {
     const e = exposureFor(20, 80);
-    expect(e.cap).toBeCloseTo(25, 9);
+    expect(e.cap).toBeCloseTo(100 * windowCapPct(100), 9);
     expect(e.room).toBeCloseTo(MIN_ROOM_USD, 9);
     expect(e.full).toBe(false);
   });
@@ -214,10 +216,10 @@ describe('exposureFor', () => {
   it('is not fooled by the balance falling as it is spent', () => {
     // Buying moves money from cash to committed; the deposit is unchanged, so
     // the cap does not slide down with it.
-    const before = exposureFor(100, 0);
-    const after = exposureFor(80, 20);
+    const before = exposureFor(40, 0);
+    const after = exposureFor(30, 10);
     expect(after.cap).toBeCloseTo(before.cap, 9);
-    expect(after.room).toBeCloseTo(5, 9);
+    expect(after.pct).toBeCloseTo(before.pct, 9);
   });
 
   it('takes another share when one is asked for', () => {
@@ -247,5 +249,50 @@ describe('cappedShares', () => {
   it('refuses when even the venue minimum would not fit', () => {
     expect(cappedShares(5, 0.4, 1)).toBeNull();
     expect(cappedShares(5, 0.4, 0)).toBeNull();
+  });
+});
+
+describe('windowCapPct', () => {
+  it('is a quarter while the deposit is small', () => {
+    expect(windowCapPct(10)).toBeCloseTo(0.25, 9);
+    expect(windowCapPct(50)).toBeCloseTo(0.25, 9);
+  });
+
+  it('is a percent from ten thousand on', () => {
+    expect(windowCapPct(10_000)).toBeCloseTo(0.01, 9);
+    expect(windowCapPct(80_000)).toBeCloseTo(0.01, 9);
+  });
+
+  /**
+   * A straight line in log-log: the share falls by the same proportion for
+   * every doubling, rather than by cliffs an account can be nudged over.
+   */
+  it('falls smoothly between the two', () => {
+    expect(windowCapPct(500)).toBeCloseTo(0.0617, 4);
+    expect(windowCapPct(2000)).toBeCloseTo(0.0266, 4);
+
+    // Monotone, and never outside its own ends.
+    let last = 1;
+    for (let usd = 10; usd <= 20_000; usd *= 1.3) {
+      const pct = windowCapPct(usd);
+      expect(pct).toBeLessThanOrEqual(last + 1e-12);
+      expect(pct).toBeGreaterThanOrEqual(0.01 - 1e-12);
+      expect(pct).toBeLessThanOrEqual(0.25 + 1e-12);
+      last = pct;
+    }
+  });
+
+  /** The money at risk still grows the whole way; only its share shrinks. */
+  it('lets the size in dollars keep rising', () => {
+    const at = (usd: number) => usd * windowCapPct(usd);
+    expect(at(50)).toBeCloseTo(12.5, 6);
+    expect(at(500)).toBeGreaterThan(at(50));
+    expect(at(10_000)).toBeCloseTo(100, 6);
+    expect(at(10_000)).toBeGreaterThan(at(500));
+  });
+
+  it('is what the guard uses unless it is told otherwise', () => {
+    expect(exposureFor(400, 100).pct).toBeCloseTo(windowCapPct(500), 9);
+    expect(exposureFor(400, 100, 0.5).pct).toBeCloseTo(0.5, 9);
   });
 });

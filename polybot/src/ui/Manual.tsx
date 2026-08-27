@@ -11,7 +11,6 @@ import {
   DEFAULT_MANUAL_SETTINGS,
   exposureFor,
   DEFAULT_CLICK_SHARES,
-  WINDOW_CAP_PCT,
   LIMIT_LADDER_COUNT,
   orderCost,
   sellableShares,
@@ -2083,7 +2082,7 @@ function RuleBar({
           }
         >
           <span className={`switch mini ${settings.exposureGuard ? 'on' : ''}`} />
-          <b>{Math.round(WINDOW_CAP_PCT * 100)}% на окно</b>
+          <b>{(exposure.pct * 100).toFixed(exposure.pct < 0.1 ? 1 : 0)}% на окно</b>
           <i className={settings.exposureGuard && exposure.full ? 'warn' : undefined}>
             {!settings.exposureGuard
               ? 'выкл'
