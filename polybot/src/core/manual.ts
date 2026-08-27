@@ -325,14 +325,17 @@ export function orderCost(shares: number, price: number): number {
  */
 export const CAP_FIRST_MIN_SEC = 60;
 export const CAP_EARLY_SEC = 180;
+export const CAP_LAST_MIN_SEC = 240;
 export const CAP_FIRST_MIN = 0.54;
 export const CAP_EARLY = 0.77;
+export const CAP_LAST_MIN = 0.91;
 
 export function buyCeiling(elapsedSec: number): number {
   if (!Number.isFinite(elapsedSec)) return CAP_FIRST_MIN;
   if (elapsedSec < CAP_FIRST_MIN_SEC) return CAP_FIRST_MIN;
   if (elapsedSec < CAP_EARLY_SEC) return CAP_EARLY;
-  return 1;
+  if (elapsedSec < CAP_LAST_MIN_SEC) return 1;
+  return CAP_LAST_MIN;
 }
 
 /** Whether a buy at this price is barred by the ceiling above. */

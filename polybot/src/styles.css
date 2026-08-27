@@ -2896,3 +2896,60 @@ button.wide {
   font-weight: 600;
   font-size: 11px;
 }
+
+/*
+  Binance's five-minute candles: the hours that led to this window.
+
+  A context chart, so it is drawn quietly — no axis, no grid, and the only
+  numbers under it are the price and what the whole run came to.
+*/
+.candles {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.candles-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.candle.up line,
+.candle.up rect {
+  stroke: var(--up);
+  fill: var(--up);
+}
+
+.candle.down line,
+.candle.down rect {
+  stroke: var(--down);
+  fill: var(--down);
+}
+
+.candle line {
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.candle rect {
+  stroke-width: 0;
+}
+
+.candles-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 3px 10px 5px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.candles-foot b {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.candles-foot span:last-child {
+  margin-left: auto;
+  font-weight: 600;
+}

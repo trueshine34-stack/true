@@ -1,0 +1,192 @@
+package com.polybot.btc5m.bot
+
+import java.util.TreeMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * Binance's five-minute candles for BTC/USDT, kept live.
+ *
+ * The window's own chart says what this five minutes has done against the
+ * price it must beat; this says what the hours before it did. They answer
+ * different questions and the desk wants both — a window opening into the
+ * fourth green candle of a run is not the same bet as one opening into chop.
+ *
+ * History comes over REST once and the stream keeps it current: Binance pushes
+ * the forming candle every couple of seconds and opens the next one itself, so
+ * there is nothing to poll.
+ */
+object BinanceCandles {
+
+    private const val REST = "https://data-api.binance.vision"
+    private const val STREAM = "wss://data-stream.binance.vision"
+    private const val SYMBOL = "btcusdt"
+    private const val INTERVAL = "5m"
+
+    /** Four hours of five-minute candles: a screen's worth of context. */
+    const val LIMIT = 48
+
+    private const val STALE_MS = 30_000L
+    private const val RESYNC_SEC = 600L
+    private const val MAX_BACKOFF_SEC = 20L
+
+    data class Candle(
+        val time: Long,
+        val open: Double,
+        val high: Double,
+        val low: Double,
+        val close: Double,
+    )
+
+    private val lock = Any()
+    private val candles = TreeMap<Long, Candle>()
+
+    private var touchedAt = 0L
+    private var attempt = 0
+
+    /** The candle the stream is currently filling in; REST leaves it alone. */
+    private var streamTime = 0L
+
+    @Volatile
+    private var stopped = true
+
+    @Volatile
+    private var socket: WebSocket? = null
+
+    private val scheduler = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "binance-candles").apply { isDaemon = true }
+    }
+
+    fun start() {
+        if (!stopped) return
+        stopped = false
+        scheduler.execute { history() }
+        connect()
+        scheduler.scheduleWithFixedDelay({ checkStall() }, 10, 10, TimeUnit.SECONDS)
+        // The stream opens each new candle itself, so this is only a guard
+        // against a slow drift away from what Binance would say.
+        scheduler.scheduleWithFixedDelay({ history() }, RESYNC_SEC, RESYNC_SEC, TimeUnit.SECONDS)
+    }
+
+    fun stop() {
+        stopped = true
+        socket?.close(1000, null)
+        socket = null
+        synchronized(lock) { candles.clear() }
+    }
+
+    /** Oldest first — a chart is drawn left to right. */
+    fun list(): List<Candle> = synchronized(lock) {
+        candles.values.toList().takeLast(LIMIT)
+    }
+
+    private fun history() {
+        if (stopped) return
+        val rows = try {
+            JSONArray(
+                Http.get("$REST/api/v3/klines?symbol=BTCUSDT&interval=$INTERVAL&limit=$LIMIT"),
+            )
+        } catch (e: Exception) {
+            return
+        }
+        synchronized(lock) {
+            for (i in 0 until rows.length()) {
+                val row = rows.optJSONArray(i) ?: continue
+                val candle = Candle(
+                    time = row.optLong(0) / 1000,
+                    open = row.optString(1).toDoubleOrNull() ?: continue,
+                    high = row.optString(2).toDoubleOrNull() ?: continue,
+                    low = row.optString(3).toDoubleOrNull() ?: continue,
+                    close = row.optString(4).toDoubleOrNull() ?: continue,
+                )
+                // The stream's own view of the candle in progress is newer
+                // than anything REST can say about it, so history fills in
+                // around it rather than over it.
+                if (candle.time == streamTime) continue
+                candles[candle.time] = candle
+            }
+            trim()
+        }
+    }
+
+    private fun checkStall() {
+        if (stopped) return
+        val age = System.currentTimeMillis() - touchedAt
+        if (touchedAt > 0L && age > STALE_MS) {
+            socket?.cancel()
+            socket = null
+            scheduleReconnect()
+        }
+    }
+
+    private fun connect() {
+        if (stopped) return
+        val request = Request.Builder()
+            .url("$STREAM/ws/$SYMBOL@kline_$INTERVAL")
+            .build()
+        socket = Http.client.newWebSocket(
+            request,
+            object : WebSocketListener() {
+                override fun onOpen(webSocket: WebSocket, response: Response) {
+                    attempt = 0
+                }
+
+                override fun onMessage(webSocket: WebSocket, text: String) {
+                    if (webSocket !== socket) return
+                    val k = try {
+                        JSONObject(text).optJSONObject("k")
+                    } catch (e: Exception) {
+                        null
+                    } ?: return
+                    absorb(k)
+                }
+
+                override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    if (webSocket === socket) scheduleReconnect()
+                }
+
+                override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    if (webSocket === socket) scheduleReconnect()
+                }
+            },
+        )
+    }
+
+    private fun scheduleReconnect() {
+        if (stopped) return
+        val delay = minOf(1L shl attempt, MAX_BACKOFF_SEC)
+        attempt = minOf(attempt + 1, 4)
+        scheduler.schedule({
+            connect()
+            history()
+        }, delay, TimeUnit.SECONDS)
+    }
+
+    private fun absorb(k: JSONObject) {
+        val time = k.optLong("t") / 1000
+        if (time <= 0L) return
+        val candle = Candle(
+            time = time,
+            open = k.optString("o").toDoubleOrNull() ?: return,
+            high = k.optString("h").toDoubleOrNull() ?: return,
+            low = k.optString("l").toDoubleOrNull() ?: return,
+            close = k.optString("c").toDoubleOrNull() ?: return,
+        )
+        synchronized(lock) {
+            candles[time] = candle
+            streamTime = time
+            trim()
+            touchedAt = System.currentTimeMillis()
+        }
+    }
+
+    private fun trim() {
+        while (candles.size > LIMIT * 2) candles.remove(candles.firstKey())
+    }
+}

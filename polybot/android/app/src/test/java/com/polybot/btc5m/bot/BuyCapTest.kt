@@ -20,9 +20,17 @@ class BuyCapTest {
     }
 
     @Test
-    fun theLastTwoMinutesAreUncapped() {
+    fun theFourthMinuteIsOpen() {
         assertEquals(1.0, BuyCap.ceiling(180), 1e-9)
-        assertEquals(1.0, BuyCap.ceiling(299), 1e-9)
+        assertEquals(1.0, BuyCap.ceiling(239), 1e-9)
+    }
+
+    @Test
+    fun theLastMinuteClosesAtNinetyOne() {
+        assertEquals(0.91, BuyCap.ceiling(240), 1e-9)
+        assertEquals(0.91, BuyCap.ceiling(299), 1e-9)
+        assertTrue(BuyCap.blocked(0.92, 260))
+        assertFalse(BuyCap.blocked(0.91, 260))
     }
 
     @Test
@@ -31,7 +39,7 @@ class BuyCapTest {
         assertTrue(BuyCap.blocked(0.55, 30))
         assertFalse(BuyCap.blocked(0.77, 120))
         assertTrue(BuyCap.blocked(0.78, 120))
-        assertFalse(BuyCap.blocked(0.95, 240))
+        assertFalse(BuyCap.blocked(0.95, 200))
     }
 
     @Test
@@ -54,5 +62,6 @@ class BuyCapTest {
     fun theRefusalSaysWhichRuleAndWhatItAllows() {
         assertEquals("В первую минуту не покупаем дороже 54¢", BuyCap.reason(10))
         assertEquals("В первые 3 минуты не покупаем дороже 77¢", BuyCap.reason(100))
+        assertEquals("В последнюю минуту не покупаем дороже 91¢", BuyCap.reason(250))
     }
 }

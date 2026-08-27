@@ -32,6 +32,7 @@ import {
 import { loadManualSettings, saveManualSettings } from '../core/storage';
 import { Fold } from './Fold';
 import { WindowChart } from './WindowChart';
+import { CandlePanel } from './CandlePanel';
 import { DepthPanel } from './DepthPanel';
 import {
   PolyBot,
@@ -1135,6 +1136,13 @@ export function Manual({
               sides out from the mid. The window's line says where price is,
               the book says what it would cost to move it.
             */}
+            {/*
+              Between the two: the hours before this window, as Binance's own
+              five-minute candles. The line above is this bet, the book below
+              is the next few dollars, and this is what led to both.
+            */}
+            {viewWindow == null && <CandlePanel />}
+
             {viewWindow == null && <DepthPanel />}
 
             {/*

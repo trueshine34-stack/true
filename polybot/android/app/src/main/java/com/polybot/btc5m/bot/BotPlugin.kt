@@ -762,6 +762,29 @@ class BotPlugin : Plugin() {
     }
 
     /**
+     * Binance's five-minute candles, from the stream the app keeps open.
+     *
+     * Flat rows — open time, open, high, low, close — because a chart of fifty
+     * candles is two hundred and fifty numbers and none of them need a name.
+     */
+    @PluginMethod
+    fun binanceCandles(call: PluginCall) {
+        val rows = JSArray()
+        BinanceCandles.list().forEach {
+            rows.put(
+                JSArray().apply {
+                    put(it.time)
+                    put(it.open)
+                    put(it.high)
+                    put(it.low)
+                    put(it.close)
+                },
+            )
+        }
+        call.resolve(JSObject().put("candles", rows))
+    }
+
+    /**
      * GMX candles for the chart. This runs natively for the same reason every
      * other request does: the WebView reports transport failures as an opaque
      * "Failed to fetch", which is impossible to act on.

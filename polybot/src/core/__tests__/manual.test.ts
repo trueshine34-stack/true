@@ -310,9 +310,16 @@ describe('buyCeiling', () => {
     expect(buyCeiling(179)).toBe(0.77);
   });
 
-  it('stops capping once the window is past its third minute', () => {
+  it('leaves the fourth minute open', () => {
     expect(buyCeiling(180)).toBe(1);
-    expect(buyCeiling(299)).toBe(1);
+    expect(buyCeiling(239)).toBe(1);
+  });
+
+  it('closes the last minute at 91c', () => {
+    // A side dearer than this with under a minute left is paying most of a
+    // dollar for a few cents, against a loss of the whole stake.
+    expect(buyCeiling(240)).toBe(0.91);
+    expect(buyCeiling(299)).toBe(0.91);
   });
 
   it('treats a window that has not started as its first minute', () => {
@@ -327,6 +334,8 @@ describe('buyCeiling', () => {
     expect(buyBarred(0.67, 10)).toBe(true);
     expect(buyBarred(0.78, 120)).toBe(true);
     expect(buyBarred(0.77, 120)).toBe(false);
-    expect(buyBarred(0.95, 240)).toBe(false);
+    expect(buyBarred(0.95, 200)).toBe(false);
+    expect(buyBarred(0.92, 260)).toBe(true);
+    expect(buyBarred(0.91, 260)).toBe(false);
   });
 });
