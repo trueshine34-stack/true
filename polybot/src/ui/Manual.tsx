@@ -62,6 +62,9 @@ const ago = (at: number) => {
 };
 const WINDOW_SEC = 300;
 
+/** How long a banner stays up before it clears itself. */
+const NOTE_MS = 5_000;
+
 /**
  * The window's phase, as a colour on its clock.
  *
@@ -169,6 +172,19 @@ export function Manual({
   // Read inside pollers that must not re-subscribe every time a setting changes.
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+
+  /**
+   * The banner clears itself.
+   *
+   * Everything it says is about a moment that has passed — an order went, an
+   * order was refused — and left up it becomes part of the furniture, still
+   * describing something that happened five windows ago.
+   */
+  useEffect(() => {
+    if (note == null) return;
+    const timer = window.setTimeout(() => setNote(null), NOTE_MS);
+    return () => window.clearTimeout(timer);
+  }, [note]);
 
   /** The book of our own orders, read inside callbacks that must not re-bind. */
   const ordersRef = useRef(orders);
@@ -559,7 +575,7 @@ export function Manual({
         const cost = orderCost(shares, price);
         if (cost > exposure.room + 1e-9) {
           setNote(
-            `Контейнер: заявка на ${usd(cost)}, свободно ${usd(exposure.room)} ` +
+            `Лимит окна: заявка на ${usd(cost)}, свободно ${usd(exposure.room)} ` +
               `(в рынке ${usd(exposure.committed)} из ${usd(exposure.cap)})`,
           );
           return;
@@ -909,14 +925,14 @@ export function Manual({
           is — this much money, that much of it spoken for.
         */}
         {/*
-          The balance, and after the slash what this five minutes is holding of
-          it. Those are the two numbers a size is decided from, and the second
-          one is the one with a line in front of it.
+          The balance, and after the slash what is still open to this five
+          minutes. What has been spent can be read off the difference; what is
+          left is the number a size is actually decided from.
         */}
         <button className="railbal" onClick={onOpenBalance}>
           <b>{balance === null ? '—' : balance.toFixed(2)}</b>
           <span className={exposure.full ? 'warn' : 'muted'}>
-            /{exposure.committed.toFixed(2)}
+            /{exposure.room.toFixed(2)}
           </span>
         </button>
 
