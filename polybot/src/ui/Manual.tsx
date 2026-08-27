@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   DEFAULT_MANUAL_SETTINGS,
-  balanceShares,
   cappedShares,
   exposureFor,
+  DEFAULT_CLICK_SHARES,
   LIMIT_LADDER_COUNT,
   orderCost,
   sellableShares,
   stakeShares,
   limitShares,
   minShares,
-  sharesFor,
-  spendableBalance,
   type Exposure,
   type ManualSettings,
 } from '../core/manual';
@@ -19,7 +17,6 @@ import { pairOrders, realised, type TradeRow } from '../core/trades';
 import {
   SELL_GAINS,
   limitLadder,
-  limitUpside,
   potentialProfit,
   signedUsd,
   targetPrice,
@@ -156,9 +153,17 @@ export function Manual({
   const [now, setNow] = useState(() => Date.now());
   const [limitPrice, setLimitPrice] = useState('');
   const [limitSize, setLimitSize] = useState('');
-  /** The size field is being edited: that is when sizing by wallet is useful. */
-  const [sizingLimit, setSizingLimit] = useState(false);
+  /**
+   * The size chips, open by default.
+   *
+   * The size is chosen more often than the price is — every trade starts with
+   * "how much" — and a row that has to be summoned first is a tap in front of
+   * every one of them.
+   */
+  const [sizingLimit, setSizingLimit] = useState(true);
   const [pickingPrice, setPickingPrice] = useState(false);
+  /** What the two big buttons do: open a position, or close one at market. */
+  const [selling, setSelling] = useState(false);
   const [ladderBot, setLadderBot] = useState<LadderState | null>(null);
   const [ladderOpen, setLadderOpen] = useState(false);
   /** The event strip is folded away until it is asked for. */
@@ -543,15 +548,13 @@ export function Manual({
     // tapping a button that buys five is the panel disagreeing with itself,
     // and the tap is the faster of the two ways to buy — so it follows.
     const chosen = Number(limitSize.replace(',', '.'));
-    const wanted = Number.isFinite(chosen) && chosen > 0
-      ? chosen
-      : settings.useBalanceShare && balance != null
-        ? balanceShares(ask, balance, settings.balanceSharePct, minSize)
-        : sharesFor(ask, settings, minSize);
-    const short = wanted == null;
+    const wanted =
+      Number.isFinite(chosen) && chosen > 0 ? chosen : DEFAULT_CLICK_SHARES;
     // Whatever was asked for, never under what the venue will take: five
     // shares at ten cents is fifty cents and is simply refused.
-    const size = Math.max(wanted ?? 0, minShares(ask, minSize));
+    const floor = minShares(ask, minSize);
+    const short = wanted < floor - 1e-9;
+    const size = Math.max(wanted, floor);
 
     // The guard trims rather than refuses: a tap that buys a little less still
     // works, and the button says what it will actually do.
@@ -835,6 +838,44 @@ export function Manual({
   const quickUp = quickFor('Up');
   const quickDown = quickFor('Down');
 
+  /**
+   * What a tap would close on this side: the position, or the size set above
+   * it if that is smaller.
+   */
+  const quickSellFor = (which: 'Up' | 'Down') => {
+    const mine = livePositions.filter((p) => p.outcome === which);
+    if (mine.length === 0) return null;
+    const held = sellableShares(mine.reduce((a, p) => a + p.size, 0));
+    if (held <= 0) return null;
+    const chosen = Number(limitSize.replace(',', '.'));
+    const size =
+      Number.isFinite(chosen) && chosen > 0 ? Math.min(chosen, held) : held;
+    return { position: mine[0], size, bid: books[which].bids[0]?.price ?? null };
+  };
+
+  /**
+   * Close a side at the book.
+   *
+   * This is the button you reach for when the window has turned, so it takes
+   * the bid rather than joining the queue — and the standing offers of ours
+   * are pulled on the way, because a tap now outranks a price set a minute
+   * ago.
+   */
+  const quickSell = (which: 'Up' | 'Down') => {
+    const held = quickSellFor(which);
+    if (!held) {
+      setNote(`Нет позиции ${which}`);
+      return;
+    }
+    void marketSell({
+      side: which,
+      action: 'SELL',
+      price: '0',
+      shares: String(held.size),
+      avg: held.position.avgPrice > 0 ? held.position.avgPrice : undefined,
+    });
+  };
+
   const quickBuy = (which: 'Up' | 'Down') => {
     const quick = which === 'Up' ? quickUp : quickDown;
     if (!quick) {
@@ -849,8 +890,8 @@ export function Manual({
     }
     if (quick.short) {
       setNote(
-        `Минимум — ${minShares(quick.ask, minSize).toFixed(0)} долей, это больше ` +
-          `${Math.round(settings.balanceSharePct * 100)}% баланса`,
+        `Минимум — ${minShares(quick.ask, minSize).toFixed(0)} долей: ` +
+          `биржа не берёт заявку дешевле 1 $`,
       );
     }
     if (quick.capped) {
@@ -973,26 +1014,37 @@ export function Manual({
           )}
         </button>
 
+        {/*
+          Two marks, not two figures. Both of these are read a few times an
+          hour and their numbers are inside them anyway — carried on the rail
+          they only competed with the balance, which is the one number here
+          that is always worth reading.
+        */}
         <button
-          className={`railchip${sessionOpen ? ' on' : ''}`}
+          className={`railmark${sessionOpen ? ' on' : ''}`}
           onClick={() => setSessionOpen((v) => !v)}
+          aria-label="Сессия"
         >
-          <span className="muted">сессия</span>
-          <b className={sessionPnl >= 0 ? 'up' : 'down'}>{signedUsd(sessionPnl)}</b>
+          <span className={sessionPnl >= 0 ? 'up' : 'down'}>◷</span>
         </button>
 
         {ladderBot && (
           <button
-            className={`railchip right${ladderOpen ? ' on' : ''}`}
+            className={`railmark${ladderOpen ? ' on' : ''}`}
             onClick={() => setLadderOpen((v) => !v)}
+            aria-label="Бот лесенки"
           >
-            <span className="muted">
-              <i className={`raildot${ladderBot.running ? ' live' : ''}`} aria-hidden />
-              лесенка
-            </span>
-            <b className={ladderBot.pnl > 0 ? 'up' : ladderBot.pnl < 0 ? 'down' : 'muted'}>
-              {signedUsd(ladderBot.pnl)}
-            </b>
+            {/* The bot's own mark: rungs, and lit while it is running. */}
+            <svg viewBox="0 0 16 16" aria-hidden>
+              <path
+                d="M3 13h10M4.5 10h7M6 7h4M7.5 4h1"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+            <i className={`raildot${ladderBot.running ? ' live' : ''}`} aria-hidden />
           </button>
         )}
 
@@ -1167,13 +1219,7 @@ export function Manual({
           <RuleBar
             state={autoSell}
             settings={settings}
-            balance={balance}
             exposure={exposure}
-            ask={
-              quickUp && quickDown
-                ? Math.min(quickUp.ask, quickDown.ask)
-                : (quickUp?.ask ?? quickDown?.ask ?? null)
-            }
             onChange={apply}
             onNote={setNote}
           />
@@ -1307,11 +1353,7 @@ export function Manual({
                   key={pct}
                   disabled={shares == null}
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    if (shares == null) return;
-                    setLimitSize(String(shares));
-                    setSizingLimit(false);
-                  }}
+                  onClick={() => shares != null && setLimitSize(String(shares))}
                 >
                   {pct}%
                 </button>
@@ -1321,14 +1363,40 @@ export function Manual({
               <button
                 key={n}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  setLimitSize(String(n));
-                  setSizingLimit(false);
-                }}
+                onClick={() => setLimitSize(String(n))}
               >
                 {n}
               </button>
             ))}
+          </div>
+        )}
+
+        {/*
+          And the same size said in money. What a clip is worth is the way a
+          size is actually decided — "a dollar of this" — and at ten cents that
+          is ten shares and at ninety it is one.
+        */}
+        {sizingLimit && (
+          <div className="limitpcts pcts" onMouseDown={(e) => e.preventDefault()}>
+            {[1, 2, 3].map((usdAmount) => {
+              const shares =
+                limitBasis > 0
+                  ? Math.max(usdAmount / limitBasis, minShares(limitBasis, minSize))
+                  : null;
+              return (
+                <button
+                  key={usdAmount}
+                  disabled={shares == null}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() =>
+                    shares != null &&
+                    setLimitSize(String(Math.round(shares * 10) / 10))
+                  }
+                >
+                  {usdAmount} $
+                </button>
+              );
+            })}
           </div>
         )}
         {/*
@@ -1349,17 +1417,6 @@ export function Manual({
               setPickingPrice(false);
             }}
           />
-        )}
-        {limitSizeNum > 0 && limitBasis > 0 && (
-          <div className="limitmeta">
-            <span className="up">
-              +
-              {usd(
-                limitUpside(limitSizeNum, limitBasis) *
-                  (settings.limitLadder ? LIMIT_LADDER_COUNT + 1 : 1),
-              )}
-            </span>
-          </div>
         )}
         <div className="limitrow">
           <button
@@ -1402,34 +1459,57 @@ export function Manual({
           </button>
         </div>
 
-        <div className="buybar">
+        {/*
+          One pair of buttons, two jobs. Buying and closing are the same two
+          taps in the same two places, and a mode that says which is one glance
+          against a second row of buttons for the rest of the screen's life.
+        */}
+        <div className={`buybar${selling ? ' selling' : ''}`}>
+          {(['Up', 'Down'] as const).map((which) => {
+            const quick = which === 'Up' ? quickUp : quickDown;
+            const held = selling ? quickSellFor(which) : null;
+            return (
+              <button
+                key={which}
+                className={`buy ${which === 'Up' ? 'up' : 'down'}`}
+                disabled={
+                  selling
+                    ? busy || held == null || held.bid == null
+                    : busy || !quick || quick.blocked || locked
+                }
+                onClick={() => (selling ? quickSell(which) : quickBuy(which))}
+              >
+                <b>
+                  {selling
+                    ? held?.bid != null
+                      ? cents(held.bid)
+                      : '—'
+                    : quick
+                      ? cents(quick.ask)
+                      : '—'}
+                </b>
+                <s>
+                  {selling
+                    ? held == null
+                      ? 'нет позиции'
+                      : held.bid == null
+                        ? 'нет спроса'
+                        : `${held.size.toFixed(1)} долей`
+                    : !quick
+                      ? 'стакан пуст'
+                      : quick.blocked
+                        ? 'контейнер'
+                        : `${quick.shares.toFixed(0)} долей${quick.capped ? ' ·огр' : ''}`}
+                </s>
+              </button>
+            );
+          })}
           <button
-            className="buy up"
-            disabled={busy || !quickUp || quickUp.blocked || locked}
-            onClick={() => quickBuy('Up')}
+            className={`buymode${selling ? ' on' : ''}`}
+            onClick={() => setSelling((v) => !v)}
+            aria-label={selling ? 'Режим покупки' : 'Режим продажи'}
           >
-            <b>{quickUp ? cents(quickUp.ask) : '—'}</b>
-            <s>
-              {!quickUp
-                ? 'стакан пуст'
-                : quickUp.blocked
-                  ? 'контейнер'
-                  : `${quickUp.shares.toFixed(0)} долей${quickUp.capped ? ' ·огр' : ''}`}
-            </s>
-          </button>
-          <button
-            className="buy down"
-            disabled={busy || !quickDown || quickDown.blocked || locked}
-            onClick={() => quickBuy('Down')}
-          >
-            <b>{quickDown ? cents(quickDown.ask) : '—'}</b>
-            <s>
-              {!quickDown
-                ? 'стакан пуст'
-                : quickDown.blocked
-                  ? 'контейнер'
-                  : `${quickDown.shares.toFixed(0)} долей${quickDown.capped ? ' ·огр' : ''}`}
-            </s>
+            {selling ? 'прод' : 'куп'}
           </button>
         </div>
       </div>
@@ -2063,18 +2143,13 @@ function RebuyDoneRow({ done }: { done: AutoSellRebuyDone }) {
 function RuleBar({
   state,
   settings,
-  balance,
   exposure,
-  ask,
   onChange,
   onNote,
 }: {
   state: AutoSellState;
   settings: ManualSettings;
-  balance: number | null;
   exposure: Exposure;
-  /** Price a click would pay, for showing what the share works out to. */
-  ask: number | null;
   onChange: (next: ManualSettings) => void;
   onNote: (text: string | null) => void;
 }) {
@@ -2108,14 +2183,6 @@ function RuleBar({
     (r) => r.status !== 'покрыто' && r.status !== 'выставлено' && r.status !== 'ждёт шага',
   );
   const rung = state.rows.length > 0 ? Math.max(...state.rows.map((r) => r.target)) : null;
-  // What a click really spends: the fee comes on top of the order, so the last
-  // slice of the balance is never available to buy with. Priced off the cheaper
-  // side, which is the one size questions are usually about.
-  const stake =
-    balance != null && ask != null
-      ? spendableBalance(balance, ask) * settings.balanceSharePct
-      : null;
-
   /** The auto-sell's own line: on but idle and on but stuck look alike. */
   const sellNote = !settings.autoSellEnabled
     ? 'выключена'
@@ -2199,45 +2266,7 @@ function RuleBar({
           </i>
         </button>
 
-        <button
-          className={`ruletile${settings.useBalanceShare ? ' on' : ''}`}
-          onClick={() =>
-            onChange({ ...settings, useBalanceShare: !settings.useBalanceShare })
-          }
-        >
-          <span className={`switch mini ${settings.useBalanceShare ? 'on' : ''}`} />
-          <b>% баланса</b>
-          <i>
-            {settings.useBalanceShare && stake != null
-              ? usd(stake)
-              : `${Math.round(settings.balanceSharePct * 100)}%`}
-          </i>
-        </button>
       </div>
-
-      {/*
-        The share is the whole point of that last rule, so it is picked here
-        rather than typed in settings — but only while the mode is on, or it is
-        a row of buttons that does nothing.
-      */}
-      {settings.useBalanceShare && (
-        <div className="pcts rules-pcts">
-          {[25, 50, 100].map((pct) => (
-            <button
-              key={pct}
-              className={
-                Math.round(settings.balanceSharePct * 100) === pct ? 'on' : undefined
-              }
-              onClick={() => onChange({ ...settings, balanceSharePct: pct / 100 })}
-            >
-              {pct}%
-            </button>
-          ))}
-          <span className="muted rules-note">
-            {stake != null ? `${stake.toFixed(2)} $ за клик` : 'баланс не прочитан'}
-          </span>
-        </div>
-      )}
 
       {/* The sell rule is the one that can be quietly stuck, so it still talks. */}
       {settings.autoSellEnabled && (
@@ -2472,11 +2501,6 @@ function ManualSettingsForm({
   onChange: (next: ManualSettings) => void;
   onNote: (text: string | null) => void;
 }) {
-  const setRule = (index: number, patch: Partial<{ maxPrice: number; shares: number }>) => {
-    const rules = settings.sizeRules.map((r, i) => (i === index ? { ...r, ...patch } : r));
-    onChange({ ...settings, sizeRules: rules });
-  };
-
   /** Rule settings have to reach the native side, not just the store. */
   const push = (next: ManualSettings) => {
     onChange(next);
@@ -2512,97 +2536,6 @@ function ManualSettingsForm({
 
   return (
     <>
-    <Fold
-      title="Покупка по клику"
-      note={`${Math.round(settings.balanceSharePct * 100)}% · $${settings.defaultStakeUsd}`}
-    >
-
-      <div className="fields">
-        <label className="field">
-          <span>доля, %</span>
-          <input
-            type="number"
-            value={String(Math.round(settings.balanceSharePct * 100))}
-            onChange={(e) =>
-              onChange({
-                ...settings,
-                balanceSharePct: Number(e.target.value.replace(',', '.')) / 100,
-              })
-            }
-          />
-        </label>
-
-        <label className="field">
-          <span>сумма, $</span>
-          <input
-            type="number"
-            step="0.5"
-            value={String(settings.defaultStakeUsd)}
-            onChange={(e) =>
-              onChange({
-                ...settings,
-                defaultStakeUsd: Number(e.target.value.replace(',', '.')),
-              })
-            }
-          />
-        </label>
-
-        <label className="field">
-          <span>шаг лесенки, ¢</span>
-          <input
-            type="number"
-            value={String(Math.round(settings.limitLadderStep * 100))}
-            onChange={(e) =>
-              onChange({
-                ...settings,
-                limitLadderStep: Number(e.target.value.replace(',', '.')) / 100,
-              })
-            }
-          />
-        </label>
-      </div>
-
-      <div className="toggle">
-        <span>Лесенка по цене</span>
-        <button
-          className={`switch ${settings.useSizeLadder ? 'on' : ''}`}
-          onClick={() =>
-            onChange({ ...settings, useSizeLadder: !settings.useSizeLadder })
-          }
-        />
-      </div>
-
-      {settings.useSizeLadder && (
-        <div className="rules">
-          <div className="rules-head">
-            <span>цена до, ¢</span>
-            <span>долей</span>
-          </div>
-          {settings.sizeRules.map((r, i) => (
-            <div className="rules-row" key={i}>
-              <input
-                type="number"
-                inputMode="numeric"
-                value={String(Math.round(r.maxPrice * 100))}
-                onChange={(e) =>
-                  setRule(i, { maxPrice: Number(e.target.value.replace(',', '.')) / 100 })
-                }
-              />
-              <input
-                type="number"
-                inputMode="decimal"
-                value={String(r.shares)}
-                onChange={(e) =>
-                  setRule(i, { shares: Number(e.target.value.replace(',', '.')) })
-                }
-              />
-            </div>
-          ))}
-        </div>
-      )}
-
-    </Fold>
-
     {/*
       One row for the container: the switch that enforces it is the heading,
       and everything it is made of opens underneath. A fold whose only content
@@ -2754,6 +2687,20 @@ function ManualSettingsForm({
       ) : (
         <>
       <div className="fields">
+      <label className="field">
+        <span>шаг лимиток, ¢</span>
+        <input
+          type="number"
+          value={String(Math.round(settings.limitLadderStep * 100))}
+          onChange={(e) =>
+            onChange({
+              ...settings,
+              limitLadderStep: Number(e.target.value.replace(',', '.')) / 100,
+            })
+          }
+        />
+      </label>
+
       <label className="field">
         <span>упреждение, с</span>
         <input

@@ -2594,39 +2594,44 @@ button.step.big {
   font-size: 13px;
 }
 
-.railchip {
+/*
+ * A mark, not a figure. Both of these open a panel that carries their numbers;
+ * on the rail those numbers only competed with the balance, which is the one
+ * here always worth reading.
+ */
+.railmark {
+  position: relative;
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 6px 8px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: none;
-  color: var(--text);
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--muted);
   font-family: inherit;
-  font-size: 11px;
+  font-size: 15px;
   cursor: pointer;
 }
 
-.railchip.on {
-  border-color: var(--line);
-  background: var(--surface-2);
+.railmark.on {
+  color: var(--text);
+  border-color: var(--text);
 }
 
-.railchip b {
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
+.railmark svg {
+  width: 17px;
+  height: 17px;
 }
 
-.railchip.right {
-  margin-left: auto;
-}
-
+/* Lit while the bot's loop is up, in the corner of its own mark. */
 .raildot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 5px;
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--muted);
 }
@@ -2689,6 +2694,28 @@ button.step.big {
 
 button.wide {
   width: 100%;
+}
+
+/* Which of the two jobs the big buttons are doing right now. */
+.buymode {
+  flex: 0 0 44px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.buymode.on {
+  border-color: var(--down);
+  color: var(--down);
+}
+
+/* In sell mode both sides read as an exit, whichever one is held. */
+.buybar.selling .buy {
+  border-style: dashed;
 }
 
 /* The wheel's price is the considered move; the book's is the quick one. */
