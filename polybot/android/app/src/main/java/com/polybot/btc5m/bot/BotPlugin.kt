@@ -48,6 +48,8 @@ class BotPlugin : Plugin() {
     /** The bot that buys the favourite while it is under its own exit. */
     private val ladderBot: LadderBot get() = EngineHolder.ladder(context)
 
+    private val pulseBot: PulseBot get() = EngineHolder.pulse(context)
+
     override fun load() {
         EngineHolder.onState = { notifyState() }
         EngineHolder.onLogEntry = { entry -> notifyLog(entry) }
@@ -1221,6 +1223,80 @@ class BotPlugin : Plugin() {
                         .put("step", it.step)
                         .put("note", it.note)
                         .put("lots", lots)
+                }),
+        )
+    }
+
+    @PluginMethod
+    fun pulseUpdate(call: PluginCall) {
+        val d = pulseBot.settings
+        pulseBot.update(
+            PulsePlan.Settings(
+                enabled = call.getBoolean("enabled") ?: d.enabled,
+                bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
+                shares = call.getDouble("shares") ?: d.shares,
+                fromSec = d.fromSec,
+                untilSec = d.untilSec,
+                rideSec = d.rideSec,
+                minEdge = call.getDouble("minEdge") ?: d.minEdge,
+                minLean = call.getDouble("minLean") ?: d.minLean,
+                minVolume = call.getDouble("minVolume") ?: d.minVolume,
+                minPrice = d.minPrice,
+                maxPrice = d.maxPrice,
+                takePct = call.getDouble("takePct") ?: d.takePct,
+                cutUsd = call.getDouble("cutUsd") ?: d.cutUsd,
+            ),
+        )
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun pulseReset(call: PluginCall) {
+        pulseBot.resetBank()
+        call.resolve()
+    }
+
+    /** What the pulse bot holds, what it is looking at, and how it has done. */
+    @PluginMethod
+    fun pulseState(call: PluginCall) {
+        val bot = pulseBot
+        val t = bot.totals
+        val read = bot.read
+
+        call.resolve(
+            JSObject()
+                .put("enabled", bot.settings.enabled)
+                .put("running", bot.running)
+                .put("bankUsd", bot.settings.bankUsd)
+                .put("shares", bot.settings.shares)
+                .put("minEdge", bot.settings.minEdge)
+                .put("takePct", bot.settings.takePct)
+                .put("cash", bot.cash)
+                .put("note", bot.note)
+                .put("lastFault", bot.lastFault)
+                .put("rounds", t.rounds)
+                .put("wins", t.wins)
+                .put("losses", t.losses)
+                .put("spent", t.spent)
+                .put("got", t.got)
+                .put("settled", t.settled)
+                .put("pnl", t.pnl)
+                .put("read", read?.let {
+                    JSObject()
+                        .put("lead", it.lead)
+                        .put("momentum", it.momentum)
+                        .put("volume", it.volume)
+                        .put("lean", it.lean)
+                        .put("upAsk", it.upAsk)
+                        .put("downAsk", it.downAsk)
+                })
+                .put("lot", bot.lot?.let {
+                    JSObject()
+                        .put("outcome", it.outcome)
+                        .put("shares", it.open)
+                        .put("price", it.price)
+                        .put("sellPrice", it.sellPrice)
+                        .put("note", it.note)
                 }),
         )
     }

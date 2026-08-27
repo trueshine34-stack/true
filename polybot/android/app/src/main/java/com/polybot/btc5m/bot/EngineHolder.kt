@@ -21,6 +21,9 @@ object EngineHolder {
     private var ladderBot: LadderBot? = null
 
     @Volatile
+    private var pulseBot: PulseBot? = null
+
+    @Volatile
     var onState: (() -> Unit)? = null
 
     @Volatile
@@ -59,7 +62,10 @@ object EngineHolder {
                 // Shares the ladder bot is holding are its own to exit: it
                 // offers them at the same rung, and two rules pulling each
                 // other's orders would leave the position naked between them.
-                botShares = { asset -> ladderBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0 },
+                botShares = { asset ->
+                    (ladderBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0) +
+                        (pulseBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0)
+                },
                 onStateChanged = {
                     onState?.invoke()
                     onServiceState?.invoke()
@@ -98,6 +104,31 @@ object EngineHolder {
     }
 
     fun peekLadder(): LadderBot? = ladderBot
+
+    /**
+     * The bot that trades one clip at a time on the side four signals agree
+     * about. Created on first ask for the same reason as the ladder: the panel
+     * shows its books whether it is running or not.
+     */
+    fun pulse(context: Context): PulseBot {
+        pulseBot?.let { return it }
+        val host = get(context)
+        return synchronized(this) {
+            pulseBot ?: PulseBot(
+                engine = host,
+                store = PulseStore(context),
+                onStateChanged = {
+                    onState?.invoke()
+                    onServiceState?.invoke()
+                },
+            ).also {
+                pulseBot = it
+                if (it.settings.enabled) it.start()
+            }
+        }
+    }
+
+    fun peekPulse(): PulseBot? = pulseBot
 
     /** Null when nothing has touched the engine yet this process. */
     fun peek(): BotEngine? = engine

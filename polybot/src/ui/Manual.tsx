@@ -43,6 +43,7 @@ import {
   type LoggedOrder,
   type NativeMarket,
   type LadderState,
+  type PulseState,
   type NativePosition,
   type OpenOrder,
 } from '../native/polybot';
@@ -160,6 +161,8 @@ export function Manual({
   const [side, setSide] = useState<'Up' | 'Down' | null>(null);
   const [ladderBot, setLadderBot] = useState<LadderState | null>(null);
   const [ladderOpen, setLadderOpen] = useState(false);
+  const [pulseBot, setPulseBot] = useState<PulseState | null>(null);
+  const [pulseOpen, setPulseOpen] = useState(false);
   /** The event strip is folded away until it is asked for. */
   const [sessionOpen, setSessionOpen] = useState(false);
   /** A resting order opened for editing. */
@@ -389,13 +392,18 @@ export function Manual({
     };
   }, [tokenFor]);
 
-  // The ladder bot runs on its own money in the service; the panel reads it.
+  // The bots run on their own money in the service; the panel reads them.
   useEffect(() => {
     let cancelled = false;
     const read = () => {
       void PolyBot.ladderState()
         .then((s) => {
           if (!cancelled) setLadderBot(s);
+        })
+        .catch(() => {});
+      void PolyBot.pulseState()
+        .then((s) => {
+          if (!cancelled) setPulseBot(s);
         })
         .catch(() => {});
     };
@@ -1001,6 +1009,27 @@ export function Manual({
           <span className={sessionPnl >= 0 ? 'up' : 'down'}>◷</span>
         </button>
 
+        {pulseBot && (
+          <button
+            className={`railmark${pulseOpen ? ' on' : ''}`}
+            onClick={() => setPulseOpen((v) => !v)}
+            aria-label="Пульс"
+          >
+            {/* Its own mark: a heartbeat, and lit while it is running. */}
+            <svg viewBox="0 0 16 16" aria-hidden>
+              <path
+                d="M1 8h3l2-4 3 8 2-4h4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <i className={`raildot${pulseBot.running ? ' live' : ''}`} aria-hidden />
+          </button>
+        )}
+
         {ladderBot && (
           <button
             className={`railmark${ladderOpen ? ' on' : ''}`}
@@ -1048,6 +1077,38 @@ export function Manual({
           onSelect={(w) => {
             setViewWindow(w);
             setSessionOpen(false);
+          }}
+        />
+      )}
+
+      {pulseOpen && pulseBot && (
+        <PulseCard
+          state={pulseBot}
+          onEnable={(enabled) => {
+            void PolyBot.pulseUpdate({ enabled })
+              .then(() => PolyBot.pulseState())
+              .then(setPulseBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onBank={(usd) => {
+            if (!Number.isFinite(usd) || usd < 0) return;
+            void PolyBot.pulseUpdate({ bankUsd: usd })
+              .then(() => PolyBot.pulseState())
+              .then(setPulseBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onShares={(n) => {
+            if (!Number.isFinite(n) || n <= 0) return;
+            void PolyBot.pulseUpdate({ shares: n })
+              .then(() => PolyBot.pulseState())
+              .then(setPulseBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onReset={() => {
+            void PolyBot.pulseReset()
+              .then(() => PolyBot.pulseState())
+              .then(setPulseBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
         />
       )}
@@ -1717,6 +1778,143 @@ function EventStrip({
  * favourite costs against what the ladder will ask for it — so the card shows
  * exactly those two, next to what the comparison has been worth.
  */
+/**
+ * The pulse bot's own panel.
+ *
+ * Four readings across the top, because the rule is a confluence and the only
+ * useful thing to see is which of the four is currently disagreeing. Under
+ * them the books, and under those what it is doing right now — or, more often,
+ * why it is not.
+ */
+function PulseCard({
+  state,
+  onEnable,
+  onBank,
+  onShares,
+  onReset,
+}: {
+  state: PulseState;
+  onEnable: (enabled: boolean) => void;
+  onBank: (usd: number) => void;
+  onShares: (shares: number) => void;
+  onReset: () => void;
+}) {
+  const tone = state.pnl > 0 ? 'up' : state.pnl < 0 ? 'down' : 'muted';
+  const read = state.read;
+  const lot = state.lot;
+  // Which side each reading is pointing at, so a glance says "three of four".
+  const side = read ? (read.lead >= 0 ? 'up' : 'down') : 'muted';
+
+  return (
+    <div className="card tight">
+      <div className="counterhead">
+        <span>Пульс</span>
+        <button
+          className={`switch ${state.enabled ? 'on' : ''}`}
+          onClick={() => onEnable(!state.enabled)}
+        />
+      </div>
+
+      <div className="counterrule muted">
+        Берёт {state.shares.toFixed(0)} долей стороны, за которую разом
+        высказались четыре вещи: ход окна от его открытия, импульс минуток,
+        объём под ним и перевес в стакане Binance. Выходит по{' '}
+        +{Math.round(state.takePct * 100)}% лимиткой, режет по рынку, если
+        перевес развернулся, и не продаёт вовсе, если к концу окна ведёт —
+        расчёт платит доллар без комиссии.
+      </div>
+
+      {read && (
+        <div className="pulsegrid">
+          <div>
+            <span className="muted">ход</span>
+            <b className={side}>
+              {read.lead >= 0 ? '+' : '−'}
+              {Math.abs(read.lead).toFixed(0)}$
+            </b>
+          </div>
+          <div>
+            <span className="muted">импульс</span>
+            <b className={read.momentum >= 0 ? 'up' : 'down'}>
+              {read.momentum >= 0 ? '+' : '−'}
+              {Math.abs(read.momentum).toFixed(0)}$
+            </b>
+          </div>
+          <div>
+            <span className="muted">объём</span>
+            <b className={read.volume >= 1 ? 'up' : 'muted'}>
+              ×{read.volume.toFixed(2)}
+            </b>
+          </div>
+          <div>
+            <span className="muted">стакан</span>
+            <b className={read.lean >= 0.5 ? 'up' : 'down'}>
+              {Math.round(read.lean * 100)}%
+            </b>
+          </div>
+        </div>
+      )}
+
+      <div className="fields botbank">
+        <label className="field">
+          <span>контейнер, $</span>
+          <input
+            type="number"
+            step="1"
+            value={String(state.bankUsd)}
+            onChange={(e) => onBank(Number(e.target.value.replace(',', '.')))}
+          />
+        </label>
+        <label className="field">
+          <span>долей за раз</span>
+          <input
+            type="number"
+            step="1"
+            value={String(state.shares)}
+            onChange={(e) => onShares(Number(e.target.value.replace(',', '.')))}
+          />
+        </label>
+      </div>
+
+      <div className="countergrid">
+        <div>
+          <span className="muted">свободно</span>
+          <b>{usd(state.cash)}</b>
+        </div>
+        <div>
+          <span className="muted">итог</span>
+          <b className={tone}>{signedUsd(state.pnl)}</b>
+        </div>
+        <div>
+          <span className="muted">кругов · +/−</span>
+          <b>
+            {state.rounds} · {state.wins}/{state.losses}
+          </b>
+        </div>
+      </div>
+
+      {lot ? (
+        <div className="counterlive">
+          <span className={lot.outcome === 'Up' ? 'up' : 'down'}>{lot.outcome}</span>{' '}
+          {lot.shares.toFixed(1)} по {cents(lot.price)}
+          {lot.sellPrice > 0 ? ` → ${cents(lot.sellPrice)}` : ''}
+          {lot.note ? ` · ${lot.note}` : ''}
+        </div>
+      ) : (
+        <div className="counterlive muted">{state.note ?? 'ждёт совпадения'}</div>
+      )}
+
+      {state.lastFault && <div className="banner warn">{state.lastFault}</div>}
+
+      <div className="listhead bare">
+        <button className="linkbtn" onClick={onReset}>
+          обнулить счёт
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function LadderCard({
   state,
   onEnable,

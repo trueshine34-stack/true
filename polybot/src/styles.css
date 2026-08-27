@@ -2935,3 +2935,41 @@ button.wide {
 .slevel-tag.support {
   fill: rgba(35, 192, 123, 0.85);
 }
+
+/*
+  The pulse bot's four readings.
+
+  Four cells, because the rule is a confluence: what matters at a glance is
+  which one of them is the odd one out.
+*/
+.pulsegrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 6px 0 2px;
+}
+
+.pulsegrid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  align-items: center;
+}
+
+.pulsegrid span {
+  font-size: 10px;
+}
+
+.pulsegrid b {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* How far the running five minutes has come, said next to the price itself. */
+.depth-foot b em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+}

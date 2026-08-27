@@ -30,6 +30,8 @@ export interface Book {
  */
 export function DepthPanel() {
   const [book, setBook] = useState<Book | null>(null);
+  /** Where the running five minutes opened, for the move under the price. */
+  const [open, setOpen] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -61,14 +63,42 @@ export function DepthPanel() {
     };
   }, []);
 
-  return <DepthFace book={book} />;
+  // The five-minute candle in progress opens where the window opened, and the
+  // distance from it is what the bet is about — so it belongs on the price
+  // rather than one panel further up.
+  useEffect(() => {
+    let alive = true;
+    const pull = () => {
+      void PolyBot.binanceCandles({ interval: '5m' })
+        .then((r) => {
+          const last = r.candles?.[r.candles.length - 1];
+          if (alive && last) setOpen(last[1]);
+        })
+        .catch(() => {});
+    };
+    pull();
+    const timer = window.setInterval(pull, 2_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  return <DepthFace book={book} open={open} />;
 }
 
 /**
  * The drawing, from a book and nothing else — kept apart from the polling so a
  * fixed book can be rendered and looked at.
  */
-export function DepthFace({ book }: { book: Book | null }) {
+export function DepthFace({
+  book,
+  open = 0,
+}: {
+  book: Book | null;
+  /** Where the current five minutes opened, or nothing when it is unknown. */
+  open?: number;
+}) {
   const shape = book ? depthShape(book.bids, book.asks, W, H) : null;
   const mid = book ? (book.bid + book.ask) / 2 : 0;
 
@@ -92,7 +122,15 @@ export function DepthFace({ book }: { book: Book | null }) {
       <div className="depth-foot">
         <span className="up">{shape ? btc(shape.bidTotal) : '—'}</span>
         <i>{mid > 0 ? priceLabel(mid * (1 - book!.span)) : ''}</i>
-        <b>{mid > 0 ? priceLabel(mid) : 'стакан грузится'}</b>
+        <b>
+          {mid > 0 ? priceLabel(mid) : 'стакан грузится'}
+          {mid > 0 && open > 0 && (
+            <em className={mid >= open ? 'up' : 'down'}>
+              {mid >= open ? '+' : '−'}
+              {Math.round(Math.abs(mid - open)).toLocaleString('ru-RU')}$
+            </em>
+          )}
+        </b>
         <i>{mid > 0 ? priceLabel(mid * (1 + book!.span)) : ''}</i>
         <span className="down">{shape ? btc(shape.askTotal) : '—'}</span>
       </div>

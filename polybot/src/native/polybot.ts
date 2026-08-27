@@ -229,6 +229,18 @@ export interface PolyBotPlugin {
   }): Promise<void>;
   ladderReset(): Promise<void>;
   ladderState(): Promise<LadderState>;
+  pulseUpdate(args: {
+    enabled?: boolean;
+    bankUsd?: number;
+    shares?: number;
+    minEdge?: number;
+    minLean?: number;
+    minVolume?: number;
+    takePct?: number;
+    cutUsd?: number;
+  }): Promise<void>;
+  pulseReset(): Promise<void>;
+  pulseState(): Promise<PulseState>;
   /** Binance's five-minute candle in progress: its open and the last price. */
   binancePrice(): Promise<{
     openTime: number;
@@ -377,6 +389,50 @@ export type LadderState = {
   round?: LadderRound | null;
 };
 
+/** What the pulse bot is looking at right now. */
+export type PulseRead = {
+  /** Dollars this window has moved from its own open. */
+  lead: number;
+  /** Where the last few one-minute closes went, in dollars. */
+  momentum: number;
+  /** Last completed minute's volume over the average of the ten before. */
+  volume: number;
+  /** Share of Binance's resting size sitting on the bid, 0..1. */
+  lean: number;
+  upAsk?: number | null;
+  downAsk?: number | null;
+};
+
+export type PulseLot = {
+  outcome: string;
+  shares: number;
+  price: number;
+  sellPrice: number;
+  note?: string | null;
+};
+
+export type PulseState = {
+  enabled: boolean;
+  running: boolean;
+  bankUsd: number;
+  shares: number;
+  minEdge: number;
+  takePct: number;
+  cash: number;
+  /** Why it is not buying, in its own words. */
+  note?: string | null;
+  lastFault?: string | null;
+  rounds: number;
+  wins: number;
+  losses: number;
+  spent: number;
+  got: number;
+  settled: number;
+  pnl: number;
+  read?: PulseRead | null;
+  lot?: PulseLot | null;
+};
+
 /** What the app has timed for itself about the venue's own delays. */
 export type Timings = {
   /** Buy to the first sell the venue accepts. */
@@ -481,6 +537,24 @@ const webStub: PolyBotPlugin = {
   binancePrice: async () => ({ openTime: 0, open: 0, last: 0, at: 0 }),
   ladderUpdate: async () => {},
   ladderReset: async () => {},
+  pulseUpdate: async () => {},
+  pulseReset: async () => {},
+  pulseState: async () => ({
+    enabled: false,
+    running: false,
+    bankUsd: 10,
+    shares: 5,
+    minEdge: 6,
+    takePct: 0.12,
+    cash: 10,
+    rounds: 0,
+    wins: 0,
+    losses: 0,
+    spent: 0,
+    got: 0,
+    settled: 0,
+    pnl: 0,
+  }),
   ladderState: async () => ({
     enabled: false,
     running: false,

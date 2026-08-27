@@ -53,6 +53,8 @@ class BinanceCandles(
         val high: Double,
         val low: Double,
         val close: Double,
+        /** Base volume, in BTC. What a move was actually traded on. */
+        val volume: Double,
     )
 
     private val lock = Any()
@@ -92,6 +94,36 @@ class BinanceCandles(
         synchronized(lock) { candles.clear() }
     }
 
+    /**
+     * How the last completed candle's volume compares with the ten before it.
+     *
+     * The candle in progress is deliberately skipped: a minute ten seconds old
+     * has a tenth of its volume, and comparing that with whole minutes says
+     * "no volume" about every move for fifty seconds out of sixty.
+     */
+    fun volumeRatio(over: Int = 10): Double {
+        val rows = list()
+        if (rows.size < over + 2) return 1.0
+        val last = rows[rows.size - 2]
+        val before = rows.subList(rows.size - 2 - over, rows.size - 2)
+        val average = before.sumOf { it.volume } / over
+        if (average <= 0.0) return 1.0
+        return last.volume / average
+    }
+
+    /**
+     * Where the last few closes have gone, in dollars.
+     *
+     * A lead that is being handed back shows up here before it shows up
+     * anywhere else: the window can still be a hundred dollars up while the
+     * last three minutes have all closed lower.
+     */
+    fun momentum(over: Int = 3): Double {
+        val rows = list()
+        if (rows.size < over + 1) return 0.0
+        return rows.last().close - rows[rows.size - 1 - over].close
+    }
+
     /** Oldest first — a chart is drawn left to right. */
     fun list(): List<Candle> = synchronized(lock) {
         candles.values.toList().takeLast(limit)
@@ -115,6 +147,7 @@ class BinanceCandles(
                     high = row.optString(2).toDoubleOrNull() ?: continue,
                     low = row.optString(3).toDoubleOrNull() ?: continue,
                     close = row.optString(4).toDoubleOrNull() ?: continue,
+                    volume = row.optString(5).toDoubleOrNull() ?: 0.0,
                 )
                 // The stream's own view of the candle in progress is newer
                 // than anything REST can say about it, so history fills in
@@ -188,6 +221,7 @@ class BinanceCandles(
             high = k.optString("h").toDoubleOrNull() ?: return,
             low = k.optString("l").toDoubleOrNull() ?: return,
             close = k.optString("c").toDoubleOrNull() ?: return,
+            volume = k.optString("v").toDoubleOrNull() ?: 0.0,
         )
         synchronized(lock) {
             candles[time] = candle
