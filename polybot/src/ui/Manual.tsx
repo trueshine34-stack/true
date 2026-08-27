@@ -519,27 +519,41 @@ export function Manual({
    * the exchange marks them redeemable, which takes minutes, and counting them
    * meant a fresh window opened with the last one's money already spent.
    */
-  const committed = useMemo(() => {
+  const resting = useMemo(() => {
     if (!market) return 0;
     const tokens = new Set([market.upTokenId, market.downTokenId]);
+    return orders
+      .filter((o) => o.side === 'BUY' && tokens.has(o.assetId))
+      .reduce((sum, o) => sum + orderCost(o.remaining, o.price), 0);
+  }, [orders, market]);
+
+  const committed = useMemo(() => {
+    if (!market) return 0;
     const held = positions
       .filter(
         (p) => p.conditionId === market.conditionId && !p.redeemable && p.size > 0,
       )
       .reduce((sum, p) => sum + p.size * (p.avgPrice > 0 ? p.avgPrice : p.curPrice), 0);
-    const resting = orders
-      .filter((o) => o.side === 'BUY' && tokens.has(o.assetId))
-      .reduce((sum, o) => sum + orderCost(o.remaining, o.price), 0);
     return held + resting;
-  }, [positions, orders, market]);
+  }, [positions, resting, market]);
+
+  /**
+   * The balance minus what is already promised to resting buys.
+   *
+   * The venue reports the wallet, not what is left of it: collateral for an
+   * order that has not filled is still in the balance it reads, so sizing the
+   * next order against that number spends the same dollars twice — and the
+   * second order is the one that gets refused.
+   */
+  const freeCash = Math.max(0, (balance ?? 0) - resting);
 
   useEffect(() => {
     onCommitted?.(committed);
   }, [committed, onCommitted]);
 
   const exposure = useMemo(
-    () => exposureFor(balance ?? 0, committed),
-    [balance, committed],
+    () => exposureFor(freeCash, committed),
+    [freeCash, committed],
   );
 
   const guard = settings.exposureGuard && balance != null;
@@ -936,7 +950,7 @@ export function Manual({
     // rather than a full container — and the rungs that did go out were the
     // dearest ones, because they go first.
     const size = limitSizeNum > 0 ? limitSizeNum : limitDefaultSize;
-    const room = settings.exposureGuard ? exposure.room : (balance ?? 0);
+    const room = settings.exposureGuard ? exposure.room : freeCash;
     const rungs: number[] = [];
     let spend = 0;
     for (const price of wanted) {
@@ -1311,7 +1325,7 @@ export function Manual({
               // A share of what this window may still take, not of the whole
               // wallet: a hundred percent that the guard then refuses is a
               // button that lies about what it does.
-              const budget = settings.exposureGuard ? exposure.room : (balance ?? 0);
+              const budget = settings.exposureGuard ? exposure.room : freeCash;
               const shares =
                 budget > 0 ? stakeShares(limitBasis, budget, pct / 100, minSize) : null;
               return (
@@ -1329,11 +1343,13 @@ export function Manual({
         )}
 
         {/*
-          And the same size said in money. What a clip is worth is the way a
-          size is actually decided — "a dollar of this" — and at ten cents that
-          is ten shares and at ninety it is one.
+          And the same size said in money, but only down where money is the
+          natural unit. At twenty cents a dollar is the venue's own five-share
+          minimum, and above it every one of these buttons asks for the same
+          thing the minimum already gives — so they only appear under it,
+          where "a dollar of this" is a real choice of size.
         */}
-        {sizingLimit && (
+        {sizingLimit && limitPriceNum > 0 && limitPriceNum < 0.2 && (
           <div className="limitpcts pcts" onMouseDown={(e) => e.preventDefault()}>
             {[1, 2, 3].map((usdAmount) => {
               const shares =
@@ -1458,9 +1474,7 @@ export function Manual({
                   // shares wanted at this price are what the window still has
                   // room for, and typing that out was the last thing here that
                   // was typed.
-                  const budget = settings.exposureGuard
-                    ? exposure.room
-                    : (balance ?? 0);
+                  const budget = settings.exposureGuard ? exposure.room : freeCash;
                   const full =
                     budget > 0 ? stakeShares(wanted, budget, 1, minSize) : null;
                   if (full != null) setLimitSize(String(full));

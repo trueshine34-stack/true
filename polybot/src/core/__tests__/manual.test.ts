@@ -299,6 +299,26 @@ describe('windowCapPct', () => {
   });
 });
 
+describe('a resting buy is money already spoken for', () => {
+  it('is not offered again as spendable cash', () => {
+    // The venue reports the wallet, not what is left of it: a $10 buy resting
+    // against a $50 wallet still reads as $50, and sizing the next order from
+    // that number spends the same dollars twice.
+    const e = exposureFor(50 - 10, 10);
+    expect(e.equity).toBe(50);
+    expect(e.balance).toBe(40);
+    expect(e.committed).toBe(10);
+    // A quarter of fifty is 12.50, of which ten is already promised — and the
+    // floor is what is left standing.
+    expect(e.room).toBeCloseTo(MIN_ROOM_USD, 5);
+  });
+
+  it('still leaves the whole cap open when nothing is resting', () => {
+    const e = exposureFor(50, 0);
+    expect(e.room).toBeCloseTo(12.5, 5);
+  });
+});
+
 describe('buyCeiling', () => {
   it('holds buys to 63c through the first minute', () => {
     expect(buyCeiling(0)).toBe(0.63);
