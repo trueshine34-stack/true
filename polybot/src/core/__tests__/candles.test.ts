@@ -10,6 +10,14 @@ const at = (i: number, o: number, h: number, l: number, c: number): Candle => [
 ];
 
 describe('candleShape', () => {
+  it('keeps the open time of each candle, which is what it is', () => {
+    // The marks drawn on the chart — where a five-minute window began — are
+    // about time, so a bar that only knows where it sits cannot carry them.
+    const shape = candleShape([at(0, 10, 12, 9, 11), at(1, 11, 13, 10, 12)], 200, 100)!;
+    expect(shape.bars[0].time).toBe(1_787_817_600);
+    expect(shape.bars[1].time - shape.bars[0].time).toBe(300);
+  });
+
   it('spaces the candles evenly across the width', () => {
     const shape = candleShape(
       [at(0, 10, 12, 9, 11), at(1, 11, 13, 10, 12)],

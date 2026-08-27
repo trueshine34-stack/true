@@ -4,6 +4,15 @@ import { candleShape, signedPct, type Candle } from '../core/candles';
 import { findLevels } from '../core/levels';
 import { priceLabel } from '../core/depth';
 
+/** Every window is five minutes, and every window opens on a multiple of it. */
+const WINDOW_SEC = 300;
+
+/** Seconds in one candle of an interval, for the marks that are about time. */
+function intervalSec(interval: string): number {
+  const n = Number(interval.replace(/[^0-9]/g, '')) || 1;
+  return interval.endsWith('h') ? n * 3600 : n * 60;
+}
+
 /** Chart width in chart units, scaled to whatever the screen gives it. */
 const W = 360;
 
@@ -66,6 +75,18 @@ export function CandleFace({
 }) {
   const shape = candleShape(candles, W, H);
   const levels = shape ? findLevels(candles, shape.last) : [];
+  /*
+    Where the running five minutes began.
+
+    Windows open on multiples of three hundred seconds, so on the minute chart
+    the newest candle whose open time is one of those is the one this bet
+    started from — and on a chart of thirty minutes there are six of them, of
+    which only the last is the window being traded.
+  */
+  const opened =
+    shape && WINDOW_SEC % intervalSec(interval) === 0
+      ? [...shape.bars].reverse().find((b) => b.time % WINDOW_SEC === 0)
+      : undefined;
   // The candles' own scale, so a level lands on the price that made it.
   const y = (price: number) =>
     shape ? ((shape.top - price) / (shape.top - shape.floor)) * H : 0;
@@ -87,6 +108,29 @@ export function CandleFace({
             y2={y(level.price).toFixed(1)}
           />
         ))}
+
+        {/*
+          A small mark over the candle the window opened on. It sits just above
+          that candle rather than at the top of the panel, so it points at the
+          price the window is being judged against and not merely at a moment.
+        */}
+        {opened &&
+          (() => {
+            // The tip sits just over the candle's high, and the whole mark is
+            // pushed back inside when that candle is against the ceiling.
+            const tip = Math.max(6, opened.high - 2);
+            const top = tip - 5;
+            return (
+              <path
+                className="openmark"
+                d={
+                  `M${(opened.x - 3.4).toFixed(1)} ${top.toFixed(1)}` +
+                  `L${(opened.x + 3.4).toFixed(1)} ${top.toFixed(1)}` +
+                  `L${opened.x.toFixed(1)} ${tip.toFixed(1)}Z`
+                }
+              />
+            );
+          })()}
 
         {shape?.bars.map((bar, i) => (
           <g key={i} className={bar.up ? 'candle up' : 'candle down'}>

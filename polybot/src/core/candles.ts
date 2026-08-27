@@ -12,6 +12,8 @@
 export type Candle = [number, number, number, number, number];
 
 export interface Bar {
+  /** The interval's open time, in seconds — what the candle *is*. */
+  time: number;
   /** Centre of the candle. */
   x: number;
   /** Half-width of the body. */
@@ -69,7 +71,7 @@ export function candleShape(
   const slot = width / clean.length;
   const half = Math.max(0.6, (slot * 0.62) / 2);
 
-  const bars = clean.map(([, open, hiPx, loPx, close], i): Bar => {
+  const bars = clean.map(([time, open, hiPx, loPx, close], i): Bar => {
     const up = close >= open;
     let top = y(Math.max(open, close));
     let bottom = y(Math.min(open, close));
@@ -79,6 +81,7 @@ export function candleShape(
       bottom = mid + MIN_BODY / 2;
     }
     return {
+      time,
       x: slot * (i + 0.5),
       half,
       top,

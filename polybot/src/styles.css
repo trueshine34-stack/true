@@ -2973,3 +2973,9 @@ button.wide {
   font-weight: 600;
   margin-left: 4px;
 }
+
+/* The candle the running five minutes opened on. */
+.openmark {
+  fill: var(--warn);
+  opacity: 0.9;
+}
