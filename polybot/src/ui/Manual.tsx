@@ -281,6 +281,29 @@ export function Manual({
    * this list meant the one place you look to answer "what is still out there"
    * was mostly answers to a different question.
    */
+  /**
+   * What this window's own orders say each side cost.
+   *
+   * The data API reports a fresh position with its size right and its cost at
+   * zero for a minute or so; the order log knows what was paid the moment it
+   * is paid. Only lots still open count — a round that has been sold is not
+   * part of what is held.
+   */
+  const localAvg = useMemo(() => {
+    const acc: Record<string, { shares: number; cost: number }> = {};
+    for (const t of trades) {
+      if (t.status !== 'open' && t.status !== 'pending') continue;
+      if (t.buyPrice == null || t.shares <= 0) continue;
+      const at = acc[t.outcome] ?? { shares: 0, cost: 0 };
+      at.shares += t.shares;
+      at.cost += t.shares * t.buyPrice;
+      acc[t.outcome] = at;
+    }
+    const avg = (side: string) =>
+      acc[side] && acc[side].shares > 0 ? acc[side].cost / acc[side].shares : null;
+    return { Up: avg('Up'), Down: avg('Down') };
+  }, [trades]);
+
   const working = useMemo(
     () => trades.filter((t) => t.status === 'buying' || t.status === 'pending'),
     [trades],
@@ -348,10 +371,10 @@ export function Manual({
         .catch(() => {});
     };
     read();
-    // Two full books every two seconds is a lot of requests for a number that
-    // moves in cents, and the venue's patience is shared with the rules — the
-    // buy-back was being refused a price while this polled.
-    const timer = window.setInterval(read, 3000);
+    // The book is the price the position's result is judged by, so it is worth
+    // two seconds — but not less: the venue's patience is shared with the
+    // rules, and the buy-back was once refused a price while this polled.
+    const timer = window.setInterval(read, 2000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -1054,6 +1077,7 @@ export function Manual({
                   Up: books.Up.bids[0]?.price ?? null,
                   Down: books.Down.bids[0]?.price ?? null,
                 }}
+                localAvg={localAvg}
                 secondsLeft={secondsLeft}
                 lookAhead={lookAhead}
                 onSell={sellPosition}
@@ -2124,6 +2148,7 @@ function RuleBar({
 function PositionPair({
   positions,
   bids,
+  localAvg,
   secondsLeft,
   lookAhead,
   onSell,
@@ -2131,6 +2156,8 @@ function PositionPair({
   positions: NativePosition[];
   /** Top of the bid side per outcome, for pricing what a close would pay. */
   bids: { Up: number | null; Down: number | null };
+  /** What this window's own orders say each side cost, when the API lags. */
+  localAvg: { Up: number | null; Down: number | null };
   secondsLeft: number;
   lookAhead: boolean;
   onSell: (position: NativePosition) => void;
@@ -2141,23 +2168,25 @@ function PositionPair({
     const bid = bids[name];
     const size = mine.reduce((a, p) => a + p.size, 0);
     const cost = mine.reduce((a, p) => a + p.size * p.avgPrice, 0);
-    // What selling it right now would pay, less the taker fee — the money, not
-    // the mark the exchange shows. Priced off the book when the data API has
-    // not caught up: it lags a fresh position by a minute or so, and a number
-    // that only appears after the window is half over is no use in it.
-    const now = bid ?? 0;
-    const pnl = mine.reduce(
-      (a, p) => a + positionPnl(p.size, p.avgPrice, p.curPrice || now).pnl,
-      0,
-    );
+    // The book first, always. The data API carries a price too, but it is a
+    // minute behind — which on a five-minute window is the difference between
+    // "up eighty cents" and a red number from before the move.
+    const now = bid ?? mine.find((p) => p.curPrice > 0)?.curPrice ?? 0;
+    // And what it cost: the app's own record of this window's buys, which is
+    // true the instant they fill, falling back to the API's average for a
+    // position it did not place itself.
+    const avg = cost > 0 ? cost / size : (localAvg[name] ?? 0);
+
     return {
       position: mine[0],
       size,
-      avg: size > 0 ? cost / size : 0,
-      pnl,
+      avg,
+      // What selling it right now would pay, less the taker fee — the money,
+      // not the mark the exchange shows.
+      pnl: positionPnl(size, avg, now).pnl,
       // The cost is the half that cannot be guessed; without it there is no
       // profit to show, only a price.
-      priced: cost > 0 && (mine.some((p) => p.curPrice > 0) || now > 0),
+      priced: avg > 0 && now > 0,
     };
   };
 
