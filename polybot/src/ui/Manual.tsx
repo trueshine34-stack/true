@@ -22,11 +22,10 @@ import {
 } from '../core/manual';
 import { pairOrders, realised, type TradeRow } from '../core/trades';
 import {
-  SELL_GAINS,
   limitLadder,
+  positionPnl,
   potentialProfit,
   signedUsd,
-  targetPrice,
   usd,
 } from '../core/money';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
@@ -79,15 +78,6 @@ const clockTone = (secondsLeft: number, lookAhead: boolean): string => {
   return 'up';
 };
 
-type Draft = {
-  side: 'Up' | 'Down';
-  action: 'BUY' | 'SELL';
-  price: string;
-  shares: string;
-  /** What the position being sold cost, so a gain can be priced off it. */
-  avg?: number;
-};
-
 const IDLE_AUTOSELL: AutoSellState = {
   enabled: false,
   running: false,
@@ -135,7 +125,6 @@ export function Manual({
     Up: { bids: [], asks: [] },
     Down: { bids: [], asks: [] },
   });
-  const [draft, setDraft] = useState<Draft | null>(null);
   const [positions, setPositions] = useState<NativePosition[]>([]);
   const [orders, setOrders] = useState<OpenOrder[]>([]);
   const [logged, setLogged] = useState<LoggedOrder[]>([]);
@@ -628,7 +617,6 @@ export function Manual({
               )} × ${cents(price)}`
             : (r.error ?? 'CLOB отклонил ордер'),
         );
-        if (r.success) setDraft(null);
       } catch (e) {
         setNote(e instanceof Error ? e.message : String(e));
       } finally {
@@ -643,43 +631,15 @@ export function Manual({
    * that is there right now. The price stays editable — the tap is meant to
    * save the typing, not to decide the trade.
    */
-  const sellPosition = useCallback(
-    (position: NativePosition) => {
-      const which: 'Up' | 'Down' = position.outcome === 'Up' ? 'Up' : 'Down';
-      const bid = books[which].bids[0]?.price ?? position.curPrice ?? 0.5;
-      setDraft({
-        side: which,
-        action: 'SELL',
-        price: String(Math.round(bid * 100)),
-        // The whole position. Tapping it means "close this", and a size that
-        // quietly leaves a few shares behind is a position still open.
-        shares: String(sellableShares(position.size)),
-        avg: position.avgPrice > 0 ? position.avgPrice : undefined,
-      });
-      setNote(null);
-    },
-    [books],
-  );
-
-  /**
-   * Sell the whole draft at market.
-   *
-   * Priced through the bids rather than at the top of them: the top is rarely
-   * deep enough for a whole position, and an order that only fills against it
-   * leaves the rest resting — which is not what "sell at market" means. Walking
-   * the book gives a price that clears the size, and anything that does not
-   * fill rests harmlessly at the bottom of it.
-   */
   const marketSell = useCallback(
-    async (d: Draft) => {
-      const shares = Number(d.shares.replace(',', '.'));
+    async (which: 'Up' | 'Down', shares: number) => {
       if (!Number.isFinite(shares) || shares <= 0) {
         setNote('Нет объёма для продажи');
         return;
       }
-      const bids = books[d.side].bids;
+      const bids = books[which].bids;
       if (bids.length === 0) {
-        setNote(`Нет спроса по ${d.side}`);
+        setNote(`Нет спроса по ${which}`);
         return;
       }
 
@@ -693,10 +653,38 @@ export function Manual({
       // A tick under the level that clears it, so rounding cannot leave the
       // last shares hanging above the book.
       const tick = market?.tickSize ?? 0.01;
-      void place(d.side, 'SELL', Math.max(tick, price - tick), shares);
+      await place(which, 'SELL', Math.max(tick, price - tick), shares);
     },
     [books, market, place],
   );
+
+  /**
+   * Tapping a position closes it, now.
+   *
+   * No sheet, no price to choose: the moment you want out of a five-minute
+   * window is not a moment to be reading a picker, and the panel that used to
+   * open here was three taps in front of the one thing it did. It goes through
+   * the book and past our own resting offers — the shares under them are the
+   * shares being sold.
+   */
+  const sellPosition = useCallback(
+    (position: NativePosition) => {
+      const which: 'Up' | 'Down' = position.outcome === 'Up' ? 'Up' : 'Down';
+      setNote(null);
+      void marketSell(which, sellableShares(position.size));
+    },
+    [marketSell],
+  );
+
+  /**
+   * Sell the whole draft at market.
+   *
+   * Priced through the bids rather than at the top of them: the top is rarely
+   * deep enough for a whole position, and an order that only fills against it
+   * leaves the rest resting — which is not what "sell at market" means. Walking
+   * the book gives a price that clears the size, and anything that does not
+   * fill rests harmlessly at the bottom of it.
+   */
 
   /** Every limit buy still on the book, which is what "лимитки" means here. */
   const restingLimits = useMemo(
@@ -1163,37 +1151,10 @@ export function Manual({
         </>
       ) : (
         <>
-          {/*
-            Selling a position: one price, chosen the way the limit editor
-            chooses one. Buying from here made no sense — the desk has two
-            buttons for that an inch below — and every field between the
-            position and the sale is a second the book has to move in.
-          */}
-          {draft && (
-            <SellSheet
-              draft={draft}
-              tick={market?.tickSize ?? 0.01}
-              busy={busy}
-              bid={books[draft.side].bids[0]?.price ?? null}
-              onPrice={(cents_) => setDraft({ ...draft, price: String(cents_) })}
-              onSell={() =>
-                void place(
-                  draft.side,
-                  'SELL',
-                  Number(draft.price) / 100,
-                  Number(draft.shares),
-                )
-              }
-              onMarket={() => void marketSell(draft)}
-              onClose={() => setDraft(null)}
-            />
+          {(autoSell.rebuys.length > 0 ||
+            (autoSell.rebuysDone?.length ?? 0) > 0) && (
+            <RebuyCard state={autoSell} now={now} />
           )}
-
-          {!draft &&
-            (autoSell.rebuys.length > 0 ||
-              (autoSell.rebuysDone?.length ?? 0) > 0) && (
-              <RebuyCard state={autoSell} now={now} />
-            )}
 
           {/*
             A past event is read, not traded. Its whole record is the orders
@@ -1552,104 +1513,6 @@ function OrderEditor({
           onClick={onCancelOrder}
         >
           Снять
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Selling what is held, at a price picked the same way an order is moved.
- *
- * One number, a step either side, the wheel under it, and the gains the sale
- * could be asked for — each of which is a price, solved so that what arrives
- * after the fee is the gain it names. The size is whatever the position is:
- * tapping it means "close this", and a field to argue with that was a field
- * nobody used.
- */
-function SellSheet({
-  draft,
-  tick,
-  busy,
-  bid,
-  onPrice,
-  onSell,
-  onMarket,
-  onClose,
-}: {
-  draft: Draft;
-  tick: number;
-  busy: boolean;
-  /** The top of the bid side: what selling right now would get. */
-  bid: number | null;
-  onPrice: (cents: number) => void;
-  onSell: () => void;
-  onMarket: () => void;
-  onClose: () => void;
-}) {
-  const at = Math.max(1, Math.min(99, Math.round(Number(draft.price) || 0)));
-  const step = Math.max(1, Math.round(tick * 100));
-  const shares = Number(draft.shares.replace(',', '.')) || 0;
-
-  return (
-    <div className="card tight sellsheet">
-      <div className="sheet-head">
-        <h2>
-          <span className={draft.side === 'Up' ? 'up' : 'down'}>{draft.side}</span>{' '}
-          {shares.toFixed(shares % 1 ? 1 : 0)}
-        </h2>
-        <button className="xbtn" onClick={onClose} aria-label="Закрыть">
-          ✕
-        </button>
-      </div>
-
-      <div className="pricepick">
-        <button className="step big" onClick={() => onPrice(Math.max(1, at - step))}>
-          −
-        </button>
-        <div className="pricepick-now">
-          <PriceSpinner value={at} onPick={onPrice} />
-          <span className="muted">¢</span>
-        </div>
-        <button className="step big" onClick={() => onPrice(Math.min(99, at + step))}>
-          +
-        </button>
-      </div>
-
-      {/*
-        The gain, not the price. Selling asks "how much more than it cost", and
-        the fee comes out of the proceeds — so each chip solves for the price
-        whose net is the gain it names.
-      */}
-      {draft.avg != null && (
-        <div className="draftpcts pcts">
-          {SELL_GAINS.map((gain) => {
-            const price = targetPrice(draft.avg as number, gain, tick);
-            return (
-              <button
-                key={gain}
-                className={Math.round(price * 100) === at ? 'on' : undefined}
-                onClick={() => onPrice(Math.round(price * 100))}
-              >
-                +{Math.round(gain * 100)}%
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="draftrow">
-        <button className="primary compact" disabled={busy} onClick={onSell}>
-          Продать {at}¢
-        </button>
-        {/* Not "market" but the number it is: that is the decision. */}
-        <button
-          className="danger compact"
-          disabled={busy}
-          onClick={onMarket}
-          title="Продать всё по рынку"
-        >
-          {bid != null ? `сейчас ${Math.round(bid * 100)}¢` : 'Рынок'}
         </button>
       </div>
     </div>
@@ -2270,17 +2133,28 @@ function PositionPair({
     if (mine.length === 0) return null;
     const size = mine.reduce((a, p) => a + p.size, 0);
     const cost = mine.reduce((a, p) => a + p.size * p.avgPrice, 0);
-    return { position: mine[0], size, avg: size > 0 ? cost / size : 0 };
+    // What selling it right now would pay, less the taker fee — the money,
+    // not the mark the exchange shows.
+    const pnl = mine.reduce(
+      (a, p) => a + positionPnl(p.size, p.avgPrice, p.curPrice ?? 0).pnl,
+      0,
+    );
+    return {
+      position: mine[0],
+      size,
+      avg: size > 0 ? cost / size : 0,
+      pnl,
+      priced: mine.some((p) => p.avgPrice > 0 && (p.curPrice ?? 0) > 0),
+    };
   };
 
   const up = leg('Up');
   const down = leg('Down');
 
   /*
-    A held side is a count and what it cost, and nothing else. The money it
-    would make was four numbers that all move together and none of which
-    changes what you do — the decision is the count, the average, and the
-    clock between them.
+    A held side is a count, what it cost, and what closing it now would pay.
+    Tapping it does exactly that — at the book, past our own resting offers —
+    so the number on it is the number the tap is worth.
   */
   const side = (name: 'Up' | 'Down', held: ReturnType<typeof leg>) => (
     <button
@@ -2293,6 +2167,10 @@ function PositionPair({
         <>
           <span className="pairsize">{held.size.toFixed(1)}</span>
           <span className="pairavg">{held.avg > 0 ? cents(held.avg) : '…'}</span>
+          {/* What it is worth to close at the price on the screen. */}
+          <span className={`pairpnl ${held.pnl >= 0 ? 'up' : 'down'}`}>
+            {held.priced ? signedUsd(held.pnl) : '…'}
+          </span>
         </>
       ) : (
         <span className="muted pairsize">—</span>

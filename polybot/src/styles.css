@@ -2731,3 +2731,10 @@ button.wide {
 .sellsheet .primary.compact {
   flex: 2;
 }
+
+/* What closing this side now would pay, which is what tapping it does. */
+.pairpnl {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
