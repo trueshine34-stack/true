@@ -54,14 +54,17 @@ describe('candleShape', () => {
     expect(shape.bars[1].high).toBeLessThan(shape.bars[0].high);
   });
 
-  it('reports the newest close and the move across the span', () => {
+  it('reports the interval in progress: where it opened and where it is', () => {
+    // Not the move across the whole chart — the move inside the candle the
+    // desk is currently trading, which for five minutes is this window's own.
     const shape = candleShape(
-      [at(0, 100, 105, 99, 104), at(1, 104, 112, 103, 110)],
+      [at(0, 100, 105, 99, 104), at(1, 200, 212, 199, 210)],
       200,
       100,
     )!;
-    expect(shape.last).toBe(110);
-    expect(shape.changePct).toBeCloseTo(10, 5);
+    expect(shape.open).toBe(200);
+    expect(shape.last).toBe(210);
+    expect(shape.sinceOpen).toBeCloseTo(5, 5);
   });
 
   it('drops candles the stream could not price', () => {

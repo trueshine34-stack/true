@@ -32,9 +32,11 @@ export interface CandleShape {
   /** The drawn range, padded — what the top and bottom of the box are worth. */
   top: number;
   floor: number;
-  /** The newest close, and how far the drawn span has moved. */
+  /** The newest close. */
   last: number;
-  changePct: number;
+  /** Where the candle in progress opened, and how far it has come from it. */
+  open: number;
+  sinceOpen: number;
 }
 
 /** A body this thin still has to be visible: a doji is a line, not a gap. */
@@ -87,8 +89,12 @@ export function candleShape(
     };
   });
 
-  const first = clean[0][1];
-  const last = clean[clean.length - 1][4];
+  // The candle in progress is the interval the desk is actually inside: for
+  // the five-minute chart that is this window's own open, which is the price
+  // a five-minute bet is settled against.
+  const current = clean[clean.length - 1];
+  const open = current[1];
+  const last = current[4];
   return {
     bars,
     low,
@@ -96,7 +102,8 @@ export function candleShape(
     top: hi,
     floor: lo,
     last,
-    changePct: first > 0 ? ((last - first) / first) * 100 : 0,
+    open,
+    sinceOpen: open > 0 ? ((last - open) / open) * 100 : 0,
   };
 }
 

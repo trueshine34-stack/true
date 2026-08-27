@@ -114,14 +114,14 @@ export function CandleFace({
           <text
             key={level.price}
             className={`slevel-tag ${level.kind}`}
-            x={W - 3}
+            x={3}
             /* A level near the ceiling puts its price under the line instead
                of half off the top of the panel. */
             y={(y(level.price) < 11
               ? y(level.price) + 8
               : y(level.price) - 2.5
             ).toFixed(1)}
-            textAnchor="end"
+            textAnchor="start"
           >
             {priceLabel(level.price)}
           </text>
@@ -129,14 +129,15 @@ export function CandleFace({
       </svg>
 
       {/*
-        What Binance says the price is, and what these four hours came to.
-        Nothing else: the axis of a context chart is context.
+        Where this interval opened, and how far it has come from there. On the
+        five-minute chart that is the window's own open — the price the bet is
+        settled against — and the number beside it is the whole question.
       */}
       <div className="candles-foot">
         <span className="muted">{interval.replace('m', 'м')}</span>
-        <b>{shape ? priceLabel(shape.last) : '—'}</b>
-        <span className={shape && shape.changePct >= 0 ? 'up' : 'down'}>
-          {shape ? signedPct(shape.changePct) : ''}
+        <b>{shape ? priceLabel(shape.open) : '—'}</b>
+        <span className={shape && shape.sinceOpen >= 0 ? 'up' : 'down'}>
+          {shape ? signedPct(shape.sinceOpen) : ''}
         </span>
       </div>
     </div>
