@@ -227,6 +227,17 @@ export type Exposure = {
 /** The share of the deposit one five-minute window may hold. */
 export const WINDOW_CAP_PCT = 0.25;
 
+/**
+ * Room the cap never takes away.
+ *
+ * A window that has filled its share is a reason to size down, not a reason to
+ * be unable to trade it at all — and on a small deposit a quarter is less than
+ * the venue's own smallest order, which would mean the cap forbidding every
+ * trade there is. So there is always this much to work with, as long as the
+ * money is actually there.
+ */
+export const MIN_ROOM_USD = 3.5;
+
 export function exposureFor(
   balance: number,
   committed: number,
@@ -237,9 +248,8 @@ export function exposureFor(
   const equity = cash + held;
   const share = Number.isFinite(capPct) ? Math.max(0, Math.min(1, capPct)) : WINDOW_CAP_PCT;
   const cap = equity * share;
-  // Never more than there is: at a quarter this cannot bind, but a share set
-  // to the whole deposit would otherwise promise money already spent.
-  const room = Math.max(0, Math.min(cap - held, cash));
+  // At least the floor, never more than there is in cash.
+  const room = Math.max(0, Math.min(Math.max(cap - held, MIN_ROOM_USD), cash));
   return { committed: held, balance: cash, equity, cap, room, full: room <= 1e-9 };
 }
 

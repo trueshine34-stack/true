@@ -4,6 +4,7 @@ import {
   minShares,
   cappedShares,
   exposureFor,
+  MIN_ROOM_USD,
   orderCost,
   sellableShares,
   spendableBalance,
@@ -174,13 +175,14 @@ describe('stakeShares', () => {
 
 describe('exposureFor', () => {
   it('caps a window at a quarter of the deposit', () => {
-    // 30 free, 10 committed: the deposit is 40, so this window may hold 10 —
-    // which it already does.
-    const e = exposureFor(30, 10);
-    expect(e.equity).toBe(40);
-    expect(e.cap).toBeCloseTo(10, 9);
-    expect(e.room).toBeCloseTo(0, 9);
-    expect(e.full).toBe(true);
+    // 300 free, 100 committed: the deposit is 400, so this window may hold 100
+    // — which it already does.
+    const e = exposureFor(300, 100);
+    expect(e.equity).toBe(400);
+    expect(e.cap).toBeCloseTo(100, 9);
+    // Down to the floor, which the cap never takes away.
+    expect(e.room).toBeCloseTo(MIN_ROOM_USD, 9);
+    expect(e.full).toBe(false);
   });
 
   it('leaves room while under the line', () => {
@@ -190,13 +192,23 @@ describe('exposureFor', () => {
     expect(e.full).toBe(false);
   });
 
-  it('offers nothing once the window is over its share', () => {
-    // 2 free against 8 already in: the deposit is 10, the quarter is 2.50, and
-    // the window is well past it.
-    const e = exposureFor(2, 8);
-    expect(e.cap).toBeCloseTo(2.5, 9);
-    expect(e.room).toBe(0);
-    expect(e.full).toBe(true);
+  /**
+   * The floor is what makes the cap a size rule rather than a lockout — on a
+   * small deposit a quarter is under the venue's own smallest order, so
+   * without it the cap would forbid every trade there is.
+   */
+  it('always leaves the floor, however far past its share the window is', () => {
+    const e = exposureFor(20, 80);
+    expect(e.cap).toBeCloseTo(25, 9);
+    expect(e.room).toBeCloseTo(MIN_ROOM_USD, 9);
+    expect(e.full).toBe(false);
+  });
+
+  it('but never more than the cash that is actually there', () => {
+    const e = exposureFor(1, 80);
+    expect(e.room).toBeCloseTo(1, 9);
+    expect(exposureFor(0, 80).room).toBe(0);
+    expect(exposureFor(0, 80).full).toBe(true);
   });
 
   it('is not fooled by the balance falling as it is spent', () => {
@@ -211,7 +223,8 @@ describe('exposureFor', () => {
   it('takes another share when one is asked for', () => {
     expect(exposureFor(100, 0, 0.5).cap).toBeCloseTo(50, 9);
     expect(exposureFor(100, 0, 1).room).toBeCloseTo(100, 9);
-    expect(exposureFor(100, 0, 0).room).toBe(0);
+    // Even a share of nothing leaves the floor.
+    expect(exposureFor(100, 0, 0).room).toBeCloseTo(MIN_ROOM_USD, 9);
   });
 });
 

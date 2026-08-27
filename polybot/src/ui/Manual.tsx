@@ -497,15 +497,26 @@ export function Manual({
    * would cost — a limit that has not filled is committed money, and leaving it
    * out is how a stack of them quietly becomes the whole deposit.
    */
+  /**
+   * What *this* five minutes is holding.
+   *
+   * Only this market's own: a closed window's shares sit in the wallet until
+   * the exchange marks them redeemable, which takes minutes, and counting them
+   * meant a fresh window opened with the last one's money already spent.
+   */
   const committed = useMemo(() => {
+    if (!market) return 0;
+    const tokens = new Set([market.upTokenId, market.downTokenId]);
     const held = positions
-      .filter((p) => !p.redeemable && p.size > 0)
+      .filter(
+        (p) => p.conditionId === market.conditionId && !p.redeemable && p.size > 0,
+      )
       .reduce((sum, p) => sum + p.size * (p.avgPrice > 0 ? p.avgPrice : p.curPrice), 0);
     const resting = orders
-      .filter((o) => o.side === 'BUY')
+      .filter((o) => o.side === 'BUY' && tokens.has(o.assetId))
       .reduce((sum, o) => sum + orderCost(o.remaining, o.price), 0);
     return held + resting;
-  }, [positions, orders]);
+  }, [positions, orders, market]);
 
   useEffect(() => {
     onCommitted?.(committed);
