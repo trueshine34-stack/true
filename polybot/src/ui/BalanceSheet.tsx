@@ -10,10 +10,108 @@ import {
   type BalancePoint,
 } from '../core/balance';
 import { signedPct, signedUsd, usd } from '../core/money';
+import { PolyBot } from '../native/polybot';
 import { GOAL_GAIN, WITHDRAW_SHARE, goalProgress, type GoalState } from '../core/goal';
 
 const W = 320;
 const H = 132;
+
+/**
+ * Taking money off the venue, to an address of your own.
+ *
+ * One transfer of USDC on Polygon, signed by the app with the key it already
+ * holds. It lands on Polygon at the same address — the wallet has to be
+ * switched to that network to see it — because Polygon and BSC are different
+ * chains and no transaction crosses between them.
+ *
+ * The two things that stop it are worth saying before the button is pressed
+ * rather than after: collateral sitting on a Polymarket proxy instead of on
+ * the key's own address, and no POL to pay for the block. So the state is read
+ * when the panel opens and the button says which it is.
+ */
+function Withdraw({ address }: { address: string }) {
+  const [info, setInfo] = useState<Awaited<
+    ReturnType<typeof PolyBot.withdrawInfo>
+  > | null>(null);
+  const [amount, setAmount] = useState('0.05');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [hash, setHash] = useState<string | null>(null);
+
+  const usdAmount = Number(amount.replace(',', '.'));
+  const ready =
+    info != null &&
+    info.gasReady &&
+    info.sendable > 0 &&
+    Number.isFinite(usdAmount) &&
+    usdAmount > 0 &&
+    usdAmount <= info.sendable + 1e-9;
+
+  const look = () => {
+    setNote(null);
+    void PolyBot.withdrawInfo()
+      .then(setInfo)
+      .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+  };
+
+  const send = () => {
+    if (!ready) return;
+    setBusy(true);
+    setNote(null);
+    setHash(null);
+    void PolyBot.withdraw({ to: address, usd: usdAmount })
+      .then((r) => {
+        setHash(r.hash);
+        look();
+      })
+      .catch((e) => setNote(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBusy(false));
+  };
+
+  if (!address) return null;
+
+  return (
+    <div className="withdraw">
+      {info == null ? (
+        <button className="ghost wide" onClick={look}>
+          вывести на этот кошелёк
+        </button>
+      ) : (
+        <>
+          <div className="withdraw-state muted">
+            на ключе {usd(info.sendable)} · газ{' '}
+            <b className={info.gasReady ? 'up' : 'down'}>{info.pol.toFixed(3)} POL</b>
+            {info.proxy && info.sendable <= 0 && ' · деньги на прокси Polymarket'}
+          </div>
+
+          <div className="withdraw-row">
+            <input
+              type="text"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <button className="primary" disabled={!ready || busy} onClick={send}>
+              {busy ? 'шлю…' : `вывести ${usd(usdAmount || 0)}`}
+            </button>
+          </div>
+
+          <div className="withdraw-note muted">
+            USDC в сети Polygon на {address.slice(0, 6)}…{address.slice(-4)} — в
+            кошельке переключите сеть на Polygon
+          </div>
+        </>
+      )}
+
+      {hash && (
+        <div className="banner info withdraw-hash">
+          отправлено · {hash.slice(0, 10)}…{hash.slice(-6)}
+        </div>
+      )}
+      {note && <div className="banner warn">{note}</div>}
+    </div>
+  );
+}
 
 /**
  * The balance over time.
@@ -99,11 +197,12 @@ export function BalanceSheet({
         )}
 
         {/*
-          The address the profit goes to. Asked about, never sent to — the app
-          has no key for this chain and nothing here can move anything.
+          The address money is taken out to, and the button that takes it.
+          Watched on both chains; sent to only on Polygon, which is the one the
+          app holds a key for.
         */}
         <label className="field balsavings">
-          <span>кошелёк вывода · USDT BEP-20</span>
+          <span>кошелёк вывода</span>
           <input
             type="text"
             inputMode="text"
@@ -115,6 +214,8 @@ export function BalanceSheet({
             onBlur={(e) => onSavingsAddress(e.target.value)}
           />
         </label>
+
+        <Withdraw address={savingsAddress} />
 
         {path ? (
           <svg

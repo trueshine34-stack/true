@@ -1403,10 +1403,122 @@ class BotPlugin : Plugin() {
             return
         }
         Thread {
-            try {
-                call.resolve(JSObject().put("usdt", BscApi.usdtBalance(address)))
+            // Two chains, one address. USDT on BSC is where profit is taken
+            // out to by hand; USDC on Polygon is where the desk's own
+            // withdrawal lands, and a total that ignored it would dip by the
+            // amount withdrawn the moment it arrived.
+            val usdt = try {
+                BscApi.usdtBalance(address)
             } catch (e: Exception) {
-                call.reject(e.message ?: "баланс BEP-20 недоступен")
+                0.0
+            }
+            val polygon = try {
+                val purse = PolygonApi.purse(address)
+                purse.usdcE + purse.usdc
+            } catch (e: Exception) {
+                0.0
+            }
+            call.resolve(
+                JSObject()
+                    .put("usdt", usdt)
+                    .put("polygon", polygon)
+                    .put("total", usdt + polygon),
+            )
+        }.start()
+    }
+
+    /**
+     * What a withdrawal would have to work with, before one is attempted.
+     *
+     * The two things that stop it are worth knowing separately: collateral
+     * that sits on a Polymarket proxy rather than on the key's own address,
+     * and no POL to pay for the block. Both are answered here so the screen can
+     * say which it is instead of failing at the moment of sending.
+     */
+    @PluginMethod
+    fun withdrawInfo(call: PluginCall) {
+        val session = engine.session()
+        if (session == null) {
+            call.reject("Сначала подключите кошелёк")
+            return
+        }
+        Thread {
+            try {
+                val signer = session.account.signerAddress
+                val purse = PolygonApi.purse(signer)
+                call.resolve(
+                    JSObject()
+                        .put("signer", signer)
+                        .put("funder", session.account.funderAddress)
+                        .put("proxy", !session.account.funderAddress.equals(signer, true))
+                        .put("usdcE", purse.usdcE)
+                        .put("usdc", purse.usdc)
+                        .put("pol", purse.pol)
+                        .put("sendable", purse.amount)
+                        .put("gasReady", purse.pol > 0.01),
+                )
+            } catch (e: Exception) {
+                call.reject(e.message ?: "Polygon недоступен")
+            }
+        }.start()
+    }
+
+    /**
+     * Sends USDC from the key's own address to an address on Polygon.
+     *
+     * One transfer of one token to the address given, signed here and sent to
+     * the public nodes. Nothing about it is a contract call the app did not
+     * compose itself, and the amount is the amount on the screen.
+     */
+    @PluginMethod
+    fun withdraw(call: PluginCall) {
+        val session = engine.session()
+        if (session == null) {
+            call.reject("Сначала подключите кошелёк")
+            return
+        }
+        val to = call.getString("to")?.trim().orEmpty()
+        val usd = call.getDouble("usd") ?: 0.0
+        if (!BscApi.looksLikeAddress(to)) {
+            call.reject("Адрес получателя не похож на адрес")
+            return
+        }
+        if (usd <= 0.0) {
+            call.reject("Сумма должна быть больше нуля")
+            return
+        }
+
+        Thread {
+            try {
+                val purse = PolygonApi.purse(session.account.signerAddress)
+                if (purse.pol <= 0.0) {
+                    call.reject("На кошельке нет POL на газ — пополните немного POL")
+                    return@Thread
+                }
+                if (purse.amount + 1e-9 < usd) {
+                    call.reject(
+                        "На адресе ключа только " + String.format("%.2f", purse.amount) +
+                            " USDC" +
+                            if (!session.account.funderAddress
+                                    .equals(session.account.signerAddress, true)
+                            ) {
+                                " — остальное на прокси-кошельке Polymarket, оттуда выводите с сайта"
+                            } else {
+                                ""
+                            },
+                    )
+                    return@Thread
+                }
+
+                val hash = PolygonApi.sendUsdc(session.keys, purse.token, to, usd)
+                engine.log(
+                    "trade",
+                    "Вывод: " + String.format("%.2f", usd) + " USDC → " +
+                        to.take(6) + "…" + to.takeLast(4),
+                )
+                call.resolve(JSObject().put("hash", hash))
+            } catch (e: Exception) {
+                call.reject(e.message ?: "не удалось отправить перевод")
             }
         }.start()
     }

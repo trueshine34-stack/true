@@ -254,8 +254,27 @@ export interface PolyBotPlugin {
   }): Promise<void>;
   catchReset(): Promise<void>;
   catchState(): Promise<CatchState>;
-  /** What a BEP-20 address holds in USDT. Read-only and keyless. */
-  chainBalance(args: { address: string }): Promise<{ usdt: number }>;
+  /**
+   * What one address holds off the venue: USDT on BSC and USDC on Polygon.
+   * Read-only — the app has no key for BSC and never sends there.
+   */
+  chainBalance(args: {
+    address: string;
+  }): Promise<{ usdt: number; polygon: number; total: number }>;
+  /** What a withdrawal would have to work with, before one is attempted. */
+  withdrawInfo(): Promise<{
+    signer: string;
+    funder: string;
+    /** Whether the collateral sits on a Polymarket proxy rather than the key. */
+    proxy: boolean;
+    usdcE: number;
+    usdc: number;
+    pol: number;
+    sendable: number;
+    gasReady: boolean;
+  }>;
+  /** One transfer of USDC on Polygon, to the address given. */
+  withdraw(args: { to: string; usd: number }): Promise<{ hash: string }>;
   /** Binance's five-minute candle in progress: its open and the last price. */
   binancePrice(): Promise<{
     openTime: number;
@@ -584,7 +603,13 @@ const webStub: PolyBotPlugin = {
   binancePrice: async () => ({ openTime: 0, open: 0, last: 0, at: 0 }),
   ladderUpdate: async () => {},
   ladderReset: async () => {},
-  chainBalance: async () => ({ usdt: 0 }),
+  chainBalance: async () => ({ usdt: 0, polygon: 0, total: 0 }),
+  withdrawInfo: async () => {
+    throw new Error('Вывод доступен только в приложении Android');
+  },
+  withdraw: async () => {
+    throw new Error('Вывод доступен только в приложении Android');
+  },
   catchArm: async () => {},
   catchUpdate: async () => {},
   catchReset: async () => {},

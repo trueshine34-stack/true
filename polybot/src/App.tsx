@@ -232,8 +232,11 @@ export function App() {
       void PolyBot.chainBalance({ address: savingsAddress })
         .then((r) => {
           if (cancelled) return;
-          savingsRef.current = r.usdt;
-          setSavings(r.usdt);
+          // Both chains at that address: USDT taken out by hand on BSC, and
+          // USDC the desk sent itself on Polygon. A total that counted only
+          // the first would dip by the amount withdrawn the moment it landed.
+          savingsRef.current = r.total;
+          setSavings(r.total);
         })
         .catch(() => {
           // A node that will not answer is not a reason to forget the figure.
