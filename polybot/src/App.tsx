@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AccountConfig } from './core/account';
-import { loadAccount } from './core/storage';
+import {
+  loadAccount,
+  loadSavingsAddress,
+  saveSavingsAddress,
+} from './core/storage';
 import { PolyBot } from './native/polybot';
 import { Manual } from './ui/Manual';
 import { SettingsScreen } from './ui/Settings';
@@ -64,6 +68,22 @@ export function App() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [account, setAccount] = useState<AccountConfig | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
+  /** USDT held off the venue, at the address profit is withdrawn to. */
+  const [savings, setSavings] = useState(0);
+  // Read inside the balance poller, which must not restart on every reading.
+  const savingsRef = useRef(0);
+  const [savingsAddress, setSavingsAddress] = useState('');
+
+  /**
+   * What the run is worth: the collateral on the venue plus what has been
+   * taken off it.
+   *
+   * The desk sizes orders from the venue balance alone — that is the only
+   * money it can spend — but the goal, the day's stop and the balance line are
+   * about the run, and the run keeps what it has withdrawn. A line that drops
+   * by the amount taken out reads a good week as a bad one.
+   */
+  const worth = balance == null ? null : balance + savings;
   const [showBalance, setShowBalance] = useState(false);
   const [balanceHistory, setBalanceHistory] = useState<BalancePoint[]>([]);
   const [goal, setGoal] = useState<GoalState | null>(null);
@@ -176,7 +196,7 @@ export function App() {
           // appendBalance, which returns the same array — so an unchanged
           // balance costs neither a render nor a write.
           setBalanceHistory((current) => {
-            const next = appendBalance(current, r.usdc);
+            const next = appendBalance(current, r.usdc + savingsRef.current);
             if (next !== current) void saveBalanceHistory(next);
             return next;
           });
@@ -194,7 +214,41 @@ export function App() {
     };
   }, [phase]);
 
+  /**
+   * And the pocket the profit goes to.
+   *
+   * Read on the same slow beat, off the public chain and without a key: it
+   * only moves when money is withdrawn, and the whole point of watching it is
+   * that a withdrawal is not a loss.
+   */
   useEffect(() => {
+    if (!savingsAddress) {
+      savingsRef.current = 0;
+      setSavings(0);
+      return;
+    }
+    let cancelled = false;
+    const read = () => {
+      void PolyBot.chainBalance({ address: savingsAddress })
+        .then((r) => {
+          if (cancelled) return;
+          savingsRef.current = r.usdt;
+          setSavings(r.usdt);
+        })
+        .catch(() => {
+          // A node that will not answer is not a reason to forget the figure.
+        });
+    };
+    read();
+    const timer = window.setInterval(read, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [savingsAddress]);
+
+  useEffect(() => {
+    void loadSavingsAddress().then(setSavingsAddress);
     void loadBalanceHistory().then(setBalanceHistory);
     void loadAdjustments().then(setAdjustments);
     void loadGoal().then(setGoal);
@@ -207,29 +261,29 @@ export function App() {
   // Ten times the day's opening balance ends the day: the stop goes on and
   // stays on until the clock rolls past midnight.
   useEffect(() => {
-    if (!day || balance == null) return;
-    if (day.hitAt != null || !dayReached(day, balance)) return;
+    if (!day || worth == null) return;
+    if (day.hitAt != null || !dayReached(day, worth)) return;
     const hit = markHit(day);
     setDay(hit);
     void saveDayGoal(hit);
-  }, [day, balance]);
+  }, [day, worth]);
 
   // The run starts at the first balance the app ever sees. Doing it here rather
   // than at connect time means a reinstall picks up where the money is, not at
   // zero.
   useEffect(() => {
-    if (goal != null || balance == null || balance <= 0) return;
-    const started = startRun(balance);
+    if (goal != null || worth == null || worth <= 0) return;
+    const started = startRun(worth);
     setGoal(started);
     void saveGoal(started);
-  }, [goal, balance]);
+  }, [goal, worth]);
 
   const putOff = useCallback(() => {
-    if (!goal || balance == null) return;
-    const next = snoozeGoal(goal, balance);
+    if (!goal || worth == null) return;
+    const next = snoozeGoal(goal, worth);
     setGoal(next);
     void saveGoal(next);
-  }, [goal, balance]);
+  }, [goal, worth]);
 
   /**
    * The money is out: the next run starts from what is left, and the amount
@@ -237,8 +291,8 @@ export function App() {
    */
   const restart = useCallback(
     (withdrawn: number) => {
-      if (!goal || balance == null) return;
-      const next = restartRun(goal, balance);
+      if (!goal || worth == null) return;
+      const next = restartRun(goal, worth);
       setGoal(next);
       void saveGoal(next);
 
@@ -250,7 +304,7 @@ export function App() {
         });
       }
     },
-    [goal, balance],
+    [goal, worth],
   );
 
   const askDay = dayAsked && needsBaseline(day) && balance != null;
@@ -270,8 +324,8 @@ export function App() {
 
   /** A quarter of the wallet per five-minute round. */
 
-  const remind = balance != null && shouldRemind(goal, balance);
-  const progress = goal && balance != null ? goalProgress(goal, balance) : null;
+  const remind = worth != null && shouldRemind(goal, worth);
+  const progress = goal && worth != null ? goalProgress(goal, worth) : null;
 
   const onSetupDone = useCallback((acct: AccountConfig) => {
     setAccount(acct);
@@ -303,6 +357,12 @@ export function App() {
           history={balanceHistory}
           adjustments={adjustments}
           balance={balance}
+          savings={savings}
+          savingsAddress={savingsAddress}
+          onSavingsAddress={(next) => {
+            setSavingsAddress(next.trim());
+            void saveSavingsAddress(next);
+          }}
           goal={goal}
           onRestart={(withdrawn) => {
             restart(withdrawn);

@@ -1387,4 +1387,27 @@ class BotPlugin : Plugin() {
                 .put("lots", lots),
         )
     }
+
+    /**
+     * What a BEP-20 address holds in USDT.
+     *
+     * Read-only, keyless and off the public nodes: this is the pocket profit
+     * is withdrawn to, and the desk counts it so that taking money out does
+     * not read as losing it.
+     */
+    @PluginMethod
+    fun chainBalance(call: PluginCall) {
+        val address = call.getString("address")?.trim().orEmpty()
+        if (address.isEmpty()) {
+            call.resolve(JSObject().put("usdt", 0.0))
+            return
+        }
+        Thread {
+            try {
+                call.resolve(JSObject().put("usdt", BscApi.usdtBalance(address)))
+            } catch (e: Exception) {
+                call.reject(e.message ?: "баланс BEP-20 недоступен")
+            }
+        }.start()
+    }
 }

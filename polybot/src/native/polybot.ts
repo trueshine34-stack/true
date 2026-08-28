@@ -254,6 +254,8 @@ export interface PolyBotPlugin {
   }): Promise<void>;
   catchReset(): Promise<void>;
   catchState(): Promise<CatchState>;
+  /** What a BEP-20 address holds in USDT. Read-only and keyless. */
+  chainBalance(args: { address: string }): Promise<{ usdt: number }>;
   /** Binance's five-minute candle in progress: its open and the last price. */
   binancePrice(): Promise<{
     openTime: number;
@@ -582,6 +584,7 @@ const webStub: PolyBotPlugin = {
   binancePrice: async () => ({ openTime: 0, open: 0, last: 0, at: 0 }),
   ladderUpdate: async () => {},
   ladderReset: async () => {},
+  chainBalance: async () => ({ usdt: 0 }),
   catchArm: async () => {},
   catchUpdate: async () => {},
   catchReset: async () => {},

@@ -26,6 +26,9 @@ export function BalanceSheet({
   history,
   adjustments,
   balance,
+  savings,
+  savingsAddress,
+  onSavingsAddress,
   goal,
   onRestart,
   onClose,
@@ -33,6 +36,10 @@ export function BalanceSheet({
   history: BalancePoint[];
   adjustments: Adjustment[];
   balance: number | null;
+  /** USDT held off the venue, where profit is withdrawn to. */
+  savings: number;
+  savingsAddress: string;
+  onSavingsAddress: (address: string) => void;
   goal: GoalState | null;
   /** The money is out: record how much, and start the run again. */
   onRestart: (withdrawn: number) => void;
@@ -62,7 +69,9 @@ export function BalanceSheet({
         </div>
 
         <div className="balnow">
-          <div className="balnow-value">{balance === null ? '—' : usd(balance)}</div>
+          <div className="balnow-value">
+            {balance === null ? '—' : usd(balance + savings)}
+          </div>
           {stats && (
             <div className={`balnow-change ${rising ? 'up' : 'down'}`}>
               {signedUsd(stats.change)}
@@ -70,6 +79,42 @@ export function BalanceSheet({
             </div>
           )}
         </div>
+
+        {/*
+          What that total is made of. Only the collateral can be traded; the
+          rest has been taken off the venue and is counted so that withdrawing
+          it does not read as losing it.
+        */}
+        {savings > 0 && (
+          <div className="balparts">
+            <div>
+              <span className="muted">на бирже</span>
+              <b>{balance === null ? '—' : usd(balance)}</b>
+            </div>
+            <div>
+              <span className="muted">USDT BEP-20</span>
+              <b>{usd(savings)}</b>
+            </div>
+          </div>
+        )}
+
+        {/*
+          The address the profit goes to. Asked about, never sent to — the app
+          has no key for this chain and nothing here can move anything.
+        */}
+        <label className="field balsavings">
+          <span>кошелёк вывода · USDT BEP-20</span>
+          <input
+            type="text"
+            inputMode="text"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="0x…"
+            defaultValue={savingsAddress}
+            onBlur={(e) => onSavingsAddress(e.target.value)}
+          />
+        </label>
 
         {path ? (
           <svg

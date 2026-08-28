@@ -15,6 +15,33 @@ import type { AccountConfig } from './account';
 const KEY_VAULT = 'vault.v1';
 const KEY_ACCOUNT = 'account.v1';
 const KEY_MANUAL = 'manual.v1';
+const KEY_SAVINGS = 'savings.v1';
+
+/**
+ * Where profit is withdrawn to, so the balance can still see it.
+ *
+ * Money moved off the venue is still the run's money; a line that drops by
+ * what was taken out reads a good week as a bad one. Read-only — the address
+ * is only ever asked about, never sent to.
+ */
+export async function saveSavingsAddress(address: string): Promise<void> {
+  await Preferences.set({ key: KEY_SAVINGS, value: address.trim() });
+}
+
+/**
+ * The address this app was set up for, until it is told another.
+ *
+ * Only used when nothing has been stored at all: an address cleared on purpose
+ * is stored as empty and stays that way, so emptying the field switches the
+ * whole thing off rather than resetting it to this.
+ */
+const DEFAULT_SAVINGS = '0x89C1DFaBfD22c5fF16158eD7d0A23d2cEa0177C3';
+
+export async function loadSavingsAddress(): Promise<string> {
+  const { value } = await Preferences.get({ key: KEY_SAVINGS });
+  if (value == null) return DEFAULT_SAVINGS;
+  return value.trim();
+}
 
 export async function clearVault(): Promise<void> {
   await Preferences.remove({ key: KEY_VAULT });
