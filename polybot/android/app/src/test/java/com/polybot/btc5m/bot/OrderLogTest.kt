@@ -617,6 +617,14 @@ class OrderWindowTest {
         assertTrue(OrderLog.byHand("mine"))
         assertFalse(OrderLog.byHand("rule"))
         assertFalse(OrderLog.byHand("never heard of it"))
+
+        // And the question the sell rule actually asks, which is the other way
+        // round: only an order it can see itself having placed is its own to
+        // move. One from before the app was opened, or from the Polymarket
+        // site, is somebody's decision and is left where it stands.
+        assertTrue(OrderLog.isAuto("rule"))
+        assertFalse(OrderLog.isAuto("mine"))
+        assertFalse(OrderLog.isAuto("never heard of it"))
     }
 
     /**

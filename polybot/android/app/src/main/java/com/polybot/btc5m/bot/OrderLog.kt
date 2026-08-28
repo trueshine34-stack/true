@@ -257,6 +257,19 @@ object OrderLog {
         it.orderId == orderId && !it.auto
     }
 
+    /**
+     * Did one of this app's rules place this order?
+     *
+     * Only a positive answer counts. An order this log has never heard of — one
+     * left standing from before the app was last opened, or placed on the
+     * Polymarket site — was not put there by a rule, and a rule that treats
+     * "I do not know" as "mine" moves prices it did not set. So the question is
+     * asked this way round, and everything else is left alone.
+     */
+    fun isAuto(orderId: String): Boolean = entries.any {
+        it.orderId == orderId && it.auto
+    }
+
     /** Is one particular asset's buy still working? */
     fun hasWorkingBuy(asset: String): Boolean = entries.any {
         it.asset == asset &&

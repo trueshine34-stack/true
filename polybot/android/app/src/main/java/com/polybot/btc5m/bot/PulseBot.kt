@@ -47,6 +47,8 @@ class PulseBot(
         val windowStart: Long,
         var sellOrderId: String? = null,
         var sellPrice: Double = 0.0,
+        /** When that offer went out, so a later listing can be believed. */
+        var sellPlacedAt: Long = 0L,
         var sold: Double = 0.0,
         var proceeds: Double = 0.0,
         var note: String? = null,
@@ -371,6 +373,19 @@ class PulseBot(
             return
         }
 
+        // An offer that has left the book without filling was pulled by
+        // somebody — the desk cancels the rules' sells when the person sells by
+        // hand, and their order outranks this one. Forget it; the branches
+        // below will put a fresh one out.
+        val id = open.sellOrderId
+        if (id != null &&
+            engine.restingAt > open.sellPlacedAt &&
+            engine.resting.none { it.id == id }
+        ) {
+            open.sellOrderId = null
+            open.note = "ордер сняли"
+        }
+
         when (PulsePlan.exitFor(open.outcome, current, settings)) {
             PulsePlan.Exit.RIDE -> {
                 if (open.sellOrderId != null) {
@@ -455,6 +470,7 @@ class PulseBot(
             Timings.sellAccepted(open.asset, open.boughtAt, System.currentTimeMillis())
             open.sellOrderId = result.orderId
             open.sellPrice = price
+            open.sellPlacedAt = System.currentTimeMillis()
             open.note = if (cut) "режу по рынку" else null
             if (cut) {
                 engine.log(

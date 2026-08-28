@@ -63,6 +63,11 @@ class BotEngine(
     var resting: List<ClobApi.OpenOrder> = emptyList()
         private set
 
+    /** When that listing was read, so an order missing from it can be believed. */
+    @Volatile
+    var restingAt: Long = 0L
+        private set
+
     private val logId = AtomicLong(0)
 
     private val ambientScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -166,6 +171,7 @@ class BotEngine(
         val acct = account ?: return
         val creds = this.creds ?: return
         resting = ClobApi.openOrders(creds, acct.signerAddress)
+        restingAt = System.currentTimeMillis()
     }
 
     fun currentMarket(): Market? {

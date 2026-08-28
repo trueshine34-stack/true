@@ -195,15 +195,6 @@ class AutoSell(
         /** How often to look at the balance while a sale's money is awaited. */
         const val CASH_PROBE_MS = 2_000L
 
-        /**
-         * How close to the close a hand-set price stops being honoured.
-         *
-         * A price the user chose is theirs to keep — the ladder moving it a
-         * few seconds later throws the decision away. In the last half-minute
-         * that stops being true: the window is about to settle, and an offer
-         * the book will never reach is worth nothing at all.
-         */
-        const val PIN_RELEASE_SEC = 30L
     }
 
     /**
@@ -892,7 +883,7 @@ class AutoSell(
             lateFloor = settings.lateFloor,
         )
         val stale = sells.filter {
-            !held(it, meta) &&
+            !held(it) &&
                 ((floor != null && it.price < floor - meta.tickSize / 2) ||
                     (lastMinute && target != null && it.price > target + meta.tickSize / 2))
         }
@@ -962,7 +953,7 @@ class AutoSell(
             .sortedByDescending { it.price }
 
         // A price the user set is theirs until the window is nearly over.
-        val (pinned, sells) = all.partition { held(it, meta) }
+        val (pinned, sells) = all.partition { held(it) }
 
         val onStep = { i: Int, order: ClobApi.OpenOrder ->
             abs(
@@ -1102,16 +1093,20 @@ class AutoSell(
     /**
      * Is this offer's price the user's own, and still theirs?
      *
-     * Everything the rules send is marked `auto`, so a sell that is not is one
-     * the person placed or moved — and until the last half-minute the rule
-     * leaves it exactly where they put it.
+     * Everything the rules send is marked `auto`, so anything else standing on
+     * the book was put there by the person — and the rule leaves it exactly
+     * where they put it, for as long as it stands. A price set by hand is a
+     * decision the rule does not have the information to overrule: not at the
+     * floor, not in the last seconds, not ever. What the rule may still do is
+     * cover whatever that order does not — a hand sale of ten out of
+     * twenty-seven leaves seventeen for the ladder, at the ladder's own price.
+     *
+     * The question is asked as "did a rule place this", not "did the person",
+     * so an order the log has never heard of — from before the app was last
+     * opened, or from the Polymarket site — is left alone rather than moved on
+     * the strength of not being recognised.
      */
-    private fun held(order: ClobApi.OpenOrder, meta: ClobApi.MarketMeta): Boolean {
-        if (!OrderLog.byHand(order.id)) return false
-        val closesAt = (meta.windowStart.takeIf { it > 0 } ?: 0L) + WINDOW_SECONDS
-        if (closesAt <= 0L) return true
-        return closesAt - Clock.nowSec() > PIN_RELEASE_SEC
-    }
+    private fun held(order: ClobApi.OpenOrder): Boolean = !OrderLog.isAuto(order.id)
 
     /** A sell must never round down onto a worse price than asked for. */
     private fun snapToTick(price: Double, tick: Double): Double {

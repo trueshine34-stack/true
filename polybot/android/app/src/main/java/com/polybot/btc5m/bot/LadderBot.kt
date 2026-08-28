@@ -39,6 +39,8 @@ class LadderBot(
         val boughtAt: Long,
         var sellOrderId: String? = null,
         var sellPrice: Double = 0.0,
+        /** When that offer went out, so a later listing can be believed. */
+        var sellPlacedAt: Long = 0L,
         var sold: Double = 0.0,
         var proceeds: Double = 0.0,
         var note: String? = null,
@@ -390,15 +392,24 @@ class LadderBot(
                 }
                 if (lot.open <= 1e-6) continue
 
-                if (abs(lot.sellPrice - price) <= tick / 2) continue
-                val session = engine.session() ?: continue
-                try {
-                    ClobApi.cancelOrder(session.creds, session.account.signerAddress, id)
+                // Gone from the book without filling: the desk pulls the
+                // rules' offers when the person sells by hand, and their order
+                // outranks this one. Forget it and offer the rest again.
+                if (lastOrdersAt > lot.sellPlacedAt && openOrders.none { it.id == id }) {
                     lot.sellOrderId = null
-                    lot.note = "переставляю"
-                } catch (e: Exception) {
-                    lot.note = e.message ?: "не снять ордер"
+                    lot.note = "ордер сняли — ставлю заново"
+                } else if (abs(lot.sellPrice - price) <= tick / 2) {
                     continue
+                } else {
+                    val session = engine.session() ?: continue
+                    try {
+                        ClobApi.cancelOrder(session.creds, session.account.signerAddress, id)
+                        lot.sellOrderId = null
+                        lot.note = "переставляю"
+                    } catch (e: Exception) {
+                        lot.note = e.message ?: "не снять ордер"
+                        continue
+                    }
                 }
             }
             if (lot.open < minOrder - 1e-6) continue
@@ -432,6 +443,7 @@ class LadderBot(
                 Timings.sellAccepted(lot.asset, lot.boughtAt, System.currentTimeMillis())
                 lot.sellOrderId = result.orderId
                 lot.sellPrice = price
+                lot.sellPlacedAt = System.currentTimeMillis()
                 lot.note = null
             } else {
                 Timings.sellRefused(lot.asset, lot.boughtAt)
