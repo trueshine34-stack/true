@@ -171,12 +171,19 @@ class CatchBot(
         start()
     }
 
-    /** Disarm. What is already held keeps its offers; nothing new is bought. */
+    /**
+     * Take the rule off the side.
+     *
+     * What is already held keeps its offers — including the parking near par
+     * in the last half minute — and nothing new is bought. Only once those
+     * lots are gone does the loop stop.
+     */
     fun disarm() {
+        val was = side
         side = null
         settings = settings.copy(enabled = false)
         note = null
-        engine.log("info", "Ловец снят")
+        if (was != null) engine.log("info", "Ловец снят")
         if (lots.isEmpty()) stop() else onStateChanged()
     }
 
@@ -250,6 +257,18 @@ class CatchBot(
 
         work(market, secondsLeft)
 
+        // The arming belongs to this window and no further. Fifteen seconds
+        // from the close nothing new can reach an exit, and a side left armed
+        // into the next window would start trading a price nobody chose — the
+        // one it was armed at belongs to a market that has finished.
+        if (which != null && CatchPlan.spent(secondsLeft)) {
+            engine.log("info", "Ловец: окно кончается — снялся сам")
+            disarm()
+            note = "окно кончилось"
+            onStateChanged()
+            return
+        }
+
         if (which != null && token != null) hunt(market, which, token, secondsLeft)
         else if (lots.isEmpty()) stop()
 
@@ -258,7 +277,7 @@ class CatchBot(
 
     /** Waits for the target, then takes the offer rather than resting on it. */
     private fun hunt(market: Market, which: String, token: String, secondsLeft: Long) {
-        if (secondsLeft <= CatchPlan.LATE_SEC) {
+        if (CatchPlan.late(secondsLeft)) {
             note = "окно кончается"
             return
         }

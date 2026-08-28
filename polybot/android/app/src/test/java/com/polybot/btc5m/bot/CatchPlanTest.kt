@@ -66,6 +66,18 @@ class CatchPlanTest {
     }
 
     @Test
+    fun takesItselfOffFifteenSecondsFromTheClose() {
+        // The arming belongs to the window in front of it: past this there is
+        // no room for an entry to reach an exit, and none of it may be carried
+        // into a window nobody armed it on.
+        assertFalse(CatchPlan.spent(16))
+        assertTrue(CatchPlan.spent(15))
+        assertTrue(CatchPlan.spent(0))
+        // Exits are still parked in the half minute before that.
+        assertTrue(CatchPlan.late(20))
+    }
+
+    @Test
     fun aClipIsAQuarterOfWhatIsFree() {
         // Twenty dollars free at forty cents: five dollars, twelve and a half
         // shares.

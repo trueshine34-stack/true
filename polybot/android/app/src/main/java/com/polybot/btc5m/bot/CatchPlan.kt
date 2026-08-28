@@ -39,6 +39,17 @@ object CatchPlan {
     /** Inside this, exits are parked near par instead of priced for profit. */
     const val LATE_SEC = 30L
 
+    /**
+     * Where the rule takes itself off.
+     *
+     * A side armed by hand is armed for the window in front of it. Fifteen
+     * seconds from the close there is no room left for an entry to reach an
+     * exit, and carrying the arming into the next window would be the rule
+     * deciding to trade something nobody chose — the price it was armed at
+     * belongs to a market that has finished.
+     */
+    const val STOP_SEC = 15L
+
     /** Where they are parked, in order, one per lot. */
     val LATE_PRICES = listOf(0.96, 0.97, 0.98)
 
@@ -95,6 +106,9 @@ object CatchPlan {
         snapUp(LATE_PRICES.getOrElse(index) { LATE_PRICES.last() }, tick)
 
     fun late(secondsLeft: Long): Boolean = secondsLeft in 0..LATE_SEC
+
+    /** Whether the rule should take itself off the side now. */
+    fun spent(secondsLeft: Long): Boolean = secondsLeft <= STOP_SEC
 
     /** A quarter of what is free, in shares, floored at the venue's minimum. */
     fun clipShares(
