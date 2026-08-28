@@ -273,6 +273,8 @@ export interface PolyBotPlugin {
     sendable: number;
     gasReady: boolean;
   }>;
+  takeUpdate(args: { enabled?: boolean; gain?: number }): Promise<void>;
+  takeState(): Promise<TakeState>;
   /** One transfer of USDC on Polygon, to the address given. */
   withdraw(args: { to: string; usd: number }): Promise<{ hash: string }>;
   /** Binance's five-minute candle in progress: its open and the last price. */
@@ -467,6 +469,28 @@ export type PulseState = {
   lot?: PulseLot | null;
 };
 
+/** A position the take rule is watching, and what closing it would pay. */
+export type TakeWatch = {
+  outcome: string;
+  shares: number;
+  /** What the shares cost, from the app's own record of the buys. */
+  cost: number;
+  bid: number;
+  /** How far above cost the bid is paying, after the fee. */
+  gain: number;
+};
+
+export type TakeState = {
+  enabled: boolean;
+  running: boolean;
+  gain: number;
+  lastFault?: string | null;
+  takes: number;
+  shares: number;
+  got: number;
+  watching: TakeWatch[];
+};
+
 export type CatchLot = {
   outcome: string;
   shares: number;
@@ -610,6 +634,16 @@ const webStub: PolyBotPlugin = {
   withdraw: async () => {
     throw new Error('Вывод доступен только в приложении Android');
   },
+  takeUpdate: async () => {},
+  takeState: async () => ({
+    enabled: false,
+    running: false,
+    gain: 0.15,
+    takes: 0,
+    shares: 0,
+    got: 0,
+    watching: [],
+  }),
   catchArm: async () => {},
   catchUpdate: async () => {},
   catchReset: async () => {},

@@ -27,6 +27,9 @@ object EngineHolder {
     private var catchBot: CatchBot? = null
 
     @Volatile
+    private var takeBot: TakeBot? = null
+
+    @Volatile
     var onState: (() -> Unit)? = null
 
     @Volatile
@@ -154,6 +157,36 @@ object EngineHolder {
     }
 
     fun peekCatcher(): CatchBot? = catchBot
+
+    /**
+     * The rule that takes a gain the book is showing but the standing offer
+     * will not reach. It works the desk's own positions, so it is told which
+     * shares belong to the other rules and leaves those alone.
+     */
+    fun taker(context: Context): TakeBot {
+        takeBot?.let { return it }
+        val host = get(context)
+        return synchronized(this) {
+            takeBot ?: TakeBot(
+                engine = host,
+                store = TakeStore(context),
+                botShares = { asset ->
+                    (ladderBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0) +
+                        (pulseBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0) +
+                        (catchBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0)
+                },
+                onStateChanged = {
+                    onState?.invoke()
+                    onServiceState?.invoke()
+                },
+            ).also {
+                takeBot = it
+                if (it.settings.enabled) it.start()
+            }
+        }
+    }
+
+    fun peekTaker(): TakeBot? = takeBot
 
     /** Null when nothing has touched the engine yet this process. */
     fun peek(): BotEngine? = engine

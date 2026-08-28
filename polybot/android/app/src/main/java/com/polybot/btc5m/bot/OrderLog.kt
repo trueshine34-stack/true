@@ -247,6 +247,44 @@ object OrderLog {
     }
 
     /**
+     * Lots still held, whatever is offered against them.
+     *
+     * The difference from [uncoveredLots] is the whole point of it: there, a
+     * resting sell counts as cover, because the question is "does every
+     * purchase have an exit arranged". Here the question is "what do I still
+     * own", and an offer that has not filled has sold nothing. A rule that
+     * wants to take a price the book is showing now has to see the shares the
+     * standing offer is still waiting on.
+     */
+    fun heldLots(asset: String): List<Lot> {
+        val mine = entries.filter { it.asset == asset }.sortedBy { it.placedAt }
+        val lots = ArrayList<Lot>()
+
+        for (entry in mine) {
+            if (entry.action != "BUY") continue
+            if (entry.matched > 1e-9) {
+                lots.add(Lot(entry.matched, entry.realPrice, entry.placedAt))
+            }
+        }
+
+        for (entry in mine) {
+            if (entry.action != "SELL") continue
+            // Only what actually traded takes shares away.
+            var left = entry.matched
+            var i = 0
+            while (left > 1e-9 && i < lots.size) {
+                val lot = lots[i]
+                val take = minOf(lot.shares, left)
+                lots[i] = lot.copy(shares = lot.shares - take)
+                left -= take
+                if (lots[i].shares <= 1e-9) i += 1
+            }
+        }
+
+        return lots.filter { it.shares > 1e-6 }
+    }
+
+    /**
      * Was this order's price chosen by hand?
      *
      * A sell the user placed or moved themselves is a decision, and the ladder

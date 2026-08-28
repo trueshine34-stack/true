@@ -47,6 +47,7 @@ import {
   type NativeMarket,
   type CatchState,
   type LadderState,
+  type TakeState,
   type PulseState,
   type NativePosition,
   type OpenOrder,
@@ -180,6 +181,8 @@ export function Manual({
   const [pulseOpen, setPulseOpen] = useState(false);
   const [catchBot, setCatchBot] = useState<CatchState | null>(null);
   const [catchOpen, setCatchOpen] = useState(false);
+  const [takeBot, setTakeBot] = useState<TakeState | null>(null);
+  const [takeOpen, setTakeOpen] = useState(false);
   /** The event strip is folded away until it is asked for. */
   const [sessionOpen, setSessionOpen] = useState(false);
   /** A resting order opened for editing. */
@@ -428,6 +431,11 @@ export function Manual({
       void PolyBot.catchState()
         .then((s) => {
           if (!cancelled) setCatchBot(s);
+        })
+        .catch(() => {});
+      void PolyBot.takeState()
+        .then((s) => {
+          if (!cancelled) setTakeBot(s);
         })
         .catch(() => {});
     };
@@ -1055,6 +1063,27 @@ export function Manual({
           <span className={sessionPnl >= 0 ? 'up' : 'down'}>◷</span>
         </button>
 
+        {takeBot && (
+          <button
+            className={`railmark${takeOpen ? ' on' : ''}`}
+            onClick={() => setTakeOpen((v) => !v)}
+            aria-label="Забираю плюс"
+          >
+            {/* Its own mark: a gain taken off the top, lit while it watches. */}
+            <svg viewBox="0 0 16 16" aria-hidden>
+              <path
+                d="M2 11l4-4 3 3 5-6M13 4h-3M13 4v3"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <i className={`raildot${takeBot.running ? ' live' : ''}`} aria-hidden />
+          </button>
+        )}
+
         {catchBot && (
           <button
             className={`railmark${catchOpen ? ' on' : ''}`}
@@ -1144,6 +1173,25 @@ export function Manual({
           onSelect={(w) => {
             setViewWindow(w);
             setSessionOpen(false);
+          }}
+        />
+      )}
+
+      {takeOpen && takeBot && (
+        <TakeCard
+          state={takeBot}
+          onEnable={(enabled) => {
+            void PolyBot.takeUpdate({ enabled })
+              .then(() => PolyBot.takeState())
+              .then(setTakeBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onGain={(gain) => {
+            if (!Number.isFinite(gain) || gain <= 0) return;
+            void PolyBot.takeUpdate({ gain })
+              .then(() => PolyBot.takeState())
+              .then(setTakeBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
         />
       )}
@@ -2044,6 +2092,98 @@ function EventStrip({
  * that reference and the price being waited for right beside the live offer —
  * those three numbers are the entire state of the rule.
  */
+/**
+ * The rule that takes a gain the standing offer will not reach.
+ *
+ * One switch and one number, and under them what it is watching: what the
+ * position cost, what the bids are paying, and how far apart those are. That
+ * last figure is the whole rule — when it crosses the threshold the position
+ * is sold into the book.
+ */
+function TakeCard({
+  state,
+  onEnable,
+  onGain,
+}: {
+  state: TakeState;
+  onEnable: (enabled: boolean) => void;
+  onGain: (gain: number) => void;
+}) {
+  const pct = Math.round(state.gain * 100);
+
+  return (
+    <div className="card tight">
+      <div className="counterhead">
+        <span>Забираю плюс</span>
+        <button
+          className={`switch ${state.enabled ? 'on' : ''}`}
+          onClick={() => onEnable(!state.enabled)}
+        />
+      </div>
+
+      <div className="counterrule muted">
+        Смотрит не на свою лимитку, а на то, сколько дают в стакане. Как только
+        покупатель платит больше +{pct}% к цене покупки — с учётом комиссии —
+        снимает наши продажи по этой стороне и продаёт по рынку. Для случая,
+        когда цена сходила в плюс, но до лимитки не дотянулась.
+      </div>
+
+      <div className="fields botbank">
+        <label className="field">
+          <span>продавать от, %</span>
+          <input
+            type="number"
+            step="1"
+            value={String(pct)}
+            onChange={(e) =>
+              onGain(Number(e.target.value.replace(',', '.')) / 100)
+            }
+          />
+        </label>
+      </div>
+
+      {state.watching.length > 0 ? (
+        <div className="counterlive">
+          {state.watching.map((w, i) => (
+            <div key={i}>
+              <span className={w.outcome === 'Up' ? 'up' : 'down'}>{w.outcome}</span>{' '}
+              {w.shares.toFixed(1)} по {cents(w.cost)} · дают{' '}
+              {w.bid > 0 ? cents(w.bid) : '—'}{' '}
+              <b className={w.gain >= state.gain ? 'up' : 'muted'}>
+                {w.gain >= 0 ? '+' : '−'}
+                {Math.abs(Math.round(w.gain * 100))}%
+              </b>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="counterlive muted">
+          {state.enabled ? 'позиций нет' : 'выключено'}
+        </div>
+      )}
+
+      {state.takes > 0 && (
+        <div className="countergrid">
+          <div>
+            <span className="muted">забрал</span>
+            <b>{state.takes}</b>
+          </div>
+          <div>
+            <span className="muted">долей</span>
+            <b>{state.shares.toFixed(1)}</b>
+          </div>
+          <div>
+            <span className="muted">на</span>
+            <b className="up">{usd(state.got)}</b>
+          </div>
+        </div>
+      )}
+
+      {state.lastFault && <div className="banner warn">{state.lastFault}</div>}
+    </div>
+  );
+}
+
 function CatchCard({
   state,
   onArm,
