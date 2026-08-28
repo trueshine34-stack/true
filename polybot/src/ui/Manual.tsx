@@ -45,6 +45,7 @@ import {
   type EventSummary,
   type LoggedOrder,
   type NativeMarket,
+  type CatchState,
   type LadderState,
   type PulseState,
   type NativePosition,
@@ -166,6 +167,8 @@ export function Manual({
   const [ladderOpen, setLadderOpen] = useState(false);
   const [pulseBot, setPulseBot] = useState<PulseState | null>(null);
   const [pulseOpen, setPulseOpen] = useState(false);
+  const [catchBot, setCatchBot] = useState<CatchState | null>(null);
+  const [catchOpen, setCatchOpen] = useState(false);
   /** The event strip is folded away until it is asked for. */
   const [sessionOpen, setSessionOpen] = useState(false);
   /** A resting order opened for editing. */
@@ -409,6 +412,11 @@ export function Manual({
       void PolyBot.pulseState()
         .then((s) => {
           if (!cancelled) setPulseBot(s);
+        })
+        .catch(() => {});
+      void PolyBot.catchState()
+        .then((s) => {
+          if (!cancelled) setCatchBot(s);
         })
         .catch(() => {});
     };
@@ -1009,6 +1017,27 @@ export function Manual({
           <span className={sessionPnl >= 0 ? 'up' : 'down'}>◷</span>
         </button>
 
+        {catchBot && (
+          <button
+            className={`railmark${catchOpen ? ' on' : ''}`}
+            onClick={() => setCatchOpen((v) => !v)}
+            aria-label="Ловец"
+          >
+            {/* Its own mark: a price falling into a catch, lit while armed. */}
+            <svg viewBox="0 0 16 16" aria-hidden>
+              <path
+                d="M8 2v7m0 0L5 6m3 3 3-3M3 13h10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <i className={`raildot${catchBot.armed ? ' live' : ''}`} aria-hidden />
+          </button>
+        )}
+
         {pulseBot && (
           <button
             className={`railmark${pulseOpen ? ' on' : ''}`}
@@ -1077,6 +1106,31 @@ export function Manual({
           onSelect={(w) => {
             setViewWindow(w);
             setSessionOpen(false);
+          }}
+        />
+      )}
+
+      {catchOpen && catchBot && (
+        <CatchCard
+          state={catchBot}
+          onArm={(which) => {
+            void PolyBot.catchArm({ side: which })
+              .then(() => PolyBot.catchState())
+              .then(setCatchBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onBank={(usd) => {
+            if (!Number.isFinite(usd) || usd < 0) return;
+            void PolyBot.catchUpdate({ bankUsd: usd })
+              .then(() => PolyBot.catchState())
+              .then(setCatchBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onReset={() => {
+            void PolyBot.catchReset()
+              .then(() => PolyBot.catchState())
+              .then(setCatchBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
         />
       )}
@@ -1939,6 +1993,138 @@ function EventStrip({
  * them the books, and under those what it is doing right now — or, more often,
  * why it is not.
  */
+/**
+ * The catcher: one side, worked by hand-pressed arming.
+ *
+ * The two buttons are the whole control. Pressing one reads the price at that
+ * moment and everything after is measured from it, which is why the card shows
+ * that reference and the price being waited for right beside the live offer —
+ * those three numbers are the entire state of the rule.
+ */
+function CatchCard({
+  state,
+  onArm,
+  onBank,
+  onReset,
+}: {
+  state: CatchState;
+  onArm: (side: 'Up' | 'Down' | null) => void;
+  onBank: (usd: number) => void;
+  onReset: () => void;
+}) {
+  const tone = state.pnl > 0 ? 'up' : state.pnl < 0 ? 'down' : 'muted';
+
+  return (
+    <div className="card tight">
+      <div className="counterhead">
+        <span>Ловец</span>
+        {state.armed && (
+          <button className="linkbtn" onClick={() => onArm(null)}>
+            снять
+          </button>
+        )}
+      </div>
+
+      <div className="counterrule muted">
+        Ждёт, пока сторона подешевеет на 6¢ от цены нажатия, и берёт по рынку —
+        не лимиткой, чтобы взять дно движения. Дальше каждый вход на 3¢ ниже
+        прошлой покупки, по 25% свободного, но не меньше 5 долей. Продаёт первую
+        по +10% от первой покупки, каждую следующую на 2¢ выше, и от цены
+        продажи считает заново. За 30 с до конца переставляет на 96/97/98¢.
+      </div>
+
+      {/* The two buttons, and the side that is armed lit up. */}
+      <div className="catcharm">
+        {(['Up', 'Down'] as const).map((which) => (
+          <button
+            key={which}
+            className={`buy ${which === 'Up' ? 'up' : 'down'}${
+              state.side === which ? ' on' : ''
+            }`}
+            onClick={() => onArm(state.side === which ? null : which)}
+          >
+            <b>{which}</b>
+            <s>{state.side === which ? 'ловит' : 'ловить'}</s>
+          </button>
+        ))}
+      </div>
+
+      {state.armed && (
+        <div className="countergrid">
+          <div>
+            <span className="muted">от</span>
+            <b>{state.reference > 0 ? cents(state.reference) : '—'}</b>
+          </div>
+          <div>
+            <span className="muted">вход</span>
+            <b className="warn">{state.target > 0 ? cents(state.target) : '—'}</b>
+          </div>
+          <div>
+            <span className="muted">сейчас</span>
+            <b>{state.ask > 0 ? cents(state.ask) : '—'}</b>
+          </div>
+        </div>
+      )}
+
+      <div className="fields botbank">
+        <label className="field">
+          <span>контейнер, $</span>
+          <input
+            type="number"
+            step="1"
+            value={String(state.bankUsd)}
+            onChange={(e) => onBank(Number(e.target.value.replace(',', '.')))}
+          />
+        </label>
+      </div>
+
+      <div className="countergrid">
+        <div>
+          <span className="muted">свободно</span>
+          <b>{usd(state.cash)}</b>
+        </div>
+        <div>
+          <span className="muted">итог</span>
+          <b className={tone}>{signedUsd(state.pnl)}</b>
+        </div>
+        <div>
+          <span className="muted">взял · отдал</span>
+          <b>
+            {state.buys} · {state.sells}
+          </b>
+        </div>
+      </div>
+
+      {state.lots.length > 0 && (
+        <div className="counterlive">
+          {state.lots.map((lot, i) => (
+            <div key={i}>
+              <span className={lot.outcome === 'Up' ? 'up' : 'down'}>
+                {lot.outcome}
+              </span>{' '}
+              {lot.shares.toFixed(1)} по {cents(lot.price)}
+              {lot.sellPrice > 0 ? ` → ${cents(lot.sellPrice)}` : ''}
+              {lot.note ? ` · ${lot.note}` : ''}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!state.armed && state.lots.length === 0 && (
+        <div className="counterlive muted">{state.note ?? 'не заряжен'}</div>
+      )}
+
+      {state.lastFault && <div className="banner warn">{state.lastFault}</div>}
+
+      <div className="listhead bare">
+        <button className="linkbtn" onClick={onReset}>
+          обнулить счёт
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PulseCard({
   state,
   onEnable,

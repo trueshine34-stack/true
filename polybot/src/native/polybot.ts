@@ -241,6 +241,19 @@ export interface PolyBotPlugin {
   }): Promise<void>;
   pulseReset(): Promise<void>;
   pulseState(): Promise<PulseState>;
+  /** Arm the catcher on a side, or pass nothing to take it off. */
+  catchArm(args: { side?: 'Up' | 'Down' | null }): Promise<void>;
+  catchUpdate(args: {
+    bankUsd?: number;
+    drop?: number;
+    step?: number;
+    gain?: number;
+    spread?: number;
+    share?: number;
+    minShares?: number;
+  }): Promise<void>;
+  catchReset(): Promise<void>;
+  catchState(): Promise<CatchState>;
   /** Binance's five-minute candle in progress: its open and the last price. */
   binancePrice(): Promise<{
     openTime: number;
@@ -433,6 +446,36 @@ export type PulseState = {
   lot?: PulseLot | null;
 };
 
+export type CatchLot = {
+  outcome: string;
+  shares: number;
+  price: number;
+  sellPrice: number;
+  note?: string | null;
+};
+
+export type CatchState = {
+  armed: boolean;
+  side?: string | null;
+  running: boolean;
+  bankUsd: number;
+  cash: number;
+  /** The price the next entry is measured from: the arm, then each sale. */
+  reference: number;
+  /** And the price it is waiting for. */
+  target: number;
+  ask: number;
+  note?: string | null;
+  lastFault?: string | null;
+  buys: number;
+  sells: number;
+  spent: number;
+  got: number;
+  settled: number;
+  pnl: number;
+  lots: CatchLot[];
+};
+
 /** What the app has timed for itself about the venue's own delays. */
 export type Timings = {
   /** Buy to the first sell the venue accepts. */
@@ -537,6 +580,25 @@ const webStub: PolyBotPlugin = {
   binancePrice: async () => ({ openTime: 0, open: 0, last: 0, at: 0 }),
   ladderUpdate: async () => {},
   ladderReset: async () => {},
+  catchArm: async () => {},
+  catchUpdate: async () => {},
+  catchReset: async () => {},
+  catchState: async () => ({
+    armed: false,
+    running: false,
+    bankUsd: 10,
+    cash: 10,
+    reference: 0,
+    target: 0,
+    ask: 0,
+    buys: 0,
+    sells: 0,
+    spent: 0,
+    got: 0,
+    settled: 0,
+    pnl: 0,
+    lots: [],
+  }),
   pulseUpdate: async () => {},
   pulseReset: async () => {},
   pulseState: async () => ({

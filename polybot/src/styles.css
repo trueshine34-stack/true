@@ -3019,3 +3019,64 @@ button.wide {
   font-size: 13px;
   font-weight: 500;
 }
+
+/* The catcher's two buttons: pick a side and it starts watching it. */
+.catcharm {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.catcharm button {
+  flex: 1;
+  border-radius: 12px;
+  padding: 10px 8px;
+  border: 1px solid;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+}
+
+.catcharm button b {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.catcharm button s {
+  font-size: 11px;
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+.catcharm button.up {
+  background: rgba(35, 192, 123, 0.12);
+  border-color: rgba(35, 192, 123, 0.45);
+  color: var(--up);
+}
+
+.catcharm button.down {
+  background: rgba(255, 90, 106, 0.12);
+  border-color: rgba(255, 90, 106, 0.45);
+  color: var(--down);
+}
+
+.catcharm button.on {
+  border-width: 2px;
+}
+
+.catcharm button.up.on {
+  background: rgba(35, 192, 123, 0.28);
+  border-color: var(--up);
+}
+
+.catcharm button.down.on {
+  background: rgba(255, 90, 106, 0.26);
+  border-color: var(--down);
+}
+
+.counterlive > div + div {
+  margin-top: 2px;
+}

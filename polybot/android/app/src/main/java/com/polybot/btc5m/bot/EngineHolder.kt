@@ -24,6 +24,9 @@ object EngineHolder {
     private var pulseBot: PulseBot? = null
 
     @Volatile
+    private var catchBot: CatchBot? = null
+
+    @Volatile
     var onState: (() -> Unit)? = null
 
     @Volatile
@@ -64,7 +67,8 @@ object EngineHolder {
                 // other's orders would leave the position naked between them.
                 botShares = { asset ->
                     (ladderBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0) +
-                        (pulseBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0)
+                        (pulseBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0) +
+                        (catchBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0)
                 },
                 onStateChanged = {
                     onState?.invoke()
@@ -129,6 +133,27 @@ object EngineHolder {
     }
 
     fun peekPulse(): PulseBot? = pulseBot
+
+    /**
+     * The rule that works one side, armed by hand. Created on first ask like
+     * the others, so its books are there whether or not it is armed.
+     */
+    fun catcher(context: Context): CatchBot {
+        catchBot?.let { return it }
+        val host = get(context)
+        return synchronized(this) {
+            catchBot ?: CatchBot(
+                engine = host,
+                store = CatchStore(context),
+                onStateChanged = {
+                    onState?.invoke()
+                    onServiceState?.invoke()
+                },
+            ).also { catchBot = it }
+        }
+    }
+
+    fun peekCatcher(): CatchBot? = catchBot
 
     /** Null when nothing has touched the engine yet this process. */
     fun peek(): BotEngine? = engine
