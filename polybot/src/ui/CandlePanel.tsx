@@ -16,8 +16,12 @@ function intervalSec(interval: string): number {
 /** Chart width in chart units, scaled to whatever the screen gives it. */
 const W = 360;
 
-/** Binance pushes the forming candle every couple of seconds. */
-const TICK_MS = 1_000;
+/**
+ * The candle in progress follows the tape rather than an interval, so the
+ * chart is redrawn at about the rate a screen can show a change at all. It
+ * reads memory the app already holds: nothing here is a request.
+ */
+const TICK_MS = 250;
 
 /**
  * Binance's five-minute candles, and the prices they keep turning at.
@@ -27,8 +31,9 @@ const TICK_MS = 1_000;
  * where price has stopped more than once — the level overhead is what a rally
  * has to get through, the one underneath is what a fall has to break.
  *
- * The candles are kept in the app off Binance's own stream, so this reads
- * memory and only redraws. One panel per interval: the five-minute series for
+ * The candles are kept in the app off Binance's own streams — the kline frames
+ * for the shape and every trade as it prints for the right-hand edge — so this
+ * reads memory and only redraws. One panel per interval: the five-minute series for
  * the hours behind the window, the one-minute series for the last hour of it.
  */
 export function CandlePanel({

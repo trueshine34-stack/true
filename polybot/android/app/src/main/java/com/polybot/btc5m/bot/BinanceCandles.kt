@@ -28,6 +28,10 @@ class BinanceCandles(
     val limit: Int,
 ) {
 
+    /** Seconds in one candle, which is what a trade has to be filed under. */
+    private val span: Long = (interval.dropLast(1).toLongOrNull() ?: 1L) *
+        if (interval.endsWith("h")) 3600L else 60L
+
     companion object {
         private const val REST = "https://data-api.binance.vision"
         private const val STREAM = "wss://data-stream.binance.vision"
@@ -99,6 +103,41 @@ class BinanceCandles(
         socket?.close(1000, null)
         socket = null
         synchronized(lock) { candles.clear() }
+    }
+
+    /**
+     * Files one trade into the candle in progress.
+     *
+     * The stream's own frames arrive every couple of seconds; a trade arrives
+     * when it happens. So the close follows the tape, the high and low widen
+     * as they are made, and everything else — the open, the volume, the final
+     * word once the candle closes — is left to the kline frames, which are the
+     * authority on it.
+     */
+    fun applyTrade(price: Double, atSec: Long) {
+        if (price <= 0.0 || atSec <= 0L) return
+        val bucket = atSec - atSec % span
+        synchronized(lock) {
+            val newest = candles.keys.lastOrNull() ?: return
+            // A trade belonging to a candle older than the newest one held is a
+            // late print, and rewriting a closed candle for it would be a lie.
+            if (bucket < newest) return
+
+            val current = candles[bucket]
+            candles[bucket] = if (current == null) {
+                // The minute has turned and the first frame has not landed yet.
+                Candle(bucket, price, price, price, price, 0.0)
+            } else {
+                current.copy(
+                    high = maxOf(current.high, price),
+                    low = minOf(current.low, price),
+                    close = price,
+                )
+            }
+            streamTime = bucket
+            trim()
+            touchedAt = System.currentTimeMillis()
+        }
     }
 
     /**

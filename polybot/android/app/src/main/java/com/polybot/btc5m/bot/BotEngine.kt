@@ -100,6 +100,7 @@ class BotEngine(
         // that says what the next few dollars of price would cost.
         BinanceBook.start()
         BinanceCandles.all.forEach { it.start() }
+        BinanceTrades.start()
         startAmbient()
     }
 
