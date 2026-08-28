@@ -144,17 +144,36 @@ function Withdraw({ address }: { address: string }) {
           />
           <Address label="газ для вывода · POL (Polygon)" value={info.signer} />
 
-          <div className="withdraw-row">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-            <button className="primary" disabled={!ready || busy} onClick={send}>
-              {busy ? 'шлю…' : `вывести ${usd(usdAmount || 0)}`}
-            </button>
-          </div>
+          {info.proxy && info.sendable <= 0 ? (
+            /*
+              The one case the button can never answer, said as a sentence
+              instead of as a disabled control. The trading balance lives in a
+              Polymarket wallet the app's key does not own — it may trade that
+              balance, which is what the key was authorised for, but moving the
+              coins is the owner's to do and the owner is the Polymarket
+              account itself.
+            */
+            <div className="withdraw-blocked">
+              Торговый баланс лежит в кошельке Polymarket, а не на ключе
+              приложения. Ключ имеет право им <b>торговать</b>, но не
+              переводить — вывод оттуда только через сайт Polymarket.
+              <br />
+              Отсюда уходит то, что лежит на адресе ключа: газ уже есть,
+              осталось положить туда USDC.
+            </div>
+          ) : (
+            <div className="withdraw-row">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+              <button className="primary" disabled={!ready || busy} onClick={send}>
+                {busy ? 'шлю…' : `вывести ${usd(usdAmount || 0)}`}
+              </button>
+            </div>
+          )}
 
           <div className="withdraw-note muted">
             USDC в сети Polygon на {address.slice(0, 6)}…{address.slice(-4)} — в
