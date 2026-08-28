@@ -2979,3 +2979,43 @@ button.wide {
   fill: var(--warn);
   opacity: 0.9;
 }
+
+/*
+  The way out of a position: three prices worth a tap, then the wheel.
+*/
+.sellpicks {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.sellpicks button {
+  flex: 1;
+  padding: 9px 4px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.sellpicks button:disabled {
+  opacity: 0.4;
+}
+
+/* What the sale pays, and what that is against what it cost. */
+.sellpays {
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+.sellpays b {
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.sheet-head h2 em {
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 500;
+}

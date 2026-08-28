@@ -23,10 +23,13 @@ import {
 } from '../core/manual';
 import { pairOrders, realised, type TradeRow } from '../core/trades';
 import {
+  breakEvenPrice,
   limitLadder,
+  netSellPrice,
   positionPnl,
   potentialProfit,
   signedUsd,
+  targetPrice,
   usd,
 } from '../core/money';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
@@ -167,6 +170,8 @@ export function Manual({
   const [sessionOpen, setSessionOpen] = useState(false);
   /** A resting order opened for editing. */
   const [editing, setEditing] = useState<TradeRow | null>(null);
+  /** A position opened to be closed, with the price still to be chosen. */
+  const [closing, setClosing] = useState<NativePosition | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
 
   // Read inside pollers that must not re-subscribe every time a setting changes.
@@ -735,22 +740,17 @@ export function Manual({
   );
 
   /**
-   * Tapping a position closes it, now.
+   * Tapping a position opens the way out of it, priced.
    *
-   * No sheet, no price to choose: the moment you want out of a five-minute
-   * window is not a moment to be reading a picker, and the panel that used to
-   * open here was three taps in front of the one thing it did. It goes through
-   * the book and past our own resting offers — the shares under them are the
-   * shares being sold.
+   * Selling on the tap itself was one gesture away from a whole position gone
+   * at whatever the book happened to be — and the price you leave at is the
+   * trade. So the tap opens a sheet over a dimmed desk with the bid already
+   * under the thumb: one more tap sells at it, or the price moves first.
    */
-  const sellPosition = useCallback(
-    (position: NativePosition) => {
-      const which: 'Up' | 'Down' = position.outcome === 'Up' ? 'Up' : 'Down';
-      setNote(null);
-      void marketSell(which, sellableShares(position.size));
-    },
-    [marketSell],
-  );
+  const sellPosition = useCallback((position: NativePosition) => {
+    setNote(null);
+    setClosing(position);
+  }, []);
 
   /**
    * Sell the whole draft at market.
@@ -1314,6 +1314,34 @@ export function Manual({
         </div>
       )}
 
+      {closing && (
+        <SellSheet
+          position={closing}
+          bid={
+            books[closing.outcome === 'Up' ? 'Up' : 'Down'].bids[0]?.price ?? null
+          }
+          avg={
+            (closing.outcome === 'Up' ? localAvg.Up : localAvg.Down) ??
+            closing.avgPrice
+          }
+          tick={market?.tickSize ?? 0.01}
+          busy={busy}
+          onClose={() => setClosing(null)}
+          onSell={(price) => {
+            const which: 'Up' | 'Down' = closing.outcome === 'Up' ? 'Up' : 'Down';
+            const size = sellableShares(closing.size);
+            setClosing(null);
+            void place(which, 'SELL', price, size);
+          }}
+          onMarket={() => {
+            const which: 'Up' | 'Down' = closing.outcome === 'Up' ? 'Up' : 'Down';
+            const size = sellableShares(closing.size);
+            setClosing(null);
+            void marketSell(which, size);
+          }}
+        />
+      )}
+
       {editing && (
         <OrderEditor
           row={editing}
@@ -1647,6 +1675,131 @@ function OrderEditor({
           onClick={onCancelOrder}
         >
           Снять
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The way out of a position, priced.
+ *
+ * Everything behind it is dimmed, because this is the one decision on the
+ * screen while it is open. The bid is already under the thumb — that is where
+ * a sale almost always goes — and the row of prices above it is the two other
+ * answers anyone actually wants: out at cost, or out at a gain. The wheel is
+ * for everything else.
+ *
+ * The button says what it will do and what it will pay, after the taker fee,
+ * because the fee on a sale is charged in money and a number that ignores it
+ * is not the number arriving in the wallet.
+ */
+function SellSheet({
+  position,
+  bid,
+  avg,
+  tick,
+  busy,
+  onClose,
+  onSell,
+  onMarket,
+}: {
+  position: NativePosition;
+  /** Top of the bid side: what closing pays right now. */
+  bid: number | null;
+  /** What the shares cost, from this window's own orders where it knows. */
+  avg: number;
+  tick: number;
+  busy: boolean;
+  onClose: () => void;
+  onSell: (price: number) => void;
+  onMarket: () => void;
+}) {
+  const size = sellableShares(position.size);
+  const step = Math.max(1, Math.round(tick * 100));
+  const opened = Math.min(99, Math.max(1, Math.round((bid ?? avg ?? 0.5) * 100)));
+  const [cents_, setCents] = useState(opened);
+
+  const nudge = (d: number) => setCents((c) => Math.min(99, Math.max(1, c + d)));
+  const at = (price: number) =>
+    setCents(Math.min(99, Math.max(1, Math.round(price * 100))));
+
+  // What the chosen price would pay, less the fee the venue takes out of it.
+  const pays = netSellPrice(cents_ / 100) * size;
+  const cost = avg > 0 ? avg * size : 0;
+
+  return (
+    <div className="sheet-scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <h2>
+            <span className={position.outcome === 'Up' ? 'up' : 'down'}>
+              {position.outcome}
+            </span>{' '}
+            {size.toFixed(size % 1 ? 1 : 0)}
+            {avg > 0 && <em className="muted"> по {cents(avg)}</em>}
+          </h2>
+          <button className="xbtn" onClick={onClose} aria-label="Закрыть">
+            ✕
+          </button>
+        </div>
+
+        {/*
+          The three prices worth one tap: what the book is bidding, what gets
+          the money back, and what the round was opened for.
+        */}
+        <div className="pcts sellpicks">
+          <button disabled={bid == null} onClick={() => bid != null && at(bid)}>
+            рынок {bid != null ? cents(bid) : '—'}
+          </button>
+          <button
+            disabled={!(avg > 0)}
+            onClick={() => avg > 0 && at(breakEvenPrice(avg, tick))}
+          >
+            в ноль
+          </button>
+          <button
+            disabled={!(avg > 0)}
+            onClick={() => avg > 0 && at(targetPrice(avg, 0.25, tick))}
+          >
+            +25%
+          </button>
+        </div>
+
+        <div className="pricepick">
+          <button className="step big" onClick={() => nudge(-step)}>
+            −
+          </button>
+          <div className="pricepick-now">
+            <PriceSpinner value={cents_} onPick={setCents} />
+          </div>
+          <button className="step big" onClick={() => nudge(step)}>
+            +
+          </button>
+        </div>
+
+        <button
+          className="primary wide"
+          disabled={busy}
+          onClick={() => onSell(cents_ / 100)}
+        >
+          Продать {size.toFixed(size % 1 ? 1 : 0)} по {cents_}¢
+        </button>
+        <div className="sellpays muted">
+          {usd(pays)}
+          {cost > 0 && <b className={pays >= cost ? 'up' : 'down'}> {signedUsd(pays - cost)}</b>}
+        </div>
+
+        {/*
+          And the other kind of exit: not a price at all, but out — through the
+          book, past our own resting offers, whatever it takes.
+        */}
+        <button
+          className="ghost wide"
+          disabled={busy || bid == null}
+          onClick={onMarket}
+        >
+          продать по рынку
         </button>
       </div>
     </div>
