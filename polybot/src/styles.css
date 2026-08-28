@@ -3178,3 +3178,39 @@ button.wide {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   margin-top: 8px;
 }
+
+/* An address you can copy, which is the only kind worth showing. */
+.addrline {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.addrline span {
+  display: block;
+  font-size: 10px;
+}
+
+.addrline b {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+  line-height: 1.3;
+  margin-top: 2px;
+}
+
+.addrline i {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--accent);
+}

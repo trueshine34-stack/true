@@ -17,6 +17,54 @@ const W = 320;
 const H = 132;
 
 /**
+ * An address, with one tap to copy it.
+ *
+ * An address that cannot be copied is an address that gets retyped, and a
+ * retyped address is how money goes to a stranger. The clipboard API is not
+ * always there, so the old textarea trick stands behind it.
+ */
+function Address({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!value) return null;
+
+  const copy = () => {
+    const done = () => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    };
+    try {
+      void navigator.clipboard.writeText(value).then(done, () => fallback(value, done));
+    } catch {
+      fallback(value, done);
+    }
+  };
+
+  return (
+    <button className="addrline" onClick={copy}>
+      <span className="muted">{label}</span>
+      <b>{value}</b>
+      <i>{copied ? 'скопировано' : 'копировать'}</i>
+    </button>
+  );
+}
+
+function fallback(text: string, done: () => void) {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  try {
+    document.execCommand('copy');
+    done();
+  } catch {
+    // Nothing to be done; the address is on the screen to be read.
+  }
+  document.body.removeChild(area);
+}
+
+/**
  * Taking money off the venue, to an address of your own.
  *
  * One transfer of USDC on Polygon, signed by the app with the key it already
@@ -83,6 +131,18 @@ function Withdraw({ address }: { address: string }) {
             <b className={info.gasReady ? 'up' : 'down'}>{info.pol.toFixed(3)} POL</b>
             {info.proxy && info.sendable <= 0 && ' · деньги на прокси Polymarket'}
           </div>
+
+          {/*
+            The two addresses, because "top it up" is a different address than
+            "trade with it". Money for trading goes to the funder — that is the
+            deposit address Polymarket itself shows — and the gas for a
+            withdrawal has to be on the key, which is the one that signs.
+          */}
+          <Address
+            label="пополнить торговый баланс · USDC (Polygon)"
+            value={info.funder}
+          />
+          <Address label="газ для вывода · POL (Polygon)" value={info.signer} />
 
           <div className="withdraw-row">
             <input
