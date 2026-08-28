@@ -53,6 +53,16 @@ class BotEngine(
     var positions: List<Position> = emptyList()
         private set
 
+    /**
+     * Orders still on the book, refreshed with the positions.
+     *
+     * The screen reads its own copy; this one is for the notification, which is
+     * the only view of the desk there is once the app is closed.
+     */
+    @Volatile
+    var resting: List<ClobApi.OpenOrder> = emptyList()
+        private set
+
     private val logId = AtomicLong(0)
 
     private val ambientScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -125,6 +135,11 @@ class BotEngine(
                     } catch (e: Exception) {
                         // Same: the position list is a view, not a decision input.
                     }
+                    try {
+                        refreshResting()
+                    } catch (e: Exception) {
+                        // And the same again: what is on the book is a view too.
+                    }
                 }
                 round += 1
                 onStateChanged()
@@ -145,6 +160,12 @@ class BotEngine(
     private fun refreshPositions() {
         val acct = account ?: return
         positions = DataApi.positions(acct.funderAddress)
+    }
+
+    private fun refreshResting() {
+        val acct = account ?: return
+        val creds = this.creds ?: return
+        resting = ClobApi.openOrders(creds, acct.signerAddress)
     }
 
     fun currentMarket(): Market? {

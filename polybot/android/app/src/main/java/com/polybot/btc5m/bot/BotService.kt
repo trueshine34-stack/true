@@ -91,7 +91,7 @@ class BotService : Service() {
             }
 
             ACTION_START_AUTOSELL -> {
-                startForeground(NOTIFICATION_ID, buildNotification("Автопродажа…"))
+                startForeground(NOTIFICATION_ID, buildNotification("Автопродажа", "запускается…", "запускается…"))
                 acquireWakeLock()
                 EngineHolder.autoSell(this).start()
                 updateNotification()
@@ -105,7 +105,7 @@ class BotService : Service() {
     }
 
     private fun startDesk() {
-        startForeground(NOTIFICATION_ID, buildNotification("Стол открыт"))
+        startForeground(NOTIFICATION_ID, buildNotification("Стол открыт", "жду данных…", "жду данных…"))
         acquireWakeLock()
 
         val bot = EngineHolder.get(this)
@@ -171,7 +171,7 @@ class BotService : Service() {
         (getSystemService(NotificationManager::class.java)).createNotificationChannel(channel)
     }
 
-    private fun buildNotification(text: String): Notification {
+    private fun buildNotification(title: String, text: String, full: String): Notification {
         val open = PendingIntent.getActivity(
             this,
             0,
@@ -189,8 +189,11 @@ class BotService : Service() {
         }
 
         return builder
-            .setContentTitle("PolyBot · BTC 5м")
+            .setContentTitle(title)
             .setContentText(text)
+            // Pulled down, the whole desk: every position with what it is worth
+            // now, and every order still waiting.
+            .setStyle(Notification.BigTextStyle().bigText(full))
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(open)
             .setOngoing(true)
@@ -198,17 +201,118 @@ class BotService : Service() {
             .build()
     }
 
+    private fun cents(price: Double) = "${Math.round(price * 100)}¢"
+
+    private fun money(usd: Double) =
+        (if (usd >= 0) "+" else "−") + "$" + String.format("%.2f", kotlin.math.abs(usd))
+
+    private fun shares(size: Double) =
+        String.format(if (size % 1.0 == 0.0) "%.0f" else "%.1f", size)
+
+    /**
+     * What is held, at what it cost and what it is worth now.
+     *
+     * The price is the bid, because the bid is what closing pays; the profit is
+     * that bid less the taker fee, which is the money rather than the mark.
+     * Positions the venue calls redeemable are settled rounds, not holdings.
+     */
+    private fun positionLines(engine: BotEngine, market: Market?): List<String> {
+        val quotes = engine.quotes
+        // Everything still held, not only this window's: shares from a window
+        // that has closed but not settled are the ones most worth seeing.
+        return engine.positions
+            .filter { !it.redeemable && it.size > 1e-6 }
+            .sortedByDescending { it.size }
+            .map { position ->
+                val bid = when (position.asset) {
+                    market?.up?.tokenId -> quotes?.up?.bestBid
+                    market?.down?.tokenId -> quotes?.down?.bestBid
+                    else -> null
+                }
+                val paid = position.avgPrice
+                val line = StringBuilder()
+                line.append(position.outcome)
+                line.append(" ").append(shares(position.size))
+                if (paid > 0.0) line.append(" по ").append(cents(paid))
+                if (bid != null && bid > 0.0) {
+                    line.append(" → ").append(cents(bid))
+                    if (paid > 0.0) {
+                        val worth = SellPercent.netSell(bid) * position.size
+                        line.append("  ").append(money(worth - paid * position.size))
+                    }
+                } else {
+                    line.append(" → нет спроса")
+                }
+                line.toString()
+            }
+    }
+
+    /** What is still on the book, and how much of it has already gone through. */
+    private fun restingLines(engine: BotEngine, market: Market?): List<String> {
+        return engine.resting
+            .filter { it.remaining > 1e-6 }
+            .sortedBy { it.price }
+            .map { order ->
+                val side = if (order.side == "BUY") "куп" else "прод"
+                val outcome = when (order.assetId) {
+                    market?.up?.tokenId -> "Up"
+                    market?.down?.tokenId -> "Down"
+                    else -> order.outcome ?: ""
+                }
+                val line = StringBuilder()
+                line.append(side).append(" ").append(outcome).append(" ")
+                line.append(shares(order.remaining)).append("×").append(cents(order.price))
+                if (order.sizeMatched > 1e-6) {
+                    line.append(" · налито ").append(shares(order.sizeMatched))
+                        .append(" из ").append(shares(order.originalSize))
+                }
+                line.toString()
+            }
+    }
+
+    /**
+     * The desk, on the lock screen.
+     *
+     * This is the only view of the account there is while the app is closed, so
+     * it carries the three things a held position raises: what is held, what it
+     * is worth at the price right now, and what is still waiting on the book.
+     * It is rebuilt on every ambient round — about every three seconds — which
+     * is as often as the quotes behind it change.
+     */
     private fun updateNotification() {
-        val rule = EngineHolder.peekAutoSell()
-        val state = if (rule?.running == true) {
-            val rung = rule.rows.maxOfOrNull { it.target }
-            "автопродажа" +
-                (rung?.let { " по " + String.format("%.0f", it * 100) + "¢" } ?: "") +
-                " · позиций ${rule.rows.size}"
-        } else {
-            "стол открыт"
+        val engine = EngineHolder.peek()
+        val market = engine?.currentMarket()
+        val positions = engine?.let { positionLines(it, market) } ?: emptyList()
+        val resting = engine?.let { restingLines(it, market) } ?: emptyList()
+
+        val left = market?.windowStart?.takeIf { it > 0 }?.let {
+            val secs = (it + WINDOW_SECONDS - Clock.nowSec()).coerceAtLeast(0)
+            String.format("%d:%02d", secs / 60, secs % 60)
         }
+
+        val title = when {
+            positions.isEmpty() -> "Позиций нет"
+            else -> positions.first()
+        }
+
+        val text = when {
+            resting.isNotEmpty() -> resting.joinToString(" · ")
+            positions.size > 1 -> positions.drop(1).joinToString(" · ")
+            EngineHolder.peekAutoSell()?.running == true -> "автопродажа следит"
+            else -> "стол открыт"
+        }
+
+        val full = buildList {
+            addAll(positions)
+            if (resting.isNotEmpty()) {
+                if (isNotEmpty()) add("")
+                addAll(resting)
+            }
+            if (isEmpty()) add("Ни позиций, ни лимиток")
+            left?.let { add("до конца окна $it") }
+        }.joinToString("\n")
+
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildNotification(state))
+        manager.notify(NOTIFICATION_ID, buildNotification(title, text, full))
     }
 }
