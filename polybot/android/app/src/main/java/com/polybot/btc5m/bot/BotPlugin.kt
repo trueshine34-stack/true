@@ -1368,6 +1368,7 @@ class BotPlugin : Plugin() {
         call.resolve(
             JSObject()
                 .put("armed", bot.side != null)
+                .put("window", bot.scoredWindow)
                 .put("side", bot.side)
                 .put("running", bot.running)
                 .put("bankUsd", bot.settings.bankUsd)

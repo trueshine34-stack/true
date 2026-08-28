@@ -110,6 +110,10 @@ class CatchBot(
     fun heldShares(asset: String): Double =
         lots.filter { it.asset == asset }.sumOf { it.open }
 
+    /** The window the score on the card belongs to. */
+    @Volatile
+    private var scored: Long = store.loadWindow()
+
     private var scope: CoroutineScope? = null
     private var job: Job? = null
 
@@ -129,6 +133,9 @@ class CatchBot(
         store.saveTotals(totals)
         onStateChanged()
     }
+
+    /** What the score covers: the window it was made in. */
+    val scoredWindow: Long get() = scored
 
     /**
      * Arm on a side, from the price it is at right now.
@@ -239,6 +246,25 @@ class CatchBot(
 
         // A window that has closed takes its lots with it: what is left settles.
         lots.filter { it.windowStart != windowStart }.forEach { settle(it) }
+
+        // And the score is the window's own. Five minutes is the unit this
+        // rule trades, so what it made is read against that and not against a
+        // number carried over from windows already finished — the container
+        // starts each one whole, as it did the first.
+        if (scored != windowStart) {
+            if (scored != 0L && (totals.buys > 0 || totals.sells > 0)) {
+                engine.log(
+                    if (totals.pnl >= 0) "trade" else "warn",
+                    "Ловец за окно: " + (if (totals.pnl >= 0) "+" else "−") +
+                        "$" + String.format("%.2f", abs(totals.pnl)) +
+                        " · ${totals.buys} вход, ${totals.sells} выход",
+                )
+            }
+            totals = Totals()
+            store.saveTotals(totals)
+            scored = windowStart
+            store.saveWindow(windowStart)
+        }
 
         val which = side
         val token = when (which) {

@@ -33,6 +33,13 @@ class CatchStore(context: Context) {
             .apply()
     }
 
+    /** The window the stored score belongs to, so a restart inside it keeps it. */
+    fun loadWindow(): Long = prefs.getLong("window", 0L)
+
+    fun saveWindow(windowStart: Long) {
+        prefs.edit().putLong("window", windowStart).apply()
+    }
+
     fun loadTotals(): CatchBot.Totals = CatchBot.Totals(
         buys = prefs.getInt("buys", 0),
         sells = prefs.getInt("sells", 0),
@@ -52,6 +59,7 @@ class CatchStore(context: Context) {
     }
 
     fun clear() = prefs.edit()
+        .remove("window")
         .remove("buys").remove("sells")
         .remove("spent").remove("got").remove("settled")
         .apply()

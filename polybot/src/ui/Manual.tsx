@@ -2084,11 +2084,12 @@ function CatchCard({
           <b>{usd(state.cash)}</b>
         </div>
         <div>
-          <span className="muted">итог</span>
+          <span className="muted">итог окна</span>
           <b className={tone}>{signedUsd(state.pnl)}</b>
         </div>
         <div>
-          <span className="muted">взял · отдал</span>
+          {/* The score is this window's, and starts again with the next. */}
+          <span className="muted">за окно</span>
           <b>
             {state.buys} · {state.sells}
           </b>

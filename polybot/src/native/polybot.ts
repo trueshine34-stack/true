@@ -456,6 +456,8 @@ export type CatchLot = {
 
 export type CatchState = {
   armed: boolean;
+  /** The five-minute window the score below belongs to. */
+  window?: number;
   side?: string | null;
   running: boolean;
   bankUsd: number;
