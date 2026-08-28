@@ -307,7 +307,7 @@ export function App() {
     [goal, worth],
   );
 
-  const askDay = dayAsked && needsBaseline(day) && balance != null;
+  const askDay = dayAsked && needsBaseline(day) && worth != null;
   const locked = isLocked(day);
 
   const setDayBaseline = useCallback((amount: number) => {
@@ -384,7 +384,7 @@ export function App() {
                   type="number"
                   inputMode="decimal"
                   autoFocus
-                  placeholder={balance?.toFixed(2) ?? ''}
+                  placeholder={worth?.toFixed(2) ?? ''}
                   value={dayInput}
                   onChange={(e) => setDayInput(e.target.value)}
                 />
@@ -394,7 +394,7 @@ export function App() {
               <span className="label">Цель</span>
               <span className="value">
                 {usd(
-                  (Number(dayInput.replace(',', '.')) || balance || 0) * DAY_MULTIPLE,
+                  (Number(dayInput.replace(',', '.')) || worth || 0) * DAY_MULTIPLE,
                 )}
               </span>
             </div>
@@ -402,7 +402,7 @@ export function App() {
               className="primary"
               style={{ marginTop: 12 }}
               onClick={() =>
-                setDayBaseline(Number(dayInput.replace(',', '.')) || balance || 0)
+                setDayBaseline(Number(dayInput.replace(',', '.')) || worth || 0)
               }
             >
               Начать день
@@ -461,6 +461,7 @@ export function App() {
       <div className="scroll">
         <Manual
           onOpenBalance={() => setShowBalance(true)}
+          savings={savings}
           locked={locked}
           appSettings={
             <SettingsScreen account={account} onForget={onForget} />

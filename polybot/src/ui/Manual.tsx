@@ -111,6 +111,7 @@ export function Manual({
   onSummary,
   onCommitted,
   onOpenBalance,
+  savings = 0,
   appSettings,
   locked,
 }: {
@@ -121,6 +122,8 @@ export function Manual({
   /** What the container holds back, in dollars. */
   /** Opens the balance sheet; the balance lives on the desk's own rail now. */
   onOpenBalance?: () => void;
+  /** Held off the venue, at the address profit is withdrawn to. */
+  savings?: number;
   /** The app-wide settings, folded in under the desk's own. */
   appSettings?: ReactNode;
   /** The day's goal is met: no new exposure until midnight. */
@@ -1028,6 +1031,14 @@ export function Manual({
           <span className={exposure.full ? 'warn' : 'muted'}>
             /{exposure.room.toFixed(2)}
           </span>
+          {/*
+            And everything the run is worth, including what has been taken off
+            the venue. The two numbers before it are what can be traded and
+            what this window may still take; this one is the score.
+          */}
+          {savings > 0 && balance !== null && (
+            <i className="railall">Σ{(balance + savings).toFixed(2)}</i>
+          )}
         </button>
 
         {/*
