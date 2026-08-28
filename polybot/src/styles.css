@@ -1664,6 +1664,14 @@ button.pill.balance {
   flex: 1;
 }
 
+/* The chosen share, said plainly: this is the one the size is standing for. */
+.limitpcts.big button.on {
+  border-color: var(--accent);
+  background: rgba(76, 141, 255, 0.22);
+  color: var(--accent);
+  border-width: 2px;
+}
+
 /*
   The share buttons, given room. They are the size decision on a screen where
   everything else is a price, and three of them across a phone can afford to be

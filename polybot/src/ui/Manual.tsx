@@ -155,6 +155,14 @@ export function Manual({
    * every one of them.
    */
   const [sizingLimit, setSizingLimit] = useState(true);
+  /**
+   * The share of the window's room the size stands for, once one is chosen.
+   *
+   * Kept as the choice rather than only its answer: "half of what is free" is
+   * a different number at forty cents than at eighty, and the number in the
+   * field has to be the one the price on the screen would actually buy.
+   */
+  const [sizePct, setSizePct] = useState<number | null>(null);
   const [pickingPrice, setPickingPrice] = useState(false);
   /**
    * The side the dock is about to buy.
@@ -906,6 +914,25 @@ export function Manual({
     return Math.min(99, Math.max(1, Math.round(dearest * 100) - 3));
   })();
 
+  /** What a share of the size is taken out of: the window's room, or the cash. */
+  const sizeBudget = settings.exposureGuard ? exposure.room : freeCash;
+
+  /**
+   * The chosen share, re-answered whenever the question changes.
+   *
+   * A price moved by a cent changes how many shares half the room buys, and a
+   * size left at the old answer is the one thing on this row that would be
+   * quietly wrong. So the share is applied again on every change of price or
+   * of what is free — until an amount in dollars is picked instead, which is
+   * not a share of anything.
+   */
+  useEffect(() => {
+    if (sizePct == null) return;
+    if (!(limitBasis > 0) || !(sizeBudget > 0)) return;
+    const shares = stakeShares(limitBasis, sizeBudget, sizePct / 100, minSize);
+    if (shares != null) setLimitSize(String(shares));
+  }, [sizePct, limitBasis, sizeBudget, minSize]);
+
   /** Whether the price in the field is one the early rule will not buy at. */
   const limitBarred =
     Number.isFinite(limitPriceNum) &&
@@ -1457,15 +1484,17 @@ export function Manual({
               // A share of what this window may still take, not of the whole
               // wallet: a hundred percent that the guard then refuses is a
               // button that lies about what it does.
-              const budget = settings.exposureGuard ? exposure.room : freeCash;
               const shares =
-                budget > 0 ? stakeShares(limitBasis, budget, pct / 100, minSize) : null;
+                sizeBudget > 0
+                  ? stakeShares(limitBasis, sizeBudget, pct / 100, minSize)
+                  : null;
               return (
                 <button
                   key={pct}
+                  className={sizePct === pct ? 'on' : undefined}
                   disabled={shares == null}
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => shares != null && setLimitSize(String(shares))}
+                  onClick={() => setSizePct(pct)}
                 >
                   {pct}%
                 </button>
@@ -1493,10 +1522,11 @@ export function Manual({
                   key={usdAmount}
                   disabled={shares == null}
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() =>
-                    shares != null &&
-                    setLimitSize(String(Math.round(shares * 10) / 10))
-                  }
+                  onClick={() => {
+                    if (shares == null) return;
+                    setSizePct(null);
+                    setLimitSize(String(Math.round(shares * 10) / 10));
+                  }}
                 >
                   {usdAmount} $
                 </button>
@@ -1591,9 +1621,11 @@ export function Manual({
                   // shares wanted at this price are what the window still has
                   // room for, and typing that out was the last thing here that
                   // was typed.
-                  const budget = settings.exposureGuard ? exposure.room : freeCash;
+                  setSizePct(100);
                   const full =
-                    budget > 0 ? stakeShares(wanted, budget, 1, minSize) : null;
+                    sizeBudget > 0
+                      ? stakeShares(wanted, sizeBudget, 1, minSize)
+                      : null;
                   if (full != null) setLimitSize(String(full));
                 }}
               >
