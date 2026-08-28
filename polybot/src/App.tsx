@@ -125,6 +125,42 @@ export function App() {
     };
   }, []);
 
+  /**
+   * The foreground service, from the moment the desk is usable.
+   *
+   * It used to start only when the standing sell rule was switched on, which
+   * meant the notification — the only view of the account there is with the
+   * app closed — was missing for anyone trading by hand. It also asks for the
+   * notification permission, which is why it waits for the wallet: there is
+   * nothing to show before that.
+   */
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    let alive = true;
+    let timer = 0;
+
+    // The desk opens before the wallet has finished connecting on a slow
+    // start, and the service refuses to start without it — so this asks again
+    // until it takes, and then stops asking.
+    const arm = () => {
+      void PolyBot.start()
+        .then(() => {
+          if (alive) window.clearInterval(timer);
+        })
+        .catch(() => {
+          // Not connected yet, or the notification was refused. Either way the
+          // desk works; this only keeps trying for the notification.
+        });
+    };
+
+    arm();
+    timer = window.setInterval(arm, 8_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [phase]);
+
   // Wallet balance in the header. It only moves when an order fills, so a slow
   // poll is enough — and it must not run before the engine holds credentials.
   useEffect(() => {

@@ -64,6 +64,15 @@ class BotService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var stateHook: (() -> Unit)? = null
 
+    /**
+     * Whether the desk itself asked to be shown.
+     *
+     * The notification is the account's only face while the app is closed, so
+     * switching the sell rule off must not take it away — only closing the desk
+     * does that.
+     */
+    private var deskWanted = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -79,6 +88,7 @@ class BotService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                deskWanted = false
                 EngineHolder.peekAutoSell()?.stop()
                 releaseUnlessBusy()
                 return START_NOT_STICKY
@@ -97,7 +107,10 @@ class BotService : Service() {
                 updateNotification()
             }
 
-            else -> startDesk()
+            else -> {
+                deskWanted = true
+                startDesk()
+            }
         }
         // Deliberately not sticky: the key is memory-only, so a restarted
         // service could not trade and would only show a misleading notification.
@@ -120,7 +133,7 @@ class BotService : Service() {
      * credentials, so the user can still manage their orders.
      */
     private fun releaseUnlessBusy() {
-        if (anyRunning()) {
+        if (deskWanted || anyRunning()) {
             updateNotification()
             return
         }
