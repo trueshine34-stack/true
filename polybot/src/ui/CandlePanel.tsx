@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { PolyBot } from '../native/polybot';
 import { candleShape, signedPct, type Candle } from '../core/candles';
 import { findLevels } from '../core/levels';
+import { levelAhead, ratePerHour, trendOf } from '../core/trend';
 import { priceLabel } from '../core/depth';
 
 /** Every window is five minutes, and every window opens on a multiple of it. */
@@ -80,6 +81,16 @@ export function CandleFace({
 }) {
   const shape = candleShape(candles, W, H);
   const levels = shape ? findLevels(candles, shape.last) : [];
+
+  /*
+    Where the last half hour has been going, fitted rather than eyeballed —
+    and the level it is heading into, which is the one worth watching out of
+    the three. The close chart looks at thirty minutes, the wide one at an
+    hour: each about a screen's worth of its own candles.
+  */
+  const trend = trendOf(candles, interval === '5m' ? 60 : 30);
+  const ahead = shape && trend ? levelAhead(levels, shape.last, trend.way) : null;
+
   /*
     Where the running five minutes began.
 
@@ -96,6 +107,25 @@ export function CandleFace({
   const y = (price: number) =>
     shape ? ((shape.top - price) / (shape.top - shape.floor)) * H : 0;
 
+  /*
+    Two levels a few dollars apart put their prices on top of each other and
+    neither can be read. The one price is heading into is kept whatever else
+    goes; the rest keep their lines and lose the label.
+  */
+  const labelled = (() => {
+    if (!shape) return [] as typeof levels;
+    const order = [
+      ...levels.filter((l) => l.price === ahead),
+      ...levels.filter((l) => l.price !== ahead),
+    ];
+    const kept: typeof levels = [];
+    for (const level of order) {
+      const at = y(level.price);
+      if (kept.every((k) => Math.abs(y(k.price) - at) >= 9)) kept.push(level);
+    }
+    return kept;
+  })();
+
   return (
     <div className="candles">
       <svg className="candles-svg" viewBox={`0 0 ${W} ${H}`} aria-hidden>
@@ -103,10 +133,25 @@ export function CandleFace({
           Levels first, under the candles: they are the background the price is
           working against, not marks on top of it.
         */}
+        {/*
+          The fitted line, over the span it was fitted to. Flat is drawn too:
+          "no direction" is an answer, and an empty chart looks like a missing
+          one rather than a quiet market.
+        */}
+        {shape && trend && (
+          <line
+            className={`trendline ${trend.way}`}
+            x1={(shape.bars[trend.fromIndex]?.x ?? 0).toFixed(1)}
+            x2={(shape.bars[shape.bars.length - 1]?.x ?? W).toFixed(1)}
+            y1={y(trend.from).toFixed(1)}
+            y2={y(trend.to).toFixed(1)}
+          />
+        )}
+
         {levels.map((level) => (
           <line
             key={level.price}
-            className={`slevel ${level.kind}`}
+            className={`slevel ${level.kind}${level.price === ahead ? ' ahead' : ''}`}
             x1="0"
             x2={W}
             y1={y(level.price).toFixed(1)}
@@ -159,10 +204,12 @@ export function CandleFace({
           The prices themselves go over the candles: a label a candle is
           drawn on top of is a label with its last digits missing.
         */}
-        {levels.map((level) => (
+        {labelled.map((level) => (
           <text
             key={level.price}
-            className={`slevel-tag ${level.kind}`}
+            className={`slevel-tag ${level.kind}${
+              level.price === ahead ? ' ahead' : ''
+            }`}
             x={3}
             /* A level near the ceiling puts its price under the line instead
                of half off the top of the panel. */
@@ -188,6 +235,12 @@ export function CandleFace({
         <span className={shape && shape.sinceOpen >= 0 ? 'up' : 'down'}>
           {shape ? signedPct(shape.sinceOpen) : ''}
         </span>
+        {trend && (
+          <em className={`trendrate ${trend.way}`}>
+            {trend.way === 'up' ? '↗' : trend.way === 'down' ? '↘' : '→'}{' '}
+            {trend.way === 'flat' ? 'вбок' : ratePerHour(trend.perHour)}
+          </em>
+        )}
       </div>
     </div>
   );

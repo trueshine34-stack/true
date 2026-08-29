@@ -219,16 +219,6 @@ export interface PolyBotPlugin {
     lateBandSec?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
-  ladderUpdate(args: {
-    enabled?: boolean;
-    bankUsd?: number;
-    shares?: number;
-    everySec?: number;
-    firstAtSec?: number;
-    untilSec?: number;
-  }): Promise<void>;
-  ladderReset(): Promise<void>;
-  ladderState(): Promise<LadderState>;
   pulseUpdate(args: {
     enabled?: boolean;
     bankUsd?: number;
@@ -241,19 +231,6 @@ export interface PolyBotPlugin {
   }): Promise<void>;
   pulseReset(): Promise<void>;
   pulseState(): Promise<PulseState>;
-  /** Arm the catcher on a side, or pass nothing to take it off. */
-  catchArm(args: { side?: 'Up' | 'Down' | null }): Promise<void>;
-  catchUpdate(args: {
-    bankUsd?: number;
-    drop?: number;
-    step?: number;
-    gain?: number;
-    spread?: number;
-    share?: number;
-    minShares?: number;
-  }): Promise<void>;
-  catchReset(): Promise<void>;
-  catchState(): Promise<CatchState>;
   /**
    * What one address holds off the venue: USDT on BSC and USDC on Polygon.
    * Read-only — the app has no key for BSC and never sends there.
@@ -380,51 +357,6 @@ export type AutoSellRebuyDone = {
   at: number;
 };
 
-// -------------------------------------------------------------- ladder bot
-
-/** One clip the ladder bot is holding, or has already sold. */
-export type LadderLot = {
-  outcome: string;
-  shares: number;
-  price: number;
-  sellPrice: number;
-  sold: number;
-  proceeds: number;
-  note?: string | null;
-};
-
-export type LadderRound = {
-  windowStart: number;
-  /** The side the market had picked at the last check. */
-  side?: string | null;
-  ask?: number | null;
-  /** The rung it was compared against, and the one the lots are offered at. */
-  rung: number;
-  step: number;
-  note?: string | null;
-  lots: LadderLot[];
-};
-
-export type LadderState = {
-  enabled: boolean;
-  running: boolean;
-  bankUsd: number;
-  shares: number;
-  everySec: number;
-  firstAtSec: number;
-  untilSec: number;
-  cash: number;
-  lastFault?: string | null;
-  rounds: number;
-  buys: number;
-  sells: number;
-  spent: number;
-  got: number;
-  settled: number;
-  pnl: number;
-  round?: LadderRound | null;
-};
-
 /** What the pulse bot is looking at right now. */
 export type PulseRead = {
   /** Dollars this window has moved from its own open. */
@@ -489,38 +421,6 @@ export type TakeState = {
   shares: number;
   got: number;
   watching: TakeWatch[];
-};
-
-export type CatchLot = {
-  outcome: string;
-  shares: number;
-  price: number;
-  sellPrice: number;
-  note?: string | null;
-};
-
-export type CatchState = {
-  armed: boolean;
-  /** The five-minute window the score below belongs to. */
-  window?: number;
-  side?: string | null;
-  running: boolean;
-  bankUsd: number;
-  cash: number;
-  /** The price the next entry is measured from: the arm, then each sale. */
-  reference: number;
-  /** And the price it is waiting for. */
-  target: number;
-  ask: number;
-  note?: string | null;
-  lastFault?: string | null;
-  buys: number;
-  sells: number;
-  spent: number;
-  got: number;
-  settled: number;
-  pnl: number;
-  lots: CatchLot[];
 };
 
 /** What the app has timed for itself about the venue's own delays. */
@@ -625,8 +525,6 @@ const webStub: PolyBotPlugin = {
     rows: [],
   }),
   binancePrice: async () => ({ openTime: 0, open: 0, last: 0, at: 0 }),
-  ladderUpdate: async () => {},
-  ladderReset: async () => {},
   chainBalance: async () => ({ usdt: 0, polygon: 0, total: 0 }),
   withdrawInfo: async () => {
     throw new Error('Вывод доступен только в приложении Android');
@@ -644,25 +542,6 @@ const webStub: PolyBotPlugin = {
     got: 0,
     watching: [],
   }),
-  catchArm: async () => {},
-  catchUpdate: async () => {},
-  catchReset: async () => {},
-  catchState: async () => ({
-    armed: false,
-    running: false,
-    bankUsd: 10,
-    cash: 10,
-    reference: 0,
-    target: 0,
-    ask: 0,
-    buys: 0,
-    sells: 0,
-    spent: 0,
-    got: 0,
-    settled: 0,
-    pnl: 0,
-    lots: [],
-  }),
   pulseUpdate: async () => {},
   pulseReset: async () => {},
   pulseState: async () => ({
@@ -676,23 +555,6 @@ const webStub: PolyBotPlugin = {
     rounds: 0,
     wins: 0,
     losses: 0,
-    spent: 0,
-    got: 0,
-    settled: 0,
-    pnl: 0,
-  }),
-  ladderState: async () => ({
-    enabled: false,
-    running: false,
-    bankUsd: 5,
-    shares: 5,
-    everySec: 60,
-    firstAtSec: 45,
-    untilSec: 285,
-    cash: 5,
-    rounds: 0,
-    buys: 0,
-    sells: 0,
     spent: 0,
     got: 0,
     settled: 0,

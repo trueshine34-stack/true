@@ -18,13 +18,7 @@ object EngineHolder {
     private var autoSell: AutoSell? = null
 
     @Volatile
-    private var ladderBot: LadderBot? = null
-
-    @Volatile
     private var pulseBot: PulseBot? = null
-
-    @Volatile
-    private var catchBot: CatchBot? = null
 
     @Volatile
     private var takeBot: TakeBot? = null
@@ -65,13 +59,11 @@ object EngineHolder {
         return synchronized(this) {
             autoSell ?: AutoSell(
                 engine = host,
-                // Shares the ladder bot is holding are its own to exit: it
-                // offers them at the same rung, and two rules pulling each
-                // other's orders would leave the position naked between them.
+                // Shares a rule is holding are its own to exit: it prices them
+                // itself, and two rules pulling each other's orders would leave
+                // the position naked between them.
                 botShares = { asset ->
-                    (ladderBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0) +
-                        (pulseBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0) +
-                        (catchBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0)
+                    pulseBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0
                 },
                 onStateChanged = {
                     onState?.invoke()
@@ -87,35 +79,9 @@ object EngineHolder {
     }
 
     /**
-     * The bot that buys the favourite while it is still under its own exit.
-     * Created on first ask rather than only when switched on, so the panel can
-     * show its books while it is off.
-     */
-    fun ladder(context: Context): LadderBot {
-        ladderBot?.let { return it }
-        val host = get(context)
-        return synchronized(this) {
-            ladderBot ?: LadderBot(
-                engine = host,
-                store = LadderStore(context),
-                ladder = { autoSell(context).settings.ladder },
-                onStateChanged = {
-                    onState?.invoke()
-                    onServiceState?.invoke()
-                },
-            ).also {
-                ladderBot = it
-                if (it.settings.enabled) it.start()
-            }
-        }
-    }
-
-    fun peekLadder(): LadderBot? = ladderBot
-
-    /**
      * The bot that trades one clip at a time on the side four signals agree
-     * about. Created on first ask for the same reason as the ladder: the panel
-     * shows its books whether it is running or not.
+     * about. Created on first ask rather than only when switched on, so the
+     * panel shows its books whether it is running or not.
      */
     fun pulse(context: Context): PulseBot {
         pulseBot?.let { return it }
@@ -138,27 +104,6 @@ object EngineHolder {
     fun peekPulse(): PulseBot? = pulseBot
 
     /**
-     * The rule that works one side, armed by hand. Created on first ask like
-     * the others, so its books are there whether or not it is armed.
-     */
-    fun catcher(context: Context): CatchBot {
-        catchBot?.let { return it }
-        val host = get(context)
-        return synchronized(this) {
-            catchBot ?: CatchBot(
-                engine = host,
-                store = CatchStore(context),
-                onStateChanged = {
-                    onState?.invoke()
-                    onServiceState?.invoke()
-                },
-            ).also { catchBot = it }
-        }
-    }
-
-    fun peekCatcher(): CatchBot? = catchBot
-
-    /**
      * The rule that takes a gain the book is showing but the standing offer
      * will not reach. It works the desk's own positions, so it is told which
      * shares belong to the other rules and leaves those alone.
@@ -171,9 +116,7 @@ object EngineHolder {
                 engine = host,
                 store = TakeStore(context),
                 botShares = { asset ->
-                    (ladderBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0) +
-                        (pulseBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0) +
-                        (catchBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0)
+                    pulseBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0
                 },
                 onStateChanged = {
                     onState?.invoke()

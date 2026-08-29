@@ -45,8 +45,6 @@ import {
   type EventSummary,
   type LoggedOrder,
   type NativeMarket,
-  type CatchState,
-  type LadderState,
   type TakeState,
   type PulseState,
   type NativePosition,
@@ -175,12 +173,8 @@ export function Manual({
    * is actually made; the button between them then only has to say "buy".
    */
   const [side, setSide] = useState<'Up' | 'Down' | null>(null);
-  const [ladderBot, setLadderBot] = useState<LadderState | null>(null);
-  const [ladderOpen, setLadderOpen] = useState(false);
   const [pulseBot, setPulseBot] = useState<PulseState | null>(null);
   const [pulseOpen, setPulseOpen] = useState(false);
-  const [catchBot, setCatchBot] = useState<CatchState | null>(null);
-  const [catchOpen, setCatchOpen] = useState(false);
   const [takeBot, setTakeBot] = useState<TakeState | null>(null);
   const [takeOpen, setTakeOpen] = useState(false);
   /** The event strip is folded away until it is asked for. */
@@ -418,19 +412,9 @@ export function Manual({
   useEffect(() => {
     let cancelled = false;
     const read = () => {
-      void PolyBot.ladderState()
-        .then((s) => {
-          if (!cancelled) setLadderBot(s);
-        })
-        .catch(() => {});
       void PolyBot.pulseState()
         .then((s) => {
           if (!cancelled) setPulseBot(s);
-        })
-        .catch(() => {});
-      void PolyBot.catchState()
-        .then((s) => {
-          if (!cancelled) setCatchBot(s);
         })
         .catch(() => {});
       void PolyBot.takeState()
@@ -1084,27 +1068,6 @@ export function Manual({
           </button>
         )}
 
-        {catchBot && (
-          <button
-            className={`railmark${catchOpen ? ' on' : ''}`}
-            onClick={() => setCatchOpen((v) => !v)}
-            aria-label="Ловец"
-          >
-            {/* Its own mark: a price falling into a catch, lit while armed. */}
-            <svg viewBox="0 0 16 16" aria-hidden>
-              <path
-                d="M8 2v7m0 0L5 6m3 3 3-3M3 13h10"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <i className={`raildot${catchBot.armed ? ' live' : ''}`} aria-hidden />
-          </button>
-        )}
-
         {pulseBot && (
           <button
             className={`railmark${pulseOpen ? ' on' : ''}`}
@@ -1123,26 +1086,6 @@ export function Manual({
               />
             </svg>
             <i className={`raildot${pulseBot.running ? ' live' : ''}`} aria-hidden />
-          </button>
-        )}
-
-        {ladderBot && (
-          <button
-            className={`railmark${ladderOpen ? ' on' : ''}`}
-            onClick={() => setLadderOpen((v) => !v)}
-            aria-label="Бот лесенки"
-          >
-            {/* The bot's own mark: rungs, and lit while it is running. */}
-            <svg viewBox="0 0 16 16" aria-hidden>
-              <path
-                d="M3 13h10M4.5 10h7M6 7h4M7.5 4h1"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-            </svg>
-            <i className={`raildot${ladderBot.running ? ' live' : ''}`} aria-hidden />
           </button>
         )}
 
@@ -1196,31 +1139,6 @@ export function Manual({
         />
       )}
 
-      {catchOpen && catchBot && (
-        <CatchCard
-          state={catchBot}
-          onArm={(which) => {
-            void PolyBot.catchArm({ side: which })
-              .then(() => PolyBot.catchState())
-              .then(setCatchBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onBank={(usd) => {
-            if (!Number.isFinite(usd) || usd < 0) return;
-            void PolyBot.catchUpdate({ bankUsd: usd })
-              .then(() => PolyBot.catchState())
-              .then(setCatchBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onReset={() => {
-            void PolyBot.catchReset()
-              .then(() => PolyBot.catchState())
-              .then(setCatchBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-        />
-      )}
-
       {pulseOpen && pulseBot && (
         <PulseCard
           state={pulseBot}
@@ -1248,38 +1166,6 @@ export function Manual({
             void PolyBot.pulseReset()
               .then(() => PolyBot.pulseState())
               .then(setPulseBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-        />
-      )}
-
-      {ladderOpen && ladderBot && (
-        <LadderCard
-          state={ladderBot}
-          onEnable={(enabled) => {
-            void PolyBot.ladderUpdate({ enabled })
-              .then(() => PolyBot.ladderState())
-              .then(setLadderBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onBank={(usd) => {
-            if (!Number.isFinite(usd) || usd < 0) return;
-            void PolyBot.ladderUpdate({ bankUsd: usd })
-              .then(() => PolyBot.ladderState())
-              .then(setLadderBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onShares={(n) => {
-            if (!Number.isFinite(n) || n <= 0) return;
-            void PolyBot.ladderUpdate({ shares: n })
-              .then(() => PolyBot.ladderState())
-              .then(setLadderBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onReset={() => {
-            void PolyBot.ladderReset()
-              .then(() => PolyBot.ladderState())
-              .then(setLadderBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
         />
@@ -2070,27 +1956,12 @@ function EventStrip({
 }
 
 /**
- * The ladder bot's account, and the rule it follows.
- *
- * Its whole strategy is two numbers compared once a minute — what the
- * favourite costs against what the ladder will ask for it — so the card shows
- * exactly those two, next to what the comparison has been worth.
- */
-/**
  * The pulse bot's own panel.
  *
  * Four readings across the top, because the rule is a confluence and the only
  * useful thing to see is which of the four is currently disagreeing. Under
  * them the books, and under those what it is doing right now — or, more often,
  * why it is not.
- */
-/**
- * The catcher: one side, worked by hand-pressed arming.
- *
- * The two buttons are the whole control. Pressing one reads the price at that
- * moment and everything after is measured from it, which is why the card shows
- * that reference and the price being waited for right beside the live offer —
- * those three numbers are the entire state of the rule.
  */
 /**
  * The rule that takes a gain the standing offer will not reach.
@@ -2180,131 +2051,6 @@ function TakeCard({
       )}
 
       {state.lastFault && <div className="banner warn">{state.lastFault}</div>}
-    </div>
-  );
-}
-
-function CatchCard({
-  state,
-  onArm,
-  onBank,
-  onReset,
-}: {
-  state: CatchState;
-  onArm: (side: 'Up' | 'Down' | null) => void;
-  onBank: (usd: number) => void;
-  onReset: () => void;
-}) {
-  const tone = state.pnl > 0 ? 'up' : state.pnl < 0 ? 'down' : 'muted';
-
-  return (
-    <div className="card tight">
-      <div className="counterhead">
-        <span>Ловец</span>
-        {state.armed && (
-          <button className="linkbtn" onClick={() => onArm(null)}>
-            снять
-          </button>
-        )}
-      </div>
-
-      <div className="counterrule muted">
-        Ждёт, пока сторона подешевеет на 6¢ от цены нажатия, и берёт по рынку —
-        не лимиткой, чтобы взять дно движения. Дальше каждый вход на 3¢ ниже
-        прошлой покупки, по 25% свободного, но не меньше 5 долей. Продаёт первую
-        по +10% от первой покупки, каждую следующую на 2¢ выше, и от цены
-        продажи считает заново. За 30 с до конца переставляет на 96/97/98¢.
-      </div>
-
-      {/* The two buttons, and the side that is armed lit up. */}
-      <div className="catcharm">
-        {(['Up', 'Down'] as const).map((which) => (
-          <button
-            key={which}
-            className={`buy ${which === 'Up' ? 'up' : 'down'}${
-              state.side === which ? ' on' : ''
-            }`}
-            onClick={() => onArm(state.side === which ? null : which)}
-          >
-            <b>{which}</b>
-            <s>{state.side === which ? 'ловит' : 'ловить'}</s>
-          </button>
-        ))}
-      </div>
-
-      {state.armed && (
-        <div className="countergrid">
-          <div>
-            <span className="muted">от</span>
-            <b>{state.reference > 0 ? cents(state.reference) : '—'}</b>
-          </div>
-          <div>
-            <span className="muted">вход</span>
-            <b className="warn">{state.target > 0 ? cents(state.target) : '—'}</b>
-          </div>
-          <div>
-            <span className="muted">сейчас</span>
-            <b>{state.ask > 0 ? cents(state.ask) : '—'}</b>
-          </div>
-        </div>
-      )}
-
-      <div className="fields botbank">
-        <label className="field">
-          <span>контейнер, $</span>
-          <input
-            type="number"
-            step="1"
-            value={String(state.bankUsd)}
-            onChange={(e) => onBank(Number(e.target.value.replace(',', '.')))}
-          />
-        </label>
-      </div>
-
-      <div className="countergrid">
-        <div>
-          <span className="muted">свободно</span>
-          <b>{usd(state.cash)}</b>
-        </div>
-        <div>
-          <span className="muted">итог окна</span>
-          <b className={tone}>{signedUsd(state.pnl)}</b>
-        </div>
-        <div>
-          {/* The score is this window's, and starts again with the next. */}
-          <span className="muted">за окно</span>
-          <b>
-            {state.buys} · {state.sells}
-          </b>
-        </div>
-      </div>
-
-      {state.lots.length > 0 && (
-        <div className="counterlive">
-          {state.lots.map((lot, i) => (
-            <div key={i}>
-              <span className={lot.outcome === 'Up' ? 'up' : 'down'}>
-                {lot.outcome}
-              </span>{' '}
-              {lot.shares.toFixed(1)} по {cents(lot.price)}
-              {lot.sellPrice > 0 ? ` → ${cents(lot.sellPrice)}` : ''}
-              {lot.note ? ` · ${lot.note}` : ''}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!state.armed && state.lots.length === 0 && (
-        <div className="counterlive muted">{state.note ?? 'не заряжен'}</div>
-      )}
-
-      {state.lastFault && <div className="banner warn">{state.lastFault}</div>}
-
-      <div className="listhead bare">
-        <button className="linkbtn" onClick={onReset}>
-          обнулить счёт
-        </button>
-      </div>
     </div>
   );
 }
@@ -2434,114 +2180,6 @@ function PulseCard({
           обнулить счёт
         </button>
       </div>
-    </div>
-  );
-}
-
-function LadderCard({
-  state,
-  onEnable,
-  onBank,
-  onShares,
-  onReset,
-}: {
-  state: LadderState;
-  onEnable: (enabled: boolean) => void;
-  onBank: (usd: number) => void;
-  onShares: (shares: number) => void;
-  onReset: () => void;
-}) {
-  const round = state.round;
-  const tone = state.pnl > 0 ? 'up' : state.pnl < 0 ? 'down' : 'muted';
-
-  return (
-    <div className="card tight">
-      <div className="counterhead">
-        <span>Бот лесенки</span>
-        <button
-          className={`switch ${state.enabled ? 'on' : ''}`}
-          onClick={() => onEnable(!state.enabled)}
-        />
-      </div>
-
-      <div className="counterrule muted">
-        За 15 с до конца каждой минуты смотрит сторону, которая дороже. Если её
-        можно купить дешевле, чем ступень лесенки на этой минуте, берёт{' '}
-        {state.shares.toFixed(0)} долей и сразу ставит продажу на эту же ступень.
-      </div>
-
-      <div className="fields botbank">
-        <label className="field">
-          <span>контейнер, $</span>
-          <input
-            type="number"
-            step="1"
-            value={String(state.bankUsd)}
-            onChange={(e) => onBank(Number(e.target.value.replace(',', '.')))}
-          />
-        </label>
-        <label className="field">
-          <span>долей за раз</span>
-          <input
-            type="number"
-            step="1"
-            value={String(state.shares)}
-            onChange={(e) => onShares(Number(e.target.value.replace(',', '.')))}
-          />
-        </label>
-      </div>
-
-      <div className="countergrid">
-        <div>
-          <span className="muted">свободно</span>
-          <b>{usd(state.cash)}</b>
-        </div>
-        <div>
-          <span className="muted">итог</span>
-          <b className={tone}>{signedUsd(state.pnl)}</b>
-        </div>
-        <div>
-          <span className="muted">окон · сделок</span>
-          <b>
-            {state.rounds} · {state.buys}/{state.sells}
-          </b>
-        </div>
-      </div>
-
-      {round && (
-        <div className="counterlive muted">
-          {round.side ? `${round.side} по ` : 'сторона не выбрана'}
-          {round.ask != null ? cents(round.ask) : '—'}
-          {round.rung > 0 ? ` · ступень ${cents(round.rung)}` : ''}
-          {round.note ? ` · ${round.note}` : ''}
-        </div>
-      )}
-
-      {round && round.lots.length > 0 &&
-        round.lots.map((l, i) => (
-          <div className="listrow static" key={i}>
-            <span className={l.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
-              {l.outcome}
-            </span>
-            <span className="listrow-main">
-              {l.shares.toFixed(1)} × {cents(l.price)}
-              <span className="sub muted">
-                {usd(l.shares * l.price)}
-                {l.sellPrice > 0 ? ` · продажа ${cents(l.sellPrice)}` : ''}
-                {l.note ? ` · ${l.note}` : ''}
-              </span>
-            </span>
-            <span className="listrow-pnl muted">
-              {l.sold > 0 ? usd(l.proceeds) : '—'}
-            </span>
-          </div>
-        ))}
-
-      {state.lastFault && <div className="counterlive warn">{state.lastFault}</div>}
-
-      <button className="ghost compact counterreset" onClick={onReset}>
-        обнулить счёт бота
-      </button>
     </div>
   );
 }

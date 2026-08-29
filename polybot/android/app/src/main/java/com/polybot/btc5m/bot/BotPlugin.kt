@@ -46,11 +46,7 @@ class BotPlugin : Plugin() {
     private val autoSell: AutoSell get() = EngineHolder.autoSell(context)
 
     /** The bot that buys the favourite while it is under its own exit. */
-    private val ladderBot: LadderBot get() = EngineHolder.ladder(context)
-
     private val pulseBot: PulseBot get() = EngineHolder.pulse(context)
-
-    private val catchBot: CatchBot get() = EngineHolder.catcher(context)
 
     private val takeBot: TakeBot get() = EngineHolder.taker(context)
 
@@ -1156,80 +1152,7 @@ class BotPlugin : Plugin() {
         }.start()
     }
 
-    // ------------------------------------------------------------ ladder bot
-
-    @PluginMethod
-    fun ladderUpdate(call: PluginCall) {
-        val d = ladderBot.settings
-        ladderBot.update(
-            LadderPlan.Settings(
-                enabled = call.getBoolean("enabled") ?: d.enabled,
-                bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
-                shares = call.getDouble("shares") ?: d.shares,
-                everySec = call.getInt("everySec")?.toLong() ?: d.everySec,
-                firstAtSec = call.getInt("firstAtSec")?.toLong() ?: d.firstAtSec,
-                untilSec = call.getInt("untilSec")?.toLong() ?: d.untilSec,
-            ),
-        )
-        call.resolve()
-    }
-
-    @PluginMethod
-    fun ladderReset(call: PluginCall) {
-        ladderBot.resetBank()
-        call.resolve()
-    }
-
-    @PluginMethod
-    fun ladderState(call: PluginCall) {
-        val bot = ladderBot
-        val t = bot.totals
-        val round = bot.round
-
-        val lots = JSArray()
-        round?.lots?.forEach {
-            lots.put(
-                JSObject()
-                    .put("outcome", it.outcome)
-                    .put("shares", it.shares)
-                    .put("price", it.price)
-                    .put("sellPrice", it.sellPrice)
-                    .put("sold", it.sold)
-                    .put("proceeds", it.proceeds)
-                    .put("note", it.note),
-            )
-        }
-
-        call.resolve(
-            JSObject()
-                .put("enabled", bot.settings.enabled)
-                .put("running", bot.running)
-                .put("bankUsd", bot.settings.bankUsd)
-                .put("shares", bot.settings.shares)
-                .put("everySec", bot.settings.everySec)
-                .put("firstAtSec", bot.settings.firstAtSec)
-                .put("untilSec", bot.settings.untilSec)
-                .put("cash", bot.cash)
-                .put("lastFault", bot.lastFault)
-                .put("rounds", t.rounds)
-                .put("buys", t.buys)
-                .put("sells", t.sells)
-                .put("spent", t.spent)
-                .put("got", t.got)
-                .put("settled", t.settled)
-                .put("pnl", t.pnl)
-                .put("round", round?.let {
-                    JSObject()
-                        .put("windowStart", it.windowStart)
-                        .put("side", it.lastSide)
-                        .put("ask", it.lastAsk)
-                        .put("rung", it.lastRung)
-                        .put("step", it.step)
-                        .put("note", it.note)
-                        .put("lots", lots)
-                }),
-        )
-    }
+    // -------------------------------------------------------------- the bots
 
     @PluginMethod
     fun pulseUpdate(call: PluginCall) {
@@ -1302,91 +1225,6 @@ class BotPlugin : Plugin() {
                         .put("sellPrice", it.sellPrice)
                         .put("note", it.note)
                 }),
-        )
-    }
-
-    /**
-     * Arm the catcher on a side, or take it off.
-     *
-     * Arming reads the price at that moment — the whole rule is measured from
-     * it — so this is a button, not a setting.
-     */
-    @PluginMethod
-    fun catchArm(call: PluginCall) {
-        val side = call.getString("side")
-        Thread {
-            if (side == null) {
-                catchBot.disarm()
-            } else if (side == "Up" || side == "Down") {
-                if (!engine.isConfigured()) {
-                    call.reject("Сначала подключите кошелёк")
-                    return@Thread
-                }
-                catchBot.arm(side)
-                BotService.startAutoSell(context)
-            }
-            call.resolve()
-        }.start()
-    }
-
-    @PluginMethod
-    fun catchUpdate(call: PluginCall) {
-        val d = catchBot.settings
-        catchBot.update(
-            d.copy(
-                bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
-                drop = call.getDouble("drop") ?: d.drop,
-                step = call.getDouble("step") ?: d.step,
-                gain = call.getDouble("gain") ?: d.gain,
-                spread = call.getDouble("spread") ?: d.spread,
-                share = call.getDouble("share") ?: d.share,
-                minShares = call.getDouble("minShares") ?: d.minShares,
-            ),
-        )
-        call.resolve()
-    }
-
-    @PluginMethod
-    fun catchReset(call: PluginCall) {
-        catchBot.resetBank()
-        call.resolve()
-    }
-
-    @PluginMethod
-    fun catchState(call: PluginCall) {
-        val bot = catchBot
-        val t = bot.totals
-        val lots = JSArray()
-        bot.lots.forEach {
-            lots.put(
-                JSObject()
-                    .put("outcome", it.outcome)
-                    .put("shares", it.open)
-                    .put("price", it.price)
-                    .put("sellPrice", it.sellPrice)
-                    .put("note", it.note),
-            )
-        }
-        call.resolve(
-            JSObject()
-                .put("armed", bot.side != null)
-                .put("window", bot.scoredWindow)
-                .put("side", bot.side)
-                .put("running", bot.running)
-                .put("bankUsd", bot.settings.bankUsd)
-                .put("cash", bot.cash)
-                .put("reference", bot.reference)
-                .put("target", bot.target)
-                .put("ask", bot.ask)
-                .put("note", bot.note)
-                .put("lastFault", bot.lastFault)
-                .put("buys", t.buys)
-                .put("sells", t.sells)
-                .put("spent", t.spent)
-                .put("got", t.got)
-                .put("settled", t.settled)
-                .put("pnl", t.pnl)
-                .put("lots", lots),
         )
     }
 

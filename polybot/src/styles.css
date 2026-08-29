@@ -3028,157 +3028,6 @@ button.wide {
   font-weight: 500;
 }
 
-/* The catcher's two buttons: pick a side and it starts watching it. */
-.catcharm {
-  display: flex;
-  gap: 8px;
-  margin: 8px 0;
-}
-
-.catcharm button {
-  flex: 1;
-  border-radius: 12px;
-  padding: 10px 8px;
-  border: 1px solid;
-  font-family: inherit;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: center;
-}
-
-.catcharm button b {
-  font-size: 17px;
-  font-weight: 700;
-}
-
-.catcharm button s {
-  font-size: 11px;
-  text-decoration: none;
-  opacity: 0.8;
-}
-
-.catcharm button.up {
-  background: rgba(35, 192, 123, 0.12);
-  border-color: rgba(35, 192, 123, 0.45);
-  color: var(--up);
-}
-
-.catcharm button.down {
-  background: rgba(255, 90, 106, 0.12);
-  border-color: rgba(255, 90, 106, 0.45);
-  color: var(--down);
-}
-
-.catcharm button.on {
-  border-width: 2px;
-}
-
-.catcharm button.up.on {
-  background: rgba(35, 192, 123, 0.28);
-  border-color: var(--up);
-}
-
-.catcharm button.down.on {
-  background: rgba(255, 90, 106, 0.26);
-  border-color: var(--down);
-}
-
-.counterlive > div + div {
-  margin-top: 2px;
-}
-
-/* What the total is made of: the venue's collateral, and what is off it. */
-.balparts {
-  display: flex;
-  gap: 8px;
-  margin: 2px 0 10px;
-}
-
-.balparts > div {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  padding: 7px 4px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-2);
-}
-
-.balparts span {
-  font-size: 10px;
-}
-
-.balparts b {
-  font-size: 14px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.field.balsavings input {
-  font-size: 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-/* Everything the run is worth, beside what of it can be traded. */
-.railbal .railall {
-  font-style: normal;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  margin-left: 6px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Taking money off the venue: the state, the amount, and the one button. */
-.withdraw {
-  margin: 4px 0 12px;
-}
-
-.withdraw-state {
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  padding: 0 2px 6px;
-}
-
-.withdraw-row {
-  display: flex;
-  gap: 8px;
-}
-
-.withdraw-row input {
-  flex: 0 0 88px;
-  min-width: 0;
-  padding: 11px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 15px;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
-.withdraw-row .primary {
-  flex: 1;
-}
-
-.withdraw-note {
-  font-size: 10px;
-  line-height: 1.35;
-  padding: 6px 2px 0;
-}
-
-.withdraw-hash {
-  font-size: 11px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  margin-top: 8px;
-}
-
 /* An address you can copy, which is the only kind worth showing. */
 .addrline {
   display: block;
@@ -3229,4 +3078,78 @@ button.wide {
 
 .withdraw-blocked b {
   color: var(--text);
+}
+
+/*
+  The fitted direction of the last half hour, and the level it is heading into.
+
+  The line is thick and quiet: it is the shape of the move, not another price.
+  The level ahead is the one drawn solid — the other two stay dashed, because
+  the point of finding three is to say which one matters now.
+*/
+.trendline {
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  opacity: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+.trendline.up {
+  stroke: var(--up);
+}
+
+.trendline.down {
+  stroke: var(--down);
+}
+
+.trendline.flat {
+  stroke: var(--muted);
+  opacity: 0.4;
+}
+
+.slevel.ahead {
+  stroke-dasharray: none;
+  stroke-width: 1.6;
+}
+
+.slevel.resistance.ahead {
+  stroke: rgba(255, 90, 106, 0.9);
+}
+
+.slevel.support.ahead {
+  stroke: rgba(35, 192, 123, 0.9);
+}
+
+.slevel-tag.ahead {
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.slevel-tag.resistance.ahead {
+  fill: var(--down);
+}
+
+.slevel-tag.support.ahead {
+  fill: var(--up);
+}
+
+/* The rate, at the end of the foot: which way and how fast. */
+.candles-foot .trendrate {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.candles-foot .trendrate.up {
+  color: var(--up);
+}
+
+.candles-foot .trendrate.down {
+  color: var(--down);
+}
+
+.candles-foot .trendrate.flat {
+  color: var(--muted);
 }
