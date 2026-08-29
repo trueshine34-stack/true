@@ -95,6 +95,12 @@ public class GhostStrings {
         put("CopyText", "Copy text", "Скопировать текст");
         put("Copied", "Copied", "Скопировано");
         put("MessageHistory", "Message history", "История сообщения");
+
+        put("ApiIdRejected",
+                "Telegram refused the sign-in because of the api_id this build was compiled with. "
+                        + "Register your own at my.telegram.org (API development tools) and rebuild with it.",
+                "Telegram отклонил вход из-за api_id, с которым собрано это приложение. "
+                        + "Заведи свой на my.telegram.org (API development tools) и пересобери с ним.");
     }
 
     private static boolean isRussian() {

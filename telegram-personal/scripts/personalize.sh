@@ -14,7 +14,11 @@
 # icons are distinguishable on the launcher, and restricts packaging to the one ABI that actually
 # carries the native library.
 #
-# Usage: personalize.sh <path-to-Telegram-checkout> [application-id] [app-name] [abi]
+# Set TG_API_ID and TG_API_HASH to your own credentials from my.telegram.org before building.
+# Without them the build keeps Telegram's public api_id 4, which their servers refuse to sign in
+# with from a third-party build - the number screen simply never advances.
+#
+# Usage: TG_API_ID=... TG_API_HASH=... personalize.sh <checkout> [application-id] [app-name] [abi]
 
 set -euo pipefail
 
@@ -22,6 +26,8 @@ SRC="${1:?usage: personalize.sh <telegram-checkout> [application-id] [app-name] 
 APP_ID="${2:-io.personal.tgclient}"
 APP_NAME="${3:-Telegram Personal}"
 ABI="${4:-arm64-v8a}"
+TG_API_ID="${TG_API_ID:-}"
+TG_API_HASH="${TG_API_HASH:-}"
 
 STANDALONE="$SRC/TMessagesProj_AppStandalone"
 KEYSTORE="$SRC/TMessagesProj/config/release.keystore"
@@ -69,6 +75,16 @@ sed -i "s|abiFilters \"armeabi-v7a\", \"arm64-v8a\", \"x86\", \"x86_64\"|abiFilt
 echo "==> enabling 16 KB page size support"
 sed -i "s|'-DANDROID_PLATFORM=android-21' //, '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'|'-DANDROID_PLATFORM=android-21', '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'|" \
     "$SRC/TMessagesProj/build.gradle"
+
+if [ -n "$TG_API_ID" ] && [ -n "$TG_API_HASH" ]; then
+    echo "==> using api_id $TG_API_ID"
+    BUILDVARS="$SRC/TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java"
+    sed -i "s|public static int APP_ID = .*;|public static int APP_ID = $TG_API_ID;|" "$BUILDVARS"
+    sed -i "s|public static String APP_HASH = \".*\";|public static String APP_HASH = \"$TG_API_HASH\";|" "$BUILDVARS"
+else
+    echo "!! TG_API_ID / TG_API_HASH not set - keeping Telegram's public api_id 4."
+    echo "!! Sign-in will be refused with API_ID_PUBLISHED_FLOOD. Get your own at my.telegram.org."
+fi
 
 echo "==> generating a private signing key"
 rm -f "$KEYSTORE"

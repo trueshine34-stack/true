@@ -261,6 +261,31 @@ PRIVACY_SETTINGS = [
 ]
 
 
+# --------------------------------------------------------------------------- LoginActivity
+
+# Upstream has no branch for API_ID_PUBLISHED_FLOOD, and its catch-all for unrecognised errors is
+# attached to auth.resendCode rather than auth.sendCode. So when the server rejects the very first
+# sign-in request the spinner just stops and the screen says nothing at all. Surface it.
+LOGIN_ACTIVITY = [(
+    "show why sign-in was refused",
+    "                        } else if (error.code != -1000) {\n"
+    "                            AlertsCreator.processError(currentAccount, error, LoginActivity.this, req, phoneInputData.phoneNumber);\n"
+    "                        }\n",
+    "                        } else if (error.text.contains(\"API_ID_PUBLISHED_FLOOD\") || error.text.contains(\"API_ID_INVALID\")) {\n"
+    "                            needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), GhostStrings.get(\"ApiIdRejected\") + \"\\n\\n\" + error.text);\n"
+    "                        } else if (error.code != -1000) {\n"
+    "                            if (AlertsCreator.processError(currentAccount, error, LoginActivity.this, req, phoneInputData.phoneNumber) == null) {\n"
+    "                                needShowAlert(getString(R.string.RestorePasswordNoEmailTitle), error.text);\n"
+    "                            }\n"
+    "                        }\n",
+), (
+    "import",
+    "import org.telegram.messenger.ContactsController;\n",
+    "import org.telegram.messenger.ContactsController;\n"
+    "import org.telegram.messenger.ghost.GhostStrings;\n",
+)]
+
+
 def copy_sources(repo_root, target_root):
     src_root = os.path.join(repo_root, "src")
     copied = 0
@@ -299,6 +324,8 @@ def main():
                    MESSAGES_STORAGE, MARKER)
         patch_file(target, "org/telegram/ui/PrivacySettingsActivity.java",
                    PRIVACY_SETTINGS, MARKER)
+        patch_file(target, "org/telegram/ui/LoginActivity.java",
+                   LOGIN_ACTIVITY, MARKER)
     except PatchError as error:
         print("error: %s" % error)
         return 1
