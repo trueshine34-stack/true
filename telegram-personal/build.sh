@@ -12,7 +12,8 @@
 #   ANDROID_HOME   Android SDK location (required unless ANDROID_SDK_ROOT is set)
 #   WORK_DIR       where the Telegram checkout goes            (default: ./.work)
 #   TG_REF         upstream commit, tag or branch to build     (default: pinned below)
-#   ABI            native ABI to build                         (default: arm64-v8a, "all" for every ABI)
+#   ABI            native ABI to build                         (default: all; e.g. arm64-v8a for a
+#                  smaller, faster build that only runs on 64-bit ARM phones)
 #   VARIANT        Gradle variant                              (default: Debug)
 
 set -euo pipefail
@@ -23,7 +24,7 @@ DEFAULT_TG_REF="62b56a07ca7e30e39f7fd00a6728d6bbd716ca1c"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK_DIR="${WORK_DIR:-$HERE/.work}"
 TG_REF="${TG_REF:-$DEFAULT_TG_REF}"
-ABI="${ABI:-arm64-v8a}"
+ABI="${ABI:-all}"
 VARIANT="${VARIANT:-Debug}"
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 
@@ -72,4 +73,7 @@ echo "==> building ${GRADLE_ARGS[*]}"
 
 echo
 echo "==> APK:"
-find "$SRC/TMessagesProj_AppStandalone/build/outputs/apk" -name "*.apk" -print
+# A single-ABI build lands in intermediates rather than outputs, so look in both.
+find "$SRC/TMessagesProj_AppStandalone/build/outputs/apk" \
+     "$SRC/TMessagesProj_AppStandalone/build/intermediates/apk" \
+     -name "*.apk" -print 2>/dev/null
