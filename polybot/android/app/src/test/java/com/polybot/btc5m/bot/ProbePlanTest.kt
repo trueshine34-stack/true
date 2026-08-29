@@ -76,4 +76,60 @@ class ProbePlanTest {
         assertEquals(0.99, ProbePlan.crossPrice(0.99, 0.01), 1e-9)
         assertEquals(0.999, ProbePlan.crossPrice(0.999, 0.001), 1e-9)
     }
+
+    @Test
+    fun `stands aside when the reversal is one window away`() {
+        // A typical window travels sixty dollars, so the rule wants
+        // thirty-six of room. Twenty is not enough: this window arrives at the
+        // level with time to spare, and the direction is nearly spent.
+        assertTrue(ProbePlan.tooClose(price = 100_000.0, level = 100_020.0, typical = 60.0))
+        // A hundred away, and the window would have to do more than usual.
+        assertTrue(!ProbePlan.tooClose(price = 100_000.0, level = 100_100.0, typical = 60.0))
+    }
+
+    @Test
+    fun `measures the room the same either side of the price`() {
+        assertTrue(ProbePlan.tooClose(price = 100_000.0, level = 99_980.0, typical = 60.0))
+    }
+
+    @Test
+    fun `has no opinion without a level or a scale`() {
+        assertTrue(!ProbePlan.tooClose(100_000.0, null, 60.0))
+        assertTrue(!ProbePlan.tooClose(100_000.0, 100_010.0, 0.0))
+        assertTrue(!ProbePlan.tooClose(0.0, 100_010.0, 60.0))
+    }
+
+    @Test
+    fun `a zero share switches the check off`() {
+        assertTrue(!ProbePlan.tooClose(100_000.0, 100_001.0, 60.0, share = 0.0))
+    }
+
+    @Test
+    fun `says which price it is standing aside from`() {
+        val why = ProbePlan.blockedBecause(
+            way = "Up",
+            ask = 0.5,
+            cashUsd = 100.0,
+            settings = on,
+            price = 100_000.0,
+            level = 100_020.0,
+            typical = 60.0,
+        )
+        assertEquals("у разворота 100020", why)
+    }
+
+    @Test
+    fun `room in front of the line is not in the way`() {
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.5,
+                cashUsd = 100.0,
+                settings = on,
+                price = 100_000.0,
+                level = 100_400.0,
+                typical = 60.0,
+            ),
+        )
+    }
 }

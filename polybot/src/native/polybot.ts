@@ -256,6 +256,7 @@ export interface PolyBotPlugin {
     enabled?: boolean;
     stakeUsd?: number;
     leadSec?: number;
+    roomShare?: number;
   }): Promise<void>;
   probeReset(): Promise<void>;
   probeState(): Promise<ProbeState>;
@@ -464,6 +465,15 @@ export type ProbeState = {
   running: boolean;
   stakeUsd: number;
   leadSec: number;
+  /**
+   * How much room the trend needs in front of it before its direction is
+   * worth paying for, as a share of what a window usually travels. Zero
+   * switches the check off.
+   */
+  roomShare: number;
+  /** The price the reversal is expected at, and how far off it is. */
+  levelAhead?: number | null;
+  roomToLevel?: number | null;
   note?: string | null;
   lastFault?: string | null;
   trend?: { way: string; perHour: number; fit: number } | null;
@@ -610,6 +620,7 @@ const webStub: PolyBotPlugin = {
     running: false,
     stakeUsd: 5,
     leadSec: 10,
+    roomShare: 0.6,
     rounds: [],
     riding: [],
   }),

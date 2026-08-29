@@ -3259,3 +3259,10 @@ button.wide {
 .pairmarkmove.muted {
   color: var(--muted);
 }
+
+/* The probe's three dials: what it stakes, how early, and how much room. */
+.probefields {
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+  margin-top: 8px;
+}

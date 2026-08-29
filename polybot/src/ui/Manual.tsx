@@ -1227,6 +1227,13 @@ export function Manual({
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
+          onRoom={(share) => {
+            if (!Number.isFinite(share) || share < 0) return;
+            void PolyBot.probeUpdate({ roomShare: share })
+              .then(() => PolyBot.probeState())
+              .then(setProbeBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
           onReset={() => {
             void PolyBot.probeReset()
               .then(() => PolyBot.probeState())
@@ -2135,18 +2142,23 @@ function ProbeCard({
   onEnable,
   onStake,
   onLead,
+  onRoom,
   onReset,
 }: {
   state: ProbeState;
   onEnable: (enabled: boolean) => void;
   onStake: (usd: number) => void;
   onLead: (sec: number) => void;
+  onRoom: (share: number) => void;
   onReset: () => void;
 }) {
   const all = summarise(state.rounds);
   const sides = bySide(state.rounds);
   const line = state.trend;
   const way = line?.way ?? '';
+  // Whether the rule is currently standing aside for the level, said in the
+  // same words it says it in: the note it publishes starts with "у разворота".
+  const near = (state.note ?? '').startsWith('у разворота');
   const tone = all.pnl > 0 ? 'up' : all.pnl < 0 ? 'down' : 'muted';
 
   return (
@@ -2162,8 +2174,10 @@ function ProbeCard({
       <div className="counterrule muted">
         За {state.leadSec} с до начала пятиминутки берёт {usd(state.stakeUsd)}{' '}
         той стороны, куда показывает линия тренда на 5-минутном графике, и
-        выходит обычной лесенкой продаж. Больше ничего не делает — это проверка
-        самой линии, а не стратегия. Всё, что она наторгует, ниже по окнам.
+        выходит обычной лесенкой продаж. Не входит, если до уровня, от которого
+        ждём разворот, осталось меньше{' '}
+        {Math.round(state.roomShare * 100)}% обычного хода пятиминутки — тренд,
+        упирающийся в стену, кончается на ней. Всё, что наторгует, ниже по окнам.
       </div>
 
       <div className="probeline">
@@ -2180,7 +2194,18 @@ function ProbeCard({
         )}
       </div>
 
-      <div className="fields botbank">
+      <div className="probeline">
+        <span className="muted">разворот у</span>
+        <b>{bigPrice(state.levelAhead)}</b>
+        {state.roomToLevel != null && (
+          <span className={near ? 'down' : 'muted'}>
+            запас {bigPrice(state.roomToLevel)}
+            {near ? ' — близко' : ''}
+          </span>
+        )}
+      </div>
+
+      <div className="fields probefields">
         <label className="field">
           <span>ставка, $</span>
           <input
@@ -2197,6 +2222,17 @@ function ProbeCard({
             step="1"
             value={String(state.leadSec)}
             onChange={(e) => onLead(Number(e.target.value.replace(',', '.')))}
+          />
+        </label>
+        <label className="field">
+          <span>запас до уровня, %</span>
+          <input
+            type="number"
+            step="10"
+            value={String(Math.round(state.roomShare * 100))}
+            onChange={(e) =>
+              onRoom(Number(e.target.value.replace(',', '.')) / 100)
+            }
           />
         </label>
       </div>

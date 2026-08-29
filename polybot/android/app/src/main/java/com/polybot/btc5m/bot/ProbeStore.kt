@@ -24,6 +24,7 @@ class ProbeStore(context: Context) {
         enabled = prefs.getBoolean("enabled", false),
         stakeUsd = prefs.getFloat("stakeUsd", ProbePlan.DEFAULT_STAKE.toFloat()).toDouble(),
         leadSec = prefs.getLong("leadSec", ProbePlan.DEFAULT_LEAD_SEC),
+        roomShare = prefs.getFloat("roomShare", ProbePlan.DEFAULT_ROOM.toFloat()).toDouble(),
     )
 
     fun saveSettings(s: ProbePlan.Settings) {
@@ -31,6 +32,7 @@ class ProbeStore(context: Context) {
             .putBoolean("enabled", s.enabled)
             .putFloat("stakeUsd", s.stakeUsd.toFloat())
             .putLong("leadSec", s.leadSec)
+            .putFloat("roomShare", s.roomShare.toFloat())
             .apply()
     }
 

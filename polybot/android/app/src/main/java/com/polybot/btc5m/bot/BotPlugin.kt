@@ -1448,6 +1448,7 @@ class BotPlugin : Plugin() {
                 enabled = call.getBoolean("enabled") ?: d.enabled,
                 stakeUsd = call.getDouble("stakeUsd") ?: d.stakeUsd,
                 leadSec = call.getInt("leadSec")?.toLong() ?: d.leadSec,
+                roomShare = call.getDouble("roomShare") ?: d.roomShare,
             ),
         )
         // The entry lands ten seconds before a window opens, which is usually
@@ -1496,6 +1497,9 @@ class BotPlugin : Plugin() {
                 .put("running", bot.running)
                 .put("stakeUsd", bot.settings.stakeUsd)
                 .put("leadSec", bot.settings.leadSec)
+                .put("roomShare", bot.settings.roomShare)
+                .put("levelAhead", bot.levelAhead)
+                .put("roomToLevel", bot.roomToLevel)
                 .put("note", bot.note)
                 .put("lastFault", bot.lastFault)
                 .put("trend", bot.trend?.let {

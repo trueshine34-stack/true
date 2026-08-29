@@ -80,6 +80,15 @@ class ProbeBot(
     var trend: TrendFit.Trend? = null
         private set
 
+    /** Where the reversal is expected, and how much room is left to it. */
+    @Volatile
+    var levelAhead: Double? = null
+        private set
+
+    @Volatile
+    var roomToLevel: Double? = null
+        private set
+
     /** Why nothing is being bought right now, in the person's words. */
     @Volatile
     var note: String? = null
@@ -182,6 +191,7 @@ class ProbeBot(
         val target = nowSec - elapsed + WINDOW_SEC
 
         trend = TrendFit.onScreen()
+        readLevel()
 
         if (!settings.enabled) {
             note = "выключен"
@@ -237,7 +247,16 @@ class ProbeBot(
 
         // The balance is a request, so it is only asked for once everything
         // free has already agreed.
-        val cheap = ProbePlan.blockedBecause(way, ask, settings.stakeUsd, settings)
+        val here = BinanceCandles.fiveMinute.list().lastOrNull()?.close ?: 0.0
+        val cheap = ProbePlan.blockedBecause(
+            way = way,
+            ask = ask,
+            cashUsd = settings.stakeUsd,
+            settings = settings,
+            price = here,
+            level = levelAhead,
+            typical = Levels.typicalRange(BinanceCandles.fiveMinute.list()),
+        )
         if (cheap != null) {
             note = cheap
             return
@@ -249,7 +268,15 @@ class ProbeBot(
             note = e.message ?: "не прочитать баланс"
             return
         }
-        val blocked = ProbePlan.blockedBecause(way, ask, cash, settings)
+        val blocked = ProbePlan.blockedBecause(
+            way = way,
+            ask = ask,
+            cashUsd = cash,
+            settings = settings,
+            price = here,
+            level = levelAhead,
+            typical = Levels.typicalRange(BinanceCandles.fiveMinute.list()),
+        )
         if (blocked != null) {
             note = blocked
             return
@@ -312,6 +339,28 @@ class ProbeBot(
                 (if ((line?.perHour ?: 0.0) >= 0) "+" else "−") + "$" +
                 String.format("%.0f", abs(line?.perHour ?: 0.0)) + "/ч",
         )
+    }
+
+    /**
+     * The level the line is heading into, off the same five-minute candles the
+     * chart draws.
+     *
+     * Read every tick rather than only at the entry, so the card can say what
+     * the rule will do before it does it — and so a window that is standing
+     * aside says which price it is standing aside from.
+     */
+    private fun readLevel() {
+        val candles = BinanceCandles.fiveMinute.list()
+        val here = candles.lastOrNull()?.close ?: 0.0
+        val way = trend?.way.orEmpty()
+        if (here <= 0.0 || way.isEmpty()) {
+            levelAhead = null
+            roomToLevel = null
+            return
+        }
+        val level = Levels.ahead(Levels.find(candles, here), here, way)
+        levelAhead = level
+        roomToLevel = level?.let { abs(it - here) }
     }
 
     /** Scores every ridden round whose window has closed and settled. */
