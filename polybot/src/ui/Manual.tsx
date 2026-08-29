@@ -16,6 +16,8 @@ import {
   LIMIT_LADDER_COUNT,
   orderCost,
   sellableShares,
+  bigPrice,
+  openMark,
   stakeShares,
   minShares,
   type Exposure,
@@ -32,6 +34,7 @@ import {
   targetPrice,
   usd,
 } from '../core/money';
+import { bySide, pnlOf, summarise } from '../core/probe';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
 import { Fold } from './Fold';
 import { CandlePanel } from './CandlePanel';
@@ -47,6 +50,8 @@ import {
   type NativeMarket,
   type TakeState,
   type PulseState,
+  type ProbeState,
+  type ProbeRound,
   type NativePosition,
   type OpenOrder,
 } from '../native/polybot';
@@ -177,6 +182,8 @@ export function Manual({
   const [pulseOpen, setPulseOpen] = useState(false);
   const [takeBot, setTakeBot] = useState<TakeState | null>(null);
   const [takeOpen, setTakeOpen] = useState(false);
+  const [probeBot, setProbeBot] = useState<ProbeState | null>(null);
+  const [probeOpen, setProbeOpen] = useState(false);
   /** The event strip is folded away until it is asked for. */
   const [sessionOpen, setSessionOpen] = useState(false);
   /** A resting order opened for editing. */
@@ -420,6 +427,11 @@ export function Manual({
       void PolyBot.takeState()
         .then((s) => {
           if (!cancelled) setTakeBot(s);
+        })
+        .catch(() => {});
+      void PolyBot.probeState()
+        .then((s) => {
+          if (!cancelled) setProbeBot(s);
         })
         .catch(() => {});
     };
@@ -1089,6 +1101,27 @@ export function Manual({
           </button>
         )}
 
+        {probeBot && (
+          <button
+            className={`railmark${probeOpen ? ' on' : ''}`}
+            onClick={() => setProbeOpen((v) => !v)}
+            aria-label="Проба"
+          >
+            {/* Its own mark: a flask, because this one is an experiment. */}
+            <svg viewBox="0 0 16 16" aria-hidden>
+              <path
+                d="M6.5 1.5v4L2.5 12a1.6 1.6 0 001.4 2.5h8.2A1.6 1.6 0 0013.5 12l-4-6.5v-4M5.5 1.5h5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <i className={`raildot${probeBot.running ? ' live' : ''}`} aria-hidden />
+          </button>
+        )}
+
         <div className="deskbtns">
           <button
             className={`gear${lookAhead ? ' on' : ''}`}
@@ -1171,6 +1204,38 @@ export function Manual({
         />
       )}
 
+      {probeOpen && probeBot && (
+        <ProbeCard
+          state={probeBot}
+          onEnable={(enabled) => {
+            void PolyBot.probeUpdate({ enabled })
+              .then(() => PolyBot.probeState())
+              .then(setProbeBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onStake={(usdAmount) => {
+            if (!Number.isFinite(usdAmount) || usdAmount <= 0) return;
+            void PolyBot.probeUpdate({ stakeUsd: usdAmount })
+              .then(() => PolyBot.probeState())
+              .then(setProbeBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onLead={(sec) => {
+            if (!Number.isFinite(sec) || sec <= 0) return;
+            void PolyBot.probeUpdate({ leadSec: Math.round(sec) })
+              .then(() => PolyBot.probeState())
+              .then(setProbeBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onReset={() => {
+            void PolyBot.probeReset()
+              .then(() => PolyBot.probeState())
+              .then(setProbeBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+        />
+      )}
+
       {tab !== 'settings' && (
           <div className="card tight">
             {viewWindow != null && (
@@ -1195,6 +1260,7 @@ export function Manual({
                 }}
                 localAvg={localAvg}
                 secondsLeft={secondsLeft}
+                windowStart={windowStart}
                 lookAhead={lookAhead}
                 onSell={sellPosition}
               />
@@ -2055,6 +2121,226 @@ function TakeCard({
   );
 }
 
+/**
+ * The test bot's report.
+ *
+ * The bot is one sentence long, so the panel is mostly the record: what it
+ * did, and then what that came to. The two halves of the answer are kept
+ * apart on purpose — how often the line called the direction right, and how
+ * much money following it made — because a run can be right most windows and
+ * still lose, and a report that averaged the two would hide exactly that.
+ */
+function ProbeCard({
+  state,
+  onEnable,
+  onStake,
+  onLead,
+  onReset,
+}: {
+  state: ProbeState;
+  onEnable: (enabled: boolean) => void;
+  onStake: (usd: number) => void;
+  onLead: (sec: number) => void;
+  onReset: () => void;
+}) {
+  const all = summarise(state.rounds);
+  const sides = bySide(state.rounds);
+  const line = state.trend;
+  const way = line?.way ?? '';
+  const tone = all.pnl > 0 ? 'up' : all.pnl < 0 ? 'down' : 'muted';
+
+  return (
+    <div className="card tight">
+      <div className="counterhead">
+        <span>Проба</span>
+        <button
+          className={`switch ${state.enabled ? 'on' : ''}`}
+          onClick={() => onEnable(!state.enabled)}
+        />
+      </div>
+
+      <div className="counterrule muted">
+        За {state.leadSec} с до начала пятиминутки берёт {usd(state.stakeUsd)}{' '}
+        той стороны, куда показывает линия тренда на 5-минутном графике, и
+        выходит обычной лесенкой продаж. Больше ничего не делает — это проверка
+        самой линии, а не стратегия. Всё, что она наторгует, ниже по окнам.
+      </div>
+
+      <div className="probeline">
+        <span className="muted">линия 5м</span>
+        <b className={way === 'Up' ? 'up' : way === 'Down' ? 'down' : 'muted'}>
+          {way === 'Up' ? '↑ вверх' : way === 'Down' ? '↓ вниз' : '— вбок'}
+        </b>
+        {line && (
+          <span className="muted">
+            {line.perHour >= 0 ? '+' : '−'}
+            {usd(Math.abs(line.perHour))}/ч · совпадение{' '}
+            {Math.round(line.fit * 100)}%
+          </span>
+        )}
+      </div>
+
+      <div className="fields botbank">
+        <label className="field">
+          <span>ставка, $</span>
+          <input
+            type="number"
+            step="1"
+            value={String(state.stakeUsd)}
+            onChange={(e) => onStake(Number(e.target.value.replace(',', '.')))}
+          />
+        </label>
+        <label className="field">
+          <span>за сколько, с</span>
+          <input
+            type="number"
+            step="1"
+            value={String(state.leadSec)}
+            onChange={(e) => onLead(Number(e.target.value.replace(',', '.')))}
+          />
+        </label>
+      </div>
+
+      <div className="counterlive muted">
+        {state.riding.length > 0
+          ? state.riding.map((r) => (
+              <div key={r.windowStart}>
+                <span className={r.side === 'Up' ? 'up' : 'down'}>{r.side}</span>{' '}
+                {r.shares.toFixed(1)} по {cents(r.price)} — окно{' '}
+                {clockOf(r.windowStart)} идёт
+              </div>
+            ))
+          : state.note || (state.enabled ? 'жду окна' : 'выключено')}
+      </div>
+
+      {all.rounds > 0 ? (
+        <>
+          <div className="listhead second">
+            <span>Итог за {all.rounds} окон</span>
+            <button className="linkbtn" onClick={onReset}>
+              очистить
+            </button>
+          </div>
+
+          <div className="countergrid">
+            <div>
+              <span className="muted">итог</span>
+              <b className={tone}>
+                {all.pnl >= 0 ? '+' : '−'}
+                {usd(Math.abs(all.pnl))}
+              </b>
+            </div>
+            <div>
+              <span className="muted">угадал</span>
+              <b>
+                {all.hitRate === null
+                  ? '—'
+                  : `${Math.round(all.hitRate * 100)}%`}
+              </b>
+            </div>
+            <div>
+              <span className="muted">плюс/минус</span>
+              <b>
+                <span className="up">{all.wins}</span>
+                <span className="muted">/</span>
+                <span className="down">{all.losses}</span>
+              </b>
+            </div>
+            <div>
+              <span className="muted">за окно</span>
+              <b className={(all.average ?? 0) >= 0 ? 'up' : 'down'}>
+                {(all.average ?? 0) >= 0 ? '+' : '−'}
+                {usd(Math.abs(all.average ?? 0))}
+              </b>
+            </div>
+            <div>
+              <span className="muted">лучшее</span>
+              <b className="up">+{usd(Math.abs(all.best ?? 0))}</b>
+            </div>
+            <div>
+              <span className="muted">худшее</span>
+              <b className="down">−{usd(Math.abs(all.worst ?? 0))}</b>
+            </div>
+            <div>
+              <span className="muted">вложено</span>
+              <b>{usd(all.spent)}</b>
+            </div>
+            <div>
+              <span className="muted">лесенкой</span>
+              <b>{all.byLadder}</b>
+            </div>
+            <div>
+              <span className="muted">до расчёта</span>
+              <b>{all.toSettlement}</b>
+            </div>
+          </div>
+
+          <div className="probesides">
+            <div>
+              <span className="up">Up</span> {sides.up.rounds} ·{' '}
+              <b className={sides.up.pnl >= 0 ? 'up' : 'down'}>
+                {sides.up.pnl >= 0 ? '+' : '−'}
+                {usd(Math.abs(sides.up.pnl))}
+              </b>
+            </div>
+            <div>
+              <span className="down">Down</span> {sides.down.rounds} ·{' '}
+              <b className={sides.down.pnl >= 0 ? 'up' : 'down'}>
+                {sides.down.pnl >= 0 ? '+' : '−'}
+                {usd(Math.abs(sides.down.pnl))}
+              </b>
+            </div>
+          </div>
+
+          <div className="listhead second">
+            <span>По пятиминуткам</span>
+            <span className="muted">свежие сверху</span>
+          </div>
+          <div className="probelist">
+            {state.rounds.map((r) => (
+              <ProbeRow key={r.windowStart} round={r} />
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="counterlive muted">
+          Пока ни одного закрытого окна. Первая запись появится через пять
+          минут после первой покупки.
+        </div>
+      )}
+
+      {state.lastFault && <div className="banner warn">{state.lastFault}</div>}
+    </div>
+  );
+}
+
+/** One traded window, as a line: what was taken, and what it came to. */
+function ProbeRow({ round }: { round: ProbeRound }) {
+  const money = pnlOf(round);
+  const tone = money > 0.005 ? 'up' : money < -0.005 ? 'down' : 'muted';
+  // What the shares averaged on the way out, sale and settlement together,
+  // which is the number worth comparing with what they cost.
+  const out =
+    round.shares > 0 ? (round.proceeds + round.settled) / round.shares : 0;
+
+  return (
+    <div className="proberow">
+      <span className="probewhen">{clockOf(round.windowStart)}</span>
+      <span className={round.side === 'Up' ? 'up' : 'down'}>{round.side}</span>
+      <span className="muted">
+        {round.shares.toFixed(1)} · {cents(round.price)} → {cents(out)}
+      </span>
+      <span className="probemark">
+        {round.winner ? (round.right ? '✓' : '✕') : '·'}
+      </span>
+      <b className={tone}>
+        {money >= 0 ? '+' : '−'}
+        {usd(Math.abs(money))}
+      </b>
+    </div>
+  );
+}
+
 function PulseCard({
   state,
   onEnable,
@@ -2549,11 +2835,63 @@ function RuleBar({
  * is already won, and the panel says so rather than leaving it to be worked
  * out from two rows of percentages.
  */
+/**
+ * What Polymarket prints over its own chart, over our clock instead.
+ *
+ * Two prices and an arrow: where this five minutes opened — the number the
+ * market settles against — where the price is now, and the whole-dollar
+ * distance between them. That distance *is* the bet, so it sits directly
+ * above the countdown, which is the other half of the same decision.
+ *
+ * It updates four times a second. The device holds both numbers in memory —
+ * the open cannot change once the window has started, and the live end comes
+ * off the socket that carries the same sixty-second average once a second —
+ * so asking this often costs nothing and the readout never lags the tick by
+ * more than a quarter of a second.
+ */
+function WindowMark({ windowStart }: { windowStart: number }) {
+  const [mark, setMark] = useState<{
+    target?: number | null;
+    price?: number | null;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const read = () => {
+      void PolyBot.polyMark({ windowStart })
+        .then((m) => {
+          if (!cancelled) setMark(m);
+        })
+        .catch(() => {});
+    };
+    read();
+    const timer = window.setInterval(read, 250);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [windowStart]);
+
+  const move = openMark(mark?.target, mark?.price);
+
+  return (
+    <div className="pairmark">
+      <span className="pairmarkline muted">
+        {bigPrice(mark?.target)} → {bigPrice(mark?.price)}
+      </span>
+      <span className={`pairmarkmove ${move ? move.way : 'muted'}`}>
+        {move ? `${move.arrow} ${move.text}` : '—'}
+      </span>
+    </div>
+  );
+}
+
 function PositionPair({
   positions,
   bids,
   localAvg,
   secondsLeft,
+  windowStart,
   lookAhead,
   onSell,
 }: {
@@ -2563,6 +2901,8 @@ function PositionPair({
   /** What this window's own orders say each side cost, when the API lags. */
   localAvg: { Up: number | null; Down: number | null };
   secondsLeft: number;
+  /** The live window, which is the one the readout above the clock is about. */
+  windowStart: number;
   lookAhead: boolean;
   onSell: (position: NativePosition) => void;
 }) {
@@ -2636,6 +2976,7 @@ function PositionPair({
         actually made: this side or that one, and how long have I got.
       */}
       <div className="pairmid">
+        <WindowMark windowStart={windowStart} />
         <b className={clockTone(secondsLeft, lookAhead)}>
           {`${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}
         </b>

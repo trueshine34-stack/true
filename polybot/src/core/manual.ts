@@ -342,3 +342,51 @@ export function buyCeiling(elapsedSec: number): number {
 export function buyBarred(price: number, elapsedSec: number): boolean {
   return price > buyCeiling(elapsedSec) + 1e-9;
 }
+
+/**
+ * How far the window has come from the price it has to beat, written the way
+ * Polymarket writes it over its own chart.
+ *
+ * The venue prints two prices and one arrow: the target, which is where the
+ * window opened, the current price, and the whole-dollar distance between
+ * them. That last figure is the bet — Up wins if it is positive at the close
+ * — so it is the one that gets the arrow and the colour, and it is rounded
+ * exactly as the venue rounds it so the two screens never disagree by a cent.
+ */
+export interface OpenMark {
+  way: 'up' | 'down' | 'flat';
+  /** ▲, ▼, or an en dash when the rounded change is zero. */
+  arrow: string;
+  /** The change, in whole dollars, unsigned: "$11". */
+  text: string;
+  /** The signed change itself, for anything that needs the number. */
+  change: number;
+}
+
+export function openMark(
+  target: number | null | undefined,
+  price: number | null | undefined,
+): OpenMark | null {
+  if (target == null || price == null) return null;
+  if (!Number.isFinite(target) || !Number.isFinite(price)) return null;
+  if (target <= 0 || price <= 0) return null;
+
+  const change = price - target;
+  const whole = Math.round(Math.abs(change));
+  // Under half a dollar the venue shows nothing either way, and an arrow on a
+  // change that rounds to zero would claim a direction the price has not
+  // taken.
+  const way = whole === 0 ? 'flat' : change > 0 ? 'up' : 'down';
+  return {
+    way,
+    arrow: way === 'up' ? '▲' : way === 'down' ? '▼' : '–',
+    text: `$${whole.toLocaleString('ru-RU')}`,
+    change,
+  };
+}
+
+/** A dollar price with the thousands grouped, as the venue prints it. */
+export function bigPrice(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value) || value <= 0) return '—';
+  return value.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
+}

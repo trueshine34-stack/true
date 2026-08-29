@@ -252,8 +252,31 @@ export interface PolyBotPlugin {
   }>;
   takeUpdate(args: { enabled?: boolean; gain?: number }): Promise<void>;
   takeState(): Promise<TakeState>;
+  probeUpdate(args: {
+    enabled?: boolean;
+    stakeUsd?: number;
+    leadSec?: number;
+  }): Promise<void>;
+  probeReset(): Promise<void>;
+  probeState(): Promise<ProbeState>;
   /** One transfer of USDC on Polygon, to the address given. */
   withdraw(args: { to: string; usd: number }): Promise<{ hash: string }>;
+  /**
+   * The two numbers Polymarket prints over its own chart: the price this
+   * window has to beat, and where the price is right now.
+   *
+   * Both are read out of memory on the device, so it may be asked as often as
+   * the screen can draw. `target` is missing only until the window's opening
+   * reading has been found, and `change` only while it is.
+   */
+  polyMark(args: { windowStart?: number }): Promise<{
+    windowStart: number;
+    target?: number | null;
+    price?: number | null;
+    /** When the live reading arrived, in milliseconds. */
+    at: number;
+    change?: number | null;
+  }>;
   /** Binance's five-minute candle in progress: its open and the last price. */
   binancePrice(): Promise<{
     openTime: number;
@@ -412,6 +435,43 @@ export type TakeWatch = {
   gain: number;
 };
 
+/** One window the test bot traded, from the entry to the settlement. */
+export type ProbeRound = {
+  windowStart: number;
+  /** The side the chart's line was pointing at. */
+  side: string;
+  /** How fast that line was moving, in dollars an hour. */
+  perHour: number;
+  shares: number;
+  price: number;
+  /** Shares the sell ladder got out before the close. */
+  sold: number;
+  proceeds: number;
+  /** What the market paid on whatever the ladder never sold. */
+  settled: number;
+  /** "Up", "Down", or empty while the result is not known yet. */
+  winner: string;
+  pnl: number;
+  /** Whether the line called the window right. */
+  right: boolean;
+  note?: string | null;
+  /** Still riding: bought, not yet scored. */
+  open: boolean;
+};
+
+export type ProbeState = {
+  enabled: boolean;
+  running: boolean;
+  stakeUsd: number;
+  leadSec: number;
+  note?: string | null;
+  lastFault?: string | null;
+  trend?: { way: string; perHour: number; fit: number } | null;
+  /** Newest first. */
+  rounds: ProbeRound[];
+  riding: ProbeRound[];
+};
+
 export type TakeState = {
   enabled: boolean;
   running: boolean;
@@ -524,6 +584,7 @@ const webStub: PolyBotPlugin = {
     timings: {},
     rows: [],
   }),
+  polyMark: async () => ({ windowStart: 0, at: 0 }),
   binancePrice: async () => ({ openTime: 0, open: 0, last: 0, at: 0 }),
   chainBalance: async () => ({ usdt: 0, polygon: 0, total: 0 }),
   withdrawInfo: async () => {
@@ -541,6 +602,16 @@ const webStub: PolyBotPlugin = {
     shares: 0,
     got: 0,
     watching: [],
+  }),
+  probeUpdate: async () => {},
+  probeReset: async () => {},
+  probeState: async () => ({
+    enabled: false,
+    running: false,
+    stakeUsd: 5,
+    leadSec: 10,
+    rounds: [],
+    riding: [],
   }),
   pulseUpdate: async () => {},
   pulseReset: async () => {},

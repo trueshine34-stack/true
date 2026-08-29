@@ -24,6 +24,9 @@ object EngineHolder {
     private var takeBot: TakeBot? = null
 
     @Volatile
+    private var probeBot: ProbeBot? = null
+
+    @Volatile
     var onState: (() -> Unit)? = null
 
     @Volatile
@@ -130,6 +133,31 @@ object EngineHolder {
     }
 
     fun peekTaker(): TakeBot? = takeBot
+
+    /**
+     * The experiment: one five-dollar entry a window, the way the chart's line
+     * points, out by the desk's own ladder. Created on first ask so the report
+     * can be read whether it is running or not.
+     */
+    fun probe(context: Context): ProbeBot {
+        probeBot?.let { return it }
+        val host = get(context)
+        return synchronized(this) {
+            probeBot ?: ProbeBot(
+                engine = host,
+                store = ProbeStore(context),
+                onStateChanged = {
+                    onState?.invoke()
+                    onServiceState?.invoke()
+                },
+            ).also {
+                probeBot = it
+                if (it.settings.enabled) it.start()
+            }
+        }
+    }
+
+    fun peekProbe(): ProbeBot? = probeBot
 
     /** Null when nothing has touched the engine yet this process. */
     fun peek(): BotEngine? = engine

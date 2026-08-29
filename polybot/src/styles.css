@@ -2340,9 +2340,12 @@ button.step.big {
   text-align: center;
 }
 
-/* The clock is the only thing between the two sides now, so it gets the room. */
+/*
+  The clock, with the window's move above it. It gave up a few points to make
+  room for that readout and is still the largest thing on the row.
+*/
 .pairmid > b {
-  font-size: 40px;
+  font-size: 32px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
@@ -3151,5 +3154,108 @@ button.wide {
 }
 
 .candles-foot .trendrate.flat {
+  color: var(--muted);
+}
+
+/*
+  The test bot's report.
+
+  A line for the trend it is following, a split by side, and then one row per
+  five-minute window. The list is the point of the panel, so it gets the room
+  and scrolls rather than pushing everything else off the screen.
+*/
+.probeline {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  padding: 2px 0 8px;
+}
+
+.probeline b {
+  font-size: 13px;
+}
+
+.probesides {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+  padding: 8px 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.probelist {
+  max-height: 220px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.proberow {
+  display: grid;
+  grid-template-columns: 42px 34px 1fr 14px auto;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.proberow:last-child {
+  border-bottom: 0;
+}
+
+.probewhen {
+  color: var(--muted);
+}
+
+/* Whether the line called it, which is a different question from the money. */
+.probemark {
+  text-align: center;
+  color: var(--muted);
+}
+
+/*
+  The window's own move, over the clock.
+
+  Two prices and the whole-dollar distance between them — the same three
+  figures Polymarket prints over its chart, in the place where the decision
+  they belong to is made. The prices are small because they are context; the
+  distance is the bet.
+*/
+.pairmid {
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pairmark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
+}
+
+.pairmarkline {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pairmarkmove {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pairmarkmove.up {
+  color: var(--up);
+}
+
+.pairmarkmove.down {
+  color: var(--down);
+}
+
+.pairmarkmove.flat,
+.pairmarkmove.muted {
   color: var(--muted);
 }

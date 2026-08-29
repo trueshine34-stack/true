@@ -50,6 +50,8 @@ class BotPlugin : Plugin() {
 
     private val takeBot: TakeBot get() = EngineHolder.taker(context)
 
+    private val probeBot: ProbeBot get() = EngineHolder.probe(context)
+
     override fun load() {
         EngineHolder.onState = { notifyState() }
         EngineHolder.onLogEntry = { entry -> notifyLog(entry) }
@@ -732,6 +734,39 @@ class BotPlugin : Plugin() {
     }
 
     /**
+     * The two numbers Polymarket prints over its own chart: the price the
+     * window has to beat, and where the price is now.
+     *
+     * Both come out of memory, so this can be asked for as fast as the screen
+     * can draw it. The target — the window's very first sixty-second reading —
+     * cannot change once the window has opened, so it is fetched once per
+     * window on a background thread and then simply remembered; the live end
+     * is the socket's own tick, which arrives once a second.
+     *
+     * When the target is not known yet the call still answers, with the price
+     * and nothing else. A readout that blinks out while a fetch is in flight
+     * is worse than one that fills in a moment later.
+     */
+    @PluginMethod
+    fun polyMark(call: PluginCall) {
+        val windowStart = call.getInt("windowStart")?.toLong()
+            ?: (Clock.nowSec() - SellLadder.elapsedInWindow(Clock.nowSec()))
+
+        val target = WindowOpen.of(windowStart, engine.feed)
+        val live = engine.feed.twap60 ?: engine.feed.twap
+
+        val result = JSObject()
+            .put("windowStart", windowStart)
+            .put("target", target)
+            .put("price", live?.value)
+            .put("at", live?.timestamp ?: 0L)
+        if (target != null && live != null) {
+            result.put("change", live.value - target)
+        }
+        call.resolve(result)
+    }
+
+    /**
      * Binance's book for BTC/USDT, as a depth curve.
      *
      * The book is kept locally off the hundred-millisecond diff stream, so
@@ -1402,6 +1437,75 @@ class BotPlugin : Plugin() {
                 .put("shares", bot.totals.shares)
                 .put("got", bot.totals.got)
                 .put("watching", watching),
+        )
+    }
+
+    @PluginMethod
+    fun probeUpdate(call: PluginCall) {
+        val d = probeBot.settings
+        probeBot.update(
+            d.copy(
+                enabled = call.getBoolean("enabled") ?: d.enabled,
+                stakeUsd = call.getDouble("stakeUsd") ?: d.stakeUsd,
+                leadSec = call.getInt("leadSec")?.toLong() ?: d.leadSec,
+            ),
+        )
+        // The entry lands ten seconds before a window opens, which is usually
+        // with the screen off. Without the service there is nothing awake to
+        // place it.
+        if (probeBot.settings.enabled) BotService.startAutoSell(context)
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun probeReset(call: PluginCall) {
+        probeBot.reset()
+        call.resolve()
+    }
+
+    /** The test bot's settings, what it is riding, and the whole record. */
+    @PluginMethod
+    fun probeState(call: PluginCall) {
+        val bot = probeBot
+
+        fun row(r: ProbeBot.Round, open: Boolean): JSObject = JSObject()
+            .put("windowStart", r.windowStart)
+            .put("side", r.side)
+            .put("perHour", r.perHour)
+            .put("shares", r.shares)
+            .put("price", r.price)
+            .put("sold", r.sold)
+            .put("proceeds", r.proceeds)
+            .put("settled", r.settled)
+            .put("winner", r.winner)
+            .put("pnl", r.pnl)
+            .put("right", r.right)
+            .put("note", r.note)
+            .put("open", open)
+
+        val rounds = JSArray()
+        // Newest first: the report is read from the top.
+        bot.rounds.asReversed().forEach { rounds.put(row(it, open = false)) }
+
+        val riding = JSArray()
+        bot.working.forEach { riding.put(row(it, open = true)) }
+
+        call.resolve(
+            JSObject()
+                .put("enabled", bot.settings.enabled)
+                .put("running", bot.running)
+                .put("stakeUsd", bot.settings.stakeUsd)
+                .put("leadSec", bot.settings.leadSec)
+                .put("note", bot.note)
+                .put("lastFault", bot.lastFault)
+                .put("trend", bot.trend?.let {
+                    JSObject()
+                        .put("way", it.way)
+                        .put("perHour", it.perHour)
+                        .put("fit", it.fit)
+                })
+                .put("rounds", rounds)
+                .put("riding", riding),
         )
     }
 }

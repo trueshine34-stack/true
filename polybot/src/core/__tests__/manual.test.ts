@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   MIN_ROOM_USD,
+  bigPrice,
   buyBarred,
   buyCeiling,
   cappedShares,
   exposureFor,
   limitShares,
   minShares,
+  openMark,
   orderCost,
   sellableShares,
   spendableBalance,
@@ -357,5 +359,50 @@ describe('buyCeiling', () => {
     expect(buyBarred(0.95, 200)).toBe(false);
     expect(buyBarred(0.92, 260)).toBe(true);
     expect(buyBarred(0.91, 260)).toBe(false);
+  });
+});
+
+describe('openMark', () => {
+  it('writes the change the way the venue writes it', () => {
+    const m = openMark(78_251, 78_261.84)!;
+    expect(m.way).toBe('up');
+    expect(m.arrow).toBe('▲');
+    expect(m.text).toBe('$11');
+  });
+
+  it('turns the arrow over when the window is under its open', () => {
+    const m = openMark(78_251, 78_205)!;
+    expect(m.way).toBe('down');
+    expect(m.arrow).toBe('▼');
+    expect(m.text).toBe('$46');
+  });
+
+  it('claims no direction for a change that rounds to nothing', () => {
+    const m = openMark(78_251, 78_251.4)!;
+    expect(m.way).toBe('flat');
+    expect(m.text).toBe('$0');
+  });
+
+  it('has nothing to show without both prices', () => {
+    expect(openMark(null, 78_251)).toBeNull();
+    expect(openMark(78_251, null)).toBeNull();
+    expect(openMark(0, 78_251)).toBeNull();
+    expect(openMark(78_251, Number.NaN)).toBeNull();
+  });
+
+  it('keeps the signed change for whoever needs the number', () => {
+    expect(openMark(100, 90)!.change).toBeCloseTo(-10, 9);
+  });
+});
+
+describe('bigPrice', () => {
+  it('groups the thousands and drops the cents', () => {
+    // A non-breaking space is what the locale groups with.
+    expect(bigPrice(78_261.84).replace(/\s/g, ' ')).toBe('78 262');
+  });
+
+  it('says nothing when there is no price', () => {
+    expect(bigPrice(null)).toBe('—');
+    expect(bigPrice(0)).toBe('—');
   });
 });
