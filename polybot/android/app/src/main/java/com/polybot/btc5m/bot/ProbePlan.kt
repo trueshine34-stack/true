@@ -154,6 +154,81 @@ object ProbePlan {
         return if (abs(price - nearest) <= band) nearest else null
     }
 
+    /**
+     * How far a position has to fall to be treated as lost.
+     *
+     * Under twenty cents the market has all but decided against it, and every
+     * rung of the sell ladder is now somewhere the price will not go — the
+     * offer sits at seventy-seven and the shares expire at nothing.
+     */
+    const val SINK_PRICE = 0.20
+
+    /** And how far back it has to come to be worth abandoning at a loss. */
+    const val BAIL_PRICE = 0.40
+
+    /**
+     * Whether a position that went nearly worthless has come back far enough
+     * to sell.
+     *
+     * This is not a profit rule. A side that fell under twenty cents and is
+     * being bid forty again is a side the market is arguing about a second
+     * time, and forty cents back is worth more than the whole dollar it will
+     * probably never pay. Taking it turns a write-off into a part refund.
+     */
+    fun bail(
+        lowWater: Double,
+        bid: Double,
+        sink: Double = SINK_PRICE,
+        back: Double = BAIL_PRICE,
+    ): Boolean {
+        if (lowWater <= 0.0 || bid <= 0.0) return false
+        return lowWater < sink && bid >= back
+    }
+
+    /**
+     * How much of a win rides on the next window.
+     *
+     * A quarter, and it compounds: each win adds a quarter of itself to what
+     * the next entry stakes, and the next win adds a quarter of its own on top
+     * of that. A losing window ends the run and the stake goes back to base.
+     * The stake grows out of money the rule has already made, so a run that
+     * gives it all back gives back winnings, never the base.
+     */
+    const val STREAK_SHARE = 0.25
+
+    /** And what a doubled account is worth to the base stake. */
+    const val DOUBLE_STEP = 1.5
+
+    /**
+     * What the run has added to the stake, after this window's result.
+     *
+     * Only a booked result counts. A window still running has made nothing
+     * yet, and staking on a profit that has not been taken is staking twice on
+     * the same guess.
+     */
+    fun nextStreak(streak: Double, pnl: Double, share: Double = STREAK_SHARE): Double =
+        if (pnl > 1e-9) maxOf(0.0, streak) + pnl * share else 0.0
+
+    /**
+     * How many times the account has doubled from where it started.
+     *
+     * A hundred becoming two hundred is one; two hundred becoming four is the
+     * second, and it takes three hundred of winnings to get there — which is
+     * why this counts the winnings against the start rather than dividing one
+     * balance by another.
+     */
+    fun doublings(won: Double, start: Double): Int {
+        if (start <= 0.0 || won <= 0.0) return 0
+        return Math.floor(Math.log(1.0 + won / start) / Math.log(2.0)).toInt()
+    }
+
+    /** What the next window is worth staking, all of the above together. */
+    fun stakeFor(stake: Double, won: Double, start: Double, streak: Double): Double {
+        if (stake <= 0.0) return 0.0
+        val base = stake * Math.pow(DOUBLE_STEP, doublings(won, start).toDouble())
+        return base + maxOf(0.0, streak)
+    }
+
     /** Whether this quote is taken now or waited for. */
     fun waits(ask: Double): Boolean = ask > MAX_TAKE + 1e-9
 
@@ -269,6 +344,8 @@ object ProbePlan {
          * the reason for the trade and cannot also be the reason against it.
          */
         byLine: Boolean = true,
+        /** What this window is actually staking, when it is not the base. */
+        stake: Double? = null,
     ): String? {
         if (!settings.enabled) return "выключен"
         // The line is read off the minute candles, so an empty answer means
@@ -283,7 +360,7 @@ object ProbePlan {
             }
         }
         if (ask == null || ask <= 0.0) return "нет цены"
-        if (cashUsd < settings.stakeUsd) {
+        if (cashUsd < (stake ?: settings.stakeUsd)) {
             return if (settings.demo) "тестовый счёт пуст" else "на счету пусто"
         }
         return null

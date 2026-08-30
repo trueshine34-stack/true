@@ -509,6 +509,12 @@ export type ProbeState = {
   /** What the paper account starts at, and what it is worth now. */
   bankUsd: number;
   bank: number;
+  /**
+   * What the next window will actually stake — the base grown by every
+   * doubling, plus what the winning run has added — and that addition alone.
+   */
+  stakeNow: number;
+  streak: number;
   /** The price the reversal is expected at, and how far off it is. */
   levelAhead?: number | null;
   roomToLevel?: number | null;
@@ -665,6 +671,8 @@ const webStub: PolyBotPlugin = {
     demo: true,
     bankUsd: 100,
     bank: 100,
+    stakeNow: 5,
+    streak: 0,
     rounds: [],
     riding: [],
   }),

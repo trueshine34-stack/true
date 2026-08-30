@@ -92,5 +92,11 @@ class ProbeStore(context: Context) {
         prefs.edit().putString("rounds", array.toString()).apply()
     }
 
-    fun clearRounds() = prefs.edit().remove("rounds").apply()
+    fun clearRounds() = prefs.edit().remove("rounds").remove("streak").apply()
+
+    /** What the winning run has added to the stake, kept across restarts. */
+    fun loadStreak(): Double = prefs.getFloat("streak", 0f).toDouble()
+
+    fun saveStreak(streak: Double) =
+        prefs.edit().putFloat("streak", streak.toFloat()).apply()
 }

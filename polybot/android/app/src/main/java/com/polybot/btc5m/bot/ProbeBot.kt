@@ -76,6 +76,8 @@ class ProbeBot(
         val target: Double = 0.0,
         /** Best bid seen while holding, which is what walks the ladder up. */
         val highWater: Double = 0.0,
+        /** And the worst, which is what says the position was written off. */
+        val lowWater: Double = 0.0,
         /** The rung reached, so a paper exit cannot slide back down. */
         val rung: Int = 0,
     ) {
@@ -101,6 +103,14 @@ class ProbeBot(
     /** Closed rounds, oldest first — the report reads this. */
     @Volatile
     var rounds: List<Round> = store.loadRounds()
+        private set
+
+    /**
+     * What the current winning run has added to the stake. Zero after a loss,
+     * which is the whole of the rule: the run stakes winnings, never the base.
+     */
+    @Volatile
+    var streak: Double = store.loadStreak()
         private set
 
     /** Bought and still riding, usually one and briefly two at a boundary. */
@@ -164,6 +174,19 @@ class ProbeBot(
      * paper should not have its paper balance moved by real money, and the
      * other way round.
      */
+    /** Everything closed rounds of the current mode have made. */
+    val won: Double
+        get() = rounds
+            .filter { it.demo == settings.demo && it.shares > 0.0 }
+            .sumOf { it.pnl }
+
+    /**
+     * What the next window is worth staking: the base, grown by every time the
+     * account has doubled, plus whatever the winning run has added.
+     */
+    val stakeNow: Double
+        get() = ProbePlan.stakeFor(settings.stakeUsd, won, settings.bankUsd, streak)
+
     val bank: Double
         get() = settings.bankUsd +
             rounds.filter { it.demo && it.shares > 0.0 }.sumOf { it.pnl } -
@@ -209,6 +232,7 @@ class ProbeBot(
     /** Wipes the record. The settings, and anything riding, are left alone. */
     fun reset() {
         rounds = emptyList()
+        streak = 0.0
         store.clearRounds()
         onStateChanged()
     }
@@ -279,6 +303,9 @@ class ProbeBot(
         // that has been bought.
         if (settings.enabled) {
             fillResting(nowSec)
+            // A position the market has written off comes first: it has no
+            // rung left to reach, so nothing below would ever sell it.
+            guard(nowSec)
             workPaper(nowSec)
         }
 
@@ -424,7 +451,7 @@ class ProbeBot(
         val cheap = ProbePlan.blockedBecause(
             way = way,
             ask = ask,
-            cashUsd = settings.stakeUsd,
+            cashUsd = stakeNow,
             settings = settings,
             price = here,
             level = levelAhead,
@@ -433,6 +460,7 @@ class ProbeBot(
             // still the five-minute candle's own range.
             typical = typical,
             byLine = pick.byLine,
+            stake = stakeNow,
         )
         if (cheap != null) {
             note = cheap
@@ -463,6 +491,7 @@ class ProbeBot(
             // still the five-minute candle's own range.
             typical = typical,
             byLine = pick.byLine,
+            stake = stakeNow,
         )
         if (blocked != null) {
             note = blocked
@@ -474,7 +503,7 @@ class ProbeBot(
         // bid where it is willing to buy and lets the window come to it.
         val waits = ProbePlan.waits(ask)
         val pay = ProbePlan.entryPrice(ask)
-        val size = ProbePlan.shares(settings.stakeUsd, pay, market.minimumOrderSize)
+        val size = ProbePlan.shares(stakeNow, pay, market.minimumOrderSize)
         // Crossing the spread can step over the window's own ceiling, and the
         // venue refuses such an order rather than shaving it.
         val limit = if (waits) {
@@ -632,6 +661,130 @@ class ProbeBot(
     }
 
     /**
+     * The rule that abandons a position the market has decided against.
+     *
+     * Every rung of the sell ladder is above the entry, so a side that has
+     * fallen under twenty cents has no exit at all: the offer rests at
+     * seventy-seven and the shares expire at nothing. But a side that fell
+     * that far and is being bid forty again is one the market is arguing about
+     * a second time, and forty cents in hand beats the dollar it will probably
+     * never pay. Taking it turns a write-off into a part refund.
+     *
+     * Runs over paper and real positions alike — on paper it books the sale,
+     * and with real shares it pulls whatever the desk has resting on them
+     * first, because the shares under a standing offer are spoken for and
+     * asking for them again is refused.
+     */
+    private fun guard(nowSec: Long) {
+        val held = working.filter { it.shares > it.sold + 1e-9 }
+        if (held.isEmpty()) return
+
+        var next = working
+        var changed = false
+        for (open in held) {
+            if (nowSec >= open.windowStart + WINDOW_SEC) continue
+            val bid = try {
+                ClobApi.bestBid(open.asset)
+            } catch (e: Exception) {
+                null
+            } ?: continue
+
+            val low = if (open.lowWater <= 0.0) bid else minOf(open.lowWater, bid)
+            var moved = open.copy(lowWater = low)
+
+            // A real position is sold by the desk's own rule, and the order
+            // log is where that shows up. Reading it here is what lets a
+            // window be filed the moment the ladder's price is touched rather
+            // than five minutes later.
+            if (!open.demo) {
+                val sells = OrderLog.forWindow(open.windowStart)
+                    .filter { it.asset == open.asset && it.action == "SELL" }
+                val sold = sells.sumOf { it.matched }.coerceAtMost(open.shares)
+                if (sold > open.sold + 1e-9) {
+                    moved = moved.copy(
+                        sold = sold,
+                        proceeds = sells.sumOf { it.matched * it.realPrice },
+                    )
+                }
+            }
+
+            if (ProbePlan.bail(low, bid)) {
+                val left = open.shares - open.sold
+                val sold = if (open.demo) {
+                    true
+                } else {
+                    sellOut(open, bid)
+                }
+                if (sold) {
+                    moved = moved.copy(
+                        sold = open.shares,
+                        proceeds = open.proceeds + left * SellPercent.netSell(bid),
+                        note = "спасено с " + (low * 100).toInt() + "¢",
+                    )
+                    engine.log(
+                        "warn",
+                        "Проба" + (if (open.demo) " (демо)" else "") + ": падала до " +
+                            "${(low * 100).toInt()}¢ — забрала " +
+                            String.format("%.1f", left) + " ${open.side} по " +
+                            "${(bid * 100).toInt()}¢",
+                    )
+                }
+            }
+
+            if (moved != open) {
+                next = next.map { if (it.windowStart == open.windowStart) moved else it }
+                changed = true
+            }
+        }
+        if (changed) {
+            working = next
+            onStateChanged()
+        }
+    }
+
+    /**
+     * Sells a real position into the book, pulling our own offers first.
+     *
+     * The shares under a resting sell are spoken for, and asking for them
+     * again comes back as "not enough balance" — which is true and useless.
+     */
+    private fun sellOut(open: Round, bid: Double): Boolean {
+        val session = engine.session() ?: return false
+        val market = engine.marketForWindow(open.windowStart) ?: return false
+
+        try {
+            ClobApi.openOrders(session.creds, session.account.signerAddress)
+                .filter { it.assetId == open.asset && it.side == "SELL" }
+                .forEach {
+                    try {
+                        ClobApi.cancelOrder(session.creds, session.account.signerAddress, it.id)
+                    } catch (e: Exception) {
+                        // It may have filled in between, which the log will show.
+                    }
+                }
+        } catch (e: Exception) {
+            return false
+        }
+
+        val price = maxOf(market.tickSize, bid - market.tickSize)
+        val result = try {
+            engine.placeManualOrder(
+                tokenId = open.asset,
+                conditionId = market.conditionId,
+                side = "SELL",
+                price = price,
+                size = open.shares - open.sold,
+                orderType = "GTC",
+                auto = true,
+            )
+        } catch (e: Exception) {
+            note = e.message ?: "ошибка сети"
+            return false
+        }
+        return result.success
+    }
+
+    /**
      * The bid that waits, on paper.
      *
      * Nothing is bought yet: the round is a standing order at the rest price,
@@ -687,7 +840,7 @@ class ProbeBot(
             } ?: continue
             if (ask > open.resting + 1e-9) continue
 
-            val size = ProbePlan.shares(settings.stakeUsd, open.resting, 5.0)
+            val size = ProbePlan.shares(stakeNow, open.resting, 5.0)
             next = next.map {
                 if (it.windowStart == open.windowStart) {
                     it.copy(shares = size, price = open.resting)
@@ -865,8 +1018,91 @@ class ProbeBot(
 
     }
 
+    /**
+     * Files a round the moment there is nothing left to learn about it.
+     *
+     * A position that has sold out is finished: the money is counted and no
+     * settlement can change it, so it belongs in the record now rather than
+     * five minutes from now. Whether the line called the window right is not
+     * known yet — that waits for the close — and [catchUp] fills it in.
+     */
+    private fun fileSold() {
+        val done = working.filter { it.shares > 0.0 && it.sold >= it.shares - 1e-9 }
+        if (done.isEmpty()) return
+
+        working = working.filterNot { row -> done.any { it.windowStart == row.windowStart } }
+        rounds = rounds + done.map { it.copy(note = it.note ?: "продано лесенкой") }
+        store.saveRounds(rounds)
+        done.forEach { run(it.pnl) }
+        done.forEach {
+            engine.log(
+                if (it.pnl >= 0) "trade" else "warn",
+                "Проба: окно " + hhmm(it.windowStart) + " закрыто — " +
+                    (if (it.pnl >= 0) "+" else "−") + "$" +
+                    String.format("%.2f", abs(it.pnl)),
+            )
+        }
+        onStateChanged()
+    }
+
+    /**
+     * Carries the winning run forward, or ends it.
+     *
+     * A window that made money adds a quarter of it to what the next one
+     * stakes, and the next win adds a quarter of its own on top. A losing
+     * window ends the run and the stake falls back to the base — so the run
+     * only ever risks money the rule has already made.
+     */
+    private fun run(pnl: Double) {
+        val next = ProbePlan.nextStreak(streak, pnl)
+        if (next == streak) return
+        streak = next
+        store.saveStreak(next)
+        engine.log(
+            "info",
+            if (next > 0.0) {
+                "Проба: серия — следующая ставка $" + String.format("%.2f", stakeNow)
+            } else {
+                "Проба: серия прервана — ставка снова $" +
+                    String.format("%.2f", stakeNow)
+            },
+        )
+    }
+
+    /**
+     * Fills in the result of rounds that were filed before their window shut.
+     *
+     * The money was known the moment the position sold; whether the line was
+     * right was not, and a report that never learned it would say the rule
+     * guessed wrong every time it exited early.
+     */
+    private fun catchUp(nowSec: Long) {
+        val pending = rounds.takeLast(24).filter {
+            it.winner.isEmpty() && nowSec >= it.windowStart + WINDOW_SEC + SETTLE_SEC
+        }
+        if (pending.isEmpty()) return
+
+        var changed = false
+        var next = rounds
+        for (row in pending) {
+            val winner = EventStats.winnerFor(row.windowStart, nowSec)
+            if (winner.isEmpty()) continue
+            next = next.map { if (it.windowStart == row.windowStart) it.copy(winner = winner) else it }
+            changed = true
+        }
+        if (changed) {
+            rounds = next
+            store.saveRounds(rounds)
+            onStateChanged()
+        }
+    }
+
     /** Scores every ridden round whose window has closed and settled. */
     private fun settleDue(nowSec: Long) {
+        // Anything already sold out is finished business and is filed at once.
+        fileSold()
+        catchUp(nowSec)
+
         val ripe = working.filter { nowSec >= it.windowStart + WINDOW_SEC + SETTLE_SEC }
         if (ripe.isEmpty()) return
 
@@ -879,6 +1115,7 @@ class ProbeBot(
 
             stillOpen = stillOpen.filterNot { it.windowStart == open.windowStart }
             closed = closed + scored
+            run(scored.pnl)
             engine.log(
                 if (scored.pnl >= 0) "trade" else "warn",
                 "Проба: окно " + hhmm(open.windowStart) + " — " +

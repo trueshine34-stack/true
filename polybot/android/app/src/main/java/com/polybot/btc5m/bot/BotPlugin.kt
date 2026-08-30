@@ -1516,6 +1516,8 @@ class BotPlugin : Plugin() {
                 .put("demo", bot.settings.demo)
                 .put("bankUsd", bot.settings.bankUsd)
                 .put("bank", bot.bank)
+                .put("stakeNow", bot.stakeNow)
+                .put("streak", bot.streak)
                 .put("levelAhead", bot.levelAhead)
                 .put("roomToLevel", bot.roomToLevel)
                 .put("note", bot.note)

@@ -467,4 +467,76 @@ class ProbePlanTest {
         assertEquals("Up", pick.side)
         assertNull(pick.note)
     }
+
+    @Test
+    fun `a position that fell under twenty is abandoned when it comes back`() {
+        // It went to fifteen and is bid forty again: forty in hand beats the
+        // dollar it will probably never pay.
+        assertTrue(ProbePlan.bail(lowWater = 0.15, bid = 0.40))
+        assertTrue(ProbePlan.bail(lowWater = 0.05, bid = 0.62))
+    }
+
+    @Test
+    fun `a position still on the floor is not sold at the floor`() {
+        assertTrue(!ProbePlan.bail(lowWater = 0.15, bid = 0.18))
+        assertTrue(!ProbePlan.bail(lowWater = 0.15, bid = 0.39))
+    }
+
+    @Test
+    fun `a position that never fell that far keeps its ladder`() {
+        // Down to thirty and back to fifty is an ordinary wobble, and the
+        // rungs above are still reachable.
+        assertTrue(!ProbePlan.bail(lowWater = 0.30, bid = 0.55))
+        assertTrue(!ProbePlan.bail(lowWater = ProbePlan.SINK_PRICE, bid = 0.90))
+    }
+
+    @Test
+    fun `nothing to say before a price has been seen`() {
+        assertTrue(!ProbePlan.bail(lowWater = 0.0, bid = 0.50))
+        assertTrue(!ProbePlan.bail(lowWater = 0.10, bid = 0.0))
+    }
+
+    @Test
+    fun `a win puts a quarter of itself on the next window`() {
+        assertEquals(1.0, ProbePlan.nextStreak(0.0, 4.0), 1e-9)
+        // And the next win adds a quarter of its own on top.
+        assertEquals(1.5, ProbePlan.nextStreak(1.0, 2.0), 1e-9)
+    }
+
+    @Test
+    fun `a loss ends the run`() {
+        assertEquals(0.0, ProbePlan.nextStreak(3.0, -1.0), 1e-9)
+        // A window that made nothing is not a win either.
+        assertEquals(0.0, ProbePlan.nextStreak(3.0, 0.0), 1e-9)
+    }
+
+    @Test
+    fun `the run only ever stakes winnings`() {
+        // Five of base plus a run of one and a half.
+        assertEquals(6.5, ProbePlan.stakeFor(5.0, won = 0.0, start = 100.0, streak = 1.5), 1e-9)
+        // And after a loss it is the base alone.
+        assertEquals(5.0, ProbePlan.stakeFor(5.0, won = 0.0, start = 100.0, streak = 0.0), 1e-9)
+    }
+
+    @Test
+    fun `a doubled account raises the base by half`() {
+        // A hundred that made a hundred has doubled once.
+        assertEquals(1, ProbePlan.doublings(won = 100.0, start = 100.0))
+        assertEquals(7.5, ProbePlan.stakeFor(5.0, won = 100.0, start = 100.0, streak = 0.0), 1e-9)
+    }
+
+    @Test
+    fun `doubling again takes three hundred, not two`() {
+        // A hundred to two hundred to four hundred: the second doubling needs
+        // another two hundred on top of the first hundred.
+        assertEquals(1, ProbePlan.doublings(won = 299.0, start = 100.0))
+        assertEquals(2, ProbePlan.doublings(won = 300.0, start = 100.0))
+        assertEquals(11.25, ProbePlan.stakeFor(5.0, won = 300.0, start = 100.0, streak = 0.0), 1e-9)
+    }
+
+    @Test
+    fun `an account that has lost money still stakes its base`() {
+        assertEquals(0, ProbePlan.doublings(won = -40.0, start = 100.0))
+        assertEquals(5.0, ProbePlan.stakeFor(5.0, won = -40.0, start = 100.0, streak = 0.0), 1e-9)
+    }
 }
