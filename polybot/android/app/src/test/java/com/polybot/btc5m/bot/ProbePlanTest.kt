@@ -953,6 +953,67 @@ class ProbePlanTest {
         assertTrue(!ProbePlan.alreadyRan("Up", candleBody = 40.0, typical = 0.0))
     }
 
+    /**
+     * 01:35 was refused with "над 79077, живём ниже" and 01:40 bought Up from
+     * the same place with the same picture, because the first was read as a
+     * bounce and the second as the line. Same trade, different label.
+     *
+     * Over 5050 windows split in two, entries on the far side of the level
+     * behind them score 47.7% and 46.5% — the same sign on both halves.
+     */
+    @Test
+    fun `the line is asked the same question the bounce is`() {
+        // Nothing touched, the line says Up, and the hour was spent below the
+        // level price has just poked above.
+        val pick = ProbePlan.choose(
+            way = "Up",
+            wide = "",
+            candleBody = -4.0,
+            typical = 89.0,
+            minuteBody = 0.0,
+            minuteTypical = 20.0,
+            below = ProbePlan.Wall(79_133.0, touches = 2, round = false),
+            above = ProbePlan.Wall(79_400.0, touches = 0, round = false, edge = true),
+            homeBelow = "Down",
+        )
+        assertEquals("", pick.side)
+        assertEquals("над 79133, живём ниже", pick.note)
+    }
+
+    @Test
+    fun `and the same the other way down`() {
+        val pick = ProbePlan.choose(
+            way = "Down",
+            wide = "",
+            candleBody = 4.0,
+            typical = 89.0,
+            minuteBody = 0.0,
+            minuteTypical = 20.0,
+            above = ProbePlan.Wall(79_133.0, touches = 2, round = false),
+            below = ProbePlan.Wall(78_800.0, touches = 2, round = false),
+            homeAbove = "Up",
+        )
+        assertEquals("", pick.side)
+        assertEquals("под 79133, живём выше", pick.note)
+    }
+
+    @Test
+    fun `a line inside the range it lives in is left alone`() {
+        val pick = ProbePlan.choose(
+            way = "Up",
+            wide = "",
+            candleBody = -4.0,
+            typical = 89.0,
+            minuteBody = 0.0,
+            minuteTypical = 20.0,
+            below = ProbePlan.Wall(79_133.0, touches = 2, round = false),
+            above = ProbePlan.Wall(79_400.0, touches = 2, round = false),
+            homeBelow = "Up",
+        )
+        assertEquals("Up", pick.side)
+        assertNull(pick.note)
+    }
+
     @Test
     fun `only the same side still supports the position`() {
         assertTrue(ProbePlan.stillOn("Up", "Up"))

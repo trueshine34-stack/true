@@ -296,6 +296,26 @@ object ProbePlan {
         // a direction at all.
         if (way.isEmpty()) return Choice("", "нет линии")
 
+        // And the same question the bounce is asked: are we on the side of the
+        // level behind us that the market actually lives on?
+        //
+        // A bounce away from a level the hour was spent behind is refused
+        // above, and a line pointing the same way through the same level is
+        // the same trade with a different reason attached — price has poked
+        // out of the range it lives in, and the entry follows it further out.
+        // Only the bounce was ever asked, so the line walked through.
+        //
+        // Measured over 5050 windows of real tape, split in two: entries on
+        // the far side of the level behind them score 47.7% on the first half
+        // and 46.5% on the second. Small, but the same sign on both halves,
+        // which is more than most of what has been tried here can say.
+        if (way == "Up" && homeBelow == "Down") {
+            return Choice("", "над " + Math.round(below?.price ?: 0.0) + ", живём ниже")
+        }
+        if (way == "Down" && homeAbove == "Up") {
+            return Choice("", "под " + Math.round(above?.price ?: 0.0) + ", живём выше")
+        }
+
         // The candle that is closing no longer votes. It vetoed more windows
         // than anything else here and had no say in which of them were worth
         // vetoing: a red five minutes under a line pointing up is as often
