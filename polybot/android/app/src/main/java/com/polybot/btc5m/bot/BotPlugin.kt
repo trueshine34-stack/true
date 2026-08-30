@@ -1508,6 +1508,7 @@ class BotPlugin : Plugin() {
                 .put("roomShare", bot.settings.roomShare)
                 .put("roundBand", bot.settings.roundBand)
                 .put("candleBody", bot.candleBody)
+                .put("minuteBody", bot.minuteBody)
                 .put("chose", bot.chose)
                 .put("roundNear", bot.roundNear)
                 .put("roomToRound", bot.roomToRound)

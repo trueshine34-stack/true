@@ -359,12 +359,12 @@ class ProbePlanTest {
 
     @Test
     fun `a candle that went nowhere leaves the line to decide`() {
-        assertEquals("Down", ProbePlan.choose("Down", 0.0, 60.0, false).side)
+        assertEquals("Down", ProbePlan.choose("Down", 0.0, 60.0, intoWall = false).side)
     }
 
     @Test
     fun `without a line there is no side at all`() {
-        assertEquals("", ProbePlan.choose("", 80.0, 60.0, false).side)
+        assertEquals("", ProbePlan.choose("", 80.0, 60.0, intoWall = false).side)
     }
 
     @Test
@@ -397,5 +397,74 @@ class ProbePlanTest {
                 byLine = true,
             ),
         )
+    }
+
+    @Test
+    fun `the minute candle gets a vote of its own`() {
+        // The five minutes is closing green with an upward line and would have
+        // passed on its own — but the minute just closed red, and that is the
+        // freshest thing on the screen.
+        val pick = ProbePlan.choose(
+            way = "Up",
+            candleBody = 40.0,
+            typical = 60.0,
+            minuteBody = -8.0,
+            minuteTypical = 14.0,
+        )
+        assertEquals("", pick.side)
+        assertEquals("свеча красная", pick.note)
+    }
+
+    @Test
+    fun `each candle is judged against its own length`() {
+        // Twelve dollars is a big minute and a small five minutes. Against a
+        // minute's usual travel it is the turn; the same body as a
+        // five-minute candle would be noise.
+        val minute = ProbePlan.choose(
+            way = "Down",
+            candleBody = 0.0,
+            typical = 60.0,
+            minuteBody = 20.0,
+            minuteTypical = 14.0,
+        )
+        assertEquals("Up", minute.side)
+        assertEquals("разворот", minute.note)
+
+        val window = ProbePlan.choose(
+            way = "Down",
+            candleBody = 20.0,
+            typical = 60.0,
+            minuteBody = 0.0,
+            minuteTypical = 14.0,
+        )
+        assertEquals("", window.side)
+    }
+
+    @Test
+    fun `the loudest objection is the one that decides`() {
+        // Both disagree; the minute is further past its own usual travel, so
+        // it is the one that calls the turn.
+        val pick = ProbePlan.choose(
+            way = "Down",
+            candleBody = 30.0,
+            typical = 60.0,
+            minuteBody = 25.0,
+            minuteTypical = 14.0,
+        )
+        assertEquals("Up", pick.side)
+        assertEquals("разворот", pick.note)
+    }
+
+    @Test
+    fun `both candles with the line leave it alone`() {
+        val pick = ProbePlan.choose(
+            way = "Up",
+            candleBody = 40.0,
+            typical = 60.0,
+            minuteBody = 6.0,
+            minuteTypical = 14.0,
+        )
+        assertEquals("Up", pick.side)
+        assertNull(pick.note)
     }
 }

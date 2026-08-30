@@ -492,6 +492,8 @@ export type ProbeState = {
    * green. It closes at the moment the window opens.
    */
   candleBody: number;
+  /** And the minute candle closing with it. */
+  minuteBody: number;
   /**
    * Why the last side was not simply the line's — "разворот" or "коррекция от
    * уровня" — and absent when it was.
@@ -657,6 +659,7 @@ const webStub: PolyBotPlugin = {
     roomShare: 0.35,
     roundBand: 50,
     candleBody: 0,
+    minuteBody: 0,
     demo: true,
     bankUsd: 100,
     bank: 100,

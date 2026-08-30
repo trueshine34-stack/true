@@ -2193,10 +2193,13 @@ function ProbeCard({
   // is pointing. Both are on the card because one of them stops the entry.
   const candleTone =
     state.candleBody > 0 ? 'up' : state.candleBody < 0 ? 'down' : 'muted';
-  const against =
-    way !== '' &&
-    state.candleBody !== 0 &&
-    (way === 'Up') !== (state.candleBody > 0);
+  const minuteTone =
+    state.minuteBody > 0 ? 'up' : state.minuteBody < 0 ? 'down' : 'muted';
+  // Either candle disagreeing with the line is enough to hold the entry back,
+  // so either one is worth colouring.
+  const disagrees = (body: number) =>
+    way !== '' && body !== 0 && (way === 'Up') !== (body > 0);
+  const against = disagrees(state.candleBody) || disagrees(state.minuteBody);
   const tone = all.pnl > 0 ? 'up' : all.pnl < 0 ? 'down' : 'muted';
 
   return (
@@ -2226,7 +2229,8 @@ function ProbeCard({
         открывается ближе {Math.round(state.roundBand)}$ к круглым пятистам —
         80 000, 80 500, 81 000: стакан там стоит всегда, что бы ни говорил
         график.{' '}
-        Когда пятиминутка закрывается против линии, решает свеча: больше
+        Когда любая из закрывающихся свечей — пятиминутная или минутная — идёт
+        против линии, решает она: больше
         обычного хода — это разворот, и сторона берётся новая; развернулась у
         самого уровня — это отскок, и берётся он; всё остальное против линии —
         шум внутри тренда, и окно пропускается. Держит от уровня до уровня:
@@ -2258,6 +2262,11 @@ function ProbeCard({
         <b className={candleTone}>
           {state.candleBody > 0 ? '▲' : state.candleBody < 0 ? '▼' : '—'}{' '}
           {usd(Math.abs(state.candleBody))}
+        </b>
+        <span className="muted">1м</span>
+        <b className={minuteTone}>
+          {state.minuteBody > 0 ? '▲' : state.minuteBody < 0 ? '▼' : '—'}{' '}
+          {usd(Math.abs(state.minuteBody))}
         </b>
         {state.chose ? (
           <span className="warn">{state.chose}</span>

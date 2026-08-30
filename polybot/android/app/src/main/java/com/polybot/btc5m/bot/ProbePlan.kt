@@ -89,23 +89,36 @@ object ProbePlan {
      */
     fun choose(
         way: String,
+        /** The five-minute candle closing with the window, and its scale. */
         candleBody: Double,
         typical: Double,
+        /** And the minute candle closing with it, against a minute's scale. */
+        minuteBody: Double = 0.0,
+        minuteTypical: Double = 0.0,
         /** The line was heading into a level or a round number with no room. */
-        intoWall: Boolean,
+        intoWall: Boolean = false,
         flip: Double = DEFAULT_FLIP,
     ): Choice {
         if (way.isEmpty()) return Choice("", "нет линии")
-        if (candleBody == 0.0) return Choice(way, null)
 
-        val green = candleBody > 0.0
-        if ((way == "Up") == green) return Choice(way, null)
+        // Either candle can disagree, and each is judged against its own kind:
+        // a twelve-dollar minute is a big minute and a small five minutes.
+        val against = listOf(candleBody to typical, minuteBody to minuteTypical)
+            .filter { (body, _) -> body != 0.0 && (way == "Up") != (body > 0.0) }
+        if (against.isEmpty()) return Choice(way, null)
 
-        if (typical > 0.0 && abs(candleBody) >= typical * flip) {
+        // The loudest objection decides: the one furthest past what a candle
+        // of its own length usually travels.
+        val loudest = against.maxByOrNull { (body, scale) ->
+            if (scale > 0.0) abs(body) / scale else 0.0
+        }!!
+        val (body, scale) = loudest
+
+        if (scale > 0.0 && abs(body) >= scale * flip) {
             return Choice(other(way), "разворот")
         }
         if (intoWall) return Choice(other(way), "коррекция от уровня")
-        return Choice("", if (green) "свеча зелёная" else "свеча красная")
+        return Choice("", if (body > 0.0) "свеча зелёная" else "свеча красная")
     }
 
     /**

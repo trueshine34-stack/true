@@ -123,11 +123,15 @@ class ProbeBot(
         private set
 
     /**
-     * The five-minute candle in progress, which closes as the window opens.
-     * Positive is green. Zero when there is nothing to say.
+     * The candles in progress, which close as the window opens. Positive is
+     * green; zero when there is nothing to say.
      */
     @Volatile
     var candleBody: Double = 0.0
+        private set
+
+    @Volatile
+    var minuteBody: Double = 0.0
         private set
 
     /** The round five hundred nearest the settlement price, and how far off. */
@@ -255,6 +259,9 @@ class ProbeBot(
      * question about that series and no other. The candles stand in only while
      * the socket has nothing to say.
      */
+    private fun body(candle: BinanceCandles.Candle?): Double =
+        candle?.let { if (it.open > 0.0 && it.close > 0.0) it.close - it.open else 0.0 } ?: 0.0
+
     private fun here(): Double =
         engine.feed.twap60?.value
             ?: engine.feed.twap?.value
@@ -390,6 +397,8 @@ class ProbeBot(
             way = TrendFit.lean(line),
             candleBody = body,
             typical = typical,
+            minuteBody = body(BinanceCandles.oneMinute.list().lastOrNull()),
+            minuteTypical = Levels.typicalRange(BinanceCandles.oneMinute.list()),
             intoWall = intoWall,
         )
         val way = pick.side
@@ -608,9 +617,7 @@ class ProbeBot(
     private fun aimFor(way: String, here: Double): Double {
         if (here <= 0.0 || way.isEmpty()) return 0.0
 
-        val walls = Levels.find(BinanceCandles.oneMinute.list(), here)
-            .filter { it.touches >= 2 }
-        val pivot = Levels.ahead(walls, here, way)
+        val pivot = Levels.ahead(walls(here), here, way)
 
         val step = ProbePlan.ROUND_STEP
         val round = if (way == "Up") {
@@ -801,6 +808,24 @@ class ProbeBot(
      * the rule will do before it does it — and so a window that is standing
      * aside says which price it is standing aside from.
      */
+    /**
+     * Every price the market stops at, off both charts.
+     *
+     * The five-minute panel draws walls the minute panel cannot see — an hour
+     * of minutes only reaches back an hour — and those are the stronger ones:
+     * a price that turned the market twice over four hours stops it harder
+     * than one that turned it twice in the last twenty minutes. Reading only
+     * the minute chart is how the rule bought into resistance that was drawn
+     * on the screen above it.
+     */
+    private fun walls(here: Double): List<Levels.Level> {
+        if (here <= 0.0) return emptyList()
+        return (
+            Levels.find(BinanceCandles.oneMinute.list(), here) +
+                Levels.find(BinanceCandles.fiveMinute.list(), here)
+            ).filter { it.touches >= 2 }
+    }
+
     private fun readLevel() {
         // The round number first, and whatever the trend is doing: it is about
         // where the price is, not about which way it is going. Off the
@@ -816,11 +841,10 @@ class ProbeBot(
             roomToRound = null
         }
 
-        // The candle that closes with the window, so the card can show what
-        // the rule is about to see.
-        candleBody = BinanceCandles.fiveMinute.list().lastOrNull()
-            ?.let { if (it.open > 0.0 && it.close > 0.0) it.close - it.open else 0.0 }
-            ?: 0.0
+        // Both candles that close with the window, so the card shows what the
+        // rule is about to see.
+        candleBody = body(BinanceCandles.fiveMinute.list().lastOrNull())
+        minuteBody = body(BinanceCandles.oneMinute.list().lastOrNull())
 
         val candles = BinanceCandles.oneMinute.list()
         val here = candles.lastOrNull()?.close ?: 0.0
@@ -835,8 +859,7 @@ class ProbeBot(
         // which is right for a chart and far too eager for a gate: a single
         // pivot on the minute chart is one wiggle, and standing aside for
         // every wiggle is standing aside for good.
-        val walls = Levels.find(candles, here).filter { it.touches >= 2 }
-        val level = Levels.ahead(walls, here, way)
+        val level = Levels.ahead(walls(here), here, way)
         levelAhead = level
         roomToLevel = level?.let { abs(it - here) }
 
