@@ -731,6 +731,36 @@ class ProbePlanTest {
         assertTrue(ProbePlan.rescues(lowWater = 0.02, bid = 0.55))
     }
 
+    /**
+     * A side that halved has been wrong long enough that getting the money
+     * back is the whole of the remaining ambition: the window meant to pay
+     * for it is mostly gone, and the ladder above is asking a price the
+     * position has already shown it cannot reach.
+     */
+    @Test
+    fun `a side that halved is taken at the first profit`() {
+        // Bought at 54, fell to 26, and the first bid that nets over 54.
+        assertTrue(ProbePlan.recovered(lowWater = 0.26, cost = 0.54, worth = 0.55))
+        // Break-even is not a profit.
+        assertTrue(!ProbePlan.recovered(lowWater = 0.26, cost = 0.54, worth = 0.54))
+        assertTrue(!ProbePlan.recovered(lowWater = 0.26, cost = 0.54, worth = 0.40))
+    }
+
+    @Test
+    fun `a side that only dipped keeps its ladder`() {
+        // Twenty-eight of fifty-four is more than half; the rung still decides.
+        assertTrue(!ProbePlan.recovered(lowWater = 0.28, cost = 0.54, worth = 0.60))
+        // Exactly half arms it.
+        assertTrue(ProbePlan.recovered(lowWater = 0.27, cost = 0.54, worth = 0.60))
+    }
+
+    @Test
+    fun `without a cost or a low there is nothing to recover from`() {
+        assertTrue(!ProbePlan.recovered(lowWater = 0.0, cost = 0.54, worth = 0.60))
+        assertTrue(!ProbePlan.recovered(lowWater = 0.26, cost = 0.0, worth = 0.60))
+        assertTrue(!ProbePlan.recovered(lowWater = 0.26, cost = 0.54, worth = 0.0))
+    }
+
     @Test
     fun `a side that never fell that far keeps its ladder`() {
         // Twelve cents is bad but not written off, so the rung still decides.

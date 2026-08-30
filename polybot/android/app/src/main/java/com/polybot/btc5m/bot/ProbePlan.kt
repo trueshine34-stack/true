@@ -663,6 +663,36 @@ object ProbePlan {
     }
 
     /**
+     * How far under its cost a side has to fall to stop asking for more.
+     *
+     * Half. A side that has halved has been wrong for long enough that
+     * getting the money back is the whole of the remaining ambition — the
+     * window that was going to pay for it is most of the way gone, and the
+     * ladder above is asking for a price this position has already shown it
+     * cannot reach.
+     */
+    const val HALVED = 0.5
+
+    /**
+     * Whether a side that halved has come back into profit and should simply
+     * be taken.
+     *
+     * Any profit at all. Not a rung, not a margin: the first bid that pays
+     * more than the shares cost. [worth] is what a share nets after the fee,
+     * so this is the real thing and not the quote.
+     */
+    fun recovered(
+        lowWater: Double,
+        cost: Double,
+        worth: Double,
+        share: Double = HALVED,
+    ): Boolean {
+        if (cost <= 0.0 || lowWater <= 0.0 || worth <= 0.0) return false
+        if (lowWater > cost * share) return false
+        return worth > cost + 1e-9
+    }
+
+    /**
      * How far price has to travel in a minute for the move to still be moving.
      *
      * Seven dollars. Under that it is not going anywhere: the position is

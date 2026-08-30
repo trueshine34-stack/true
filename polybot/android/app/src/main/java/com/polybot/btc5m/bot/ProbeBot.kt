@@ -1715,9 +1715,20 @@ class ProbeBot(
                 null
             } ?: continue
 
-            // The worst the side has been worth, which is what arms this.
+            // The worst the side has been worth, which is what arms both of
+            // the rules below.
             val low = if (open.lowWater <= 0.0) bid else minOf(open.lowWater, bid)
-            if (!ProbePlan.rescues(low, bid)) {
+            val worth = SellPercent.netSell(bid)
+            val why = when {
+                // Written off under a dime, and handed back at a third.
+                ProbePlan.rescues(low, bid) -> "спасена с " + (low * 100).toInt() + "¢"
+                // Halved, and back in profit: the money back is the whole of
+                // what is left to want here.
+                ProbePlan.recovered(low, open.price, worth) ->
+                    "падала до " + (low * 100).toInt() + "¢ — вышла в плюс"
+                else -> null
+            }
+            if (why == null) {
                 if (low != open.lowWater) {
                     working = working.map {
                         if (it.windowStart == open.windowStart && it.leg == open.leg) {
@@ -1740,7 +1751,7 @@ class ProbeBot(
                         sold = open.shares,
                         proceeds = open.proceeds + left * SellPercent.netSell(bid),
                         lowWater = low,
-                        note = "спасена с " + (low * 100).toInt() + "¢",
+                        note = why,
                     )
                 } else {
                     it
@@ -1748,8 +1759,8 @@ class ProbeBot(
             }
             engine.log(
                 "trade",
-                "Проба" + (if (open.demo) " (демо)" else "") + ": падала до " +
-                    (low * 100).toInt() + "¢ — забрала " + String.format("%.1f", left) +
+                "Проба" + (if (open.demo) " (демо)" else "") + ": " + why +
+                    " — забрала " + String.format("%.1f", left) +
                     " ${open.side} по ${(bid * 100).toInt()}¢",
             )
             onStateChanged()
