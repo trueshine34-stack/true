@@ -113,9 +113,27 @@ class PulsePlanTest {
     }
 
     @Test
-    fun keepsOutOfTheEdgesOfTheWindow() {
+    fun waitsForTheWindowToSaySomething() {
         assertEquals("рано", PulsePlan.blockedBecause(good(elapsed = 20), on, holding = false))
-        assertEquals("поздно", PulsePlan.blockedBecause(good(elapsed = 250), on, holding = false))
+    }
+
+    @Test
+    fun tradesTheLastMinuteToo() {
+        // A late lot cannot reach its own take price, but from the ride second
+        // a side that is still ahead is carried into settlement instead — and
+        // settlement pays a dollar with no fee.
+        assertNull(PulsePlan.blockedBecause(good(elapsed = 250), on, holding = false))
+        assertNull(PulsePlan.blockedBecause(good(elapsed = 295), on, holding = false))
+    }
+
+    @Test
+    fun stillHonoursALimitSetInsideTheWindow() {
+        val early = on.copy(untilSec = 120)
+        assertNull(PulsePlan.blockedBecause(good(elapsed = 100), early, holding = false))
+        assertEquals(
+            "поздно",
+            PulsePlan.blockedBecause(good(elapsed = 130), early, holding = false),
+        )
     }
 
     @Test

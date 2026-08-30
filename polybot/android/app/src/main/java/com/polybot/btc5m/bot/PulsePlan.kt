@@ -36,14 +36,27 @@ object PulsePlan {
 
     const val DEFAULT_BANK_USD = 100.0
 
+    /** Every window is five minutes long. */
+    const val WINDOW_SEC = 300L
+
     /** One clip, always. This bot's whole idea is repetition, not size. */
     const val DEFAULT_SHARES = 5.0
 
     /** The window has to have said something before it is worth trading. */
     const val DEFAULT_FROM_SEC = 45L
 
-    /** Late entries have no room to reach their exit. */
-    const val DEFAULT_UNTIL_SEC = 240L
+    /**
+     * How late a window may still be entered — the whole of it, by default.
+     *
+     * A late entry has no room left to reach its own take price, which was the
+     * reason this used to stop a minute before the close. But that is not the
+     * only way a lot pays: from [DEFAULT_RIDE_SEC] a side that is still ahead
+     * is carried into settlement, which pays a whole dollar and charges no
+     * fee, and a lot bought at four and a half minutes on a side that is
+     * winning is a lot bought for exactly that. The refusal cost those windows
+     * and bought nothing.
+     */
+    const val DEFAULT_UNTIL_SEC = 300L
 
     /** From here a winning side is carried into settlement rather than sold. */
     const val DEFAULT_RIDE_SEC = 265L
@@ -137,7 +150,10 @@ object PulsePlan {
         if (!settings.enabled) return "выключен"
         if (holding) return "в позиции"
         if (read.elapsedSec < settings.fromSec) return "рано"
-        if (read.elapsedSec > settings.untilSec) return "поздно"
+        // A limit at or past the window's own length is no limit at all.
+        if (settings.untilSec in 1 until WINDOW_SEC && read.elapsedSec > settings.untilSec) {
+            return "поздно"
+        }
 
         val side = leader(read.lead, settings.minEdge)
             ?: return "нет перевеса " + money(abs(read.lead)) + " из " + money(settings.minEdge)
