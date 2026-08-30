@@ -1452,6 +1452,7 @@ class BotPlugin : Plugin() {
                 stakeUsd = call.getDouble("stakeUsd") ?: d.stakeUsd,
                 leadSec = call.getInt("leadSec")?.toLong() ?: d.leadSec,
                 roomShare = call.getDouble("roomShare") ?: d.roomShare,
+                roundBand = call.getDouble("roundBand") ?: d.roundBand,
                 demo = call.getBoolean("demo") ?: d.demo,
                 bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
                 inside = call.getBoolean("inside") ?: d.inside,
@@ -1481,6 +1482,7 @@ class BotPlugin : Plugin() {
             .put("demo", r.demo)
             .put("target", r.target)
             .put("resting", r.resting)
+            .put("adds", r.adds)
             .put("leg", r.leg)
             .put("side", r.side)
             .put("perHour", r.perHour)
@@ -1528,6 +1530,7 @@ class BotPlugin : Plugin() {
                 .put("stakeUsd", bot.settings.stakeUsd)
                 .put("leadSec", bot.settings.leadSec)
                 .put("roomShare", bot.settings.roomShare)
+                .put("roundBand", bot.settings.roundBand)
                 .put("candleBody", bot.candleBody)
                 .put("minuteBody", bot.minuteBody)
                 .put("chose", bot.chose)

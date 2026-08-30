@@ -83,6 +83,8 @@ class ProbeBot(
          * so reaching it closes the position rather than waiting for a rung.
          */
         val target: Double = 0.0,
+        /** How many times the same money has gone into the side again. */
+        val adds: Int = 0,
         /**
          * Which buy of this window this is: the entry is nought, and a side
          * bought back after the ladder sold it is the next one along.
@@ -475,6 +477,9 @@ class ProbeBot(
             // The read is taken again ten seconds before the open, and a bid
             // still waiting on a picture that is no longer there is pulled.
             recheck(nowSec)
+            // A side that has fallen far enough is bought again, once, while
+            // the window still has time to turn.
+            addUp(nowSec)
             // And a side the ladder has already let go of is taken back when
             // the market hands it over cheaper than it sold.
             buyBack(nowSec)
@@ -604,9 +609,6 @@ class ProbeBot(
         val minuteTypical: Double,
         val above: ProbePlan.Wall?,
         val below: ProbePlan.Wall?,
-        /** The high and the low of everything the five-minute chart holds. */
-        val top: Double,
-        val bottom: Double,
         val pick: ProbePlan.Choice,
     )
 
@@ -699,8 +701,6 @@ class ProbeBot(
             minuteTypical = minuteTypical,
             above = above,
             below = below,
-            top = top ?: 0.0,
-            bottom = bottom ?: 0.0,
             pick = pick,
         )
     }
@@ -930,7 +930,6 @@ class ProbeBot(
             settings = settings,
             price = here,
             level = ahead,
-            candleBody = body,
             candleOpen = closing?.open ?: 0.0,
             candleHigh = closing?.high ?: 0.0,
             candleLow = closing?.low ?: 0.0,
@@ -939,8 +938,6 @@ class ProbeBot(
             // can travel is a question about five minutes, so the scale is
             // still the five-minute candle's own range.
             typical = typical,
-            top = seen.top,
-            bottom = seen.bottom,
             minuteRange = minuteRange,
             minuteBody = body(lastMinute),
             minuteTypical = minuteTypical,
@@ -976,7 +973,6 @@ class ProbeBot(
             settings = settings,
             price = here,
             level = ahead,
-            candleBody = body,
             candleOpen = closing?.open ?: 0.0,
             candleHigh = closing?.high ?: 0.0,
             candleLow = closing?.low ?: 0.0,
@@ -985,8 +981,6 @@ class ProbeBot(
             // can travel is a question about five minutes, so the scale is
             // still the five-minute candle's own range.
             typical = typical,
-            top = seen.top,
-            bottom = seen.bottom,
             minuteRange = minuteRange,
             minuteBody = body(lastMinute),
             minuteTypical = minuteTypical,
@@ -1358,6 +1352,111 @@ class ProbeBot(
     }
 
     /**
+     * Puts the same money into the same side again, cheaply.
+     *
+     * The entry was taken on a read that has not been withdrawn, and the same
+     * read at forty cents is the same bet at better odds. It happens at two
+     * prices — forty-two and then thirty-three — so a window holds three buys
+     * and never a fourth, and only while there is still time for the move:
+     * past two minutes a cheap side is not cheap, it is late.
+     *
+     * And not into a shock. A minute several times the size of the minutes
+     * around it is the news that moved the price rather than noise on top of
+     * it, and averaging into that pays twice for one wrong read.
+     */
+    private fun addUp(nowSec: Long) {
+        val held = working.filter { it.shares > it.sold + 1e-9 }
+        if (held.isEmpty()) return
+
+        for (open in held) {
+            val elapsed = nowSec - open.windowStart
+            val ask = try {
+                ClobApi.bestAsk(open.asset)
+            } catch (e: Exception) {
+                null
+            }
+            if (!ProbePlan.addsUp(elapsed, ask, open.adds)) continue
+            if (ask == null) continue
+            // A minute several times the usual size is the news that moved
+            // the price, not a dip in it, and it is still moving.
+            if (shockNow(open.side)) {
+                note = "аномальная свеча — без докупа"
+                continue
+            }
+
+            // The same amount as went in the first time — the position has
+            // grown with every add, so what it cost is divided back down.
+            val usd = open.shares * open.price / (open.adds + 1)
+            if (settings.demo && bank < usd) continue
+            // And the ceiling is on the window, not on its first buy: three
+            // buys of a quarter each is three quarters of the account riding
+            // on five minutes, which is the thing the ceiling exists to stop.
+            if (overCap(open.windowStart, usd)) {
+                note = "потолок окна"
+                continue
+            }
+
+            val market = engine.marketForWindow(open.windowStart) ?: continue
+            val size = ProbePlan.shares(usd, ask, market.minimumOrderSize)
+            val paid: Double
+            val more: Double
+
+            if (settings.demo) {
+                paid = ProbePlan.takenPrice(ask)
+                more = size
+            } else {
+                val limit = minOf(
+                    ProbePlan.crossPrice(ask, market.tickSize),
+                    BuyCap.ceiling(BuyCap.elapsedFor(market.windowStart)),
+                )
+                val result = try {
+                    engine.placeManualOrder(
+                        tokenId = open.asset,
+                        conditionId = market.conditionId,
+                        side = "BUY",
+                        price = limit,
+                        size = size,
+                        orderType = "GTC",
+                        auto = true,
+                    )
+                } catch (e: Exception) {
+                    note = e.message ?: "ошибка сети"
+                    continue
+                }
+                if (!result.success) {
+                    note = result.error ?: "отказ CLOB"
+                    continue
+                }
+                val fill = Orders.filled("BUY", result.makingAmount, result.takingAmount)
+                if (fill.shares <= 1e-6) {
+                    result.orderId?.let { cancel(it) }
+                    continue
+                }
+                paid = if (fill.usd > 0.0) fill.usd / fill.shares else limit
+                // What the venue actually gave, which is rarely all of it.
+                more = fill.shares
+            }
+
+            val shares = open.shares + more
+            val price = (open.shares * open.price + more * paid) / shares
+            working = working.map {
+                if (it.windowStart == open.windowStart && it.leg == open.leg) {
+                    it.copy(shares = shares, price = price, adds = it.adds + 1)
+                } else {
+                    it
+                }
+            }
+            engine.log(
+                "trade",
+                "Проба" + (if (settings.demo) " (демо)" else "") + ": докупила " +
+                    String.format("%.1f", more) + " ${open.side} по " +
+                    "${(paid * 100).toInt()}¢ — средняя ${(price * 100).toInt()}¢",
+            )
+            onStateChanged()
+        }
+    }
+
+    /**
      * Whether one more buy would put the window over its ceiling.
      *
      * Everything this window has spent already counts — the entry, its
@@ -1475,7 +1574,7 @@ class ProbeBot(
         }
 
         // The same money as the entry, once more.
-        val usd = sold.shares * sold.price
+        val usd = sold.shares * sold.price / (sold.adds + 1)
         if (settings.demo && bank < usd) return
         if (overCap(windowStart, usd)) {
             note = "потолок окна"
@@ -1544,6 +1643,7 @@ class ProbeBot(
             winner = "",
             note = null,
             resting = 0.0,
+            adds = 0,
             soldAt = 0.0,
             back = false,
             highWater = 0.0,

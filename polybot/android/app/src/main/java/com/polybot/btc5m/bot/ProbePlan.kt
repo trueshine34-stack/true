@@ -127,6 +127,9 @@ object ProbePlan {
      */
     const val ROUND_STEP = 500.0
 
+    /** How close to one of them is too close, in dollars. Zero switches off. */
+    const val DEFAULT_ROUND_BAND = 50.0
+
     /**
      * How close a wick has to come to a level to have touched it.
      *
@@ -213,23 +216,8 @@ object ProbePlan {
     fun choose(
         /** The minute chart's line. */
         way: String,
-        /**
-         * The five-minute chart's call.
-         *
-         * Kept for the record and no longer consulted. It used to veto the
-         * minute chart whenever the two disagreed, which sounds like caution
-         * and is the opposite: the wide line averages three hours, so after a
-         * turn it goes on pointing the old way for most of an hour, and the
-         * windows it vetoed were the turn itself.
-         *
-         * Measured over 793 windows of real tape, following the minute line
-         * where the two disagree is right 55% of the time — against 47% where
-         * they agree and 46% where the wide line has no opinion. The case the
-         * veto refused was the best of the three. Conditioning on how tight
-         * the minute fit is does not help: the buckets run 59%, 40%, 67%, 54%
-         * with rising fit, which is noise.
-         */
-        @Suppress("UNUSED_PARAMETER") wide: String,
+        /** And the five-minute chart's call, which objects only when it makes one. */
+        wide: String,
         /** The five-minute candle closing with the window, and its scale. */
         candleBody: Double,
         typical: Double,
@@ -275,7 +263,7 @@ object ProbePlan {
         // ends the window says whether price is actually leaving. Without that
         // second half it is a level being tested, not turned — the lines carry
         // the window instead, and buying into the tested level is refused
-        // separately by the room the entry needs.
+        // separately by `rejectedAt`.
         if (hitTop && minuteBody < 0.0) {
             // A level the market has spent the hour above is not resistance
             // met from below; it is the floor of the range, and being under it
@@ -296,25 +284,9 @@ object ProbePlan {
         // a direction at all.
         if (way.isEmpty()) return Choice("", "нет линии")
 
-        // And the same question the bounce is asked: are we on the side of the
-        // level behind us that the market actually lives on?
-        //
-        // A bounce away from a level the hour was spent behind is refused
-        // above, and a line pointing the same way through the same level is
-        // the same trade with a different reason attached — price has poked
-        // out of the range it lives in, and the entry follows it further out.
-        // Only the bounce was ever asked, so the line walked through.
-        //
-        // Measured over 5050 windows of real tape, split in two: entries on
-        // the far side of the level behind them score 47.7% on the first half
-        // and 46.5% on the second. Small, but the same sign on both halves,
-        // which is more than most of what has been tried here can say.
-        if (way == "Up" && homeBelow == "Down") {
-            return Choice("", "над " + Math.round(below?.price ?: 0.0) + ", живём ниже")
-        }
-        if (way == "Down" && homeAbove == "Up") {
-            return Choice("", "под " + Math.round(above?.price ?: 0.0) + ", живём выше")
-        }
+        // A flat five minutes is not an opposite direction, it is silence, and
+        // silence should not veto a minute chart that is perfectly clear.
+        if (wide.isNotEmpty() && wide != way) return Choice("", "тренды спорят")
 
         // The candle that is closing no longer votes. It vetoed more windows
         // than anything else here and had no say in which of them were worth
@@ -323,6 +295,15 @@ object ProbePlan {
         return Choice(way, null)
     }
 
+    /**
+     * Whether the closing candle was thrown back from the level the entry
+     * would be buying into.
+     *
+     * The bounce above turns that into a trade the other way when the minute
+     * confirms it. When it does not — the wick is there but the last minute is
+     * still pushing — the level has at least been shown to hold, and buying
+     * into it anyway is buying from the people who were just refused.
+     */
     fun rejectedAt(
         way: String,
         high: Double,
@@ -359,80 +340,6 @@ object ProbePlan {
         if (close == open) return false
         val green = close > open
         return if (way == "Up") !green else green
-    }
-
-    /**
-     * How near the edge of everything on the screen is too near to buy toward.
-     *
-     * One typical five-minute move. Not a share of [Settings.roomShare]: that
-     * setting scales what an ordinary wall asks for, and turning it down —
-     * which is a reasonable thing to want — should not also switch off the
-     * question of whether there is anywhere left to go at all.
-     */
-    const val EDGE_BAND = 1.0
-
-    /**
-     * Whether price is already at the edge of the visible range.
-     *
-     * The wall rules treat the high of the history as a level, but only while
-     * it is above price: the moment price reaches it the wall stops existing,
-     * which is the moment it matters. Buying Up into the top of everything on
-     * the screen is buying the one price at which nothing on the screen has
-     * ever been worth more.
-     *
-     * Measured over 794 windows of real tape: entries this stops win 44%
-     * against 50% for the ones it lets through, and it stops 18% of them.
-     * Tighter bands sharpen it — a quarter of a move is 40% against 49% — on
-     * samples too small to lean on.
-     */
-    fun atEdge(
-        way: String,
-        price: Double,
-        top: Double,
-        bottom: Double,
-        typical: Double,
-        band: Double = EDGE_BAND,
-    ): Boolean {
-        if (way.isEmpty() || price <= 0.0 || typical <= 0.0 || band <= 0.0) return false
-        return if (way == "Up") {
-            top > 0.0 && top - price <= typical * band
-        } else {
-            bottom > 0.0 && price - bottom <= typical * band
-        }
-    }
-
-    /**
-     * How far the closing candle may already have run our way.
-     *
-     * Half a typical five-minute move. Past that the move being bought has
-     * mostly happened: the side is dearer for it, and what is left of the
-     * distance is what the next window has to find.
-     *
-     * This is the single largest effect in everything measured here. Over 840
-     * windows the rule without it enters 24% and is right 51.7% — which, at a
-     * fifty-cent entry with the fee, is exactly break-even. With it the rule
-     * enters 18% and is right 58.8%, and the curve is smooth either side of
-     * the threshold rather than one lucky cell:
-     *
-     *   0.3× → 57.4%   0.4× → 58.0%   0.5× → 58.8%
-     *   0.6× → 58.2%   0.75× → 56.9%  1.0× → 54.4%
-     *
-     * It is the opposite of the veto this rule used to have, which stopped
-     * entries against the closing candle. What loses is going *with* a candle
-     * that has already gone.
-     */
-    const val ALREADY_RAN = 0.5
-
-    /** Whether the closing candle has already made the move being bought. */
-    fun alreadyRan(
-        way: String,
-        candleBody: Double,
-        typical: Double,
-        share: Double = ALREADY_RAN,
-    ): Boolean {
-        if (way.isEmpty() || typical <= 0.0 || share <= 0.0) return false
-        val progress = if (way == "Up") candleBody else -candleBody
-        return progress > typical * share
     }
 
     /**
@@ -487,6 +394,20 @@ object ProbePlan {
             minOf(open, close) - low
         }
         return wick >= range * wickShare
+    }
+
+    /**
+     * The round number this price is sitting on, or null if it is in open
+     * ground between two of them.
+     */
+    fun nearRound(
+        price: Double,
+        band: Double,
+        step: Double = ROUND_STEP,
+    ): Double? {
+        if (band <= 0.0 || step <= 0.0 || price <= 0.0) return null
+        val nearest = Math.round(price / step) * step
+        return if (abs(price - nearest) <= band) nearest else null
     }
 
     /**
@@ -596,7 +517,47 @@ object ProbePlan {
         return capped(base + maxOf(0.0, streak), base, bank)
     }
 
+    /**
+     * The price at which a side worth buying is worth buying twice.
+     *
+     * Thirty-four cents is the market saying the side has two chances in six,
+     * and the window is only five minutes long — but the entry was taken on a
+     * read that has not been withdrawn, and the same read at half the price is
+     * the same bet at better odds. Averaging down is only sane while there is
+     * still time for the move to happen, which is why it stops after two
+     * minutes: past that the price is not cheap, it is late.
+     */
     val ADD_PRICES = listOf(0.42, 0.33)
+
+    /**
+     * And the last second of the window at which it is still early.
+     *
+     * The first minute. A side that is cheap because the window has already
+     * spent four fifths of itself going the other way is not cheap, it is
+     * finished, and there is no time left for the read to come good.
+     */
+    const val ADD_UNTIL_SEC = 60L
+
+    /**
+     * Whether to put the same money into the same side again.
+     *
+     * Twice at most, at forty-two cents and then at thirty-three, so a window
+     * holds three buys and no more. A rule that keeps doubling into a falling
+     * side is a rule that loses the whole account on the day the read is
+     * simply wrong, and each rung has to be reached in its own turn.
+     */
+    fun addsUp(
+        elapsedSec: Long,
+        ask: Double?,
+        adds: Int,
+        prices: List<Double> = ADD_PRICES,
+        untilSec: Long = ADD_UNTIL_SEC,
+    ): Boolean {
+        if (adds < 0 || adds >= prices.size) return false
+        if (elapsedSec < 0 || elapsedSec > untilSec) return false
+        if (ask == null || ask <= 0.0) return false
+        return ask < prices[adds]
+    }
 
     /**
      * How far a side has to fall under its own sale before it is bought back.
@@ -645,13 +606,50 @@ object ProbePlan {
     }
 
     /**
-     * How many times the usual minute a candle has to be to stop a buy-back.
+     * How many times the usual minute a candle has to be to stop a top-up.
      *
-     * Buying a side back assumes the price coming down was noise. A minute
-     * several times the size of the minutes around it is not noise: it is the
-     * thing that moved the price, and it is still moving it.
+     * Buying a dip assumes the dip is noise. A minute several times the size
+     * of the minutes around it is not noise: it is the thing that moved the
+     * price, and it is still moving it. Averaging into that is paying twice
+     * for the same wrong read.
      */
     const val SHOCK = 2.0
+
+    /**
+     * How many times the usual minute the last one has to be before the move
+     * it made counts as already spent.
+     *
+     * Higher than [SHOCK], which guards a top-up. A top-up refused costs
+     * nothing but a smaller position; an entry refused costs the whole window,
+     * so the candle has to be plainly anomalous — the kind a person looking at
+     * the chart would point at — rather than merely large.
+     */
+    const val SPENT = 2.5
+
+    /**
+     * Whether the minute that just closed is too big to be followed.
+     *
+     * Measured on the whole candle, wicks included, because that is what
+     * "a big candle" means to the eye; the direction comes from the body. A
+     * minute two and a half times the size of the minutes around it has made
+     * its move, and the side it made it in is the dear side by the time the
+     * window opens — so buying with it is paying up for something that has
+     * already happened.
+     */
+    fun spent(
+        way: String,
+        minuteRange: Double,
+        minuteBody: Double,
+        minuteTypical: Double,
+        limit: Double = SPENT,
+    ): Boolean {
+        if (way.isEmpty() || minuteTypical <= 0.0 || limit <= 0.0) return false
+        if (minuteRange <= minuteTypical * limit) return false
+        // A candle that closed where it opened points nowhere, whatever it
+        // did in between.
+        if (minuteBody == 0.0) return false
+        return (way == "Up") == (minuteBody > 0.0)
+    }
 
     /**
      * Whether the move that made this price is too big to buy into.
@@ -756,6 +754,7 @@ object ProbePlan {
         /** Room to the level ahead, against a typical window's travel. */
         val roomShare: Double = DEFAULT_ROOM,
         /** How close to a round five hundred is too close, in dollars. */
+        val roundBand: Double = DEFAULT_ROUND_BAND,
         /**
          * Paper money. On by default, because the point of this rule is to
          * find out whether the line pays before any real money is asked to
@@ -868,15 +867,11 @@ object ProbePlan {
         byLine: Boolean = true,
         /** What this window is actually staking, when it is not the base. */
         stake: Double? = null,
-        /** The closing candle, which may already have made the move. */
-        candleBody: Double = 0.0,
+        /** The closing candle's reach, for a level it may have been refused at. */
         candleOpen: Double = 0.0,
         candleHigh: Double = 0.0,
         candleLow: Double = 0.0,
         candleClose: Double = 0.0,
-        /** The high and the low of the whole visible history. */
-        top: Double = 0.0,
-        bottom: Double = 0.0,
         /** And the minute that just closed, against a minute's usual size. */
         minuteRange: Double = 0.0,
         minuteBody: Double = 0.0,
@@ -886,11 +881,17 @@ object ProbePlan {
         // The line is read off the minute candles, so an empty answer means
         // the stream has not arrived rather than that the market is quiet.
         if (way.isEmpty()) return "нет свечей"
-        // The move being bought has mostly already happened.
-        if (alreadyRan(way, candleBody, typical)) {
-            return "свеча уже сходила"
+        if (rejectedAt(way, candleHigh, candleLow, candleClose, level, typical)) {
+            return "отбой от " + Math.round(level ?: 0.0)
         }
-        // A five minutes that reached our way and was pushed back is the
+        // A minute far bigger than the minutes around it has made its move,
+        // and by the time the window opens that side is the dear one. Going
+        // with it is paying up for something that has already happened.
+        if (spent(way, minuteRange, minuteBody, minuteTypical)) {
+            return "минутка выстрелила " +
+                (if (minuteBody > 0.0) "вверх" else "вниз")
+        }
+        // And a five minutes that reached our way and was pushed back is the
         // move having tried and failed from this very place.
         if (refused(way, candleOpen, candleHigh, candleLow, candleClose, typical)) {
             return "свеча с хвостом " + (if (way == "Up") "вверх" else "вниз")
@@ -901,12 +902,6 @@ object ProbePlan {
         // standing on the level is the worst place of all to buy through it.
         // The exemption a bounce gets is for the level behind it — the one it
         // just came off — and [level] is never that one.
-        // At the edge of everything on the screen there is no wall ahead to
-        // measure against, because price has become the wall.
-        if (atEdge(way, price, top, bottom, typical)) {
-            return (if (way == "Up") "у потолка " else "у дна ") +
-                Math.round(if (way == "Up") top else bottom)
-        }
         // The edge of the range asks for half again as much room: it is the
         // strongest line on the chart, and a window started within reach of
         // it is a window with nowhere to go.
@@ -914,6 +909,13 @@ object ProbePlan {
         if (tooClose(price, level, typical, room)) {
             return (if (levelEdge) "край диапазона " else "у уровня ") +
                 Math.round(level ?: 0.0)
+        }
+        // Sitting on a round number is only a reason to trade when the trade
+        // is away from it, which is what a bounce is.
+        if (byLine) {
+            nearRound(price, settings.roundBand)?.let {
+                return "круглый " + Math.round(it)
+            }
         }
         if (ask == null || ask <= 0.0) return "нет цены"
         if (cashUsd < (stake ?: settings.stakeUsd)) {

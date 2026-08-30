@@ -1255,6 +1255,13 @@ export function Manual({
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
+          onRound={(band) => {
+            if (!Number.isFinite(band) || band < 0) return;
+            void PolyBot.probeUpdate({ roundBand: band })
+              .then(() => PolyBot.probeState())
+              .then(setProbeBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
           onDemo={(demo) => {
             void PolyBot.probeUpdate({ demo })
               .then(() => PolyBot.probeState())
@@ -2286,6 +2293,7 @@ function ProbeCard({
   onStake,
   onLead,
   onRoom,
+  onRound,
   onDemo,
   onBank,
   onInside,
@@ -2297,6 +2305,7 @@ function ProbeCard({
   onStake: (usd: number) => void;
   onLead: (sec: number) => void;
   onRoom: (share: number) => void;
+  onRound: (band: number) => void;
   onDemo: (demo: boolean) => void;
   onBank: (usd: number) => void;
   onInside: (inside: boolean) => void;
@@ -2330,9 +2339,10 @@ function ProbeCard({
   const disagrees = (body: number) =>
     way !== '' && body !== 0 && (way === 'Up') !== (body > 0);
   const against = disagrees(state.candleBody) || disagrees(state.minuteBody);
-  // The round five hundreds are still walls on the shelf; standing on one is
-  // no longer a reason to skip, so the tile says where it is and not much else.
-  const atRound = false;
+  const atRound =
+    state.roundBand > 0 &&
+    state.roomToRound != null &&
+    state.roomToRound <= state.roundBand;
   const tone = all.pnl > 0 ? 'up' : all.pnl < 0 ? 'down' : 'muted';
 
   return (
@@ -2378,8 +2388,9 @@ function ProbeCard({
           {'После выигранного окна ставит следующую на четверть выигрыша больше, ' +
             'и так по нарастающей, пока не проиграет — тогда снова с базовой. ' +
             'Каждое удвоение счёта поднимает базовую ставку в полтора раза. ' +
-            'Если сторона упала ниже 34¢ в первые две минуты, докупает её ' +
-            'один раз на ту же сумму. '}
+            'Если сторона в первую минуту упала ниже 42¢, а потом ниже 33¢, ' +
+              'докупает её на ту же сумму — три покупки на окно и не больше; ' +
+              'в аномально большую свечу не докупает вовсе. '}
           За {state.leadSec} с до начала пятиминутки берёт {usd(state.stakeUsd)}{' '}
           той стороны, куда показывает линия тренда на минутном графике — по
           рынку, если сторона не дороже 52¢, иначе оставляет заявку по 52¢ и
@@ -2391,24 +2402,18 @@ function ProbeCard({
           которую настроен стол. Пока цена идёт в нашу сторону и ни разу не
           отдала 6¢ от своего максимума, держит до 90¢ — первые четыре минуты;
           после отката продаёт по лесенке сразу, как только цена до неё дошла.
-          И забирает удвоение цены входа, не дожидаясь ступеньки. Когда линии 1м и 5м спорят,
-          решает минутная: пятиминутная усредняет три часа и после разворота
-          ещё долго показывает старую сторону. Не покупает вверх у самого верха
-          пятиминутного графика и вниз у самого низа — там, где цена сама стала
-          стеной и впереди уже ничего нет. Не входит и тогда, когда пятиминутка потянулась
+          И забирает удвоение цены входа, не дожидаясь ступеньки. Не входит и
+          тогда, когда пятиминутка потянулась
           в нашу сторону и была отбита — большой хвост на нашей стороне при
           теле, почти не сдвинувшемся: следующие пять минут просят повторить
           то, на чём предыдущие только что споткнулись. Не входит, если до
           уровня, от которого ждём разворот, осталось меньше{' '}
           {Math.round(state.roomShare * 100)}% обычного хода пятиминутки — тренд,
-          упирающийся в стену, кончается на ней. И не идёт за свечой, которая
-          уже сходила в нашу сторону больше чем на половину обычного хода: ход
-          по большей части состоялся, сторона за него подорожала, а окну
-          осталось искать остаток.{' '}
-  Не входит наружу из диапазона, в котором рынок
-          живёт: если час прошёл по одну сторону уровня, а цена только что
-          вышла за него, вход дальше наружу отклоняется — и по отбою, и по
-          линии одинаково. Сначала смотрит на уровни, а не на линии: цена почти всё
+          упирающийся в стену, кончается на ней. Не входит, когда окно
+          открывается ближе {Math.round(state.roundBand)}$ к круглым пятистам —
+          80 000, 80 500, 81 000: стакан там стоит всегда, что бы ни говорил
+          график.{' '}
+          Сначала смотрит на уровни, а не на линии: цена почти всё
           время ходит от уровня к уровню, а не по тренду. Фитиль в уровень,
           закрытие обратно от него и минутка, которая уже уходит, — это отбой, и
           берётся сторона прочь от уровня, что бы ни говорила линия: она узнает
@@ -2441,12 +2446,8 @@ function ProbeCard({
             <i className={arrowTone(way)}>{arrow(way)}</i>
             <i className={arrowTone(wideWay)}>{arrow(wideWay)}</i>
           </b>
-          {/* The rate the minute line is moving at, which is the one that
-              decides — said the same way whether or not the wide line
-              agrees, because disagreeing no longer stops anything. */}
-          <em className={agree ? undefined : 'muted'}>
-            {Math.round(Math.abs(line?.perHour ?? 0))}/ч
-            {!agree && ' · 1м'}
+          <em className={agree ? undefined : 'down'}>
+            {agree ? `${Math.round(Math.abs(line?.perHour ?? 0))}/ч` : 'спорят'}
           </em>
         </div>
         <div>
@@ -2565,6 +2566,11 @@ function ProbeCard({
               label="запас до уровня, %"
               value={Math.round(state.roomShare * 100)}
               onCommit={(n) => onRoom(n / 100)}
+            />
+            <NumField
+              label="у круглых, $"
+              value={Math.round(state.roundBand)}
+              onCommit={(n) => onRound(n)}
             />
           </>
         )}
@@ -2869,6 +2875,7 @@ function ProbeRow({ round, offer }: { round: ProbeRound; offer?: ProbeOffer }) {
           {round.shares > 0
             ? `${round.shares.toFixed(1)} · ${cents(round.price)}`
             : `ждёт ${cents(round.resting || 0)}`}
+          {round.adds > 0 ? ` ×${round.adds + 1}` : ''}
           {round.leg > 0 ? ' откуп' : ''}
           {/* Up to the last minute the rung is watched, not offered: the
               shares go into the bid the moment it reaches up, so the price is
