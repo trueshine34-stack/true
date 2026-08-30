@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_MANUAL_SETTINGS,
   MIN_ROOM_USD,
   bigPrice,
   buyBarred,
@@ -404,5 +405,23 @@ describe('bigPrice', () => {
   it('says nothing when there is no price', () => {
     expect(bigPrice(null)).toBe('—');
     expect(bigPrice(0)).toBe('—');
+  });
+});
+
+describe('the ladder default', () => {
+  it('has a rung for every thirty seconds of the window', () => {
+    // Five rungs at that step ran out at the halfway mark; ten reach the
+    // close, which is where the last one is actually needed.
+    expect(DEFAULT_MANUAL_SETTINGS.autoSellLadder).toHaveLength(10);
+    expect(DEFAULT_MANUAL_SETTINGS.autoSellStepSec).toBe(30);
+  });
+
+  it('still climbs, and still ends where it used to', () => {
+    const ladder = DEFAULT_MANUAL_SETTINGS.autoSellLadder;
+    expect(ladder[0]).toBeCloseTo(0.77, 9);
+    expect(ladder[ladder.length - 1]).toBeCloseTo(0.97, 9);
+    for (let i = 1; i < ladder.length; i++) {
+      expect(ladder[i]).toBeGreaterThan(ladder[i - 1]);
+    }
   });
 });

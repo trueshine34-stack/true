@@ -28,6 +28,19 @@ object SellLadder {
     val DEFAULT = listOf(0.77, 0.84, 0.89, 0.93, 0.97)
 
     /**
+     * The same shape at half a minute a rung, which spans the whole window.
+     *
+     * Five rungs at thirty seconds are spent by the halfway mark and the top
+     * one then holds for the rest of the window — the ladder stops being a
+     * ladder exactly when the window starts deciding. Ten rungs walk the same
+     * distance in the same shape, one every thirty seconds, all the way to the
+     * close.
+     */
+    val HALF_MINUTE = listOf(
+        0.77, 0.80, 0.83, 0.86, 0.88, 0.90, 0.92, 0.94, 0.96, 0.97,
+    )
+
+    /**
      * @param elapsedSec seconds since the window opened
      * @param highWater highest price this outcome has reached this window, or
      *   null if nothing has been seen yet

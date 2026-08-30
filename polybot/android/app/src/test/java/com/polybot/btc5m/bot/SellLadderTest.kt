@@ -224,4 +224,36 @@ class SellLadderLeadTest {
         val rungs = listOf(0.77, 0.84, 0.89, 0.93, 0.97)
         assertEquals(2, SellLadder.stepFor(120, null, rungs, stepSec = 0))
     }
+
+    @Test
+    fun `the half-minute ladder reaches the close instead of the halfway mark`() {
+        val ten = SellLadder.HALF_MINUTE
+        val step = 30L
+        // One rung every thirty seconds, all the way through the window.
+        assertEquals(0.77, SellLadder.priceFor(0, null, ten, stepSec = step), 1e-9)
+        assertEquals(0.83, SellLadder.priceFor(60, null, ten, stepSec = step), 1e-9)
+        assertEquals(0.88, SellLadder.priceFor(120, null, ten, stepSec = step), 1e-9)
+        assertEquals(0.92, SellLadder.priceFor(180, null, ten, stepSec = step), 1e-9)
+        assertEquals(0.96, SellLadder.priceFor(240, null, ten, stepSec = step), 1e-9)
+        assertEquals(0.97, SellLadder.priceFor(270, null, ten, stepSec = step), 1e-9)
+    }
+
+    @Test
+    fun `five rungs at that step are spent by the halfway mark`() {
+        // Which is the reason for the longer one: from here on the old ladder
+        // asks the same price for half the window.
+        val five = SellLadder.DEFAULT
+        assertEquals(0.97, SellLadder.priceFor(135, null, five, stepSec = 30L), 1e-9)
+        assertEquals(0.97, SellLadder.priceFor(290, null, five, stepSec = 30L), 1e-9)
+    }
+
+    @Test
+    fun `it still walks and never slips back`() {
+        val ten = SellLadder.HALF_MINUTE
+        // Price cleared 88 in the first half-minute: the offer goes above it.
+        assertEquals(0.90, SellLadder.priceFor(5, 0.885, ten, stepSec = 30L), 1e-9)
+        // And a rung reached is never given up when the price falls back.
+        val reached = SellLadder.stepFor(5, 0.885, ten, stepSec = 30L)
+        assertEquals(reached, SellLadder.stepFor(20, 0.50, ten, floor = reached, stepSec = 30L))
+    }
 }

@@ -68,6 +68,14 @@ export async function saveManualSettings(settings: ManualSettings): Promise<void
   await Preferences.set({ key: KEY_MANUAL, value: JSON.stringify(settings) });
 }
 
+/** The five rungs a minute apart that the ladder used to be. */
+const OLD_LADDER = [0.77, 0.84, 0.89, 0.93, 0.97];
+
+const isOldLadder = (ladder: number[] | undefined): boolean =>
+  Array.isArray(ladder) &&
+  ladder.length === OLD_LADDER.length &&
+  ladder.every((price, i) => Math.abs(price - OLD_LADDER[i]) < 1e-9);
+
 export async function loadManualSettings(): Promise<ManualSettings> {
   const { value } = await Preferences.get({ key: KEY_MANUAL });
   if (!value) return { ...DEFAULT_MANUAL_SETTINGS };
@@ -83,6 +91,13 @@ export async function loadManualSettings(): Promise<ManualSettings> {
         stored.autoSellRetrySec === 7
           ? DEFAULT_MANUAL_SETTINGS.autoSellRetrySec
           : (stored.autoSellRetrySec ?? DEFAULT_MANUAL_SETTINGS.autoSellRetrySec),
+      // The ladder used to be five rungs at a minute each. It steps every
+      // thirty seconds now, which needs ten of them to reach the close — so a
+      // stored ladder that is still the old five is read as "never edited"
+      // rather than as a choice, and gets the new one.
+      autoSellLadder: isOldLadder(stored.autoSellLadder)
+        ? [...DEFAULT_MANUAL_SETTINGS.autoSellLadder]
+        : (stored.autoSellLadder ?? [...DEFAULT_MANUAL_SETTINGS.autoSellLadder]),
     };
   } catch {
     return { ...DEFAULT_MANUAL_SETTINGS };

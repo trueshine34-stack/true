@@ -16,7 +16,14 @@ export const DEFAULT_CLICK_SHARES = 5;
 
 export type ManualSettings = {
   autoSellEnabled: boolean;
-  /** Sell price by minute of the window, cheapest rung first. */
+  /**
+   * Sell price by step of the window, cheapest rung first.
+   *
+   * Ten of them, one every thirty seconds, which is what it takes to cover a
+   * five-minute window at that step. Five rungs were spent by the halfway
+   * mark and the ladder stopped being a ladder exactly when the window began
+   * to decide.
+   */
   autoSellLadder: number[];
   /**
    * How long before a refused sell is tried again.
@@ -77,7 +84,9 @@ export const LIMIT_LADDER_COUNT = 3;
 
 export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellEnabled: false,
-  autoSellLadder: [0.77, 0.84, 0.89, 0.93, 0.97],
+  autoSellLadder: [
+    0.77, 0.8, 0.83, 0.86, 0.88, 0.9, 0.92, 0.94, 0.96, 0.97,
+  ],
   autoSellRetrySec: 3,
   autoSellWatchSec: 60,
   autoSellLeadSec: 15,

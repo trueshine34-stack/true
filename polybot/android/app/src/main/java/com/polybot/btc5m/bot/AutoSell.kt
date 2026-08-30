@@ -41,7 +41,7 @@ class AutoSell(
     data class Settings(
         val enabled: Boolean = false,
         /** Sell price by minute of the window, cheapest rung first. */
-        val ladder: List<Double> = SellLadder.DEFAULT,
+        val ladder: List<Double> = SellLadder.HALF_MINUTE,
         /** How often to try again while the venue is still refusing. */
         val retryEverySec: Int = 7,
         /** How long to keep trying on one purchase before giving up. */
