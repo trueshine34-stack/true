@@ -452,6 +452,8 @@ export type ProbeRound = {
   target: number;
   /** A bid still waiting at this price, with nothing bought yet. */
   resting: number;
+  /** Whether the same money went into the same side a second time. */
+  added: boolean;
   /** The side the chart's line was pointing at. */
   side: string;
   /** How fast that line was moving, in dollars an hour. */

@@ -74,6 +74,8 @@ class ProbeBot(
          * so reaching it closes the position rather than waiting for a rung.
          */
         val target: Double = 0.0,
+        /** Whether the same money has already gone in a second time. */
+        val added: Boolean = false,
         /** Best bid seen while holding, which is what walks the ladder up. */
         val highWater: Double = 0.0,
 
@@ -308,6 +310,9 @@ class ProbeBot(
         if (settings.enabled) {
             fillResting(nowSec)
             readSales()
+            // A side that has fallen far enough is bought again, once, while
+            // the window still has time to turn.
+            addUp(nowSec)
             workPaper(nowSec)
         }
 
@@ -662,6 +667,95 @@ class ProbeBot(
         val candidates = listOfNotNull(pivot, round.takeIf { it > 0.0 })
             .filter { if (way == "Up") it > here else it < here }
         return candidates.minByOrNull { abs(it - here) } ?: 0.0
+    }
+
+    /**
+     * Puts the same money into the same side a second time, cheaply.
+     *
+     * The entry was taken on a read that has not been withdrawn, and the same
+     * read at a third of a dollar is the same bet at better odds. It only
+     * happens while there is still time for the move — past two minutes a
+     * cheap side is not cheap, it is late — and it happens once, because a
+     * rule that keeps doubling into a falling side loses the account on the
+     * day the read is simply wrong.
+     */
+    private fun addUp(nowSec: Long) {
+        val held = working.filter { !it.added && it.shares > it.sold + 1e-9 }
+        if (held.isEmpty()) return
+
+        for (open in held) {
+            val elapsed = nowSec - open.windowStart
+            val ask = try {
+                ClobApi.bestAsk(open.asset)
+            } catch (e: Exception) {
+                null
+            }
+            if (!ProbePlan.addsUp(elapsed, ask, open.added)) continue
+            if (ask == null) continue
+
+            // The same amount as went in the first time, which is what the
+            // position cost rather than whatever the stake happens to be now.
+            val usd = open.shares * open.price
+            if (settings.demo && bank < usd) continue
+
+            val market = engine.marketForWindow(open.windowStart) ?: continue
+            val size = ProbePlan.shares(usd, ask, market.minimumOrderSize)
+            val paid: Double
+            val more: Double
+
+            if (settings.demo) {
+                paid = ProbePlan.takenPrice(ask)
+                more = size
+            } else {
+                val limit = minOf(
+                    ProbePlan.crossPrice(ask, market.tickSize),
+                    BuyCap.ceiling(BuyCap.elapsedFor(market.windowStart)),
+                )
+                val result = try {
+                    engine.placeManualOrder(
+                        tokenId = open.asset,
+                        conditionId = market.conditionId,
+                        side = "BUY",
+                        price = limit,
+                        size = size,
+                        orderType = "GTC",
+                        auto = true,
+                    )
+                } catch (e: Exception) {
+                    note = e.message ?: "ошибка сети"
+                    continue
+                }
+                if (!result.success) {
+                    note = result.error ?: "отказ CLOB"
+                    continue
+                }
+                val fill = Orders.filled("BUY", result.makingAmount, result.takingAmount)
+                if (fill.shares <= 1e-6) {
+                    result.orderId?.let { cancel(it) }
+                    continue
+                }
+                paid = if (fill.usd > 0.0) fill.usd / fill.shares else limit
+                // What the venue actually gave, which is rarely all of it.
+                more = fill.shares
+            }
+
+            val shares = open.shares + more
+            val price = (open.shares * open.price + more * paid) / shares
+            working = working.map {
+                if (it.windowStart == open.windowStart) {
+                    it.copy(shares = shares, price = price, added = true)
+                } else {
+                    it
+                }
+            }
+            engine.log(
+                "trade",
+                "Проба" + (if (settings.demo) " (демо)" else "") + ": докупила " +
+                    String.format("%.1f", more) + " ${open.side} по " +
+                    "${(paid * 100).toInt()}¢ — средняя ${(price * 100).toInt()}¢",
+            )
+            onStateChanged()
+        }
     }
 
     /**

@@ -211,6 +211,40 @@ object ProbePlan {
         return base + maxOf(0.0, streak)
     }
 
+    /**
+     * The price at which a side worth buying is worth buying twice.
+     *
+     * Thirty-four cents is the market saying the side has two chances in six,
+     * and the window is only five minutes long — but the entry was taken on a
+     * read that has not been withdrawn, and the same read at half the price is
+     * the same bet at better odds. Averaging down is only sane while there is
+     * still time for the move to happen, which is why it stops after two
+     * minutes: past that the price is not cheap, it is late.
+     */
+    const val ADD_PRICE = 0.34
+
+    /** And the last second of the window at which it is still early. */
+    const val ADD_UNTIL_SEC = 120L
+
+    /**
+     * Whether to put the same money into the same side a second time.
+     *
+     * Once per window. A rule that keeps doubling into a falling side is a
+     * rule that loses the whole account on the day the read is simply wrong.
+     */
+    fun addsUp(
+        elapsedSec: Long,
+        ask: Double?,
+        alreadyAdded: Boolean,
+        price: Double = ADD_PRICE,
+        untilSec: Long = ADD_UNTIL_SEC,
+    ): Boolean {
+        if (alreadyAdded) return false
+        if (elapsedSec < 0 || elapsedSec > untilSec) return false
+        if (ask == null || ask <= 0.0) return false
+        return ask < price
+    }
+
     /** Whether this quote is taken now or waited for. */
     fun waits(ask: Double): Boolean = ask > MAX_TAKE + 1e-9
 

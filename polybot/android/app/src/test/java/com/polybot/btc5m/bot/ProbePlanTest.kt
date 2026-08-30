@@ -542,4 +542,35 @@ class ProbePlanTest {
         assertEquals(0, ProbePlan.doublings(won = -40.0, start = 100.0))
         assertEquals(5.0, ProbePlan.stakeFor(5.0, won = -40.0, start = 100.0, streak = 0.0), 1e-9)
     }
+
+    @Test
+    fun `a side that fell under a third is bought again`() {
+        assertTrue(ProbePlan.addsUp(elapsedSec = 30, ask = 0.30, alreadyAdded = false))
+        assertTrue(ProbePlan.addsUp(elapsedSec = 120, ask = 0.12, alreadyAdded = false))
+    }
+
+    @Test
+    fun `a side that has not fallen that far is left alone`() {
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.34, alreadyAdded = false))
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.45, alreadyAdded = false))
+    }
+
+    @Test
+    fun `past two minutes a cheap side is late rather than cheap`() {
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 121, ask = 0.20, alreadyAdded = false))
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 280, ask = 0.05, alreadyAdded = false))
+    }
+
+    @Test
+    fun `the same money goes in once and no more`() {
+        // A rule that keeps doubling into a falling side loses the account on
+        // the day the read is simply wrong.
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.20, alreadyAdded = true))
+    }
+
+    @Test
+    fun `without a price there is nothing to buy`() {
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = null, alreadyAdded = false))
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.0, alreadyAdded = false))
+    }
 }

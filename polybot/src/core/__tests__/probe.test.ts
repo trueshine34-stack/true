@@ -9,6 +9,7 @@ const round = (over: Partial<ProbeRound>): ProbeRound => {
     demo: true,
     target: 0,
     resting: 0,
+    added: false,
     side: 'Up',
     perHour: 120,
     shares: 10,
