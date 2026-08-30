@@ -240,6 +240,7 @@ export function Manual({
           ladderLeadSec: stored.autoSellLeadSec,
           ladderStepSec: stored.autoSellStepSec,
           percentMode: stored.autoSellPercentMode,
+          smartExit: stored.autoSellSmartExit,
           profitPct: stored.autoSellProfitPct,
           sliceGapSec: stored.autoSellSliceGapSec,
           panicSec: stored.autoSellPanicSec,
@@ -522,6 +523,7 @@ export function Manual({
               ladderLeadSec: settingsRef.current.autoSellLeadSec,
               ladderStepSec: settingsRef.current.autoSellStepSec,
               percentMode: settingsRef.current.autoSellPercentMode,
+              smartExit: settingsRef.current.autoSellSmartExit,
               profitPct: settingsRef.current.autoSellProfitPct,
               sliceGapSec: settingsRef.current.autoSellSliceGapSec,
               panicSec: settingsRef.current.autoSellPanicSec,
@@ -3045,6 +3047,7 @@ function RuleBar({
         ladderLeadSec: next.autoSellLeadSec,
         ladderStepSec: next.autoSellStepSec,
         percentMode: next.autoSellPercentMode,
+        smartExit: next.autoSellSmartExit,
         profitPct: next.autoSellProfitPct,
         sliceGapSec: next.autoSellSliceGapSec,
         panicSec: next.autoSellPanicSec,
@@ -3514,6 +3517,7 @@ function ManualSettingsForm({
       ladderLeadSec: next.autoSellLeadSec,
       ladderStepSec: next.autoSellStepSec,
       percentMode: next.autoSellPercentMode,
+      smartExit: next.autoSellSmartExit,
       profitPct: next.autoSellProfitPct,
       sliceGapSec: next.autoSellSliceGapSec,
       panicSec: next.autoSellPanicSec,
@@ -3688,6 +3692,29 @@ function ManualSettingsForm({
             onCommit={(n) => setRung(i, String(n))}
           />
         ))}
+      </div>
+
+      {/*
+        The bot's own exits, on everything held. They read the position's
+        price against what it cost, which is as true of a hand-placed buy as
+        of the bot's — so this is a switch rather than a second rule.
+      */}
+      <div className="counterhead" style={{ marginTop: 10 }}>
+        <span>Умный выход</span>
+        <button
+          className={`switch ${settings.autoSellSmartExit ? 'on' : ''}`}
+          onClick={() =>
+            push({
+              ...settings,
+              autoSellSmartExit: !settings.autoSellSmartExit,
+            })
+          }
+        />
+      </div>
+      <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+        Не ждёт ступеньку, если ждать больше нечего: сторону, упавшую ниже
+        10¢, забирает на 33¢; упавшую вдвое — на первом же плюсе; простоявшую
+        полминуты в минусе — при +20%, когда ход уже закончился.
       </div>
         </>
       )}

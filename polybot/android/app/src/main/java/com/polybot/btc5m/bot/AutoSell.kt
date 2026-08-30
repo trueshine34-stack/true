@@ -76,6 +76,15 @@ class AutoSell(
         val lateFloor: Double = SellPercent.DEFAULT_LATE_FLOOR,
         /** How long that stretch runs, ending where the last minute begins. */
         val lateBandSec: Int = SellPercent.DEFAULT_LATE_BAND_SEC,
+        /**
+         * The trend bot's own exits, applied to everything else held too.
+         *
+         * A side written off under a dime, one that halved, one that spent
+         * half a minute under water — none of those are waiting for a rung in
+         * any useful sense, and the rules that say so were built for the bot
+         * but describe the position, not who bought it.
+         */
+        val smartExit: Boolean = true,
     )
 
     /** One position and what the rule has managed to do about it. */
@@ -130,6 +139,11 @@ class AutoSell(
         val windowStart: Long,
         var highWater: Double,
         var step: Int,
+        /** The worst the side has been worth, which arms the deeper exits. */
+        var lowWater: Double = 0.0,
+        /** When it went under water, and whether it stayed there long enough. */
+        var redFrom: Long = 0L,
+        var wasRed: Boolean = false,
         /**
          * Whether the bid has ever given back six cents of its best. Until it
          * has, the move is one clean run and the ask is held at ninety rather
@@ -527,8 +541,8 @@ class AutoSell(
                 // Up to the last minute the rung is watched rather than
                 // offered, so a bid that jumps past it pays what it jumped to.
                 !SellLadder.restsNow(closesAt - now) ->
-                    watchRung(position, open, meta, target, mine, lotAt)
-                else -> reconcile(position, open, meta, target, mine, lotAt)
+                    watchRung(position, open, meta, target, mine, lotAt, rung, paid)
+                else -> reconcile(position, open, meta, target, mine, lotAt, rung, paid)
             }
             // Covered, settled, or the bot's: nothing left to chase here.
             if (status == "покрыто" || status == "рынок закрыт") {
@@ -978,6 +992,54 @@ class AutoSell(
      * orders on the same shares.
      */
     /**
+     * The trend bot's own exits, applied to whatever is held.
+     *
+     * Three of them, all read off the position's own price against what it
+     * cost, and so equally true of a hand-placed buy: a side the book has
+     * written off under a dime and handed back at a third; one that halved
+     * and came back into profit at all; and one that spent half a minute
+     * under water and is now a fifth ahead with its run over.
+     *
+     * The bot's other two — taking a winner stalled at a level, and closing
+     * when price reaches the level the trade was taken for — need a level the
+     * trade was aimed at, which a hand-placed buy does not have.
+     *
+     * Returns why to sell now, or null to leave it to the ladder.
+     */
+    private fun urgent(state: Rung, cost: Double, bid: Double?): String? {
+        if (!settings.smartExit) return null
+        if (bid == null || bid <= 0.0 || cost <= 0.0) return null
+
+        val now = Clock.nowSec()
+        val worth = SellPercent.netSell(bid)
+
+        // The marks the rules ride on. Kept here because this is the only
+        // place the best bid is read.
+        state.lowWater = if (state.lowWater <= 0.0) bid else minOf(state.lowWater, bid)
+        val under = worth < cost
+        state.redFrom = when {
+            !under -> 0L
+            state.redFrom == 0L -> now
+            else -> state.redFrom
+        }
+        if (under && state.redFrom > 0L && now - state.redFrom >= ProbePlan.RED_SEC) {
+            state.wasRed = true
+        }
+
+        return when {
+            ProbePlan.rescues(state.lowWater, bid) ->
+                "спасаю с " + (state.lowWater * 100).toInt() + "¢"
+            ProbePlan.recovered(state.lowWater, cost, worth) ->
+                "падала до " + (state.lowWater * 100).toInt() + "¢ — в плюс"
+            state.wasRed && state.dipped &&
+                ProbePlan.gained(worth, cost, ProbePlan.RED_GAIN) ->
+                "была в минусе — беру +" +
+                    Math.round((worth / cost - 1.0) * 100) + "%"
+            else -> null
+        }
+    }
+
+    /**
      * Watches for the rung instead of sitting on it.
      *
      * A resting offer at the rung is a promise to sell at exactly that price:
@@ -999,6 +1061,10 @@ class AutoSell(
         rung: Double,
         mine: Double,
         lotAt: Long,
+        /** The ladder state for this outcome, which carries the water marks. */
+        state: Rung,
+        /** What the shares cost, which the deeper exits are measured against. */
+        cost: Double,
     ): String {
         val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
         val (pinned, ours) = sells.partition { held(it) }
@@ -1022,6 +1088,16 @@ class AutoSell(
         } catch (e: Exception) {
             return "цена недоступна"
         }
+
+        // The trend bot's own exits, on the position's own price against what
+        // it cost. They describe the position rather than who bought it, so a
+        // hand-placed buy gets them too.
+        urgent(state, cost, bid)?.let { why ->
+            val out = maxOf(meta.tickSize, snapToTick(bid!! - meta.tickSize, meta.tickSize))
+            val done = tryPlace(position, free, out, lotAt)
+            return if (done == "выставлено") why else done
+        }
+
         if (!SellLadder.reached(bid, rung)) {
             return "жду " + (rung * 100).toInt() + "¢"
         }
@@ -1040,7 +1116,49 @@ class AutoSell(
         target: Double,
         mine: Double,
         lotAt: Long,
+        state: Rung,
+        cost: Double,
     ): String {
+        // The deeper exits apply in the last minute too — a side handed back
+        // at a third is not waiting for a rung, whatever the clock says. The
+        // book is only asked when there is a rule that would use the answer.
+        if (settings.smartExit) {
+            val bid = try {
+                ClobApi.bestBid(position.asset)
+            } catch (e: Exception) {
+                null
+            }
+            urgent(state, cost, bid)?.let { why ->
+                val free = mine - open
+                    .filter { it.assetId == position.asset && it.side == "SELL" && held(it) }
+                    .sumOf { it.remaining }
+                if (free >= meta.minimumOrderSize - 1e-6) {
+                    val session = engine.session()
+                    if (session != null) {
+                        open.filter {
+                            it.assetId == position.asset && it.side == "SELL" && !held(it)
+                        }.forEach {
+                            try {
+                                ClobApi.cancelOrder(
+                                    session.creds,
+                                    session.account.signerAddress,
+                                    it.id,
+                                )
+                            } catch (e: Exception) {
+                                // It may have filled; the log will show it.
+                            }
+                        }
+                    }
+                    val out = maxOf(
+                        meta.tickSize,
+                        snapToTick(bid!! - meta.tickSize, meta.tickSize),
+                    )
+                    val done = tryPlace(position, free, out, lotAt)
+                    return if (done == "выставлено") why else done
+                }
+            }
+        }
+
         val base = snapToTick(target, meta.tickSize)
         // Best price first: that is the order the steps are counted in, and
         // the order the book will reach them in.
