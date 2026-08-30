@@ -2275,7 +2275,7 @@ function ProbeCard({
           'один раз на ту же сумму. '}
         За {state.leadSec} с до начала пятиминутки берёт {usd(state.stakeUsd)}{' '}
         той стороны, куда показывает линия тренда на минутном графике — по
-        рынку, если сторона не дороже 57¢, иначе оставляет заявку по 54¢ и
+        рынку, если сторона не дороже 52¢, иначе оставляет заявку по 50¢ и
         ждёт минуту; не налили — снимает её, чтобы деньги не висели до конца
         окна. За 10 с до начала перечитывает картину: пятиминутная свеча к
         этому моменту почти закрыта, и если она больше не показывает ту же
@@ -2354,8 +2354,12 @@ function ProbeCard({
         <div>
           <span>разворот</span>
           <b className={near ? 'down' : undefined}>{bigPrice(state.levelAhead)}</b>
+          {/* The room there is, against the room the setting demands. A share
+              of the usual five-minute travel says nothing on its own; these
+              two numbers are what actually decide the entry. */}
           <em className={near ? 'down' : undefined}>
             {state.roomToLevel == null ? '—' : `+${Math.round(state.roomToLevel)}`}
+            {state.roomNeed != null && ` / ${Math.round(state.roomNeed)}`}
           </em>
         </div>
       </div>

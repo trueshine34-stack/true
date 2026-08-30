@@ -167,6 +167,18 @@ class ProbeBot(
         private set
 
     /**
+     * How much room the gate is actually demanding right now, in dollars.
+     *
+     * The setting is a share of what a five-minute candle usually travels, so
+     * what it means in money changes with the market — and "twenty percent"
+     * on a screen says nothing about whether an entry twenty-five dollars
+     * from a level will be allowed. This is the number that decides it.
+     */
+    @Volatile
+    var roomNeed: Double? = null
+        private set
+
+    /**
      * The candles in progress, which close as the window opens. Positive is
      * green; zero when there is nothing to say.
      */
@@ -565,21 +577,32 @@ class ProbeBot(
         val pick: ProbePlan.Choice,
     )
 
-    private fun look(): Look {
+    private fun look(windowStart: Long): Look {
         val here = here()
         val typical = Levels.typicalRange(BinanceCandles.fiveMinute.list())
+
         // The minute that closes as the window opens, and what the minutes
         // before it were — the candle itself is left out of its own average,
         // or an outsized one raises the bar it is being measured against.
-        val minutes = BinanceCandles.oneMinute.list()
+        //
+        // "The candle closing with the window" is the last one that started
+        // before the window did, which is not the same as the last one there
+        // is. The entry may also be taken in the seconds just after an open,
+        // and there the newest candle is the window's own, seconds old, with
+        // its open and close still the same price — a body of nought and a
+        // range of nought. Every candle rule read that and saw nothing: no
+        // closing candle to disagree with, no minute big enough to have
+        // fired. The record said "свеча 5м: +0$" on a window whose candle
+        // was plainly not flat.
+        val minutes = BinanceCandles.oneMinute.list().filter { it.time < windowStart }
         val lastMinute = minutes.lastOrNull()
         val minuteRange = lastMinute
             ?.let { if (it.high > 0.0 && it.low > 0.0) it.high - it.low else 0.0 }
             ?: 0.0
         val minuteTypical = Levels.typicalRange(minutes.dropLast(1))
-        // The five-minute candle that closes as this window opens: at twenty
-        // seconds out its shape is already decided enough to read.
-        val closing = BinanceCandles.fiveMinute.list().lastOrNull()
+
+        val closing = BinanceCandles.fiveMinute.list()
+            .lastOrNull { it.time < windowStart }
         val body = closing
             ?.let { if (it.open > 0.0 && it.close > 0.0) it.close - it.open else 0.0 }
             ?: 0.0
@@ -622,8 +645,8 @@ class ProbeBot(
             candleHigh = closing?.high ?: 0.0,
             candleLow = closing?.low ?: 0.0,
             candleClose = closing?.close ?: 0.0,
-            minuteBody = body(BinanceCandles.oneMinute.list().lastOrNull()),
-            minuteTypical = Levels.typicalRange(BinanceCandles.oneMinute.list()),
+            minuteBody = body(lastMinute),
+            minuteTypical = minuteTypical,
             above = above,
             below = below,
             // Which side of each wall the market has actually been living on.
@@ -663,7 +686,7 @@ class ProbeBot(
             return
         }
 
-        val seen = look()
+        val seen = look(windowStart)
         val here = seen.here
         val typical = seen.typical
         val closing = seen.closing
@@ -714,6 +737,9 @@ class ProbeBot(
             below = below,
             body = body,
             typical = typical,
+            lastMinute = lastMinute,
+            minuteRange = minuteRange,
+            minuteTypical = minuteTypical,
             ask = ask,
             staking = staking,
         )
@@ -934,6 +960,10 @@ class ProbeBot(
         below: ProbePlan.Wall?,
         body: Double,
         typical: Double,
+        /** The same minute the gates read, not whichever is newest. */
+        lastMinute: BinanceCandles.Candle?,
+        minuteRange: Double,
+        minuteTypical: Double,
         ask: Double?,
         staking: Double,
     ): String {
@@ -961,12 +991,7 @@ class ProbeBot(
                         )
             } ?: "нет"
         }
-        val minutes = BinanceCandles.oneMinute.list()
-        val minute = body(minutes.lastOrNull())
-        val minuteRange = minutes.lastOrNull()
-            ?.let { if (it.high > 0.0 && it.low > 0.0) it.high - it.low else 0.0 }
-            ?: 0.0
-        val minuteTypical = Levels.typicalRange(minutes.dropLast(1))
+        val minute = body(lastMinute)
         val room = if (aim > 0.0 && here > 0.0) abs(aim - here) else 0.0
 
         return listOf(
@@ -977,6 +1002,8 @@ class ProbeBot(
             "тренд 5м: " + (wide?.way.orEmpty().ifEmpty { "вбок" }),
             "свеча 5м: " + dollars(body) + " · минутка: " + dollars(minute),
             "обычный ход 5м: " + Math.round(typical) + "$",
+            "нужен запас: " + Math.round(typical * settings.roomShare) + "$" +
+                " (" + Math.round(settings.roomShare * 100) + "% хода)",
             "размер минутки: " + (
                 if (minuteTypical > 0.0) {
                     String.format("%.1f", minuteRange / minuteTypical) + "× обычной"
@@ -1267,7 +1294,9 @@ class ProbeBot(
         val waiting = due.filter { it.resting > 0.0 && it.shares <= 0.0 }
         if (early.isEmpty() && waiting.isEmpty()) return
 
-        val fresh = look().pick.side
+        // Read for the window the position was bought for, not for whatever
+        // window the clock is in.
+        val fresh = look(due.first().windowStart).pick.side
 
         // A bid still waiting for a window whose read has changed is simply
         // taken back: there is nothing to sell, and letting it fill would buy
@@ -2092,6 +2121,9 @@ class ProbeBot(
         val level = Levels.ahead(walls(here), here, way)
         levelAhead = level
         roomToLevel = level?.let { abs(it - here) }
+        roomNeed = Levels.typicalRange(BinanceCandles.fiveMinute.list())
+            .takeIf { it > 0.0 }
+            ?.let { it * settings.roomShare }
 
     }
 

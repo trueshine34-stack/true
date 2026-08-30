@@ -928,6 +928,21 @@ class ProbePlanTest {
         assertTrue(35L !in ProbePlan.OLD_LEADS)
     }
 
+    /**
+     * The take price and the price the bid waits at are one rule seen twice,
+     * and the bid must sit under it: a limit left above the price just
+     * refused at the market is the same money for the same side on worse
+     * terms, wearing an order type as a disguise.
+     */
+    @Test
+    fun `the resting bid sits under the price it refuses to pay`() {
+        assertTrue(ProbePlan.REST_PRICE < ProbePlan.MAX_TAKE)
+        assertEquals(0.52, ProbePlan.MAX_TAKE, 1e-9)
+        // Fifty-two is taken; a cent over it waits.
+        assertTrue(!ProbePlan.waits(0.52))
+        assertTrue(ProbePlan.waits(0.53))
+    }
+
     @Test
     fun `only the same side still supports the position`() {
         assertTrue(ProbePlan.stillOn("Up", "Up"))

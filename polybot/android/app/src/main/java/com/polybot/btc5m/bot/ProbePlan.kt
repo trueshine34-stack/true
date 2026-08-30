@@ -89,10 +89,16 @@ object ProbePlan {
      * coming back to us it will come back to [REST_PRICE], and if it is not,
      * the window was not ours.
      */
-    const val MAX_TAKE = 0.57
+    const val MAX_TAKE = 0.52
 
-    /** Where the bid waits when the offer is dearer than that. */
-    const val REST_PRICE = 0.54
+    /**
+     * Where the bid waits when the offer is dearer than that.
+     *
+     * Under [MAX_TAKE], necessarily: a bid left above the price the rule has
+     * just refused to pay at the market is the same money for the same side
+     * on worse terms, wearing a limit order as a disguise.
+     */
+    const val REST_PRICE = 0.50
 
     /**
      * How long that bid is left out before it is pulled.

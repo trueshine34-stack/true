@@ -548,6 +548,12 @@ export type ProbeState = {
   /** The price the reversal is expected at, and how far off it is. */
   levelAhead?: number | null;
   roomToLevel?: number | null;
+  /**
+   * How much room the gate is demanding right now, in dollars — the room
+   * setting as a share of what a five-minute candle usually travels. Without
+   * it "20%" on a screen says nothing about whether an entry will pass.
+   */
+  roomNeed?: number | null;
   note?: string | null;
   lastFault?: string | null;
   trend?: { way: string; perHour: number; fit: number } | null;

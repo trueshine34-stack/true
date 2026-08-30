@@ -1542,6 +1542,7 @@ class BotPlugin : Plugin() {
                 .put("losing", bot.losing)
                 .put("levelAhead", bot.levelAhead)
                 .put("roomToLevel", bot.roomToLevel)
+                .put("roomNeed", bot.roomNeed)
                 .put("note", bot.note)
                 .put("lastFault", bot.lastFault)
                 .put("wide", bot.wide?.let {
