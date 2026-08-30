@@ -314,6 +314,15 @@ class ProbeBot(
         const val HOME_OVER = 60
 
         /**
+         * How close two walls have to be to be the same wall, in dollars.
+         *
+         * A cluster of pivots averages a few dollars off the high that made
+         * it, and two lines that close together are one line to anybody
+         * looking at the chart.
+         */
+        const val MERGE_USD = 5.0
+
+        /**
          * How long after the close to wait before scoring the round.
          *
          * The price series needs a moment to carry the window's last point,
@@ -568,11 +577,27 @@ class ProbeBot(
         // weight it carries. The bounce is read off these before any line is
         // consulted, and how much weight a level has decides whether it may be
         // traded against the candle that is closing.
-        val shelf = walls(here).map { ProbePlan.Wall(it.price, it.touches, round = false) } +
-            listOfNotNull(
-                roundAbove(here)?.let { ProbePlan.Wall(it, 0, round = true) },
-                roundBelow(here)?.let { ProbePlan.Wall(it, 0, round = true) },
-            )
+        // The high and the low of everything on the screen. They need no pivot
+        // to confirm them — they are the prices that stopped the market
+        // hardest in all of it — and the pivot rule could not confirm the
+        // retest anyway, since the candle price is testing a level on can
+        // never be the middle of five. Leaving them out is how the rule bought
+        // Up nineteen dollars under the high of four hours.
+        val fives = BinanceCandles.fiveMinute.list()
+        val top = fives.filter { it.high > 0.0 }.maxOfOrNull { it.high }
+        val bottom = fives.filter { it.low > 0.0 }.minOfOrNull { it.low }
+
+        val shelf = merge(
+            walls(here).map { ProbePlan.Wall(it.price, it.touches, round = false) } +
+                listOfNotNull(
+                    roundAbove(here)?.let { ProbePlan.Wall(it, 0, round = true) },
+                    roundBelow(here)?.let { ProbePlan.Wall(it, 0, round = true) },
+                    top?.takeIf { it > here }
+                        ?.let { ProbePlan.Wall(it, 0, round = false, edge = true) },
+                    bottom?.takeIf { it < here }
+                        ?.let { ProbePlan.Wall(it, 0, round = false, edge = true) },
+                ),
+        )
         val above = shelf.filter { it.price > here }.minByOrNull { it.price - here }
         val below = shelf.filter { it.price < here }.minByOrNull { here - it.price }
 
@@ -606,7 +631,8 @@ class ProbeBot(
 
         // And the wall this side is heading into, which for a bounce is the
         // one across the room rather than the one just left behind.
-        val ahead = (if (way == "Up") above else below)?.price
+        val aheadWall = if (way == "Up") above else below
+        val ahead = aheadWall?.price
 
         val token = if (way == "Up") market.up.tokenId else market.down.tokenId
         val ask = try {
@@ -658,6 +684,7 @@ class ProbeBot(
             minuteRange = minuteRange,
             minuteBody = body(lastMinute),
             minuteTypical = minuteTypical,
+            levelEdge = aheadWall?.edge == true,
             byLine = pick.byLine,
             stake = staking,
         )
@@ -699,6 +726,7 @@ class ProbeBot(
             minuteRange = minuteRange,
             minuteBody = body(lastMinute),
             minuteTypical = minuteTypical,
+            levelEdge = aheadWall?.edge == true,
             byLine = pick.byLine,
             stake = stake,
         )
@@ -842,7 +870,13 @@ class ProbeBot(
         val wall = { w: ProbePlan.Wall? ->
             w?.let {
                 Math.round(it.price).toString() +
-                    (if (it.round) " (круглый)" else " (×" + it.touches + ")") +
+                    (
+                        when {
+                            it.round -> " (круглый)"
+                            it.edge -> " (край)"
+                            else -> " (×" + it.touches + ")"
+                        }
+                        ) +
                     // Which side of it the hour has been spent on, when one
                     // side has clearly had it.
                     (
@@ -1059,6 +1093,13 @@ class ProbeBot(
             // grown with every add, so what it cost is divided back down.
             val usd = open.shares * open.price / (open.adds + 1)
             if (settings.demo && bank < usd) continue
+            // And the ceiling is on the window, not on its first buy: three
+            // buys of a quarter each is three quarters of the account riding
+            // on five minutes, which is the thing the ceiling exists to stop.
+            if (overCap(open.windowStart, usd)) {
+                note = "потолок окна"
+                continue
+            }
 
             val market = engine.marketForWindow(open.windowStart) ?: continue
             val size = ProbePlan.shares(usd, ask, market.minimumOrderSize)
@@ -1121,6 +1162,21 @@ class ProbeBot(
     }
 
     /**
+     * Whether one more buy would put the window over its ceiling.
+     *
+     * Everything this window has spent already counts — the entry, its
+     * top-ups, and any leg bought back after a sale — because the ceiling is
+     * a limit on what rides on five minutes, not on any single order.
+     */
+    private fun overCap(windowStart: Long, more: Double): Boolean {
+        val cap = ProbePlan.windowCap(settings.stakeUsd, held())
+        val already = working.filter { it.windowStart == windowStart }.sumOf { it.cost } +
+            rounds.filter { it.windowStart == windowStart && it.demo == settings.demo }
+                .sumOf { it.cost }
+        return already + more > cap + 1e-9
+    }
+
+    /**
      * Whether the minute now running is too big a move to buy into.
      *
      * Measured against the minutes before it rather than a fixed number of
@@ -1171,6 +1227,10 @@ class ProbeBot(
         // The same money as the entry, once more.
         val usd = sold.shares * sold.price / (sold.adds + 1)
         if (settings.demo && bank < usd) return
+        if (overCap(windowStart, usd)) {
+            note = "потолок окна"
+            return
+        }
 
         val market = engine.marketForWindow(windowStart) ?: return
         val size = ProbePlan.shares(usd, ask, market.minimumOrderSize)
@@ -1718,6 +1778,31 @@ class ProbeBot(
         val at = Math.ceil(here / ProbePlan.ROUND_STEP) * ProbePlan.ROUND_STEP -
             ProbePlan.ROUND_STEP
         return at.takeIf { it > 0.0 }
+    }
+
+    /**
+     * Folds walls that name the same price into one.
+     *
+     * A pivot cluster and the range's own high land within a dollar or two of
+     * each other, and picking whichever happens to be nearer would drop the
+     * fact that it is the edge — which is the half that decides how much room
+     * the entry needs.
+     */
+    private fun merge(shelf: List<ProbePlan.Wall>): List<ProbePlan.Wall> {
+        val out = ArrayList<ProbePlan.Wall>()
+        for (wall in shelf.sortedBy { it.price }) {
+            val last = out.lastOrNull()
+            if (last != null && abs(wall.price - last.price) <= MERGE_USD) {
+                out[out.size - 1] = last.copy(
+                    touches = maxOf(last.touches, wall.touches),
+                    round = last.round || wall.round,
+                    edge = last.edge || wall.edge,
+                )
+            } else {
+                out.add(wall)
+            }
+        }
+        return out
     }
 
     /**

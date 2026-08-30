@@ -816,6 +816,79 @@ class ProbePlanTest {
     }
 
     /**
+     * The 18:10 window: price nineteen dollars under the high of the whole
+     * four hours on the screen, and the rule bought Up into it because the
+     * high had turned the market once, not twice, and so was filtered out of
+     * the shelf. The retest could never add a second touch either — a pivot
+     * is the extreme of two candles either side of it, and the candle being
+     * tested on is the last one there is.
+     */
+    @Test
+    fun `the edge of the range needs half again the room`() {
+        // Nineteen dollars under a high, where a five minutes covers thirty.
+        assertEquals(
+            "край диапазона 78207",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.48,
+                cashUsd = 100.0,
+                settings = on,
+                price = 78_188.0,
+                level = 78_207.0,
+                typical = 32.0,
+                levelEdge = true,
+            ),
+        )
+        // An ordinary wall at forty dollars is far enough; the edge is not.
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.48,
+                cashUsd = 100.0,
+                settings = on,
+                price = 78_188.0,
+                level = 78_228.0,
+                typical = 32.0,
+                levelEdge = false,
+            ),
+        )
+        assertEquals(
+            "край диапазона 78228",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.48,
+                cashUsd = 100.0,
+                settings = on,
+                price = 78_188.0,
+                level = 78_228.0,
+                typical = 32.0,
+                levelEdge = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `the edge of the range may argue with the closing candle`() {
+        // It is the strongest line on the chart, so it counts as important.
+        assertTrue(ProbePlan.Wall(78_207.0, 1, round = false, edge = true).important)
+        assertTrue(!ProbePlan.Wall(78_207.0, 1, round = false).important)
+    }
+
+    /**
+     * The same window put in twice what the ceiling allowed, because the
+     * ceiling was read against the first buy and the top-up was free.
+     */
+    @Test
+    fun `the ceiling is on the window, not on one buy`() {
+        // A forty dollar account allows ten on a window, all buys together.
+        assertEquals(10.0, ProbePlan.windowCap(base = 5.0, bank = 40.0), 1e-9)
+        // And it never falls under the base stake the user set.
+        assertEquals(5.0, ProbePlan.windowCap(base = 5.0, bank = 12.0), 1e-9)
+        // With no account known there is nothing to cap against.
+        assertEquals(Double.MAX_VALUE, ProbePlan.windowCap(base = 5.0, bank = 0.0), 1e-9)
+    }
+
+    /**
      * The dip is only worth buying while it is noise. A minute several times
      * the size of the minutes around it is the news that moved the price.
      */

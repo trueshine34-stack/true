@@ -85,9 +85,23 @@ object ProbePlan {
      * whatever the chart has done — and a pivot earns it by having turned the
      * market more than twice.
      */
-    data class Wall(val price: Double, val touches: Int, val round: Boolean) {
+    data class Wall(
+        val price: Double,
+        val touches: Int,
+        val round: Boolean,
+        /**
+         * The high or the low of the whole visible history.
+         *
+         * It needs no pivot to confirm it: it is by construction the price
+         * that stopped the market hardest in everything on the screen. And
+         * the pivot rule could not confirm the retest anyway — a pivot is the
+         * extreme of two candles either side of it, so the candle price is
+         * testing a level on can never be one.
+         */
+        val edge: Boolean = false,
+    ) {
         /** Enough to trade against the candle that is closing. */
-        val important: Boolean get() = round || touches >= 3
+        val important: Boolean get() = round || edge || touches >= 3
     }
 
     /** Which side the rule ends up on, and why it is not simply the line. */
@@ -96,21 +110,6 @@ object ProbePlan {
         val byLine: Boolean get() = side.isNotEmpty() && note == null
     }
 
-    /**
-     * The side to buy, once the closing candle has had its say.
-     *
-     * The line is an average over half an hour; the candle is the last five
-     * minutes. When they disagree the question is which one the next five
-     * minutes will resemble, and there are three answers:
-     *
-     *  - a candle bigger than an ordinary one, going the other way, is the
-     *    turn itself. Take the candle's side — the line catches up later;
-     *  - a candle going the other way while the line was running into a price
-     *    that stops things is the bounce off that price, and the bounce is the
-     *    move actually available. Take the candle's side;
-     *  - anything else against the line is noise inside a trend that has not
-     *    ended, and there is no edge either way. Take neither.
-     */
     /**
      * How lopsided the recent record has to be before one side of a level
      * counts as where the market lives.
@@ -138,6 +137,21 @@ object ProbePlan {
         }
     }
 
+    /**
+     * The side to buy, once the closing candle has had its say.
+     *
+     * The line is an average over half an hour; the candle is the last five
+     * minutes. When they disagree the question is which one the next five
+     * minutes will resemble, and there are three answers:
+     *
+     *  - a candle bigger than an ordinary one, going the other way, is the
+     *    turn itself. Take the candle's side — the line catches up later;
+     *  - a candle going the other way while the line was running into a price
+     *    that stops things is the bounce off that price, and the bounce is the
+     *    move actually available. Take the candle's side;
+     *  - anything else against the line is noise inside a trend that has not
+     *    ended, and there is no edge either way. Take neither.
+     */
     fun choose(
         /** The minute chart's line. */
         way: String,
@@ -369,9 +383,22 @@ object ProbePlan {
         base: Double,
         bank: Double,
         share: Double = MAX_SHARE,
+    ): Double = minOf(want, windowCap(base, bank, share))
+
+    /**
+     * The most one window may put in, every buy of it together.
+     *
+     * The ceiling is on the window, not on its first buy. Two top-ups of a
+     * quarter each on top of a first quarter is three quarters of the account
+     * riding on five minutes, which is the thing the ceiling exists to stop.
+     */
+    fun windowCap(
+        base: Double,
+        bank: Double,
+        share: Double = MAX_SHARE,
     ): Double {
-        if (bank <= 0.0 || share <= 0.0) return want
-        return minOf(want, maxOf(base, bank * share))
+        if (bank <= 0.0 || share <= 0.0) return Double.MAX_VALUE
+        return maxOf(base, bank * share)
     }
 
     /**
@@ -666,6 +693,18 @@ object ProbePlan {
     )
 
     /**
+     * How much more room the edge of the range wants than an ordinary wall.
+     *
+     * Half again. It is the strongest line on the chart — everything the
+     * screen holds turned back from it — so a window is not worth starting
+     * within reach of it. Measured over 849 windows of real tape: entries
+     * this stops win 42% against 48% for the ones it lets through, and it
+     * stops a quarter of them; at one typical move it is 44% against 47%,
+     * and at half a move it separates nothing at all.
+     */
+    const val EDGE_ROOM = 1.5
+
+    /**
      * Whether the level ahead is close enough to be this window's problem.
      *
      * Distances are meaningless bare: forty dollars from resistance is nothing
@@ -735,6 +774,8 @@ object ProbePlan {
          * turn itself — so the structure that would have stopped the line is
          * the reason for the trade and cannot also be the reason against it.
          */
+        /** Whether that level is the high or low of the whole visible range. */
+        levelEdge: Boolean = false,
         byLine: Boolean = true,
         /** What this window is actually staking, when it is not the base. */
         stake: Double? = null,
@@ -767,8 +808,13 @@ object ProbePlan {
         // standing on the level is the worst place of all to buy through it.
         // The exemption a bounce gets is for the level behind it — the one it
         // just came off — and [level] is never that one.
-        if (tooClose(price, level, typical, settings.roomShare)) {
-            return "у уровня " + Math.round(level ?: 0.0)
+        // The edge of the range asks for half again as much room: it is the
+        // strongest line on the chart, and a window started within reach of
+        // it is a window with nowhere to go.
+        val room = settings.roomShare * (if (levelEdge) EDGE_ROOM else 1.0)
+        if (tooClose(price, level, typical, room)) {
+            return (if (levelEdge) "край диапазона " else "у уровня ") +
+                Math.round(level ?: 0.0)
         }
         // Sitting on a round number is only a reason to trade when the trade
         // is away from it, which is what a bounce is.
