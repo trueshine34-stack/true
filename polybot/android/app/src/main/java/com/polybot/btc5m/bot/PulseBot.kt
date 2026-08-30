@@ -469,7 +469,20 @@ class PulseBot(
                 )
                 val want = minOf(mine, rungAsk)
                 open.sellPrice = want
-                if (bid >= want - 1e-9) paperSell(open, want, "по ${(want * 100).toInt()}¢")
+                if (SellLadder.reached(bid, want)) {
+                    // Up to the last minute nothing is on the book: the rung
+                    // is a price to wait for, and a bid that jumps past it
+                    // pays what it jumped to. Inside the last minute the offer
+                    // is resting there and gets the price it asked for.
+                    val resting = SellLadder.restsNow(secondsLeft)
+                    val got = if (resting) want else bid
+                    paperSell(
+                        open,
+                        got,
+                        (if (resting) "лимитка" else "по рынку") +
+                            " ${(got * 100).toInt()}¢",
+                    )
+                }
                 // And only now does the mark walk on.
                 open.highWater = maxOf(open.highWater, bid)
                 open.rung = maxOf(
@@ -553,6 +566,36 @@ class PulseBot(
 
             PulsePlan.Exit.HOLD -> {
                 val want = PulsePlan.takePrice(open.price, settings, market.tickSize)
+                val secondsLeft = open.windowStart + PulsePlan.WINDOW_SEC - Clock.nowSec()
+
+                // Up to the last minute the price is watched rather than
+                // offered. An offer resting at it is a promise to sell at
+                // exactly that price, so a book that runs straight through
+                // pays the promise and keeps the rest of the move; watching
+                // makes the same number a floor instead of a ceiling.
+                if (!SellLadder.restsNow(secondsLeft)) {
+                    if (open.sellOrderId != null) cancelOffer(open)
+                    val bid = try {
+                        ClobApi.bestBid(open.asset)
+                    } catch (e: Exception) {
+                        null
+                    }
+                    open.sellPrice = want
+                    if (!SellLadder.reached(bid, want)) {
+                        open.note = "жду ${(want * 100).toInt()}¢"
+                        return
+                    }
+                    // Reached: take it, a tick under the bid so the top of
+                    // book moving between the read and the send cannot miss.
+                    offer(
+                        open,
+                        (bid!! - market.tickSize).coerceAtLeast(market.tickSize),
+                        market,
+                        cut = true,
+                    )
+                    return
+                }
+
                 if (open.sellOrderId != null && abs(open.sellPrice - want) <= market.tickSize / 2) {
                     return
                 }

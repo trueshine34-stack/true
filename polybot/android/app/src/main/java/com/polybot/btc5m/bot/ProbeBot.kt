@@ -840,6 +840,14 @@ class ProbeBot(
         val rung: Int,
         val demo: Boolean,
         val leg: Int,
+        /**
+         * Whether this price is on the book or only being watched for.
+         *
+         * Up to the last minute it is watched: nothing rests, and the shares
+         * go into the bid the moment it reaches the price — so the number is a
+         * floor. Inside the last minute it rests, and is a ceiling.
+         */
+        val resting: Boolean,
     )
 
     /** What is on offer for everything still held, paper or real. */
@@ -867,6 +875,9 @@ class ProbeBot(
                         rung = open.rung,
                         demo = open.demo,
                         leg = open.leg,
+                        resting = SellLadder.restsNow(
+                            open.windowStart + WINDOW_SEC - nowSec,
+                        ),
                     )
                 }
         }
@@ -1565,18 +1576,30 @@ class ProbeBot(
                         " — продала " + String.format("%.1f", left) +
                         " ${open.side} по ${(bid * 100).toInt()}¢",
                 )
-            } else if (bid >= want - 1e-9) {
-                // The offer would have been resting there, so it is the price
-                // asked that gets paid, not the bid that reached up to it.
+            } else if (SellLadder.reached(bid, want)) {
+                // Up to the last minute the rung is a price to wait for, not
+                // one to sit at: nothing is on the book, and the shares go
+                // into the bid the moment it reaches up — so the rung is a
+                // floor, and a bid that jumps past it pays what it jumped to.
+                // Inside the last minute the offer is resting at the rung, and
+                // a resting offer gets the price it asked for.
+                val resting = SellLadder.restsNow(secondsLeft)
+                val got = if (resting) want else bid
                 val left = open.shares - open.sold
                 moved = moved.copy(
                     sold = open.shares,
-                    proceeds = open.proceeds + left * SellPercent.netSell(want),
+                    proceeds = open.proceeds + left * SellPercent.netSell(got),
                 )
                 engine.log(
                     "trade",
-                    "Проба (демо): продала " + String.format("%.1f", left) +
-                        " ${open.side} по ${(want * 100).toInt()}¢",
+                    "Проба (демо): " + (if (resting) "лимитка сработала" else "забрала по рынку") +
+                        " — " + String.format("%.1f", left) +
+                        " ${open.side} по ${(got * 100).toInt()}¢" +
+                        (if (!resting && got > want + 1e-9) {
+                            " (лесенка просила ${(want * 100).toInt()}¢)"
+                        } else {
+                            ""
+                        }),
                 )
             }
             if (moved != open) {

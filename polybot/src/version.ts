@@ -5,4 +5,4 @@
  * failed to install, and "is this the one with the fix" is a question the
  * screen should answer rather than the memory. Bumped with the APK's version.
  */
-export const APP_VERSION = '15.3';
+export const APP_VERSION = '15.4';

@@ -82,6 +82,31 @@ object SellLadder {
         return maxOf(stepped, tick)
     }
 
+    /**
+     * How long before the close the ladder stops watching and starts resting.
+     *
+     * The last minute. Up to then the rung is a price to *wait for*: nothing
+     * sits on the book, and the moment the bid reaches the rung the shares are
+     * sold into it — so the rung is a floor rather than a ceiling, and a bid
+     * that jumps straight past it pays what it jumped to. Inside the last
+     * minute there is no longer time to wait for anything, so the offer goes
+     * onto the book at the rung and takes whoever comes.
+     */
+    const val REST_LAST_SEC = 60L
+
+    /**
+     * Whether the offer belongs on the book now rather than in hand.
+     *
+     * [secondsLeft] is what is left of the position's own window, so a
+     * position bought before its window opened is not treated as late.
+     */
+    fun restsNow(secondsLeft: Long, restSec: Long = REST_LAST_SEC): Boolean =
+        secondsLeft <= restSec
+
+    /** Whether the book is already paying the rung, so it can simply be taken. */
+    fun reached(bid: Double?, rung: Double): Boolean =
+        bid != null && bid > 0.0 && rung > 0.0 && bid >= rung - 1e-9
+
     fun stepFor(
         elapsedSec: Long,
         highWater: Double?,

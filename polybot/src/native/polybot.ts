@@ -494,6 +494,11 @@ export type ProbeOffer = {
   demo: boolean;
   /** Which buy of the window it stands over. */
   leg: number;
+  /**
+   * Whether the price is on the book or only being watched for. Up to the
+   * last minute it is watched — a floor, not a ceiling.
+   */
+  resting: boolean;
 };
 
 export type ProbeState = {

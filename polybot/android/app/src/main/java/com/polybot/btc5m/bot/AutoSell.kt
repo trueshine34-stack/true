@@ -500,6 +500,10 @@ class AutoSell(
                 hold > 0L -> "жду ${(hold + 999) / 1000} с по замеру"
                 settings.percentMode ->
                     reconcilePercent(position, open, meta, percentPrice, mine)
+                // Up to the last minute the rung is watched rather than
+                // offered, so a bid that jumps past it pays what it jumped to.
+                !SellLadder.restsNow(closesAt - now) ->
+                    watchRung(position, open, meta, target, mine, lotAt)
                 else -> reconcile(position, open, meta, target, mine, lotAt)
             }
             // Covered, settled, or the bot's: nothing left to chase here.
@@ -946,6 +950,62 @@ class AutoSell(
      * covered are asked for, so a slow or repeated sweep cannot stack two
      * orders on the same shares.
      */
+    /**
+     * Watches for the rung instead of sitting on it.
+     *
+     * A resting offer at the rung is a promise to sell at exactly that price:
+     * when the book runs through it the fill comes back at the rung and the
+     * rest of the move is somebody else's. So until the last minute nothing is
+     * left on the book — the bid is read, and the moment it reaches the rung
+     * the shares are sold into it at whatever it is paying. The rung becomes a
+     * floor rather than a ceiling.
+     *
+     * Anything of ours already resting is pulled first: an offer left from the
+     * last minute of a previous window, or from before this rule changed,
+     * would fill at its own price and defeat the whole point. A price the user
+     * pinned by hand is theirs and is left alone.
+     */
+    private fun watchRung(
+        position: Position,
+        open: List<ClobApi.OpenOrder>,
+        meta: ClobApi.MarketMeta,
+        rung: Double,
+        mine: Double,
+        lotAt: Long,
+    ): String {
+        val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
+        val (pinned, ours) = sells.partition { held(it) }
+        if (ours.isNotEmpty()) {
+            val session = engine.session() ?: return "нет сессии"
+            for (order in ours) {
+                try {
+                    ClobApi.cancelOrder(session.creds, session.account.signerAddress, order.id)
+                } catch (e: Exception) {
+                    return e.message ?: "не снять старый ордер"
+                }
+            }
+            return "жду " + (rung * 100).toInt() + "¢"
+        }
+
+        val free = mine - pinned.sumOf { it.remaining }
+        if (free < meta.minimumOrderSize - 1e-6) return "покрыто"
+
+        val bid = try {
+            ClobApi.bestBid(position.asset)
+        } catch (e: Exception) {
+            return "цена недоступна"
+        }
+        if (!SellLadder.reached(bid, rung)) {
+            return "жду " + (rung * 100).toInt() + "¢"
+        }
+
+        // Crossing rather than resting: this is meant to be taken now. A tick
+        // under the bid covers the top of book moving between the read and the
+        // send without giving away more than one tick of it.
+        val limit = maxOf(meta.tickSize, snapToTick(bid!! - meta.tickSize, meta.tickSize))
+        return tryPlace(position, free, limit, lotAt)
+    }
+
     private fun reconcile(
         position: Position,
         open: List<ClobApi.OpenOrder>,

@@ -257,3 +257,49 @@ class SellLadderLeadTest {
         assertEquals(reached, SellLadder.stepFor(20, 0.50, ten, floor = reached, stepSec = 30L))
     }
 }
+
+/**
+ * The rung as a floor rather than a ceiling.
+ *
+ * An offer resting at the rung is a promise to sell at exactly that price: a
+ * book that runs straight through it pays the promise and keeps the rest of
+ * the move. So until the last minute nothing rests — the bid is watched, and
+ * when it reaches the rung the shares go into it at whatever it is paying.
+ */
+class SellLadderWatchTest {
+
+    @Test
+    fun `the rung is watched until the last minute`() {
+        assertEquals(false, SellLadder.restsNow(300))
+        assertEquals(false, SellLadder.restsNow(61))
+        assertEquals(true, SellLadder.restsNow(60))
+        assertEquals(true, SellLadder.restsNow(0))
+    }
+
+    @Test
+    fun `a position bought before its window opens is not late`() {
+        // More than five minutes left, because the window has not started.
+        assertEquals(false, SellLadder.restsNow(320))
+    }
+
+    @Test
+    fun `the bid has to reach the rung, and anything over it counts`() {
+        assertEquals(false, SellLadder.reached(0.83, 0.84))
+        assertEquals(true, SellLadder.reached(0.84, 0.84))
+        // The point of watching: a bid that jumped past pays what it jumped to.
+        assertEquals(true, SellLadder.reached(0.91, 0.84))
+    }
+
+    @Test
+    fun `no bid is not a reached rung`() {
+        assertEquals(false, SellLadder.reached(null, 0.84))
+        assertEquals(false, SellLadder.reached(0.0, 0.84))
+        assertEquals(false, SellLadder.reached(0.90, 0.0))
+    }
+
+    @Test
+    fun `the last minute is adjustable`() {
+        assertEquals(false, SellLadder.restsNow(31, restSec = 30))
+        assertEquals(true, SellLadder.restsNow(30, restSec = 30))
+    }
+}

@@ -2618,8 +2618,13 @@ function ProbeRow({ round, offer }: { round: ProbeRound; offer?: ProbeOffer }) {
             : `ждёт ${cents(round.resting || 0)}`}
           {round.adds > 0 ? ` ×${round.adds + 1}` : ''}
           {round.leg > 0 ? ' откуп' : ''}
+          {/* Up to the last minute the rung is watched, not offered: the
+              shares go into the bid the moment it reaches up, so the price is
+              a floor. In the last minute the offer rests at it. */}
           {offer
-            ? ` · продаёт ${cents(offer.price)}`
+            ? offer.resting
+              ? ` · лимитка ${cents(offer.price)}`
+              : ` · ждёт ${cents(offer.price)}+`
             : round.target > 0
               ? ` → ${bigPrice(round.target)}`
               : ''}

@@ -1516,7 +1516,8 @@ class BotPlugin : Plugin() {
                     .put("size", it.size)
                     .put("rung", it.rung)
                     .put("demo", it.demo)
-                    .put("leg", it.leg),
+                    .put("leg", it.leg)
+                    .put("resting", it.resting),
             )
         }
 
