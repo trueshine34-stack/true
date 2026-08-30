@@ -48,8 +48,14 @@ class AutoSell(
         val watchSec: Int = 60,
         /** How far ahead of each boundary the next rung takes over. */
         val ladderLeadSec: Int = SellLadder.DEFAULT_LEAD_SEC,
-        /** How long each rung holds before the clock moves on. */
-        val ladderStepSec: Long = SellLadder.DEFAULT_STEP_SEC,
+        /**
+         * How long each rung holds before the clock moves on.
+         *
+         * Half a minute: five rungs spent by the halfway mark, which asks the
+         * higher prices while there is still time for the market to reach
+         * them, and holds the top one for the rest of the window.
+         */
+        val ladderStepSec: Long = 30L,
         /** Buy the same size back if the price falls far enough after a sale. */
         val rebuyEnabled: Boolean = false,
         /** How far below the sale price the buy-back triggers, as a fraction. */

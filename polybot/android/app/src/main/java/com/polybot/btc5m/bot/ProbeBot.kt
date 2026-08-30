@@ -56,6 +56,14 @@ class ProbeBot(
         val settled: Double = 0.0,
         val winner: String = "",
         val note: String? = null,
+        /**
+         * A bid left waiting at this price, with nothing bought yet.
+         *
+         * The side opened dearer than the rule will pay at the market, so
+         * instead of standing the window out it left an order where it is
+         * willing to buy. Until something fills, [shares] is zero.
+         */
+        val resting: Double = 0.0,
         /** Best bid seen while holding, which is what walks the ladder up. */
         val highWater: Double = 0.0,
         /** The rung reached, so a paper exit cannot slide back down. */
@@ -210,9 +218,13 @@ class ProbeBot(
         // Scoring first: a round whose window has settled is finished business
         // and should be off the books before the next entry is considered.
         settleDue(nowSec)
-        // And the paper positions walk their own ladder, since no rule on the
-        // desk can see them.
-        if (settings.enabled) workPaper(nowSec)
+        // And the paper orders are worked, since no rule on the desk can see
+        // them: first the bids that are waiting, then the ladder over anything
+        // that has been bought.
+        if (settings.enabled) {
+            fillResting(nowSec)
+            workPaper(nowSec)
+        }
 
         val session = engine.session()
         if (session == null) {
@@ -372,16 +384,25 @@ class ProbeBot(
         }
         if (ask == null) return
 
-        val size = ProbePlan.shares(settings.stakeUsd, ask, market.minimumOrderSize)
+        // Dear sides are not chased. Above the take price the rule leaves a
+        // bid where it is willing to buy and lets the window come to it.
+        val waits = ProbePlan.waits(ask)
+        val pay = ProbePlan.entryPrice(ask)
+        val size = ProbePlan.shares(settings.stakeUsd, pay, market.minimumOrderSize)
         // Crossing the spread can step over the window's own ceiling, and the
         // venue refuses such an order rather than shaving it.
-        val limit = minOf(
-            ProbePlan.crossPrice(ask, market.tickSize),
-            BuyCap.ceiling(BuyCap.elapsedFor(market.windowStart)),
-        )
+        val limit = if (waits) {
+            ProbePlan.REST_PRICE
+        } else {
+            minOf(
+                ProbePlan.crossPrice(ask, market.tickSize),
+                BuyCap.ceiling(BuyCap.elapsedFor(market.windowStart)),
+            )
+        }
 
         if (settings.demo) {
-            paperBuy(windowStart, token, way, ask, size, line)
+            if (waits) paperRest(windowStart, token, way, line)
+            else paperBuy(windowStart, token, way, ask, size, line)
             return
         }
 
@@ -408,8 +429,29 @@ class ProbeBot(
 
         val fill = Orders.filled("BUY", result.makingAmount, result.takingAmount)
         if (fill.shares <= 1e-6) {
-            // Nothing was taken. A resting buy is a bet the rule did not mean
-            // to place — it wanted this window, at this price, now.
+            if (waits) {
+                // This one is meant to wait. It stays on the book, and what it
+                // came to is read off the order log when the window settles.
+                working = working + Round(
+                    windowStart = windowStart,
+                    asset = token,
+                    demo = false,
+                    side = way,
+                    perHour = line?.perHour ?: 0.0,
+                    shares = 0.0,
+                    price = 0.0,
+                    resting = ProbePlan.REST_PRICE,
+                )
+                note = "жду по ${(ProbePlan.REST_PRICE * 100).toInt()}¢"
+                engine.log(
+                    "info",
+                    "Проба: дорого ${(ask * 100).toInt()}¢ — оставила заявку " +
+                        "на $way по ${(ProbePlan.REST_PRICE * 100).toInt()}¢",
+                )
+                return
+            }
+            // Nothing was taken at a price it meant to take. A resting buy is
+            // a bet the rule did not mean to place.
             result.orderId?.let { cancel(it) }
             note = "не налили по ${(ask * 100).toInt()}¢"
             return
@@ -474,6 +516,81 @@ class ProbeBot(
     }
 
     /**
+     * The bid that waits, on paper.
+     *
+     * Nothing is bought yet: the round is a standing order at the rest price,
+     * and it becomes a position the moment the offers come down to it. If they
+     * never do, the window closes having cost nothing, which is the point of
+     * bidding rather than chasing.
+     */
+    private fun paperRest(
+        windowStart: Long,
+        token: String,
+        way: String,
+        line: TrendFit.Trend?,
+    ) {
+        working = working + Round(
+            windowStart = windowStart,
+            asset = token,
+            demo = true,
+            side = way,
+            perHour = line?.perHour ?: 0.0,
+            shares = 0.0,
+            price = 0.0,
+            resting = ProbePlan.REST_PRICE,
+        )
+        note = "жду по ${(ProbePlan.REST_PRICE * 100).toInt()}¢ (демо)"
+        engine.log(
+            "info",
+            "Проба (демо): дорого — оставила заявку на $way по " +
+                "${(ProbePlan.REST_PRICE * 100).toInt()}¢",
+        )
+    }
+
+    /**
+     * Whether a waiting paper bid has been reached.
+     *
+     * A resting buy is filled when a seller comes down to it, which is exactly
+     * when the best offer reaches its price — and being the maker, it pays no
+     * taker fee, so the price it gets is the price it asked.
+     */
+    private fun fillResting(nowSec: Long) {
+        val waiting = working.filter { it.demo && it.resting > 0.0 && it.shares <= 0.0 }
+        if (waiting.isEmpty()) return
+
+        var next = working
+        var changed = false
+        for (open in waiting) {
+            if (nowSec >= open.windowStart + WINDOW_SEC) continue
+            val ask = try {
+                ClobApi.bestAsk(open.asset)
+            } catch (e: Exception) {
+                null
+            } ?: continue
+            if (ask > open.resting + 1e-9) continue
+
+            val size = ProbePlan.shares(settings.stakeUsd, open.resting, 5.0)
+            next = next.map {
+                if (it.windowStart == open.windowStart) {
+                    it.copy(shares = size, price = open.resting)
+                } else {
+                    it
+                }
+            }
+            changed = true
+            engine.log(
+                "trade",
+                "Проба (демо): налили " + String.format("%.1f", size) + " ${open.side}" +
+                    " по ${(open.resting * 100).toInt()}¢",
+            )
+        }
+        if (changed) {
+            working = next
+            onStateChanged()
+        }
+    }
+
+    /**
      * Walks the paper position up the same ladder the desk's own rule uses.
      *
      * The real probe places no sells: it buys, and the standing sell rule
@@ -500,18 +617,24 @@ class ProbeBot(
                 null
             } ?: continue
 
-            val high = maxOf(open.highWater, bid)
-            val step = ProbePlan.exitStep(elapsed, high, open.rung, rule)
+            // The offer is priced from what was known before this tick, and
+            // only then does the mark walk forward. Doing it the other way
+            // round — pricing the rung off the very bid being tested — meant
+            // that a price which jumped straight past a rung dragged the rung
+            // up with it, and the paper position could never fill. In the
+            // market the offer was already resting there and simply got hit.
             val want = ProbePlan.exitPrice(
                 cost = open.price,
                 elapsedSec = elapsed,
                 secondsLeft = secondsLeft,
-                highWater = high,
+                highWater = open.highWater,
                 rung = open.rung,
                 bestBid = bid,
                 exit = rule,
             )
 
+            val high = maxOf(open.highWater, bid)
+            val step = ProbePlan.exitStep(elapsed, high, open.rung, rule)
             var moved = open.copy(highWater = high, rung = maxOf(open.rung, step))
             if (bid >= want - 1e-9) {
                 // The offer would have been resting there, so it is the price
@@ -606,6 +729,35 @@ class ProbeBot(
      * share on the winning side and nothing on the other.
      */
     private fun score(open: Round, nowSec: Long): Round {
+        // A real bid that was left waiting may have been filled while nobody
+        // was looking; the order log is the only place that fill exists.
+        val round = if (!open.demo && open.resting > 0.0 && open.shares <= 0.0) {
+            val buys = OrderLog.forWindow(open.windowStart)
+                .filter { it.asset == open.asset && it.action == "BUY" }
+            val got = buys.sumOf { it.matched }
+            val paid = buys.sumOf { it.matched * it.realPrice }
+            if (got > 1e-6) {
+                open.copy(shares = got, price = paid / got)
+            } else {
+                open
+            }
+        } else {
+            open
+        }
+
+        // A bid nobody came down to cost nothing and bought nothing. It is a
+        // window with a reason, not a trade.
+        if (round.shares <= 1e-6) {
+            return round.copy(
+                winner = EventStats.winnerFor(round.windowStart, nowSec),
+                note = "лимитка ${(round.resting * 100).toInt()}¢ не налилась",
+            )
+        }
+
+        return scoreFilled(round, nowSec)
+    }
+
+    private fun scoreFilled(open: Round, nowSec: Long): Round {
         // A paper round has been keeping its own books all along; a real one's
         // sales exist only in the order log, because this rule never placed
         // them.

@@ -13,8 +13,8 @@ class ProbePlanTest {
 
     @Test
     fun `aims at the next window through the lead before it opens`() {
-        // Ten seconds left, and nine.
-        assertEquals(W + 300, ProbePlan.targetWindow(W, 290, on))
+        // Twenty seconds left, and one.
+        assertEquals(W + 300, ProbePlan.targetWindow(W, 280, on))
         assertEquals(W + 300, ProbePlan.targetWindow(W, 299, on))
     }
 
@@ -23,14 +23,14 @@ class ProbePlanTest {
         // The venue does not always publish the next market in time, and a
         // window entered two seconds late is still that window's bet.
         assertEquals(W, ProbePlan.targetWindow(W, 0, on))
-        assertEquals(W, ProbePlan.targetWindow(W, 10, on))
+        assertEquals(W, ProbePlan.targetWindow(W, 20, on))
     }
 
     @Test
     fun `aims at nothing through the middle of a window`() {
-        assertNull(ProbePlan.targetWindow(W, 11, on))
+        assertNull(ProbePlan.targetWindow(W, 21, on))
         assertNull(ProbePlan.targetWindow(W, 150, on))
-        assertNull(ProbePlan.targetWindow(W, 289, on))
+        assertNull(ProbePlan.targetWindow(W, 279, on))
     }
 
     @Test
@@ -57,11 +57,25 @@ class ProbePlanTest {
     }
 
     @Test
-    fun `will not chase a side that is already priced`() {
-        val why = ProbePlan.blockedBecause("Up", 0.86, 100.0, on)
-        assertEquals("дорого 86¢", why)
-        // The ceiling itself is still allowed.
-        assertNull(ProbePlan.blockedBecause("Up", ProbePlan.MAX_PRICE, 100.0, on))
+    fun `takes a side at the market only while it is cheap enough`() {
+        assertTrue(!ProbePlan.waits(0.42))
+        assertTrue(!ProbePlan.waits(ProbePlan.MAX_TAKE))
+        assertTrue(ProbePlan.waits(0.57))
+        assertTrue(ProbePlan.waits(0.90))
+    }
+
+    @Test
+    fun `a dear side is bid for rather than chased`() {
+        // Cheap enough: pay what is asked.
+        assertEquals(0.42, ProbePlan.entryPrice(0.42), 1e-9)
+        // Too dear: leave a bid where the rule is willing to buy, and let the
+        // window come to it or not.
+        assertEquals(ProbePlan.REST_PRICE, ProbePlan.entryPrice(0.72), 1e-9)
+    }
+
+    @Test
+    fun `a dear side is not a reason to stand the window out`() {
+        assertNull(ProbePlan.blockedBecause("Up", 0.86, 100.0, on))
     }
 
     @Test
@@ -180,9 +194,11 @@ class ProbePlanTest {
             ProbePlan.exitPrice(0.5, 0, 300, 0.0, 0, 0.5, rule),
             1e-9,
         )
+        // Half a minute a rung, so the second one is already asking by the
+        // fifteenth second — the lead moves each boundary that much early.
         assertEquals(
             0.84,
-            ProbePlan.exitPrice(0.5, 50, 250, 0.0, 0, 0.5, rule),
+            ProbePlan.exitPrice(0.5, 20, 280, 0.0, 0, 0.5, rule),
             1e-9,
         )
     }
@@ -222,7 +238,7 @@ class ProbePlanTest {
     fun `a shorter rung reaches the higher asks sooner`() {
         val long = AutoSell.Settings(ladderStepSec = 60)
         val short = AutoSell.Settings(ladderStepSec = 30)
-        val at = 90L
+        val at = 50L
         assertTrue(
             ProbePlan.exitPrice(0.5, at, 210, 0.0, 0, 0.5, short) >
                 ProbePlan.exitPrice(0.5, at, 210, 0.0, 0, 0.5, long),

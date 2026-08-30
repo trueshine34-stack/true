@@ -34,9 +34,9 @@ export type ManualSettings = {
   /**
    * How long each rung holds before the clock moves to the next one.
    *
-   * A minute spends the five rungs over the whole window. Thirty seconds
-   * spends them by the halfway mark, which asks the higher prices while there
-   * is still time for the market to reach them.
+   * Thirty seconds spends the five rungs by the halfway mark, asking the
+   * higher prices while there is still time for the market to reach them. A
+   * minute spreads them over the whole window instead.
    */
   autoSellStepSec: number;
   /** Price the exit off what the position cost rather than off the clock. */
@@ -81,7 +81,7 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellRetrySec: 3,
   autoSellWatchSec: 60,
   autoSellLeadSec: 15,
-  autoSellStepSec: 60,
+  autoSellStepSec: 30,
   autoSellPercentMode: false,
   autoSellProfitPct: 0.2,
   autoSellSliceGapSec: 2,

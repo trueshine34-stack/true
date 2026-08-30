@@ -436,12 +436,12 @@ class PulseBot(
             return
         }
 
-        open.highWater = maxOf(open.highWater, bid)
+        // What the offer was asking before this tick's bid arrived. Pricing
+        // the rung off the same bid it is tested against walks it up out of
+        // reach every time the price jumps, and a resting offer does not do
+        // that — it gets hit.
         val rule = exit()
-        open.rung = maxOf(
-            open.rung,
-            ProbePlan.exitStep(elapsed, open.highWater, open.rung, rule),
-        )
+        val asked = open.highWater
 
         when (PulsePlan.exitFor(open.outcome, current, settings)) {
             PulsePlan.Exit.RIDE -> {
@@ -461,7 +461,7 @@ class PulseBot(
                     cost = open.price,
                     elapsedSec = elapsed,
                     secondsLeft = secondsLeft,
-                    highWater = open.highWater,
+                    highWater = asked,
                     rung = open.rung,
                     bestBid = bid,
                     exit = rule,
@@ -470,6 +470,12 @@ class PulseBot(
                 val want = minOf(mine, rungAsk)
                 open.sellPrice = want
                 if (bid >= want - 1e-9) paperSell(open, want, "по ${(want * 100).toInt()}¢")
+                // And only now does the mark walk on.
+                open.highWater = maxOf(open.highWater, bid)
+                open.rung = maxOf(
+                    open.rung,
+                    ProbePlan.exitStep(elapsed, open.highWater, open.rung, rule),
+                )
             }
         }
     }

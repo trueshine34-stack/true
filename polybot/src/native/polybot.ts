@@ -632,7 +632,7 @@ const webStub: PolyBotPlugin = {
     enabled: false,
     running: false,
     stakeUsd: 5,
-    leadSec: 10,
+    leadSec: 20,
     roomShare: 0.35,
     demo: true,
     bankUsd: 100,

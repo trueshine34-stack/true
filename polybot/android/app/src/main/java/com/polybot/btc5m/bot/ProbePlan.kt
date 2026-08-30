@@ -24,10 +24,27 @@ object ProbePlan {
     const val DEFAULT_BANK = 100.0
 
     /** How long before the window opens the entry goes in. */
-    const val DEFAULT_LEAD_SEC = 10L
+    const val DEFAULT_LEAD_SEC = 20L
 
-    /** Nothing is bought this dear, whatever the line says. */
-    const val MAX_PRICE = 0.80
+    /**
+     * The dearest offer worth taking at the market.
+     *
+     * Above it the entry is not abandoned — the line still points somewhere —
+     * but it stops paying whatever is asked and leaves a bid instead. A side
+     * that opens dear is a side someone else has already paid for; if it is
+     * coming back to us it will come back to [REST_PRICE], and if it is not,
+     * the window was not ours.
+     */
+    const val MAX_TAKE = 0.56
+
+    /** Where the bid waits when the offer is dearer than that. */
+    const val REST_PRICE = 0.54
+
+    /** Whether this quote is taken now or waited for. */
+    fun waits(ask: Double): Boolean = ask > MAX_TAKE + 1e-9
+
+    /** What the entry will actually pay: the offer, or the resting bid. */
+    fun entryPrice(ask: Double): Double = if (waits(ask)) REST_PRICE else ask
 
     /**
      * How much room to the level ahead a window needs, as a share of what a
@@ -137,7 +154,6 @@ object ProbePlan {
             return "у разворота " + Math.round(level ?: 0.0)
         }
         if (ask == null || ask <= 0.0) return "нет цены"
-        if (ask > MAX_PRICE + 1e-9) return "дорого " + "${Math.round(ask * 100)}¢"
         if (cashUsd < settings.stakeUsd) {
             return if (settings.demo) "тестовый счёт пуст" else "на счету пусто"
         }

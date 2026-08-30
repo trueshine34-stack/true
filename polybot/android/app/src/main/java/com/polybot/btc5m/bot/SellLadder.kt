@@ -39,10 +39,9 @@ object SellLadder {
     /**
      * How long a rung holds before the clock moves to the next one.
      *
-     * A minute by default, which spends the five rungs over the whole window.
-     * Half that spends them by the halfway mark, which is a different bet: it
-     * asks the higher prices while there is still time for the market to reach
-     * them, and settles for the top rung for the rest of the window.
+     * A minute here, which spreads five rungs over the whole window; the sell
+     * rule asks for half that, spending them by the halfway mark so the higher
+     * prices are asked while there is still time for the market to reach them.
      */
     const val DEFAULT_STEP_SEC = 60L
 
