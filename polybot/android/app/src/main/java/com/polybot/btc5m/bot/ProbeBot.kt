@@ -1767,6 +1767,14 @@ class ProbeBot(
             val wasRed = open.wasRed ||
                 (under && redFrom > 0L && nowSec - redFrom >= ProbePlan.RED_SEC)
 
+            // Whether the move is still one clean run. A real position's
+            // high-water mark is kept here, because the paper ladder keeps its
+            // own further down and deliberately prices its offer off the
+            // pre-tick value — walking it early would put the rung above the
+            // very bid being tested, which is a bug this rule already had once.
+            val high = if (open.demo) open.highWater else maxOf(open.highWater, bid)
+            val dipped = open.dipped || SellLadder.dipping(open.highWater, bid)
+
             val why = when {
                 // Written off under a dime, and handed back at a third.
                 ProbePlan.rescues(low, bid) -> "спасена с " + (low * 100).toInt() + "¢"
@@ -1776,7 +1784,14 @@ class ProbeBot(
                     "падала до " + (low * 100).toInt() + "¢ — вышла в плюс"
                 // Half a minute on the wrong side of the entry, and now ahead:
                 // a tenth is already better than the position deserved.
-                wasRed && ProbePlan.gained(worth, open.price, ProbePlan.RED_GAIN) ->
+                //
+                // Unless the move is still running. A position that dipped
+                // early and then went straight up is exactly the one worth
+                // holding to ninety, and taking a tenth off it is the thing
+                // the run rule exists to prevent — this sold at 66¢ what was
+                // on its way past 74¢.
+                wasRed && dipped &&
+                    ProbePlan.gained(worth, open.price, ProbePlan.RED_GAIN) ->
                     "была в минусе — забрала +" +
                         Math.round((worth / open.price - 1.0) * 100) + "%"
                 // Or a quote that has not left a nickel for half a minute:
@@ -1793,6 +1808,8 @@ class ProbeBot(
                     if (it.windowStart == open.windowStart && it.leg == open.leg) {
                         it.copy(
                             lowWater = low,
+                            highWater = high,
+                            dipped = dipped,
                             flatFrom = flatFrom,
                             flatLow = flatLow,
                             flatHigh = flatHigh,

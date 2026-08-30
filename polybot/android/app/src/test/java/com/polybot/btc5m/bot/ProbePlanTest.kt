@@ -785,6 +785,28 @@ class ProbePlanTest {
         assertTrue(!ProbePlan.gained(worth = 0.55, cost = 0.0, share = ProbePlan.RED_GAIN))
     }
 
+    /**
+     * Bought at 51¢ and sold at 66¢ while the ladder's first rung was 77¢.
+     *
+     * The position dipped under the entry for half a minute, which armed the
+     * tenth-above-cost exit at about 58¢; the bid then jumped straight past
+     * that to 66¢ and was taken there. But the move had never given six cents
+     * back — it was one clean run, the case the ninety-cent hold exists for.
+     * So the tenth only applies once the run is over.
+     */
+    @Test
+    fun `a run still running is not cut short for a tenth`() {
+        val cost = 0.527
+        val worth = 0.644
+        // The gain is there either way.
+        assertTrue(ProbePlan.gained(worth, cost, ProbePlan.RED_GAIN))
+        // What decides it is whether the run has ended.
+        assertTrue(!SellLadder.dipping(highWater = 0.66, bid = 0.66))
+        assertTrue(SellLadder.dipping(highWater = 0.66, bid = 0.59))
+        // And while it has not, the ladder is asking ninety rather than a rung.
+        assertEquals(0.90, SellLadder.holdOut(0.77, dipped = false, elapsedSec = 33), 1e-9)
+    }
+
     @Test
     fun `the bar is lower for a position that has already been wrong`() {
         // Standing still asks a fifth; having been under water asks a tenth,
