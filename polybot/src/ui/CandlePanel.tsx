@@ -45,9 +45,14 @@ const TICK_MS = 250;
  */
 export function CandlePanel({
   interval = '5m',
+  onPick,
+  picked,
   height = 150,
 }: {
   interval?: string;
+  /** Called with a candle's open time when it is tapped. */
+  onPick?: (time: number) => void;
+  picked?: number | null;
   /** Chart units tall. The closer view is the shorter one. */
   height?: number;
 }) {
@@ -72,7 +77,15 @@ export function CandlePanel({
     };
   }, [interval]);
 
-  return <CandleFace candles={candles} interval={interval} height={height} />;
+  return (
+    <CandleFace
+      candles={candles}
+      interval={interval}
+      height={height}
+      onPick={onPick}
+      picked={picked}
+    />
+  );
 }
 
 /** The drawing, from candles and nothing else. */
@@ -80,10 +93,15 @@ export function CandleFace({
   candles,
   interval = '5m',
   height: H = 150,
+  onPick,
+  picked,
 }: {
   candles: Candle[];
   interval?: string;
   height?: number;
+  /** Called with a candle's open time when it is tapped. */
+  onPick?: (time: number) => void;
+  picked?: number | null;
 }) {
   const shape = candleShape(candles, W, H);
   const levels = shape ? findLevels(candles, shape.last) : [];
@@ -135,9 +153,45 @@ export function CandleFace({
     return kept;
   })();
 
+  /*
+    Which candle a tap landed on.
+
+    The chart is drawn in its own units and stretched to whatever width the
+    screen gives it, so the tap comes back as a fraction of that width and is
+    put back into chart units before the nearest bar is looked for. Every bar
+    is a five-minute window, and the window is what the history and the bot's
+    own reading are filed under.
+  */
+  const pick = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!onPick || !shape) return;
+    const box = e.currentTarget.getBoundingClientRect();
+    if (box.width <= 0) return;
+    const at = ((e.clientX - box.left) / box.width) * W;
+    let best = shape.bars[0];
+    for (const bar of shape.bars) {
+      if (Math.abs(bar.x - at) < Math.abs(best.x - at)) best = bar;
+    }
+    if (best) onPick(best.time);
+  };
+
+  const lit = shape?.bars.find((b) => b.time === picked);
+
   return (
-    <div className="candles">
+    <div
+      className={`candles${onPick ? ' tappable' : ''}`}
+      onPointerUp={onPick ? pick : undefined}
+    >
       <svg className="candles-svg" viewBox={`0 0 ${W} ${H}`} aria-hidden>
+        {/* The candle being read, marked behind everything else. */}
+        {lit && (
+          <rect
+            className="candlepick"
+            x={(lit.x - lit.half * 2).toFixed(1)}
+            y={0}
+            width={(lit.half * 4).toFixed(1)}
+            height={H}
+          />
+        )}
         {/*
           Levels first, under the candles: they are the background the price is
           working against, not marks on top of it.

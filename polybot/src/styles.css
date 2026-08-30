@@ -2975,6 +2975,52 @@ button.wide {
   background: var(--surface);
 }
 
+/*
+  One candle, opened. It sits directly under the chart it was tapped on, so
+  the marked candle and what it says are one glance apart.
+*/
+.windowread {
+  margin-top: -4px;
+}
+
+/* The headline answer: a touch larger than the reading, well under the title. */
+.windowread > .probefact {
+  font-size: 12px;
+  padding: 2px 0 6px;
+}
+
+.windowread .probelist {
+  max-height: 132px;
+}
+
+.windowread .probewhy {
+  margin-top: 6px;
+  border-radius: 8px;
+}
+
+/* Bare, because the card it closes is already a panel with a border. */
+.windowread button.shut {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+/* A chart whose candles can be read one at a time says so to the thumb. */
+.candles.tappable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The candle being read, behind everything else on the chart. */
+.candlepick {
+  fill: var(--surface-2);
+}
+
 .candles-svg {
   display: block;
   width: 100%;

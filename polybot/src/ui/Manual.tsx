@@ -183,6 +183,9 @@ export function Manual({
   const [takeBot, setTakeBot] = useState<TakeState | null>(null);
   const [takeOpen, setTakeOpen] = useState(false);
   const [probeBot, setProbeBot] = useState<ProbeState | null>(null);
+  /** The five-minute candle being read, and that window's own orders. */
+  const [readWindow, setReadWindow] = useState<number | null>(null);
+  const [readOrders, setReadOrders] = useState<LoggedOrder[]>([]);
   const [probeOpen, setProbeOpen] = useState(false);
   /** The event strip is folded away until it is asked for. */
   const [sessionOpen, setSessionOpen] = useState(false);
@@ -304,6 +307,24 @@ export function Manual({
   useEffect(() => {
     onSummary?.(potential);
   }, [potential, onSummary]);
+
+  useEffect(() => {
+    if (readWindow == null) {
+      setReadOrders([]);
+      return;
+    }
+    let cancelled = false;
+    void PolyBot.getOrderLog({ windowStart: readWindow })
+      .then((r) => {
+        if (!cancelled) setReadOrders(r.orders);
+      })
+      .catch(() => {
+        if (!cancelled) setReadOrders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [readWindow]);
 
   /** The window's orders, paired into trades: a buy and the sell that closed it. */
   const trades = useMemo(() => pairOrders(logged), [logged]);
@@ -1272,7 +1293,35 @@ export function Manual({
               candles, with the prices the market keeps turning at drawn on
               them. Under it the book: what the next few dollars would cost.
             */}
-            {viewWindow == null && <CandlePanel interval="5m" height={150} />}
+            {viewWindow == null && (
+              <CandlePanel
+                interval="5m"
+                height={150}
+                picked={readWindow}
+                onPick={(t) => setReadWindow((v) => (v === t ? null : t))}
+              />
+            )}
+
+            {/*
+              What happened in the candle just tapped: the bot's own reading of
+              that window and every order it holds. One candle is one window,
+              so the two are the same question asked of the chart instead of
+              the list.
+            */}
+            {viewWindow == null && readWindow != null && (
+              <WindowRead
+                windowStart={readWindow}
+                orders={readOrders}
+                round={
+                  probeBot
+                    ? [...probeBot.riding, ...probeBot.rounds].find(
+                        (r) => r.windowStart === readWindow,
+                      ) ?? null
+                    : null
+                }
+                onClose={() => setReadWindow(null)}
+              />
+            )}
 
             {/*
               And the same hour close up. The five-minute chart says which way
@@ -2580,6 +2629,104 @@ function ProbeCard({
       )}
 
       {state.lastFault && <div className="banner warn">{state.lastFault}</div>}
+    </div>
+  );
+}
+
+/**
+ * One five-minute candle, opened.
+ *
+ * A candle and a window are the same thing seen two ways, so tapping one asks
+ * the question the history answers in a list: what was done here, and what the
+ * rule was looking at when it decided. Orders come from the log for that
+ * window; the reading comes from the round the bot filed for it, traded or
+ * skipped alike.
+ */
+function WindowRead({
+  windowStart,
+  orders,
+  round,
+  onClose,
+}: {
+  windowStart: number;
+  orders: LoggedOrder[];
+  round: ProbeRound | null;
+  onClose: () => void;
+}) {
+  const facts = (round?.why ?? '').trim();
+  const done = orders.filter((o) => o.matched > 1e-6);
+  const money = round && traded(round) ? pnlOf(round) : null;
+
+  return (
+    <div className="card tight windowread">
+      <div className="counterhead">
+        <span>Свеча {clockOf(windowStart)}</span>
+        {money != null && (
+          <b className={money >= 0 ? 'up' : 'down'}>
+            {money >= 0 ? '+' : '−'}
+            {usd(Math.abs(money))}
+          </b>
+        )}
+        <button className="shut" onClick={onClose}>
+          ✕
+        </button>
+      </div>
+
+      {/* What the bot did with this window, in its own words. */}
+      <div className="probefact">
+        <span className="muted">бот</span>
+        <b>
+          {round == null
+            ? 'не смотрел'
+            : traded(round)
+              ? `${round.side} ${round.shares.toFixed(1)} · ${cents(round.price)}`
+              : round.note || 'пропуск'}
+        </b>
+      </div>
+
+      {done.length > 0 ? (
+        <div className="probelist">
+          {done.map((o) => (
+            <div className="proberow" key={o.id}>
+              <span className="probewhen">
+                {new Date(o.placedAt * 1000).toLocaleTimeString('ru', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+              <span className={o.action === 'BUY' ? 'up' : 'down'}>
+                {o.action === 'BUY' ? 'куп' : 'прод'}
+              </span>
+              <span className="muted">
+                {o.outcome} {o.matched.toFixed(1)} ·{' '}
+                {cents(o.fillPrice ?? o.price)}
+              </span>
+              <span className="probemark">·</span>
+              <b className="muted">{o.auto ? 'бот' : 'рука'}</b>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="muted" style={{ fontSize: 11 }}>
+          Сделок в этом окне не было.
+        </div>
+      )}
+
+      {facts && (
+        <div className="probewhy">
+          {facts.split('\n').map((line) => {
+            const at = line.indexOf(':');
+            const name = at > 0 ? line.slice(0, at) : '';
+            const value = at > 0 ? line.slice(at + 1).trim() : line;
+            return (
+              <div className="probefact" key={line}>
+                <span className="muted">{name}</span>
+                <b>{value}</b>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
