@@ -1,5 +1,6 @@
 package com.polybot.btc5m.bot
 
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -338,5 +339,45 @@ class SellLadderDoubleTest {
     @Test
     fun `the multiple is adjustable`() {
         assertEquals(0.51, SellLadder.capped(0.77, 0.34, over = 1.5), 1e-9)
+    }
+}
+
+/**
+ * A run that keeps making new highs is not finished, and the rung it happens
+ * to be passing is an accident of the clock. The seconds between eighty and
+ * ninety are most of the profit and are not to be spent deciding.
+ */
+class SellLadderRunTest {
+
+    @Test
+    fun `a clean run asks for ninety instead of its rung`() {
+        assertEquals(0.90, SellLadder.holdOut(0.84, dipped = false, elapsedSec = 60), 1e-9)
+        assertEquals(0.90, SellLadder.holdOut(0.77, dipped = false, elapsedSec = 0), 1e-9)
+    }
+
+    @Test
+    fun `it never asks for less than the rung`() {
+        // Past ninety the ladder is already asking for more.
+        assertEquals(0.97, SellLadder.holdOut(0.97, dipped = false, elapsedSec = 60), 1e-9)
+    }
+
+    @Test
+    fun `a run that gave six cents back is over`() {
+        assertEquals(0.84, SellLadder.holdOut(0.84, dipped = true, elapsedSec = 60), 1e-9)
+    }
+
+    @Test
+    fun `past four minutes the window decides, not the run`() {
+        assertEquals(0.90, SellLadder.holdOut(0.84, dipped = false, elapsedSec = 240), 1e-9)
+        assertEquals(0.84, SellLadder.holdOut(0.84, dipped = false, elapsedSec = 241), 1e-9)
+    }
+
+    @Test
+    fun `six cents given back ends the run, seven or more`() {
+        assertTrue(!SellLadder.dipping(highWater = 0.80, bid = 0.74))
+        assertTrue(SellLadder.dipping(highWater = 0.80, bid = 0.73))
+        // Nothing to give back yet.
+        assertTrue(!SellLadder.dipping(highWater = 0.0, bid = 0.73))
+        assertTrue(!SellLadder.dipping(highWater = 0.80, bid = 0.0))
     }
 }

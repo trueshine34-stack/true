@@ -126,7 +126,17 @@ class AutoSell(
     private val metaCache = HashMap<String, Pair<Long, ClobApi.MarketMeta>>()
 
     /** Per-outcome ladder state, reset when the window rolls. */
-    private data class Rung(val windowStart: Long, var highWater: Double, var step: Int)
+    private data class Rung(
+        val windowStart: Long,
+        var highWater: Double,
+        var step: Int,
+        /**
+         * Whether the bid has ever given back six cents of its best. Until it
+         * has, the move is one clean run and the ask is held at ninety rather
+         * than at whatever rung the clock has reached.
+         */
+        var dipped: Boolean = false,
+    )
 
     private val rungs = HashMap<String, Rung>()
 
@@ -468,9 +478,14 @@ class AutoSell(
             // ladder none the wiser.
             val paid = OrderLog.uncoveredLots(position.asset).firstOrNull()?.price
                 ?: position.avgPrice
-            val ladderTarget = SellLadder.capped(
-                settings.ladder.getOrElse(rung.step) { settings.ladder.last() },
-                paid,
+            val ladderTarget = SellLadder.holdOut(
+                SellLadder.capped(
+                    settings.ladder.getOrElse(rung.step) { settings.ladder.last() },
+                    paid,
+                ),
+                rung.dipped,
+                (now - (meta?.windowStart?.takeIf { it > 0 } ?: windowStart))
+                    .coerceAtLeast(0L),
             )
 
             // The venue locks freshly bought shares, and how long for is
@@ -769,6 +784,9 @@ class AutoSell(
         } else {
             existing
         }
+        // Six cents given back ends the run, and it stays ended: a run
+        // interrupted is not the same run when it resumes.
+        if (SellLadder.dipping(rung.highWater, position.curPrice)) rung.dipped = true
         if (position.curPrice > rung.highWater) rung.highWater = position.curPrice
         rung.step = SellLadder.stepFor(
             // Negative before the window opens: the first rung, not the last.

@@ -106,6 +106,56 @@ object SellLadder {
     }
 
     /**
+     * How far the bid may fall back from its best and still be one clean run.
+     *
+     * Six cents. A move that keeps making new highs without giving six back
+     * is not a move that has finished; the rung it happens to be passing is
+     * an accident of the clock, and selling into it stops the run for a
+     * reason that has nothing to do with the run.
+     */
+    const val RUN_DIP = 0.06
+
+    /**
+     * What such a run holds out for instead of its rung.
+     *
+     * Ninety cents. The difference between eighty and ninety is a couple of
+     * seconds in a move like this, and it is most of the profit.
+     */
+    const val RUN_HOLD = 0.90
+
+    /**
+     * And how long into the window that is still worth doing.
+     *
+     * Four minutes. Past that the window is nearly over and holding out for
+     * a price the run has not reached yet is holding out for the settlement,
+     * which pays a dollar or nothing.
+     */
+    const val RUN_UNTIL_SEC = 240L
+
+    /** Whether the bid has given back enough of its best to end the run. */
+    fun dipping(highWater: Double, bid: Double, dip: Double = RUN_DIP): Boolean {
+        if (highWater <= 0.0 || bid <= 0.0) return false
+        return highWater - bid > dip + 1e-9
+    }
+
+    /**
+     * The price to ask, with a clean run allowed to ask for more.
+     *
+     * Only ever raises it, and only while the run is unbroken and the window
+     * still has time. Once the bid has given back six cents the run is over
+     * and the rung decides again — and because the rung is watched rather
+     * than rested, reaching it then sells at once, which is the whole point:
+     * the seconds between eighty and ninety are not to be spent deciding.
+     */
+    fun holdOut(
+        rung: Double,
+        dipped: Boolean,
+        elapsedSec: Long,
+        hold: Double = RUN_HOLD,
+        untilSec: Long = RUN_UNTIL_SEC,
+    ): Double = if (!dipped && elapsedSec in 0..untilSec) maxOf(rung, hold) else rung
+
+    /**
      * How long before the close the ladder stops watching and starts resting.
      *
      * The last minute. Up to then the rung is a price to *wait for*: nothing

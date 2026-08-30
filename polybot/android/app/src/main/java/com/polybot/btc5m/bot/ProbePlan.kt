@@ -1019,6 +1019,11 @@ object ProbePlan {
         bestBid: Double?,
         exit: AutoSell.Settings,
         tick: Double = 0.01,
+        /**
+         * Whether the bid has ever given back enough of its best to end the
+         * run. True by default, which is the ordinary ladder.
+         */
+        dipped: Boolean = true,
     ): Double {
         if (exit.percentMode) {
             return SellLadder.capped(
@@ -1051,7 +1056,13 @@ object ProbePlan {
         // sits at seventy-seven cents, so a side bought at a third that comes
         // back to two thirds has doubled the money with the ladder none the
         // wiser.
-        return SellLadder.capped(rungs[step.coerceIn(0, rungs.size - 1)], cost)
+        // A run that has not given six cents back is not finished, and the
+        // rung it is passing is an accident of the clock.
+        return SellLadder.holdOut(
+            SellLadder.capped(rungs[step.coerceIn(0, rungs.size - 1)], cost),
+            dipped,
+            elapsedSec,
+        )
     }
 
     /**

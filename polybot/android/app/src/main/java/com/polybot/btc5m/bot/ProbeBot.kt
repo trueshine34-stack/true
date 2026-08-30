@@ -119,6 +119,15 @@ class ProbeBot(
         /** The rung reached, so a paper exit cannot slide back down. */
         val rung: Int = 0,
         /**
+         * Whether the bid has ever given back six cents of its best.
+         *
+         * Until it has, the move is one clean run and the rung it happens to
+         * be passing is an accident of the clock; the ask is held at ninety
+         * instead. Once given back, it stays given back — a run interrupted
+         * is not the same run when it resumes.
+         */
+        val dipped: Boolean = false,
+        /**
          * Everything the rule was looking at when it chose this side.
          *
          * One line per fact, in the order a person would check them. A
@@ -1104,6 +1113,7 @@ class ProbeBot(
                             rung = open.rung,
                             bestBid = null,
                             exit = rule,
+                            dipped = open.dipped,
                         ),
                         size = open.shares - open.sold,
                         rung = open.rung,
@@ -2021,6 +2031,7 @@ class ProbeBot(
                 rung = open.rung,
                 bestBid = bid,
                 exit = rule,
+                dipped = open.dipped,
             )
 
             // Level to level: the trade was taken for the distance to the
@@ -2034,7 +2045,13 @@ class ProbeBot(
 
             val high = maxOf(open.highWater, bid)
             val step = ProbePlan.exitStep(elapsed, high, open.rung, rule)
-            var moved = open.copy(highWater = high, rung = maxOf(open.rung, step))
+            // Six cents given back ends the run, and it stays ended.
+            val dipped = open.dipped || SellLadder.dipping(open.highWater, bid)
+            var moved = open.copy(
+                highWater = high,
+                rung = maxOf(open.rung, step),
+                dipped = dipped,
+            )
             if (arrived && bid > 0.0 && bid < want) {
                 val left = open.shares - open.sold
                 moved = moved.copy(
