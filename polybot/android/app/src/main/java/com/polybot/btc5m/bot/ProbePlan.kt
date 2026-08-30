@@ -293,6 +293,47 @@ object ProbePlan {
         return ask < price
     }
 
+    /**
+     * How far price has to travel in a minute for the move to still be moving.
+     *
+     * Seven dollars. Under that it is not going anywhere: the position is
+     * worth what it is worth now and every second after this is the market
+     * deciding whether to give it back.
+     */
+    const val CRAWL = 7.0
+
+    /** The least the book has to be paying before a stall is worth taking. */
+    const val STALL_PRICE = 0.73
+
+    /** And how long a position has to have been open before this applies. */
+    const val STALL_SEC = 60L
+
+    /**
+     * Whether a winning position has stopped dead at a level and should be
+     * taken here rather than hoped through.
+     *
+     * The move that was bought has arrived: price is at the price it was going
+     * to, the last minute has gone nowhere, and the book is paying enough that
+     * the position is plainly ahead. Waiting past that is not holding a
+     * winner, it is holding a coin toss on whether the level lets it through —
+     * and a level that has stopped the market before usually does not.
+     */
+    fun stalling(
+        /** How far the last minute travelled the trade's own way, in dollars. */
+        progress: Double,
+        heldSec: Long,
+        bid: Double,
+        atLevel: Boolean,
+        crawl: Double = CRAWL,
+        floor: Double = STALL_PRICE,
+        minHeld: Long = STALL_SEC,
+    ): Boolean {
+        if (!atLevel) return false
+        if (heldSec < minHeld) return false
+        if (bid < floor) return false
+        return progress < crawl
+    }
+
     /** Whether this quote is taken now or waited for. */
     fun waits(ask: Double): Boolean = ask > MAX_TAKE + 1e-9
 

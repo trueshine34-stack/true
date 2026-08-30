@@ -310,10 +310,17 @@ class ProbeBot(
         if (settings.enabled) {
             fillResting(nowSec)
             readSales()
+            // A winner that has stopped at a level is taken there, before any
+            // rung is consulted: the rung is above the level and the level is
+            // where the move ends.
+            stall(nowSec)
             // A side that has fallen far enough is bought again, once, while
             // the window still has time to turn.
             addUp(nowSec)
             workPaper(nowSec)
+            // A sale booked this tick is filed this tick, so the run's next
+            // stake is right before the next window opens.
+            fileSold()
         }
 
         val session = engine.session()
@@ -772,6 +779,119 @@ class ProbeBot(
             )
             onStateChanged()
         }
+    }
+
+    /**
+     * Takes a winning position that has stopped dead at a level.
+     *
+     * The move that was bought has arrived — price is at one of the prices
+     * that stop it, the last minute has gone nowhere, and the book is paying
+     * enough that the position is plainly ahead. Waiting past that is not
+     * holding a winner, it is holding a coin toss on whether the level lets it
+     * through, and a level that has stopped the market before usually does
+     * not. The window before this was written stood on its level for minutes
+     * with the profit there for the taking, and gave it all back.
+     */
+    private fun stall(nowSec: Long) {
+        val riding = working.filter { it.shares > it.sold + 1e-9 }
+        if (riding.isEmpty()) return
+
+        val here = here()
+        if (here <= 0.0) return
+        val typical = Levels.typicalRange(BinanceCandles.fiveMinute.list())
+        if (typical <= 0.0) return
+
+        // Where price was a minute ago, off the closed minute candle behind
+        // the one in progress.
+        val minutes = BinanceCandles.oneMinute.list()
+        if (minutes.size < 2) return
+        val was = minutes[minutes.size - 2].close
+        if (was <= 0.0) return
+
+        // At a level: any price the market has stopped at before, within a
+        // wick's reach of here.
+        val near = typical * ProbePlan.TOUCH
+        val atLevel = walls(here).any { abs(it.price - here) <= near } ||
+            ProbePlan.nearRound(here, near) != null
+
+        for (open in riding) {
+            val moved = here - was
+            val progress = if (open.side == "Up") moved else -moved
+            val bid = try {
+                ClobApi.bestBid(open.asset)
+            } catch (e: Exception) {
+                null
+            } ?: continue
+
+            if (!ProbePlan.stalling(progress, nowSec - open.windowStart, bid, atLevel)) {
+                continue
+            }
+
+            val left = open.shares - open.sold
+            val sold = if (open.demo) true else sellOut(open, bid)
+            if (!sold) continue
+
+            working = working.map {
+                if (it.windowStart == open.windowStart) {
+                    it.copy(
+                        sold = open.shares,
+                        proceeds = open.proceeds + left * SellPercent.netSell(bid),
+                        note = "встали на уровне",
+                    )
+                } else {
+                    it
+                }
+            }
+            engine.log(
+                "trade",
+                "Проба" + (if (open.demo) " (демо)" else "") + ": встали на уровне " +
+                    Math.round(here) + " — забрала " + String.format("%.1f", left) +
+                    " ${open.side} по ${(bid * 100).toInt()}¢",
+            )
+            onStateChanged()
+        }
+    }
+
+    /**
+     * Sells a real position into the book, pulling our own offers first.
+     *
+     * The shares under a resting sell are spoken for, and asking for them
+     * again comes back as "not enough balance" — which is true and useless.
+     */
+    private fun sellOut(open: Round, bid: Double): Boolean {
+        val session = engine.session() ?: return false
+        val market = engine.marketForWindow(open.windowStart) ?: return false
+
+        try {
+            ClobApi.openOrders(session.creds, session.account.signerAddress)
+                .filter { it.assetId == open.asset && it.side == "SELL" }
+                .forEach {
+                    try {
+                        ClobApi.cancelOrder(session.creds, session.account.signerAddress, it.id)
+                    } catch (e: Exception) {
+                        // It may have filled in between, which the log will show.
+                    }
+                }
+        } catch (e: Exception) {
+            return false
+        }
+
+        val price = maxOf(market.tickSize, bid - market.tickSize)
+        val result = try {
+            engine.placeManualOrder(
+                tokenId = open.asset,
+                conditionId = market.conditionId,
+                side = "SELL",
+                price = price,
+                size = open.shares - open.sold,
+                orderType = "GTC",
+                auto = true,
+            )
+        } catch (e: Exception) {
+            note = e.message ?: "ошибка сети"
+            return false
+        }
+        return result.success
     }
 
     /**

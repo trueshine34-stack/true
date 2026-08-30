@@ -601,4 +601,87 @@ class ProbePlanTest {
             ),
         )
     }
+
+    @Test
+    fun `a winner standing still at a level is taken there`() {
+        // Two dollars in a minute is not a move, the book is paying eighty,
+        // and price is on the level it was going to.
+        assertTrue(
+            ProbePlan.stalling(
+                progress = 2.0,
+                heldSec = 90,
+                bid = 0.80,
+                atLevel = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `a move still moving is left to move`() {
+        assertTrue(
+            !ProbePlan.stalling(
+                progress = 12.0,
+                heldSec = 90,
+                bid = 0.80,
+                atLevel = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `a stall away from any level is just a quiet minute`() {
+        assertTrue(
+            !ProbePlan.stalling(
+                progress = 1.0,
+                heldSec = 90,
+                bid = 0.80,
+                atLevel = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `a position that is not plainly ahead is not sold on a stall`() {
+        // Seventy-two cents is not the profit this rule is for.
+        assertTrue(
+            !ProbePlan.stalling(
+                progress = 1.0,
+                heldSec = 90,
+                bid = 0.72,
+                atLevel = true,
+            ),
+        )
+        assertTrue(
+            ProbePlan.stalling(
+                progress = 1.0,
+                heldSec = 90,
+                bid = ProbePlan.STALL_PRICE,
+                atLevel = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `a position has to have stood there for a minute`() {
+        assertTrue(
+            !ProbePlan.stalling(
+                progress = 1.0,
+                heldSec = 40,
+                bid = 0.90,
+                atLevel = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `going the wrong way counts as not going the right way`() {
+        assertTrue(
+            ProbePlan.stalling(
+                progress = -20.0,
+                heldSec = 90,
+                bid = 0.85,
+                atLevel = true,
+            ),
+        )
+    }
 }
