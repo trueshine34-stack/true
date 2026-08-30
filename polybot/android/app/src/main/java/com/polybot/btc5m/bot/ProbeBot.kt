@@ -90,6 +90,14 @@ class ProbeBot(
         val back: Boolean = false,
         /** Best bid seen while holding, which is what walks the ladder up. */
         val highWater: Double = 0.0,
+        /**
+         * And the worst bid seen, which is what arms the rescue.
+         *
+         * A side the book has written off down at a dime is not a position
+         * any more; if the window hands it back at a third it is let go of
+         * there rather than ridden to the close.
+         */
+        val lowWater: Double = 0.0,
 
         /** The rung reached, so a paper exit cannot slide back down. */
         val rung: Int = 0,
@@ -369,6 +377,9 @@ class ProbeBot(
             // money is free for the next window.
             dropStale(nowSec)
             readSales()
+            // A side that went to nothing and came back is let go of the
+            // moment it can be, before anything else looks at it.
+            rescue()
             // A winner that has stopped at a level is taken there, before any
             // rung is consulted: the rung is above the level and the level is
             // where the move ends.
@@ -983,6 +994,7 @@ class ProbeBot(
             soldAt = 0.0,
             back = false,
             highWater = 0.0,
+            lowWater = 0.0,
             rung = 0,
         )
         engine.log(
@@ -1110,6 +1122,68 @@ class ProbeBot(
                 "trade",
                 "Проба" + (if (open.demo) " (демо)" else "") + ": встали на уровне " +
                     Math.round(here) + " — забрала " + String.format("%.1f", left) +
+                    " ${open.side} по ${(bid * 100).toInt()}¢",
+            )
+            onStateChanged()
+        }
+    }
+
+    /**
+     * Lets go of a side the book wrote off, the moment it is worth a third.
+     *
+     * Under a dime the market is saying one chance in ten and the position
+     * has stopped being a position. Getting back to thirty-three cents means
+     * the window turned round — and a turn that far is exactly the kind that
+     * turns again, so this does not wait for a rung or for the close. It is
+     * checked before the ladder, because the ladder's own price is up at
+     * seventy-seven and would never fire here.
+     */
+    private fun rescue() {
+        val riding = working.filter { it.shares > it.sold + 1e-9 }
+        if (riding.isEmpty()) return
+
+        for (open in riding) {
+            val bid = try {
+                ClobApi.bestBid(open.asset)
+            } catch (e: Exception) {
+                null
+            } ?: continue
+
+            // The worst the side has been worth, which is what arms this.
+            val low = if (open.lowWater <= 0.0) bid else minOf(open.lowWater, bid)
+            if (!ProbePlan.rescues(low, bid)) {
+                if (low != open.lowWater) {
+                    working = working.map {
+                        if (it.windowStart == open.windowStart && it.leg == open.leg) {
+                            it.copy(lowWater = low)
+                        } else {
+                            it
+                        }
+                    }
+                }
+                continue
+            }
+
+            val left = open.shares - open.sold
+            val sold = if (open.demo) true else sellOut(open, bid)
+            if (!sold) continue
+
+            working = working.map {
+                if (it.windowStart == open.windowStart && it.leg == open.leg) {
+                    it.copy(
+                        sold = open.shares,
+                        proceeds = open.proceeds + left * SellPercent.netSell(bid),
+                        lowWater = low,
+                        note = "спасена с " + (low * 100).toInt() + "¢",
+                    )
+                } else {
+                    it
+                }
+            }
+            engine.log(
+                "trade",
+                "Проба" + (if (open.demo) " (демо)" else "") + ": падала до " +
+                    (low * 100).toInt() + "¢ — забрала " + String.format("%.1f", left) +
                     " ${open.side} по ${(bid * 100).toInt()}¢",
             )
             onStateChanged()

@@ -324,8 +324,14 @@ object ProbePlan {
      */
     val ADD_PRICES = listOf(0.42, 0.33)
 
-    /** And the last second of the window at which it is still early. */
-    const val ADD_UNTIL_SEC = 120L
+    /**
+     * And the last second of the window at which it is still early.
+     *
+     * The first minute. A side that is cheap because the window has already
+     * spent four fifths of itself going the other way is not cheap, it is
+     * finished, and there is no time left for the read to come good.
+     */
+    const val ADD_UNTIL_SEC = 60L
 
     /**
      * Whether to put the same money into the same side again.
@@ -367,13 +373,22 @@ object ProbePlan {
      */
     const val BACK_FLOOR = 0.44
 
+    /**
+     * How long a sale stays worth buying back.
+     *
+     * Longer than a top-up, because the ladder sold into a move that already
+     * happened: the window is halfway through by the time a rung fills, and
+     * the price coming back afterwards is the whole point.
+     */
+    const val BACK_UNTIL_SEC = 240L
+
     /** Whether the side just sold is worth buying back at this ask. */
     fun buysBack(
         elapsedSec: Long,
         ask: Double?,
         soldAt: Double,
         alreadyBack: Boolean,
-        untilSec: Long = ADD_UNTIL_SEC,
+        untilSec: Long = BACK_UNTIL_SEC,
         drop: Double = BACK_DROP,
         floor: Double = BACK_FLOOR,
     ): Boolean {
@@ -411,6 +426,37 @@ object ProbePlan {
         if (open <= 0.0 || close <= 0.0) return 0.0
         val move = close - open
         return if (side == "Up") maxOf(0.0, -move) else maxOf(0.0, move)
+    }
+
+    /**
+     * The price under which a side has been written off by the book.
+     *
+     * A dime is the market saying one chance in ten, and a five-minute window
+     * does not often give that back. What is left is not a position any more,
+     * it is a lottery ticket.
+     */
+    const val SUNK_PRICE = 0.10
+
+    /**
+     * And the price at which a written-off side is let go of, the moment it
+     * gets there.
+     *
+     * A third is the most such a side is realistically worth: getting back to
+     * it means the window turned round, and a turn that far is exactly the
+     * kind that turns again. No ladder, no rung, no waiting for the close —
+     * the offer goes out the tick the bid reaches it.
+     */
+    const val RESCUE_PRICE = 0.33
+
+    /** Whether a side that fell to nothing has come back far enough to sell. */
+    fun rescues(
+        lowWater: Double,
+        bid: Double,
+        sunk: Double = SUNK_PRICE,
+        out: Double = RESCUE_PRICE,
+    ): Boolean {
+        if (lowWater <= 0.0 || bid <= 0.0) return false
+        return lowWater < sunk && bid >= out
     }
 
     /**
@@ -504,12 +550,17 @@ object ProbePlan {
     )
 
     /**
-     * Whether the reversal is close enough to be this window's problem.
+     * Whether the level ahead is close enough to be this window's problem.
      *
      * Distances are meaningless bare: forty dollars from resistance is nothing
      * in a market moving two hundred an hour and everything in one moving
-     * thirty. So the room in front of the trend is measured in windows, not in
+     * thirty. So the room in front of the trade is measured in windows, not in
      * dollars.
+     *
+     * This applies to every entry. A level outranks a line by a long way — the
+     * trend can point wherever it likes, but a bet with a wall a few dollars
+     * in front of it has nowhere to go in five minutes, and standing on the
+     * wall is the worst place of all from which to buy through it.
      */
     fun tooClose(
         price: Double,
@@ -583,12 +634,20 @@ object ProbePlan {
         if (rejectedAt(way, candleHigh, candleLow, candleClose, level, typical)) {
             return "отбой от " + Math.round(level ?: 0.0)
         }
+        // The room ahead is checked for every entry, whatever chose the side.
+        // A level beats a line: the trend can say what it likes, but a trade
+        // with a wall a few dollars in front of it has nowhere to go, and
+        // standing on the level is the worst place of all to buy through it.
+        // The exemption a bounce gets is for the level behind it — the one it
+        // just came off — and [level] is never that one.
+        if (tooClose(price, level, typical, settings.roomShare)) {
+            return "у уровня " + Math.round(level ?: 0.0)
+        }
+        // Sitting on a round number is only a reason to trade when the trade
+        // is away from it, which is what a bounce is.
         if (byLine) {
             nearRound(price, settings.roundBand)?.let {
                 return "круглый " + Math.round(it)
-            }
-            if (tooClose(price, level, typical, settings.roomShare)) {
-                return "у разворота " + Math.round(level ?: 0.0)
             }
         }
         if (ask == null || ask <= 0.0) return "нет цены"

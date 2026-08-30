@@ -147,7 +147,7 @@ describe('curve', () => {
 });
 
 describe('windows it stood out of', () => {
-  const skip = round({ shares: 0, price: 0, proceeds: 0, note: 'у разворота 78420' });
+  const skip = round({ shares: 0, price: 0, proceeds: 0, note: 'у уровня 78420' });
 
   it('is not a trade', () => {
     expect(traded(skip)).toBe(false);

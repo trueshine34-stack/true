@@ -146,7 +146,7 @@ class ProbePlanTest {
             level = 100_270.0,
             typical = 60.0,
         )
-        assertEquals("у разворота 100270", why)
+        assertEquals("у уровня 100270", why)
     }
 
     @Test
@@ -328,11 +328,17 @@ class ProbePlanTest {
 
 
 
+    /**
+     * The bot bought Down while standing on the support it had been sitting
+     * on for a dozen minutes, because a side chosen off a bounce used to skip
+     * the room check altogether. A level outranks a line: the wall a bounce
+     * came off is the reason for the trade, but the wall in front of it is
+     * still a wall, and [level] is only ever the one in front.
+     */
     @Test
-    fun `a side taken against the line is not stopped by the level it came off`() {
-        // The wall is the reason for the trade; it cannot also be the reason
-        // against it.
-        assertNull(
+    fun `a wall in front stops the trade however the side was chosen`() {
+        assertEquals(
+            "у уровня 80010",
             ProbePlan.blockedBecause(
                 way = "Up",
                 ask = 0.5,
@@ -344,9 +350,9 @@ class ProbePlanTest {
                 byLine = false,
             ),
         )
-        // Following the line into it is still refused.
+        // And following the line into it is refused for the same reason.
         assertEquals(
-            "круглый 80000",
+            "у уровня 80010",
             ProbePlan.blockedBecause(
                 way = "Up",
                 ask = 0.5,
@@ -360,13 +366,74 @@ class ProbePlanTest {
         )
     }
 
+    /**
+     * The screenshot: price sat on support at 78 034 with the round 78 000
+     * under it, and the rule bought Down into both.
+     */
+    @Test
+    fun `standing on support is not a place to buy downwards`() {
+        assertEquals(
+            "у уровня 78034",
+            ProbePlan.blockedBecause(
+                way = "Down",
+                ask = 0.34,
+                cashUsd = 100.0,
+                settings = on,
+                price = 78_054.0,
+                level = 78_034.0,
+                typical = 60.0,
+                byLine = false,
+            ),
+        )
+    }
 
+    /** A bounce with the whole room in front of it still trades. */
+    @Test
+    fun `a bounce with somewhere to go is taken`() {
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.5,
+                cashUsd = 100.0,
+                settings = on,
+                // Off support, with resistance a full window's travel away.
+                price = 80_010.0,
+                level = 80_200.0,
+                typical = 60.0,
+                byLine = false,
+            ),
+        )
+    }
 
-
-
-
-
-
+    /** Standing on a round number is a reason to bounce off it, not to follow into it. */
+    @Test
+    fun `a bounce off a round number is not refused for standing on it`() {
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.5,
+                cashUsd = 100.0,
+                settings = on,
+                price = 80_000.0,
+                level = 80_200.0,
+                typical = 60.0,
+                byLine = false,
+            ),
+        )
+        assertEquals(
+            "круглый 80000",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.5,
+                cashUsd = 100.0,
+                settings = on,
+                price = 80_000.0,
+                level = 80_200.0,
+                typical = 60.0,
+                byLine = true,
+            ),
+        )
+    }
 
     @Test
     fun `a win puts half of itself on the next window`() {
@@ -438,7 +505,7 @@ class ProbePlanTest {
     @Test
     fun `a side that fell under forty-two is bought again`() {
         assertTrue(ProbePlan.addsUp(elapsedSec = 30, ask = 0.41, adds = 0))
-        assertTrue(ProbePlan.addsUp(elapsedSec = 120, ask = 0.35, adds = 0))
+        assertTrue(ProbePlan.addsUp(elapsedSec = 55, ask = 0.35, adds = 0))
     }
 
     @Test
@@ -455,8 +522,9 @@ class ProbePlanTest {
     }
 
     @Test
-    fun `past two minutes a cheap side is late rather than cheap`() {
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 121, ask = 0.20, adds = 0))
+    fun `past the first minute a cheap side is late rather than cheap`() {
+        assertTrue(ProbePlan.addsUp(elapsedSec = 59, ask = 0.20, adds = 0))
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 61, ask = 0.20, adds = 0))
         assertTrue(!ProbePlan.addsUp(elapsedSec = 280, ask = 0.05, adds = 0))
     }
 
@@ -497,9 +565,41 @@ class ProbePlanTest {
     @Test
     fun `a sale is bought back once, and only while there is time`() {
         assertTrue(!ProbePlan.buysBack(60, ask = 0.60, soldAt = 0.80, alreadyBack = true))
-        assertTrue(!ProbePlan.buysBack(200, ask = 0.60, soldAt = 0.80, alreadyBack = false))
+        assertTrue(ProbePlan.buysBack(200, ask = 0.60, soldAt = 0.80, alreadyBack = false))
+        assertTrue(!ProbePlan.buysBack(250, ask = 0.60, soldAt = 0.80, alreadyBack = false))
         // And a sale that never happened has no price to measure under.
         assertTrue(!ProbePlan.buysBack(60, ask = 0.60, soldAt = 0.0, alreadyBack = false))
+    }
+
+    /**
+     * A side the book wrote off at a dime, handed back at a third.
+     *
+     * No rung fires down here — the ladder's first offer is at seventy-seven —
+     * so without this the position rides to the close for nothing.
+     */
+    @Test
+    fun `a side that fell to nothing is let go at a third`() {
+        assertTrue(ProbePlan.rescues(lowWater = 0.08, bid = 0.33))
+        assertTrue(ProbePlan.rescues(lowWater = 0.02, bid = 0.55))
+    }
+
+    @Test
+    fun `a side that never fell that far keeps its ladder`() {
+        // Twelve cents is bad but not written off, so the rung still decides.
+        assertTrue(!ProbePlan.rescues(lowWater = 0.12, bid = 0.40))
+        assertTrue(!ProbePlan.rescues(lowWater = 0.10, bid = 0.40))
+    }
+
+    @Test
+    fun `a written-off side is held until it is worth a third`() {
+        assertTrue(!ProbePlan.rescues(lowWater = 0.05, bid = 0.32))
+        assertTrue(ProbePlan.rescues(lowWater = 0.05, bid = 0.33))
+    }
+
+    @Test
+    fun `with no low seen there is nothing to rescue`() {
+        assertTrue(!ProbePlan.rescues(lowWater = 0.0, bid = 0.90))
+        assertTrue(!ProbePlan.rescues(lowWater = 0.05, bid = 0.0))
     }
 
     /**

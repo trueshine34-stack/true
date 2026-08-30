@@ -2232,8 +2232,8 @@ function ProbeCard({
   const arrowTone = (w: string) =>
     w === 'Up' ? 'up' : w === 'Down' ? 'down' : 'muted';
   // Whether the rule is currently standing aside for the level, said in the
-  // same words it says it in: the note it publishes starts with "у разворота".
-  const near = (state.note ?? '').startsWith('у разворота');
+  // same words it says it in: the note it publishes starts with "у уровня".
+  const near = (state.note ?? '').startsWith('у уровня');
   // Which way the closing candle went, and whether that is the way the line
   // is pointing. Both are on the card because one of them stops the entry.
   const candleTone =

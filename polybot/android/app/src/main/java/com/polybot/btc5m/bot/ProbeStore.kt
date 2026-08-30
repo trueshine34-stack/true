@@ -58,6 +58,7 @@ class ProbeStore(context: Context) {
                     leg = o.optInt("leg", 0),
                     soldAt = o.optDouble("soldAt", 0.0),
                     back = o.optBoolean("back", false),
+                    lowWater = o.optDouble("lowWater", 0.0),
                     side = o.optString("side"),
                     perHour = o.optDouble("perHour", 0.0),
                     shares = o.optDouble("shares", 0.0),
@@ -87,6 +88,7 @@ class ProbeStore(context: Context) {
                     .put("leg", it.leg)
                     .put("soldAt", it.soldAt)
                     .put("back", it.back)
+                    .put("lowWater", it.lowWater)
                     .put("side", it.side)
                     .put("perHour", it.perHour)
                     .put("shares", it.shares)
