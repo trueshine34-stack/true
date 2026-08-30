@@ -78,6 +78,18 @@ object ProbePlan {
      */
     const val TOUCH = 0.35
 
+    /**
+     * A price the market stops at, and how much weight it carries.
+     *
+     * The round five hundreds always carry it — the book is stacked there
+     * whatever the chart has done — and a pivot earns it by having turned the
+     * market more than twice.
+     */
+    data class Wall(val price: Double, val touches: Int, val round: Boolean) {
+        /** Enough to trade against the candle that is closing. */
+        val important: Boolean get() = round || touches >= 3
+    }
+
     /** Which side the rule ends up on, and why it is not simply the line. */
     data class Choice(val side: String, val note: String?) {
         /** True when the line was followed, which is the ordinary case. */
@@ -115,8 +127,8 @@ object ProbePlan {
         minuteBody: Double = 0.0,
         minuteTypical: Double = 0.0,
         /** The nearest price the market has stopped at, either side of here. */
-        above: Double? = null,
-        below: Double? = null,
+        above: Wall? = null,
+        below: Wall? = null,
         touch: Double = TOUCH,
     ): Choice {
         // The bounce comes first, and it comes before the lines.
@@ -130,8 +142,10 @@ object ProbePlan {
         // the minute that ends the window already leaving.
         val near = typical * touch
         val reach = typical > 0.0 && candleHigh > 0.0 && candleLow > 0.0 && candleClose > 0.0
-        val hitTop = reach && above != null && candleHigh >= above - near && candleClose < above
-        val hitFloor = reach && below != null && candleLow <= below + near && candleClose > below
+        val hitTop = reach && above != null &&
+            candleHigh >= above.price - near && candleClose < above.price
+        val hitFloor = reach && below != null &&
+            candleLow <= below.price + near && candleClose > below.price
 
         // Both at once is a candle that spanned the whole shelf: it touched
         // everything and settled nothing.
@@ -142,11 +156,23 @@ object ProbePlan {
         // second half it is a level being tested, not turned — the lines carry
         // the window instead, and buying into the tested level is refused
         // separately by `rejectedAt`.
+        //
+        // And when the bounce would be bought against the candle that is
+        // closing — a green five minutes turned back from resistance, say —
+        // the level has to be one worth arguing with the close about: a round
+        // five hundred, or a price that has turned the market more than twice.
+        // Anything less and the candle wins.
         if (hitTop && minuteBody < 0.0) {
-            return Choice("Down", "отбой от " + Math.round(above ?: 0.0))
+            if (candleBody > 0.0 && above?.important != true) {
+                return Choice("", "свеча зелёная")
+            }
+            return Choice("Down", "отбой от " + Math.round(above?.price ?: 0.0))
         }
         if (hitFloor && minuteBody > 0.0) {
-            return Choice("Up", "отбой от " + Math.round(below ?: 0.0))
+            if (candleBody < 0.0 && below?.important != true) {
+                return Choice("", "свеча красная")
+            }
+            return Choice("Up", "отбой от " + Math.round(below?.price ?: 0.0))
         }
 
         // Nothing was touched, so the question is the ordinary one: is there a

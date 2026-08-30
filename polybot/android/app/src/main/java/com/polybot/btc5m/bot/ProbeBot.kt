@@ -432,11 +432,17 @@ class ProbeBot(
             ?.let { if (it.open > 0.0 && it.close > 0.0) it.close - it.open else 0.0 }
             ?: 0.0
 
-        // The prices that stop things, either side of here. The bounce is read
-        // off these before any line is consulted.
-        val shelf = walls(here)
-        val above = shelf.filter { it.price > here }.minByOrNull { it.price - here }?.price
-        val below = shelf.filter { it.price < here }.minByOrNull { here - it.price }?.price
+        // The prices that stop things, either side of here, each with the
+        // weight it carries. The bounce is read off these before any line is
+        // consulted, and how much weight a level has decides whether it may be
+        // traded against the candle that is closing.
+        val shelf = walls(here).map { ProbePlan.Wall(it.price, it.touches, round = false) } +
+            listOfNotNull(
+                roundAbove(here)?.let { ProbePlan.Wall(it, 0, round = true) },
+                roundBelow(here)?.let { ProbePlan.Wall(it, 0, round = true) },
+            )
+        val above = shelf.filter { it.price > here }.minByOrNull { it.price - here }
+        val below = shelf.filter { it.price < here }.minByOrNull { here - it.price }
 
         val pick = ProbePlan.choose(
             way = TrendFit.lean(line),
@@ -462,7 +468,7 @@ class ProbeBot(
 
         // And the wall this side is heading into, which for a bounce is the
         // one across the room rather than the one just left behind.
-        val ahead = if (way == "Up") above else below
+        val ahead = (if (way == "Up") above else below)?.price
 
         val token = if (way == "Up") market.up.tokenId else market.down.tokenId
         val ask = try {
@@ -1162,6 +1168,20 @@ class ProbeBot(
      * the rule will do before it does it — and so a window that is standing
      * aside says which price it is standing aside from.
      */
+    /** The round five hundreds either side of a price. */
+    private fun roundAbove(here: Double): Double? {
+        if (here <= 0.0) return null
+        return Math.floor(here / ProbePlan.ROUND_STEP) * ProbePlan.ROUND_STEP +
+            ProbePlan.ROUND_STEP
+    }
+
+    private fun roundBelow(here: Double): Double? {
+        if (here <= 0.0) return null
+        val at = Math.ceil(here / ProbePlan.ROUND_STEP) * ProbePlan.ROUND_STEP -
+            ProbePlan.ROUND_STEP
+        return at.takeIf { it > 0.0 }
+    }
+
     /**
      * Every price the market stops at, off both charts.
      *

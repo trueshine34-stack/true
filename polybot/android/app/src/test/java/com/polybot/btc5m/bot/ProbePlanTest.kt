@@ -454,8 +454,8 @@ class ProbePlanTest {
         candleClose = 78_260.0,
         minuteBody = minute,
         minuteTypical = 14.0,
-        above = 78_311.0,
-        below = 78_145.0,
+        above = ProbePlan.Wall(78_311.0, touches = 4, round = false),
+        below = ProbePlan.Wall(78_145.0, touches = 3, round = false),
     )
 
     @Test
@@ -488,8 +488,8 @@ class ProbePlanTest {
             candleClose = 78_170.0,
             minuteBody = 5.0,
             minuteTypical = 14.0,
-            above = 78_311.0,
-            below = 78_145.0,
+            above = ProbePlan.Wall(78_311.0, touches = 4, round = false),
+            below = ProbePlan.Wall(78_145.0, touches = 3, round = false),
         )
         assertEquals("Up", pick.side)
         assertEquals("отбой от 78145", pick.note)
@@ -507,8 +507,8 @@ class ProbePlanTest {
             candleClose = 78_200.0,
             minuteBody = -3.0,
             minuteTypical = 14.0,
-            above = 78_311.0,
-            below = 78_145.0,
+            above = ProbePlan.Wall(78_311.0, touches = 4, round = false),
+            below = ProbePlan.Wall(78_145.0, touches = 3, round = false),
         )
         assertEquals("", pick.side)
         assertEquals("зажато между уровнями", pick.note)
@@ -526,8 +526,8 @@ class ProbePlanTest {
             candleClose = 78_255.0,
             minuteBody = 4.0,
             minuteTypical = 14.0,
-            above = 78_600.0,
-            below = 77_900.0,
+            above = ProbePlan.Wall(78_600.0, touches = 2, round = false),
+            below = ProbePlan.Wall(77_900.0, touches = 2, round = false),
         )
         assertEquals("Up", far.side)
         assertNull(far.note)
@@ -695,5 +695,86 @@ class ProbePlanTest {
     fun `and left out for that minute`() {
         assertTrue(!ProbePlan.restingDone(0))
         assertTrue(!ProbePlan.restingDone(59))
+    }
+
+    @Test
+    fun `a bounce against the closing candle needs a level worth it`() {
+        // The five minutes is closing green and the bounce would buy Down. A
+        // pivot touched twice is not enough to argue with the close.
+        val weak = ProbePlan.choose(
+            way = "Up",
+            wide = "Up",
+            candleBody = 30.0,
+            typical = 60.0,
+            candleHigh = 78_308.0,
+            candleLow = 78_240.0,
+            candleClose = 78_260.0,
+            minuteBody = -6.0,
+            minuteTypical = 14.0,
+            above = ProbePlan.Wall(78_311.0, touches = 2, round = false),
+        )
+        assertEquals("", weak.side)
+        assertEquals("свеча зелёная", weak.note)
+    }
+
+    @Test
+    fun `a round five hundred is always worth it`() {
+        val round = ProbePlan.choose(
+            way = "Up",
+            wide = "Up",
+            candleBody = 30.0,
+            typical = 60.0,
+            candleHigh = 78_497.0,
+            candleLow = 78_440.0,
+            candleClose = 78_470.0,
+            minuteBody = -6.0,
+            minuteTypical = 14.0,
+            above = ProbePlan.Wall(78_500.0, touches = 0, round = true),
+        )
+        assertEquals("Down", round.side)
+        assertEquals("отбой от 78500", round.note)
+    }
+
+    @Test
+    fun `so is a price that has turned the market three times`() {
+        val strong = ProbePlan.choose(
+            way = "Up",
+            wide = "Up",
+            candleBody = 30.0,
+            typical = 60.0,
+            candleHigh = 78_308.0,
+            candleLow = 78_240.0,
+            candleClose = 78_260.0,
+            minuteBody = -6.0,
+            minuteTypical = 14.0,
+            above = ProbePlan.Wall(78_311.0, touches = 3, round = false),
+        )
+        assertEquals("Down", strong.side)
+    }
+
+    @Test
+    fun `a bounce that agrees with the closing candle needs no such licence`() {
+        // Red five minutes, bouncing down off a twice-touched pivot: the entry
+        // and the close say the same thing, so the level need not be special.
+        val agreed = ProbePlan.choose(
+            way = "Up",
+            wide = "Up",
+            candleBody = -30.0,
+            typical = 60.0,
+            candleHigh = 78_308.0,
+            candleLow = 78_240.0,
+            candleClose = 78_260.0,
+            minuteBody = -6.0,
+            minuteTypical = 14.0,
+            above = ProbePlan.Wall(78_311.0, touches = 2, round = false),
+        )
+        assertEquals("Down", agreed.side)
+    }
+
+    @Test
+    fun `what makes a level important`() {
+        assertTrue(ProbePlan.Wall(78_500.0, touches = 0, round = true).important)
+        assertTrue(ProbePlan.Wall(78_311.0, touches = 3, round = false).important)
+        assertTrue(!ProbePlan.Wall(78_311.0, touches = 2, round = false).important)
     }
 }
