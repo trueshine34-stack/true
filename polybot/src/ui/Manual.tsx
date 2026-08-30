@@ -2028,6 +2028,64 @@ function EventStrip({
  * why it is not.
  */
 /**
+ * A number you can actually retype.
+ *
+ * A controlled number input reads what is in it on every keystroke, and the
+ * first keystroke of retyping is deleting what is there — which parses as
+ * nothing, gets refused or read as zero, and puts the old value straight back.
+ * The field then cannot be cleared at all: the only way to change 100 into 20
+ * is to fumble with the caret.
+ *
+ * So the text belongs to the field while it is being edited and to the setting
+ * the rest of the time. It commits when the field is left or Enter is pressed,
+ * anything that is not a number is dropped, and focusing selects what is there
+ * so that typing replaces it.
+ */
+function NumField({
+  label,
+  value,
+  onCommit,
+  className = 'field',
+}: {
+  label: string;
+  value: number | string;
+  onCommit: (value: number) => void;
+  /** The rungs of the ladder wear their own, narrower, shape. */
+  className?: string;
+}) {
+  const [text, setText] = useState<string | null>(null);
+
+  const commit = () => {
+    const raw = text;
+    setText(null);
+    if (raw == null) return;
+    const parsed = Number(raw.replace(',', '.').trim());
+    if (raw.trim() === '' || !Number.isFinite(parsed)) return;
+    onCommit(parsed);
+  };
+
+  return (
+    <label className={className}>
+      <span>{label}</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={text ?? String(value)}
+        onFocus={(e) => {
+          setText(String(value));
+          e.currentTarget.select();
+        }}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+      />
+    </label>
+  );
+}
+
+/**
  * The one button every bot's explanation lives behind.
  *
  * Each of these panels had a paragraph across the top saying what the rule
@@ -2096,17 +2154,13 @@ function TakeCard({
       )}
 
       <div className="fields botfields">
-        <label className="field">
-          <span>продавать от, %</span>
-          <input
-            type="number"
-            step="1"
-            value={String(pct)}
-            onChange={(e) =>
-              onGain(Number(e.target.value.replace(',', '.')) / 100)
-            }
-          />
-        </label>
+        <NumField
+          label="продавать от, %"
+          value={pct}
+          onCommit={(n) =>
+            onGain(n / 100)
+          }
+        />
       </div>
 
       {state.watching.length > 0 ? (
@@ -2331,54 +2385,34 @@ function ProbeCard({
       </div>
 
       <div className="fields botfields">
-        <label className="field">
-          <span>ставка, $</span>
-          <input
-            type="number"
-            step="1"
-            value={String(state.stakeUsd)}
-            onChange={(e) => onStake(Number(e.target.value.replace(',', '.')))}
-          />
-        </label>
-        <label className="field">
-          <span>за сколько, с</span>
-          <input
-            type="number"
-            step="1"
-            value={String(state.leadSec)}
-            onChange={(e) => onLead(Number(e.target.value.replace(',', '.')))}
-          />
-        </label>
-        <label className="field">
-          <span>запас до уровня, %</span>
-          <input
-            type="number"
-            step="10"
-            value={String(Math.round(state.roomShare * 100))}
-            onChange={(e) =>
-              onRoom(Number(e.target.value.replace(',', '.')) / 100)
-            }
-          />
-        </label>
-        <label className="field">
-          <span>у круглых, $</span>
-          <input
-            type="number"
-            step="10"
-            value={String(Math.round(state.roundBand))}
-            onChange={(e) => onRound(Number(e.target.value.replace(',', '.')))}
-          />
-        </label>
+        <NumField
+          label="ставка, $"
+          value={state.stakeUsd}
+          onCommit={(n) => onStake(n)}
+        />
+        <NumField
+          label="за сколько, с"
+          value={state.leadSec}
+          onCommit={(n) => onLead(n)}
+        />
+        <NumField
+          label="запас до уровня, %"
+          value={Math.round(state.roomShare * 100)}
+          onCommit={(n) =>
+            onRoom(n / 100)
+          }
+        />
+        <NumField
+          label="у круглых, $"
+          value={Math.round(state.roundBand)}
+          onCommit={(n) => onRound(n)}
+        />
         {state.demo && (
-          <label className="field">
-            <span>тестовый счёт, $</span>
-            <input
-              type="number"
-              step="10"
-              value={String(state.bankUsd)}
-              onChange={(e) => onBank(Number(e.target.value.replace(',', '.')))}
-            />
-          </label>
+          <NumField
+            label="тестовый счёт, $"
+            value={state.bankUsd}
+            onCommit={(n) => onBank(n)}
+          />
         )}
       </div>
 
@@ -2668,24 +2702,16 @@ function PulseCard({
       )}
 
       <div className="fields botfields">
-        <label className="field">
-          <span>контейнер, $</span>
-          <input
-            type="number"
-            step="1"
-            value={String(state.bankUsd)}
-            onChange={(e) => onBank(Number(e.target.value.replace(',', '.')))}
-          />
-        </label>
-        <label className="field">
-          <span>долей за раз</span>
-          <input
-            type="number"
-            step="1"
-            value={String(state.shares)}
-            onChange={(e) => onShares(Number(e.target.value.replace(',', '.')))}
-          />
-        </label>
+        <NumField
+          label="контейнер, $"
+          value={state.bankUsd}
+          onCommit={(n) => onBank(n)}
+        />
+        <NumField
+          label="долей за раз"
+          value={state.shares}
+          onCommit={(n) => onShares(n)}
+        />
       </div>
 
       {/* What it holds, or why it holds nothing — and the way to start over. */}
@@ -3439,154 +3465,124 @@ function ManualSettingsForm({
       {settings.autoSellPercentMode ? (
         <div className="fields">
 
-          <label className="field">
-            <span>плюс, %</span>
-            <input
-              type="number"
-              value={String(Math.round(settings.autoSellProfitPct * 100))}
-              onChange={(e) =>
-                push({
+          <NumField
+            label="плюс, %"
+            value={Math.round(settings.autoSellProfitPct * 100)}
+            onCommit={(n) =>
+              push({
                   ...settings,
-                  autoSellProfitPct: Number(e.target.value.replace(',', '.')) / 100,
+                  autoSellProfitPct: n / 100,
                 })
-              }
-            />
-          </label>
+            }
+          />
 
-          <label className="field">
-            <span>пауза, с</span>
-            <input
-              type="number"
-              value={String(settings.autoSellSliceGapSec)}
-              onChange={(e) =>
-                push({
+          <NumField
+            label="пауза, с"
+            value={settings.autoSellSliceGapSec}
+            onCommit={(n) =>
+              push({
                   ...settings,
-                  autoSellSliceGapSec: Number(e.target.value.replace(',', '.')),
+                  autoSellSliceGapSec: n,
                 })
-              }
-            />
-          </label>
+            }
+          />
 
-          <label className="field">
-            <span>финал, ¢</span>
-            <input
-              type="number"
-              value={String(Math.round(settings.autoSellCloseFloor * 100))}
-              onChange={(e) =>
-                push({
+          <NumField
+            label="финал, ¢"
+            value={Math.round(settings.autoSellCloseFloor * 100)}
+            onCommit={(n) =>
+              push({
                   ...settings,
                   autoSellCloseFloor:
-                    Number(e.target.value.replace(',', '.')) / 100,
+                  n / 100,
                 })
-              }
-            />
-          </label>
+            }
+          />
 
-          <label className="field">
-            <span>до финала, ¢</span>
-            <input
-              type="number"
-              value={String(Math.round(settings.autoSellLateFloor * 100))}
-              onChange={(e) =>
-                push({
+          <NumField
+            label="до финала, ¢"
+            value={Math.round(settings.autoSellLateFloor * 100)}
+            onCommit={(n) =>
+              push({
                   ...settings,
-                  autoSellLateFloor: Number(e.target.value.replace(',', '.')) / 100,
+                  autoSellLateFloor: n / 100,
                 })
-              }
-            />
-          </label>
+            }
+          />
 
-          <label className="field">
-            <span>полоса, с</span>
-            <input
-              type="number"
-              value={String(settings.autoSellLateBandSec)}
-              onChange={(e) =>
-                push({
+          <NumField
+            label="полоса, с"
+            value={settings.autoSellLateBandSec}
+            onCommit={(n) =>
+              push({
                   ...settings,
-                  autoSellLateBandSec: Number(e.target.value.replace(',', '.')),
+                  autoSellLateBandSec: n,
                 })
-              }
-            />
-          </label>
+            }
+          />
 
-          <label className="field">
-            <span>финал за, с</span>
-            <input
-              type="number"
-              value={String(settings.autoSellPanicSec)}
-              onChange={(e) =>
-                push({
+          <NumField
+            label="финал за, с"
+            value={settings.autoSellPanicSec}
+            onCommit={(n) =>
+              push({
                   ...settings,
-                  autoSellPanicSec: Number(e.target.value.replace(',', '.')),
+                  autoSellPanicSec: n,
                 })
-              }
-            />
-          </label>
+            }
+          />
         </div>
       ) : (
         <>
       <div className="fields">
-      <label className="field">
-        <span>шаг лимиток, ¢</span>
-        <input
-          type="number"
-          value={String(Math.round(settings.limitLadderStep * 100))}
-          onChange={(e) =>
-            onChange({
+      <NumField
+        label="шаг лимиток, ¢"
+        value={Math.round(settings.limitLadderStep * 100)}
+        onCommit={(n) =>
+          onChange({
               ...settings,
-              limitLadderStep: Number(e.target.value.replace(',', '.')) / 100,
+              limitLadderStep: n / 100,
             })
-          }
-        />
-      </label>
+        }
+      />
 
-      <label className="field">
-        <span>упреждение, с</span>
-        <input
-          type="number"
-          value={String(settings.autoSellLeadSec)}
-          onChange={(e) =>
-            push({
+      <NumField
+        label="упреждение, с"
+        value={settings.autoSellLeadSec}
+        onCommit={(n) =>
+          push({
               ...settings,
-              autoSellLeadSec: Number(e.target.value.replace(',', '.')),
+              autoSellLeadSec: n,
             })
-          }
-        />
-      </label>
+        }
+      />
 
       {/*
         How long one rung holds. A minute spends the five over the whole
         window; thirty seconds spends them by the halfway mark, asking the
         higher prices while there is still time to reach them.
       */}
-      <label className="field">
-        <span>ступень, с</span>
-        <input
-          type="number"
-          step="15"
-          value={String(settings.autoSellStepSec)}
-          onChange={(e) =>
-            push({
+      <NumField
+        label="ступень, с"
+        value={settings.autoSellStepSec}
+        onCommit={(n) =>
+          push({
               ...settings,
-              autoSellStepSec: Number(e.target.value.replace(',', '.')),
+              autoSellStepSec: n,
             })
-          }
-        />
-      </label>
+        }
+      />
       </div>
 
       <div className="rungs">
         {settings.autoSellLadder.map((price, i) => (
-          <label className="rung" key={i}>
-            <span>{i + 1}м</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={String(Math.round(price * 100))}
-              onChange={(e) => setRung(i, e.target.value)}
-            />
-          </label>
+          <NumField
+            key={i}
+            className="rung"
+            label={`${i + 1}`}
+            value={Math.round(price * 100)}
+            onCommit={(n) => setRung(i, String(n))}
+          />
         ))}
       </div>
         </>
