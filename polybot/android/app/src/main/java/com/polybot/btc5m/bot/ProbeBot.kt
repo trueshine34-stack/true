@@ -422,20 +422,26 @@ class ProbeBot(
             ?.let { if (it.open > 0.0 && it.close > 0.0) it.close - it.open else 0.0 }
             ?: 0.0
 
-        // Whether the line was walking into something. Either kind of wall
-        // counts: a price the market has turned at before, or one of the round
-        // five hundreds where the book always is.
-        val intoWall = ProbePlan.tooClose(here, levelAhead, typical, settings.roomShare) ||
-            ProbePlan.nearRound(here, settings.roundBand) != null
+        // The prices that stop things, either side of here. The bounce is read
+        // off these before any line is consulted.
+        val shelf = walls(here)
+        val above = shelf.filter { it.price > here }.minByOrNull { it.price - here }?.price
+        val below = shelf.filter { it.price < here }.minByOrNull { here - it.price }?.price
 
         val pick = ProbePlan.choose(
             way = TrendFit.lean(line),
-            wide = TrendFit.lean(wide),
+            // The five-minute line's own call, not merely its slope: a fit too
+            // weak to name a direction has no business vetoing one.
+            wide = wide?.way.orEmpty(),
             candleBody = body,
             typical = typical,
+            candleHigh = closing?.high ?: 0.0,
+            candleLow = closing?.low ?: 0.0,
+            candleClose = closing?.close ?: 0.0,
             minuteBody = body(BinanceCandles.oneMinute.list().lastOrNull()),
             minuteTypical = Levels.typicalRange(BinanceCandles.oneMinute.list()),
-            atWall = intoWall,
+            above = above,
+            below = below,
         )
         val way = pick.side
         if (way.isEmpty()) {
@@ -443,6 +449,10 @@ class ProbeBot(
             return
         }
         chose = pick.note
+
+        // And the wall this side is heading into, which for a bounce is the
+        // one across the room rather than the one just left behind.
+        val ahead = if (way == "Up") above else below
 
         val token = if (way == "Up") market.up.tokenId else market.down.tokenId
         val ask = try {
@@ -463,7 +473,10 @@ class ProbeBot(
             cashUsd = stakeNow,
             settings = settings,
             price = here,
-            level = levelAhead,
+            level = ahead,
+            candleHigh = closing?.high ?: 0.0,
+            candleLow = closing?.low ?: 0.0,
+            candleClose = closing?.close ?: 0.0,
             // Levels come off the minute chart, with the line; how far a bet
             // can travel is a question about five minutes, so the scale is
             // still the five-minute candle's own range.
@@ -494,7 +507,10 @@ class ProbeBot(
             cashUsd = cash,
             settings = settings,
             price = here,
-            level = levelAhead,
+            level = ahead,
+            candleHigh = closing?.high ?: 0.0,
+            candleLow = closing?.low ?: 0.0,
+            candleClose = closing?.close ?: 0.0,
             // Levels come off the minute chart, with the line; how far a bet
             // can travel is a question about five minutes, so the scale is
             // still the five-minute candle's own range.

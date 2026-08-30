@@ -55,22 +55,19 @@ object ProbePlan {
     const val DEFAULT_ROUND_BAND = 50.0
 
     /**
-     * How big a candle against the line has to be to *be* the new line.
+     * How close a wick has to come to a level to have touched it.
      *
-     * Measured against what a five-minute candle usually travels. Bigger than
-     * an ordinary one and going the other way is not noise around a trend — it
-     * is the trend ending, and the fitted line will not say so for another
-     * twenty minutes, because it is an average over half an hour.
+     * Against what a five-minute candle usually travels, so it is a fraction
+     * of the day's own movement rather than a number of dollars that means
+     * something different every week.
      */
-    const val DEFAULT_FLIP = 1.2
+    const val TOUCH = 0.35
 
     /** Which side the rule ends up on, and why it is not simply the line. */
     data class Choice(val side: String, val note: String?) {
         /** True when the line was followed, which is the ordinary case. */
         val byLine: Boolean get() = side.isNotEmpty() && note == null
     }
-
-    private fun other(way: String) = if (way == "Up") "Down" else "Up"
 
     /**
      * The side to buy, once the closing candle has had its say.
@@ -88,28 +85,62 @@ object ProbePlan {
      *    ended, and there is no edge either way. Take neither.
      */
     fun choose(
-        /** The minute chart's line, which is the one the rule follows. */
+        /** The minute chart's line. */
         way: String,
-        /** And the five-minute chart's, which has to agree with it. */
+        /** And the five-minute chart's call, which objects only when it makes one. */
         wide: String,
         /** The five-minute candle closing with the window, and its scale. */
         candleBody: Double,
         typical: Double,
+        /** Its reach, which is how a level is known to have been touched. */
+        candleHigh: Double = 0.0,
+        candleLow: Double = 0.0,
+        candleClose: Double = 0.0,
         /** And the minute candle closing with it, against a minute's scale. */
         minuteBody: Double = 0.0,
         minuteTypical: Double = 0.0,
-        /** The price is at a level, or at a round number. */
-        atWall: Boolean = false,
-        flip: Double = DEFAULT_FLIP,
+        /** The nearest price the market has stopped at, either side of here. */
+        above: Double? = null,
+        below: Double? = null,
+        touch: Double = TOUCH,
     ): Choice {
-        if (way.isEmpty() || wide.isEmpty()) return Choice("", "нет линии")
+        // The bounce comes first, and it comes before the lines.
+        //
+        // Price spends most of its time walking between the prices that stop
+        // it rather than along a trend, and when it is thrown back from one of
+        // them the direction has already changed while the fitted line — an
+        // average over the last half hour — still points the old way, and will
+        // go on pointing it for another twenty minutes. What actually happened
+        // is on the screen: a wick into the level, a close back off it, and
+        // the minute that ends the window already leaving.
+        val near = typical * touch
+        val reach = typical > 0.0 && candleHigh > 0.0 && candleLow > 0.0 && candleClose > 0.0
+        val hitTop = reach && above != null && candleHigh >= above - near && candleClose < above
+        val hitFloor = reach && below != null && candleLow <= below + near && candleClose > below
 
-        // Both charts or neither. The half-hour of minutes says what is
-        // happening and the hour of five-minutes says what has been happening,
-        // and a bet placed while they point opposite ways is a bet on which of
-        // them is stale. There is no way to know that in advance, so those
-        // windows are simply not traded.
-        if (way != wide) return Choice("", "тренды спорят")
+        // Both at once is a candle that spanned the whole shelf: it touched
+        // everything and settled nothing.
+        if (hitTop && hitFloor) return Choice("", "зажато между уровнями")
+
+        // The wick says the level was reached and refused; the minute that
+        // ends the window says whether price is actually leaving. Without that
+        // second half it is a level being tested, not turned — the lines carry
+        // the window instead, and buying into the tested level is refused
+        // separately by `rejectedAt`.
+        if (hitTop && minuteBody < 0.0) {
+            return Choice("Down", "отбой от " + Math.round(above ?: 0.0))
+        }
+        if (hitFloor && minuteBody > 0.0) {
+            return Choice("Up", "отбой от " + Math.round(below ?: 0.0))
+        }
+
+        // Nothing was touched, so the question is the ordinary one: is there a
+        // direction, and is the closing candle going that way.
+        if (way.isEmpty()) return Choice("", "нет линии")
+
+        // A flat five minutes is not an opposite direction, it is silence, and
+        // silence should not veto a minute chart that is perfectly clear.
+        if (wide.isNotEmpty() && wide != way) return Choice("", "тренды спорят")
 
         // Either candle can disagree, and each is judged against its own kind:
         // a twelve-dollar minute is a big minute and a small five minutes.
@@ -117,21 +148,38 @@ object ProbePlan {
             .filter { (body, _) -> body != 0.0 && (way == "Up") != (body > 0.0) }
         if (against.isEmpty()) return Choice(way, null)
 
-        // The loudest objection decides: the one furthest past what a candle
-        // of its own length usually travels.
         val loudest = against.maxByOrNull { (body, scale) ->
             if (scale > 0.0) abs(body) / scale else 0.0
         }!!
-        val (body, scale) = loudest
-        val big = scale > 0.0 && abs(body) >= scale * flip
+        return Choice("", if (loudest.first > 0.0) "свеча зелёная" else "свеча красная")
+    }
 
-        // A turn is a big candle *at a price that stops things*. Either half
-        // alone is not one: a big candle in open ground is a candle, and a
-        // small one at a level is the level being tested rather than holding.
-        // Both together, against agreeing lines, is the only counter-trend
-        // entry worth having.
-        if (big && atWall) return Choice(other(way), "разворот от уровня")
-        return Choice("", if (body > 0.0) "свеча зелёная" else "свеча красная")
+    /**
+     * Whether the closing candle was thrown back from the level the entry
+     * would be buying into.
+     *
+     * The bounce above turns that into a trade the other way when the minute
+     * confirms it. When it does not — the wick is there but the last minute is
+     * still pushing — the level has at least been shown to hold, and buying
+     * into it anyway is buying from the people who were just refused.
+     */
+    fun rejectedAt(
+        way: String,
+        high: Double,
+        low: Double,
+        close: Double,
+        level: Double?,
+        typical: Double,
+        touch: Double = TOUCH,
+    ): Boolean {
+        if (way.isEmpty() || level == null || typical <= 0.0) return false
+        if (high <= 0.0 || low <= 0.0 || close <= 0.0) return false
+        val near = typical * touch
+        return if (way == "Up") {
+            high >= level - near && close < level
+        } else {
+            low <= level + near && close > level
+        }
     }
 
     /**
@@ -265,12 +313,12 @@ object ProbePlan {
      *
      * Zero switches the check off.
      *
-     * Kept low on purpose. The rule is meant to trade nearly every window, so
-     * this is for the few where price is genuinely up against something — and
-     * "something" means a price the market has turned at more than once, not
-     * every wiggle the minute chart has left behind.
+     * A whole window's travel. Buying a direction with less room than that in
+     * front of it is buying the last stretch before the wall: what is left is
+     * smaller than the move a five-minute candle makes by accident, and the
+     * wall is where everybody else's orders are.
      */
-    const val DEFAULT_ROOM = 0.35
+    const val DEFAULT_ROOM = 1.0
 
     data class Settings(
         val enabled: Boolean = false,
@@ -362,11 +410,18 @@ object ProbePlan {
         byLine: Boolean = true,
         /** What this window is actually staking, when it is not the base. */
         stake: Double? = null,
+        /** The closing candle's reach, for a level it may have been refused at. */
+        candleHigh: Double = 0.0,
+        candleLow: Double = 0.0,
+        candleClose: Double = 0.0,
     ): String? {
         if (!settings.enabled) return "выключен"
         // The line is read off the minute candles, so an empty answer means
         // the stream has not arrived rather than that the market is quiet.
         if (way.isEmpty()) return "нет свечей"
+        if (rejectedAt(way, candleHigh, candleLow, candleClose, level, typical)) {
+            return "отбой от " + Math.round(level ?: 0.0)
+        }
         if (byLine) {
             nearRound(price, settings.roundBand)?.let {
                 return "круглый " + Math.round(it)

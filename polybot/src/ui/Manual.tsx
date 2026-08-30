@@ -1125,14 +1125,6 @@ export function Manual({
 
         <div className="deskbtns">
           <button
-            className={`gear${lookAhead ? ' on' : ''}`}
-            onClick={() => setLookAhead((v) => !v)}
-            aria-label="Следующее окно"
-            title="Следующее окно"
-          >
-            {lookAhead ? '↩' : '»'}
-          </button>
-          <button
             className={`gear${tab === 'settings' ? ' on' : ''}`}
             onClick={() => setTab(tab === 'settings' ? 'desk' : 'settings')}
             aria-label="Настройки"
@@ -1647,6 +1639,7 @@ export function Manual({
               secondsLeft={secondsLeft}
               windowStart={windowStart}
               lookAhead={lookAhead}
+              onLookAhead={() => setLookAhead((v) => !v)}
               elapsed={elapsed}
               ceiling={ceiling}
               chosen={side}
@@ -2290,11 +2283,13 @@ function ProbeCard({
         открывается ближе {Math.round(state.roundBand)}$ к круглым пятистам —
         80 000, 80 500, 81 000: стакан там стоит всегда, что бы ни говорил
         график.{' '}
-Обе линии — минутная и пятиминутная — должны смотреть
-        в одну сторону, иначе окно не торгуется вовсе. Против линии входит
-        только в одном случае: большая свеча у самого уровня — это разворот, и
-        берётся новая сторона. Большая свеча в чистом поле или маленькая у
-        уровня — окно пропускается. Держит от уровня до уровня:
+Сначала смотрит на уровни, а не на линии: цена почти всё
+        время ходит от уровня к уровню, а не по тренду. Фитиль в уровень,
+        закрытие обратно от него и минутка, которая уже уходит, — это отбой, и
+        берётся сторона прочь от уровня, что бы ни говорила линия: она узнает
+        об этом только минут через двадцать. Если уровень не тронут — решают
+        линии: минутная задаёт сторону, пятиминутная возражает только когда
+        сама называет направление, и закрывающаяся свеча должна идти туда же. Держит от уровня до уровня:
         закрывает, как только цена дошла до следующего, не дожидаясь ступени. Всё, что наторгует, ниже по окнам.
       </div>
       )}
@@ -3165,6 +3160,7 @@ function PositionPair({
   secondsLeft,
   windowStart,
   lookAhead,
+  onLookAhead,
   elapsed,
   ceiling,
   chosen,
@@ -3182,6 +3178,7 @@ function PositionPair({
   /** The live window, which is the one the readout above the clock is about. */
   windowStart: number;
   lookAhead: boolean;
+  onLookAhead: () => void;
   /** How far into the window the desk is trading, for the early ceiling. */
   elapsed: number;
   /** The dearest a buy may be right now; a quote over it loads this instead. */
@@ -3284,9 +3281,20 @@ function PositionPair({
       */}
       <div className="pairmid">
         <WindowMark windowStart={windowStart} />
-        <b className={clockTone(secondsLeft, lookAhead)}>
-          {`${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}
-        </b>
+        {/*
+          The clock is the switch between this window and the next. They are
+          the same question — which five minutes am I trading — so it is one
+          control, and the countdown is the obvious thing to press.
+        */}
+        <button
+          className={`pairclock ${clockTone(secondsLeft, lookAhead)}`}
+          onClick={onLookAhead}
+        >
+          {lookAhead
+            ? '5:00'
+            : `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}
+        </button>
+        {lookAhead && <span className="pairnext">следующее</span>}
       </div>
 
       {side('Down', down)}

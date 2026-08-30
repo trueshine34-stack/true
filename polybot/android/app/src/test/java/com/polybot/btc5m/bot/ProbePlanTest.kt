@@ -108,17 +108,17 @@ class ProbePlanTest {
 
     @Test
     fun `stands aside when the reversal is one window away`() {
-        // A typical window travels sixty dollars, so the rule wants twenty-one
-        // of room. Ten is not enough: this window arrives at the level with
-        // most of itself left, and the direction is nearly spent.
-        assertTrue(ProbePlan.tooClose(price = 100_000.0, level = 100_010.0, typical = 60.0))
-        // Thirty away, and the window has somewhere to go first.
-        assertTrue(!ProbePlan.tooClose(price = 100_000.0, level = 100_030.0, typical = 60.0))
+        // A typical window travels sixty dollars, and the rule wants a whole
+        // one of room. Thirty is not enough: what is left is smaller than the
+        // move a candle makes by accident.
+        assertTrue(ProbePlan.tooClose(price = 100_000.0, level = 100_030.0, typical = 60.0))
+        // Ninety away, and the window has somewhere to go first.
+        assertTrue(!ProbePlan.tooClose(price = 100_000.0, level = 100_090.0, typical = 60.0))
     }
 
     @Test
     fun `measures the room the same either side of the price`() {
-        assertTrue(ProbePlan.tooClose(price = 100_000.0, level = 99_990.0, typical = 60.0))
+        assertTrue(ProbePlan.tooClose(price = 100_000.0, level = 99_970.0, typical = 60.0))
     }
 
     @Test
@@ -143,10 +143,10 @@ class ProbePlanTest {
             // In open ground between two round numbers, so the reversal is
             // the only thing in the way.
             price = 100_240.0,
-            level = 100_250.0,
+            level = 100_270.0,
             typical = 60.0,
         )
-        assertEquals("у разворота 100250", why)
+        assertEquals("у разворота 100270", why)
     }
 
     @Test
@@ -320,69 +320,13 @@ class ProbePlanTest {
         assertTrue(!ProbePlan.closingAgainst("Up", 0.0, 80_040.0))
     }
 
-    @Test
-    fun `a candle going the line's way leaves the line alone`() {
-        assertEquals(
-            ProbePlan.Choice("Up", null),
-            ProbePlan.choose("Up", "Up", candleBody = 40.0, typical = 60.0),
-        )
-        assertEquals(
-            ProbePlan.Choice("Down", null),
-            ProbePlan.choose("Down", "Down", candleBody = -40.0, typical = 60.0),
-        )
-    }
 
-    @Test
-    fun `a big candle at a level is the turn, and is taken the other way`() {
-        // The lines say down; the five minutes closed green by more than a
-        // candle usually travels, and it did it at a price that stops things.
-        val pick = ProbePlan.choose("Down", "Down", candleBody = 80.0, typical = 60.0, atWall = true)
-        assertEquals("Up", pick.side)
-        assertEquals("разворот от уровня", pick.note)
-        assertTrue(!pick.byLine)
-    }
 
-    @Test
-    fun `the same candle in open ground is only a candle`() {
-        // Nothing there for price to turn on, so a big bar against the trend
-        // is one bar, and the window is left alone.
-        val pick = ProbePlan.choose("Down", "Down", candleBody = 80.0, typical = 60.0, atWall = false)
-        assertEquals("", pick.side)
-        assertEquals("свеча зелёная", pick.note)
-    }
 
-    @Test
-    fun `a small candle at a level is the level being tested, not turned`() {
-        val pick = ProbePlan.choose("Down", "Down", candleBody = 20.0, typical = 60.0, atWall = true)
-        assertEquals("", pick.side)
-        assertEquals("свеча зелёная", pick.note)
-    }
 
-    @Test
-    fun `lines that disagree are a window nobody can call`() {
-        // Half an hour of minutes says up and an hour of five-minutes says
-        // down. One of them is stale and there is no telling which.
-        val pick = ProbePlan.choose("Up", "Down", candleBody = 40.0, typical = 60.0)
-        assertEquals("", pick.side)
-        assertEquals("тренды спорят", pick.note)
-    }
 
-    @Test
-    fun `an ordinary candle against the line in open ground is neither side`() {
-        val pick = ProbePlan.choose("Down", "Down", candleBody = 20.0, typical = 60.0)
-        assertEquals("", pick.side)
-        assertEquals("свеча зелёная", pick.note)
-    }
 
-    @Test
-    fun `a candle that went nowhere leaves the line to decide`() {
-        assertEquals("Down", ProbePlan.choose("Down", "Down", 0.0, 60.0).side)
-    }
 
-    @Test
-    fun `without a line there is no side at all`() {
-        assertEquals("", ProbePlan.choose("", "Down", 80.0, 60.0).side)
-    }
 
     @Test
     fun `a side taken against the line is not stopped by the level it came off`() {
@@ -416,84 +360,9 @@ class ProbePlanTest {
         )
     }
 
-    @Test
-    fun `the minute candle gets a vote of its own`() {
-        // The five minutes is closing green with an upward line and would have
-        // passed on its own — but the minute just closed red, and that is the
-        // freshest thing on the screen.
-        val pick = ProbePlan.choose(
-            way = "Up",
-            wide = "Up",
-            candleBody = 40.0,
-            typical = 60.0,
-            minuteBody = -8.0,
-            minuteTypical = 14.0,
-        )
-        assertEquals("", pick.side)
-        assertEquals("свеча красная", pick.note)
-    }
 
-    @Test
-    fun `each candle is judged against its own length`() {
-        // Twelve dollars is a big minute and a small five minutes. Against a
-        // minute's usual travel it is the turn; the same body as a
-        // five-minute candle would be noise.
-        val minute = ProbePlan.choose(
-            way = "Down",
-            wide = "Down",
-            candleBody = 0.0,
-            typical = 60.0,
-            minuteBody = 20.0,
-            minuteTypical = 14.0,
-            atWall = true,
-        )
-        assertEquals("Up", minute.side)
-        assertEquals("разворот от уровня", minute.note)
 
-        // The same body as a five-minute candle is noise, and stays a skip
-        // even at the level.
-        val window = ProbePlan.choose(
-            way = "Down",
-            wide = "Down",
-            candleBody = 20.0,
-            typical = 60.0,
-            minuteBody = 0.0,
-            minuteTypical = 14.0,
-            atWall = true,
-        )
-        assertEquals("", window.side)
-    }
 
-    @Test
-    fun `the loudest objection is the one that decides`() {
-        // Both disagree; the minute is further past its own usual travel, so
-        // it is the one that calls the turn.
-        val pick = ProbePlan.choose(
-            way = "Down",
-            wide = "Down",
-            candleBody = 30.0,
-            typical = 60.0,
-            minuteBody = 25.0,
-            minuteTypical = 14.0,
-            atWall = true,
-        )
-        assertEquals("Up", pick.side)
-        assertEquals("разворот от уровня", pick.note)
-    }
-
-    @Test
-    fun `both candles with the line leave it alone`() {
-        val pick = ProbePlan.choose(
-            way = "Up",
-            wide = "Up",
-            candleBody = 40.0,
-            typical = 60.0,
-            minuteBody = 6.0,
-            minuteTypical = 14.0,
-        )
-        assertEquals("Up", pick.side)
-        assertNull(pick.note)
-    }
 
 
 
@@ -572,5 +441,164 @@ class ProbePlanTest {
     fun `without a price there is nothing to buy`() {
         assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = null, alreadyAdded = false))
         assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.0, alreadyAdded = false))
+    }
+
+    /** A five-minute candle that ran into resistance and closed back under. */
+    private fun offTop(minute: Double) = ProbePlan.choose(
+        way = "Up",
+        wide = "Up",
+        candleBody = 30.0,
+        typical = 60.0,
+        candleHigh = 78_308.0,
+        candleLow = 78_240.0,
+        candleClose = 78_260.0,
+        minuteBody = minute,
+        minuteTypical = 14.0,
+        above = 78_311.0,
+        below = 78_145.0,
+    )
+
+    @Test
+    fun `a wick into resistance and a close back under is a bounce`() {
+        // The lines both say up and it is bought Down anyway: the level turned
+        // it, and the line will not know for another twenty minutes.
+        val pick = offTop(minute = -6.0)
+        assertEquals("Down", pick.side)
+        assertEquals("отбой от 78311", pick.note)
+        assertTrue(!pick.byLine)
+    }
+
+    @Test
+    fun `a bounce needs the last minute to be leaving`() {
+        // The wick is there but the minute is still pushing into the level, so
+        // it is not a bounce — and the lines then carry the window.
+        val pick = offTop(minute = 6.0)
+        assertEquals("Up", pick.side)
+    }
+
+    @Test
+    fun `a wick into support and a close back over it is the other bounce`() {
+        val pick = ProbePlan.choose(
+            way = "Down",
+            wide = "Down",
+            candleBody = -30.0,
+            typical = 60.0,
+            candleHigh = 78_200.0,
+            candleLow = 78_148.0,
+            candleClose = 78_170.0,
+            minuteBody = 5.0,
+            minuteTypical = 14.0,
+            above = 78_311.0,
+            below = 78_145.0,
+        )
+        assertEquals("Up", pick.side)
+        assertEquals("отбой от 78145", pick.note)
+    }
+
+    @Test
+    fun `a candle that spanned the whole shelf settled nothing`() {
+        val pick = ProbePlan.choose(
+            way = "Up",
+            wide = "Up",
+            candleBody = 5.0,
+            typical = 60.0,
+            candleHigh = 78_308.0,
+            candleLow = 78_148.0,
+            candleClose = 78_200.0,
+            minuteBody = -3.0,
+            minuteTypical = 14.0,
+            above = 78_311.0,
+            below = 78_145.0,
+        )
+        assertEquals("", pick.side)
+        assertEquals("зажато между уровнями", pick.note)
+    }
+
+    @Test
+    fun `away from every level the lines decide as before`() {
+        val far = ProbePlan.choose(
+            way = "Up",
+            wide = "Up",
+            candleBody = 30.0,
+            typical = 60.0,
+            candleHigh = 78_260.0,
+            candleLow = 78_220.0,
+            candleClose = 78_255.0,
+            minuteBody = 4.0,
+            minuteTypical = 14.0,
+            above = 78_600.0,
+            below = 77_900.0,
+        )
+        assertEquals("Up", far.side)
+        assertNull(far.note)
+    }
+
+    @Test
+    fun `a flat five-minute line does not veto a clear minute one`() {
+        // The five-minute fit is too weak to call a direction. That is
+        // silence, not disagreement — and it used to cost the window.
+        val pick = ProbePlan.choose(
+            way = "Down",
+            wide = "",
+            candleBody = -30.0,
+            typical = 60.0,
+            minuteBody = -5.0,
+            minuteTypical = 14.0,
+        )
+        assertEquals("Down", pick.side)
+        assertNull(pick.note)
+    }
+
+    @Test
+    fun `a five-minute line that does call the other way still vetoes`() {
+        val pick = ProbePlan.choose(
+            way = "Down",
+            wide = "Up",
+            candleBody = -30.0,
+            typical = 60.0,
+            minuteBody = -5.0,
+            minuteTypical = 14.0,
+        )
+        assertEquals("", pick.side)
+        assertEquals("тренды спорят", pick.note)
+    }
+
+    @Test
+    fun `buying into a level the candle was just refused at is refused too`() {
+        assertTrue(
+            ProbePlan.rejectedAt(
+                way = "Up",
+                high = 78_308.0,
+                low = 78_240.0,
+                close = 78_260.0,
+                level = 78_311.0,
+                typical = 60.0,
+            ),
+        )
+        // Closing above it is a break, not a refusal.
+        assertTrue(
+            !ProbePlan.rejectedAt(
+                way = "Up",
+                high = 78_330.0,
+                low = 78_240.0,
+                close = 78_320.0,
+                level = 78_311.0,
+                typical = 60.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `a level the candle never reached refuses nothing`() {
+        assertTrue(
+            !ProbePlan.rejectedAt(
+                way = "Up",
+                high = 78_250.0,
+                low = 78_200.0,
+                close = 78_240.0,
+                level = 78_500.0,
+                typical = 60.0,
+            ),
+        )
     }
 }
