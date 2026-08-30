@@ -754,35 +754,14 @@ class ProbePlanTest {
         assertTrue(ProbePlan.recovered(lowWater = 0.27, cost = 0.54, worth = 0.60))
     }
 
-    /**
-     * A quote inside a nickel is not a market deciding anything, it is a
-     * market waiting — and the ladder overhead is asking for a move it has
-     * just said it will not make.
-     */
     @Test
-    fun `a price that has not left its nickel for half a minute has stopped`() {
-        assertTrue(ProbePlan.stoodStill(heldSec = 30, span = 0.05))
-        assertTrue(ProbePlan.stoodStill(heldSec = 120, span = 0.01))
-        // A cent wider is a market still moving.
-        assertTrue(!ProbePlan.stoodStill(heldSec = 120, span = 0.06))
-        // And half a minute is the least it has to stand there.
-        assertTrue(!ProbePlan.stoodStill(heldSec = 29, span = 0.01))
-    }
-
-    @Test
-    fun `a fifth is what a stopped price is worth taking`() {
+    fun `a fifth is what a position that was under water is worth taking`() {
         // Bought at 50, so a fifth up is 60.
-        assertTrue(ProbePlan.gained(worth = 0.60, cost = 0.50, share = ProbePlan.FLAT_GAIN))
-        assertTrue(!ProbePlan.gained(worth = 0.59, cost = 0.50, share = ProbePlan.FLAT_GAIN))
-    }
-
-    @Test
-    fun `a tenth is what a position that was under water is worth taking`() {
-        assertTrue(ProbePlan.gained(worth = 0.55, cost = 0.50, share = ProbePlan.RED_GAIN))
-        assertTrue(!ProbePlan.gained(worth = 0.54, cost = 0.50, share = ProbePlan.RED_GAIN))
+        assertTrue(ProbePlan.gained(worth = 0.60, cost = 0.50, share = ProbePlan.RED_GAIN))
+        assertTrue(!ProbePlan.gained(worth = 0.59, cost = 0.50, share = ProbePlan.RED_GAIN))
         // A loss is never a gain, whatever the share.
         assertTrue(!ProbePlan.gained(worth = 0.40, cost = 0.50, share = ProbePlan.RED_GAIN))
-        assertTrue(!ProbePlan.gained(worth = 0.55, cost = 0.0, share = ProbePlan.RED_GAIN))
+        assertTrue(!ProbePlan.gained(worth = 0.60, cost = 0.0, share = ProbePlan.RED_GAIN))
     }
 
     /**
@@ -798,22 +777,13 @@ class ProbePlanTest {
     fun `a run still running is not cut short for a tenth`() {
         val cost = 0.527
         val worth = 0.644
-        // The gain is there either way.
+        // The gain clears even the raised bar.
         assertTrue(ProbePlan.gained(worth, cost, ProbePlan.RED_GAIN))
         // What decides it is whether the run has ended.
         assertTrue(!SellLadder.dipping(highWater = 0.66, bid = 0.66))
         assertTrue(SellLadder.dipping(highWater = 0.66, bid = 0.59))
         // And while it has not, the ladder is asking ninety rather than a rung.
         assertEquals(0.90, SellLadder.holdOut(0.77, dipped = false, elapsedSec = 33), 1e-9)
-    }
-
-    @Test
-    fun `the bar is lower for a position that has already been wrong`() {
-        // Standing still asks a fifth; having been under water asks a tenth,
-        // because half a minute on the wrong side is a read already refuted.
-        assertTrue(ProbePlan.RED_GAIN < ProbePlan.FLAT_GAIN)
-        assertTrue(ProbePlan.gained(worth = 0.55, cost = 0.50, share = ProbePlan.RED_GAIN))
-        assertTrue(!ProbePlan.gained(worth = 0.55, cost = 0.50, share = ProbePlan.FLAT_GAIN))
     }
 
     @Test

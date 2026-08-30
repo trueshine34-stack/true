@@ -99,17 +99,6 @@ class ProbeBot(
          */
         val lowWater: Double = 0.0,
         /**
-         * The stretch the quote has spent inside one nickel: when it began,
-         * and the lowest and highest bid seen since.
-         *
-         * A price that has not left a five-cent band for half a minute is a
-         * market that has stopped deciding, and a five-minute bet cannot
-         * afford to wait with it.
-         */
-        val flatFrom: Long = 0L,
-        val flatLow: Double = 0.0,
-        val flatHigh: Double = 0.0,
-        /**
          * When the position went under water, and whether it stayed there
          * long enough to change what it is worth waiting for.
          */
@@ -1747,16 +1736,7 @@ class ProbeBot(
             val low = if (open.lowWater <= 0.0) bid else minOf(open.lowWater, bid)
             val worth = SellPercent.netSell(bid)
 
-            // How long the quote has stayed inside one nickel. A bid that
-            // leaves the band starts the stretch again from where it landed.
-            val lo = if (open.flatFrom == 0L) bid else minOf(open.flatLow, bid)
-            val hi = if (open.flatFrom == 0L) bid else maxOf(open.flatHigh, bid)
-            val wide = hi - lo > ProbePlan.FLAT_BAND + 1e-9
-            val flatFrom = if (open.flatFrom == 0L || wide) nowSec else open.flatFrom
-            val flatLow = if (wide) bid else lo
-            val flatHigh = if (wide) bid else hi
-
-            // And how long it has been under water, which resets the moment
+            // How long it has been under water, which resets the moment
             // it is not.
             val under = worth < open.price
             val redFrom = when {
@@ -1782,24 +1762,16 @@ class ProbeBot(
                 // what is left to want here.
                 ProbePlan.recovered(low, open.price, worth) ->
                     "падала до " + (low * 100).toInt() + "¢ — вышла в плюс"
-                // Half a minute on the wrong side of the entry, and now ahead:
-                // a tenth is already better than the position deserved.
+                // Half a minute on the wrong side of the entry, and now a
+                // fifth ahead: the ladder's own price stops being the thing
+                // to wait for on a read that has already been wrong.
                 //
-                // Unless the move is still running. A position that dipped
+                // Only once the move is over, though. A position that dipped
                 // early and then went straight up is exactly the one worth
-                // holding to ninety, and taking a tenth off it is the thing
-                // the run rule exists to prevent — this sold at 66¢ what was
-                // on its way past 74¢.
+                // holding to ninety.
                 wasRed && dipped &&
                     ProbePlan.gained(worth, open.price, ProbePlan.RED_GAIN) ->
                     "была в минусе — забрала +" +
-                        Math.round((worth / open.price - 1.0) * 100) + "%"
-                // Or a quote that has not left a nickel for half a minute:
-                // the ladder wants a move this market has said it will not
-                // make.
-                ProbePlan.stoodStill(nowSec - flatFrom, flatHigh - flatLow) &&
-                    ProbePlan.gained(worth, open.price, ProbePlan.FLAT_GAIN) ->
-                    "стоит на месте — забрала +" +
                         Math.round((worth / open.price - 1.0) * 100) + "%"
                 else -> null
             }
@@ -1810,9 +1782,6 @@ class ProbeBot(
                             lowWater = low,
                             highWater = high,
                             dipped = dipped,
-                            flatFrom = flatFrom,
-                            flatLow = flatLow,
-                            flatHigh = flatHigh,
                             redFrom = redFrom,
                             wasRed = wasRed,
                         )
