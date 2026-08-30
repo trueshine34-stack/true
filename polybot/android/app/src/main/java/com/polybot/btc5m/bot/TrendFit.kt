@@ -93,4 +93,22 @@ object TrendFit {
 
     /** The wider line, for anything that wants the afternoon's direction. */
     fun wide(): Trend? = of(BinanceCandles.fiveMinute.list(), 60)
+
+    /**
+     * Which way the line points, whatever it is worth.
+     *
+     * [Trend.way] is a judgement: it refuses to call a direction the fit does
+     * not support, which is right for anything choosing whether to act. A rule
+     * that acts every window is not choosing whether — only which — and for
+     * that the question is simply which end of the fitted line is higher. The
+     * strength is still on the card, and still in the record beside every
+     * round, so a run of weak lines can be read afterwards.
+     */
+    fun lean(trend: Trend?): String = when {
+        trend == null -> ""
+        trend.way.isNotEmpty() -> trend.way
+        trend.perHour > 0.0 -> "Up"
+        trend.perHour < 0.0 -> "Down"
+        else -> ""
+    }
 }

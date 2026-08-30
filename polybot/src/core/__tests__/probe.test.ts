@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bySide, curve, latest, pnlOf, summarise } from '../probe';
+import { bySide, curve, latest, pnlOf, summarise, traded } from '../probe';
 import type { ProbeRound } from '../../native/polybot';
 
 /** One scored window, with only the parts a report reads spelled out. */
@@ -138,5 +138,26 @@ describe('curve', () => {
 
   it('is empty until a window has closed', () => {
     expect(curve([round({ open: true, pnl: 5 })])).toEqual([]);
+  });
+});
+
+describe('windows it stood out of', () => {
+  const skip = round({ shares: 0, price: 0, proceeds: 0, note: 'у разворота 78420' });
+
+  it('is not a trade', () => {
+    expect(traded(skip)).toBe(false);
+    expect(traded(round({ shares: 5 }))).toBe(true);
+  });
+
+  it('is left out of the money and the averages', () => {
+    // Otherwise a run that mostly stood aside reads as a run of flat trades.
+    const s = summarise([skip, round({ pnl: 2 })]);
+    expect(s.rounds).toBe(1);
+    expect(s.flat).toBe(0);
+    expect(s.average).toBeCloseTo(2, 9);
+  });
+
+  it('is left out of the curve', () => {
+    expect(curve([skip, round({ pnl: 1 })])).toEqual([1]);
   });
 });

@@ -70,8 +70,16 @@ export function pnlOf(round: ProbeRound): number {
   return round.proceeds + round.settled - round.shares * round.price;
 }
 
+/** A window it actually bought into, as opposed to one it stood out of. */
+export function traded(round: ProbeRound): boolean {
+  return round.shares > 0;
+}
+
 export function summarise(rounds: ProbeRound[]): ProbeSummary {
-  const closed = rounds.filter((r) => !r.open);
+  // A window it stood out of has a line in the record and a reason, but no
+  // money — counting it as a flat result would water down every average with
+  // trades that never happened.
+  const closed = rounds.filter((r) => !r.open && traded(r));
   if (closed.length === 0) return { ...EMPTY };
 
   let spent = 0;
@@ -160,7 +168,7 @@ export function latest(rounds: ProbeRound[], count: number): ProbeRound[] {
 
 /** A running total over the record, oldest first — the shape of the run. */
 export function curve(rounds: ProbeRound[]): number[] {
-  const closed = rounds.filter((r) => !r.open);
+  const closed = rounds.filter((r) => !r.open && traded(r));
   const out: number[] = [];
   let sum = 0;
   for (let i = closed.length - 1; i >= 0; i -= 1) {

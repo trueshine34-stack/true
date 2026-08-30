@@ -39,8 +39,13 @@ object ProbePlan {
      * for.
      *
      * Zero switches the check off.
+     *
+     * Kept low on purpose. The rule is meant to trade nearly every window, so
+     * this is for the few where price is genuinely up against something — and
+     * "something" means a price the market has turned at more than once, not
+     * every wiggle the minute chart has left behind.
      */
-    const val DEFAULT_ROOM = 0.6
+    const val DEFAULT_ROOM = 0.35
 
     data class Settings(
         val enabled: Boolean = false,
@@ -69,9 +74,29 @@ object ProbePlan {
         return abs(level - price) < typical * share
     }
 
-    /** Whether now is the moment: inside the lead, before the window turns. */
-    fun due(secondsLeft: Long, settings: Settings): Boolean =
-        secondsLeft in 1..settings.leadSec
+    /**
+     * The window this moment is trying to buy, or null when it is neither.
+     *
+     * Two moments, not one. The lead before a window opens is where the entry
+     * belongs — late enough to have seen the last window, early enough to be
+     * in from the first tick. But the venue does not always publish the next
+     * market in time, and a chance missed for that reason used to cost the
+     * whole window; so the same lead again just after the open buys the window
+     * that is already running. Two seconds late is still that window's bet.
+     */
+    fun targetWindow(
+        windowStart: Long,
+        elapsedSec: Long,
+        settings: Settings,
+        windowSec: Long = 300L,
+    ): Long? {
+        val left = windowSec - elapsedSec
+        return when {
+            left in 1..settings.leadSec -> windowStart + windowSec
+            elapsedSec in 0..settings.leadSec -> windowStart
+            else -> null
+        }
+    }
 
     /**
      * Why the entry is not going in, or null when it is.
@@ -90,7 +115,9 @@ object ProbePlan {
         typical: Double = 0.0,
     ): String? {
         if (!settings.enabled) return "выключен"
-        if (way.isEmpty()) return "тренд вбок"
+        // The line is read off the minute candles, so an empty answer means
+        // the stream has not arrived rather than that the market is quiet.
+        if (way.isEmpty()) return "нет свечей"
         if (tooClose(price, level, typical, settings.roomShare)) {
             return "у разворота " + Math.round(level ?: 0.0)
         }

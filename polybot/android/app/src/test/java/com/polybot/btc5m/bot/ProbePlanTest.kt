@@ -9,33 +9,42 @@ class ProbePlanTest {
 
     private val on = ProbePlan.Settings(enabled = true)
 
+    private val W = 1_788_060_600L
+
     @Test
-    fun `enters inside the lead and not before it`() {
-        assertTrue(ProbePlan.due(10, on))
-        assertTrue(ProbePlan.due(1, on))
-        assertTrue(!ProbePlan.due(11, on))
-        assertTrue(!ProbePlan.due(60, on))
+    fun `aims at the next window through the lead before it opens`() {
+        // Ten seconds left, and nine.
+        assertEquals(W + 300, ProbePlan.targetWindow(W, 290, on))
+        assertEquals(W + 300, ProbePlan.targetWindow(W, 299, on))
     }
 
     @Test
-    fun `does not enter on the boundary itself`() {
-        // Zero seconds left is the next window, already open — the entry it
-        // would place belongs to a window that has started without it.
-        assertTrue(!ProbePlan.due(0, on))
-        assertTrue(!ProbePlan.due(-3, on))
+    fun `aims at the running window for the same lead after it opens`() {
+        // The venue does not always publish the next market in time, and a
+        // window entered two seconds late is still that window's bet.
+        assertEquals(W, ProbePlan.targetWindow(W, 0, on))
+        assertEquals(W, ProbePlan.targetWindow(W, 10, on))
     }
 
     @Test
-    fun `a longer lead moves the whole window forward`() {
+    fun `aims at nothing through the middle of a window`() {
+        assertNull(ProbePlan.targetWindow(W, 11, on))
+        assertNull(ProbePlan.targetWindow(W, 150, on))
+        assertNull(ProbePlan.targetWindow(W, 289, on))
+    }
+
+    @Test
+    fun `a longer lead widens both chances`() {
         val early = ProbePlan.Settings(enabled = true, leadSec = 30)
-        assertTrue(ProbePlan.due(30, early))
-        assertTrue(!ProbePlan.due(31, early))
+        assertEquals(W + 300, ProbePlan.targetWindow(W, 270, early))
+        assertEquals(W, ProbePlan.targetWindow(W, 30, early))
+        assertNull(ProbePlan.targetWindow(W, 31, early))
     }
 
     @Test
     fun `says why it is standing aside`() {
         assertEquals("выключен", ProbePlan.blockedBecause("Up", 0.5, 100.0, ProbePlan.Settings()))
-        assertEquals("тренд вбок", ProbePlan.blockedBecause("", 0.5, 100.0, on))
+        assertEquals("нет свечей", ProbePlan.blockedBecause("", 0.5, 100.0, on))
         assertEquals("нет цены", ProbePlan.blockedBecause("Up", null, 100.0, on))
         assertEquals("нет цены", ProbePlan.blockedBecause("Up", 0.0, 100.0, on))
         assertEquals("контейнер пуст", ProbePlan.blockedBecause("Up", 0.5, 1.0, on))
@@ -79,17 +88,17 @@ class ProbePlanTest {
 
     @Test
     fun `stands aside when the reversal is one window away`() {
-        // A typical window travels sixty dollars, so the rule wants
-        // thirty-six of room. Twenty is not enough: this window arrives at the
-        // level with time to spare, and the direction is nearly spent.
-        assertTrue(ProbePlan.tooClose(price = 100_000.0, level = 100_020.0, typical = 60.0))
-        // A hundred away, and the window would have to do more than usual.
-        assertTrue(!ProbePlan.tooClose(price = 100_000.0, level = 100_100.0, typical = 60.0))
+        // A typical window travels sixty dollars, so the rule wants twenty-one
+        // of room. Ten is not enough: this window arrives at the level with
+        // most of itself left, and the direction is nearly spent.
+        assertTrue(ProbePlan.tooClose(price = 100_000.0, level = 100_010.0, typical = 60.0))
+        // Thirty away, and the window has somewhere to go first.
+        assertTrue(!ProbePlan.tooClose(price = 100_000.0, level = 100_030.0, typical = 60.0))
     }
 
     @Test
     fun `measures the room the same either side of the price`() {
-        assertTrue(ProbePlan.tooClose(price = 100_000.0, level = 99_980.0, typical = 60.0))
+        assertTrue(ProbePlan.tooClose(price = 100_000.0, level = 99_990.0, typical = 60.0))
     }
 
     @Test
@@ -112,10 +121,10 @@ class ProbePlanTest {
             cashUsd = 100.0,
             settings = on,
             price = 100_000.0,
-            level = 100_020.0,
+            level = 100_010.0,
             typical = 60.0,
         )
-        assertEquals("у разворота 100020", why)
+        assertEquals("у разворота 100010", why)
     }
 
     @Test
@@ -127,7 +136,7 @@ class ProbePlanTest {
                 cashUsd = 100.0,
                 settings = on,
                 price = 100_000.0,
-                level = 100_400.0,
+                level = 100_200.0,
                 typical = 60.0,
             ),
         )

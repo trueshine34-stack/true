@@ -34,7 +34,7 @@ import {
   targetPrice,
   usd,
 } from '../core/money';
-import { bySide, pnlOf, summarise } from '../core/probe';
+import { bySide, pnlOf, summarise, traded } from '../core/probe';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
 import { Fold } from './Fold';
 import { CandlePanel } from './CandlePanel';
@@ -2251,15 +2251,26 @@ function ProbeCard({
           : state.note || (state.enabled ? 'жду окна' : 'выключено')}
       </div>
 
-      {all.rounds > 0 ? (
+      {state.rounds.length > 0 ? (
         <>
           <div className="listhead second">
-            <span>Итог за {all.rounds} окон</span>
+            <span>
+              Итог за {all.rounds} окон
+              {state.rounds.length > all.rounds
+                ? ` · пропущено ${state.rounds.length - all.rounds}`
+                : ''}
+            </span>
             <button className="linkbtn" onClick={onReset}>
               очистить
             </button>
           </div>
 
+          {/*
+            The money only when there was any. A run that stood out of every
+            window has nothing to average, and the list below still says why.
+          */}
+          {all.rounds > 0 && (
+          <>
           <div className="countergrid">
             <div>
               <span className="muted">итог</span>
@@ -2329,6 +2340,8 @@ function ProbeCard({
               </b>
             </div>
           </div>
+          </>
+          )}
 
           <div className="listhead second">
             <span>По пятиминуткам</span>
@@ -2343,7 +2356,7 @@ function ProbeCard({
       ) : (
         <div className="counterlive muted">
           Пока ни одного закрытого окна. Первая запись появится через пять
-          минут после первой покупки.
+          минут после открытия — покупкой или причиной, по которой её не было.
         </div>
       )}
 
@@ -2352,8 +2365,22 @@ function ProbeCard({
   );
 }
 
-/** One traded window, as a line: what was taken, and what it came to. */
+/** One window, as a line: what was taken, and what it came to. */
 function ProbeRow({ round }: { round: ProbeRound }) {
+  // A window it stood out of still gets a line, with the reason in place of
+  // the numbers — that is the whole point of writing them down.
+  if (!traded(round)) {
+    return (
+      <div className="proberow skipped">
+        <span className="probewhen">{clockOf(round.windowStart)}</span>
+        <span className="muted">—</span>
+        <span className="muted">пропуск: {round.note || 'без причины'}</span>
+        <span className="probemark">·</span>
+        <b className="muted">—</b>
+      </div>
+    );
+  }
+
   const money = pnlOf(round);
   const tone = money > 0.005 ? 'up' : money < -0.005 ? 'down' : 'muted';
   // What the shares averaged on the way out, sale and settlement together,

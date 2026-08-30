@@ -97,6 +97,10 @@ class ProbeBot(
     private var scope: CoroutineScope? = null
     private var job: Job? = null
 
+    /** The window the current chance is for, and why it has not gone in yet. */
+    private var aiming = 0L
+    private var aimNote: String? = null
+
     private companion object {
         /** A ten-second lead needs a clock, not a poll. */
         const val TICK_MS = 1_000L
@@ -181,6 +185,9 @@ class ProbeBot(
         val session = engine.session()
         if (session == null) {
             lastFault = "кошелёк не подключён"
+            // So the window this costs is filed with the reason rather than
+            // as a silent gap.
+            aimNote = lastFault
             onStateChanged()
             return
         }
@@ -188,7 +195,7 @@ class ProbeBot(
 
         val elapsed = SellLadder.elapsedInWindow(nowSec)
         val secondsLeft = WINDOW_SEC - elapsed
-        val target = nowSec - elapsed + WINDOW_SEC
+        val windowStart = nowSec - elapsed
 
         trend = TrendFit.onScreen()
         readLevel()
@@ -198,7 +205,15 @@ class ProbeBot(
             onStateChanged()
             return
         }
-        if (!ProbePlan.due(secondsLeft, settings)) {
+
+        val target = ProbePlan.targetWindow(windowStart, elapsed, settings, WINDOW_SEC)
+        // A chance that has come and gone is filed with the reason it did, so
+        // "why did it not trade that one" is a question the report answers.
+        if (target != aiming) {
+            giveUp(nowSec)
+            aiming = target ?: 0L
+        }
+        if (target == null) {
             note = "жду открытия: " + (secondsLeft - settings.leadSec) + " с"
             onStateChanged()
             return
@@ -210,7 +225,36 @@ class ProbeBot(
         }
 
         enter(target)
+        aimNote = note
         onStateChanged()
+    }
+
+    /**
+     * Files the window whose chance has just run out.
+     *
+     * Every window gets a line in the record — a trade, or the reason there
+     * was not one. A rule that silently does nothing is a rule nobody can
+     * tell from a broken one, which is exactly what happened the first time
+     * this ran.
+     */
+    private fun giveUp(nowSec: Long) {
+        val missed = aiming
+        aiming = 0L
+        if (missed <= 0L || traded(missed)) return
+
+        val skipped = Round(
+            windowStart = missed,
+            asset = "",
+            side = TrendFit.lean(trend),
+            perHour = trend?.perHour ?: 0.0,
+            shares = 0.0,
+            price = 0.0,
+            winner = EventStats.winnerFor(missed, nowSec),
+            note = aimNote ?: "не успел",
+        )
+        rounds = rounds + skipped
+        store.saveRounds(rounds)
+        engine.log("warn", "Проба: пропустила окно " + hhmm(missed) + " — " + skipped.note)
     }
 
     private fun traded(windowStart: Long): Boolean =
@@ -226,7 +270,7 @@ class ProbeBot(
      */
     private fun enter(windowStart: Long) {
         val line = trend
-        val way = line?.way.orEmpty()
+        val way = TrendFit.lean(line)
 
         val market = engine.marketForWindow(windowStart)
         if (market == null) {
@@ -358,13 +402,19 @@ class ProbeBot(
     private fun readLevel() {
         val candles = BinanceCandles.oneMinute.list()
         val here = candles.lastOrNull()?.close ?: 0.0
-        val way = trend?.way.orEmpty()
+        val way = TrendFit.lean(trend)
         if (here <= 0.0 || way.isEmpty()) {
             levelAhead = null
             roomToLevel = null
             return
         }
-        val level = Levels.ahead(Levels.find(candles, here), here, way)
+        // Only prices the market has actually turned at more than once. The
+        // panel draws the nearest cluster either side whatever its history,
+        // which is right for a chart and far too eager for a gate: a single
+        // pivot on the minute chart is one wiggle, and standing aside for
+        // every wiggle is standing aside for good.
+        val walls = Levels.find(candles, here).filter { it.touches >= 2 }
+        val level = Levels.ahead(walls, here, way)
         levelAhead = level
         roomToLevel = level?.let { abs(it - here) }
     }

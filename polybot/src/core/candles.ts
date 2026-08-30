@@ -8,11 +8,8 @@
  * as nothing at all.
  */
 
-/**
- * Open time in seconds, then open, high, low, close — and the volume, which
- * older callers may not carry.
- */
-export type Candle = [number, number, number, number, number, number?];
+/** Open time in seconds, then open, high, low, close. */
+export type Candle = [number, number, number, number, number];
 
 export interface Bar {
   /** The interval's open time, in seconds — what the candle *is*. */
@@ -51,13 +48,6 @@ export function candleShape(
   candles: Candle[],
   width: number,
   height: number,
-  /**
-   * Prices that are not candles but must still fit in the frame — the
-   * forecast's path, drawn in the lane past the last one. Without them a
-   * projection that leaves the candles' own range is drawn outside the panel
-   * and simply disappears.
-   */
-  extra: number[] = [],
 ): CandleShape | null {
   const clean = candles.filter(
     ([t, o, h, l, c]) =>
@@ -70,13 +60,6 @@ export function candleShape(
   for (const [, , h, l] of clean) {
     if (l < low) low = l;
     if (h > high) high = h;
-  }
-  // The candles decide what the chart is about; the extras only stop the
-  // frame from cutting something off.
-  for (const price of extra) {
-    if (!Number.isFinite(price) || price <= 0) continue;
-    if (price < low) low = price;
-    if (price > high) high = price;
   }
   const span = high - low;
   // A stretch of price that never moved would divide by nothing.

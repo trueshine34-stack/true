@@ -815,9 +815,6 @@ class BotPlugin : Plugin() {
                     put(it.high)
                     put(it.low)
                     put(it.close)
-                    // The volume too: the chart's forecast leans on whether a
-                    // move has people behind it or is drifting on nobody.
-                    put(it.volume)
                 },
             )
         }

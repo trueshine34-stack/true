@@ -56,4 +56,26 @@ class TrendFitTest {
         assertNull(TrendFit.of(walk(listOf(100.0, 101.0)), 30))
         assertNull(TrendFit.of(emptyList(), 30))
     }
+
+    @Test
+    fun `leans the way the line points even when it will not call it`() {
+        // Chop with a slight upward tilt: the strict answer is "no trend", and
+        // the lean is still up, which is what a rule that acts every window
+        // needs. Without this the probe stood aside for four windows in ten.
+        val chop = TrendFit.Trend(perHour = 12.0, way = "", fit = 0.05)
+        assertEquals("Up", TrendFit.lean(chop))
+        assertEquals("Down", TrendFit.lean(chop.copy(perHour = -12.0)))
+    }
+
+    @Test
+    fun `keeps a called direction as it is`() {
+        val up = TrendFit.Trend(perHour = -3.0, way = "Up", fit = 0.9)
+        assertEquals("Up", TrendFit.lean(up))
+    }
+
+    @Test
+    fun `has no lean without a line, or on a flat one`() {
+        assertEquals("", TrendFit.lean(null))
+        assertEquals("", TrendFit.lean(TrendFit.Trend(perHour = 0.0, way = "", fit = 0.0)))
+    }
 }
