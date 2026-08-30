@@ -428,6 +428,9 @@ class ProbeBot(
         // that has been bought.
         if (settings.enabled) {
             fillResting(nowSec)
+            // And the real equivalent: a bid the venue filled while nothing
+            // here was looking is a position, not a pending order.
+            catchFills()
             // And a bid the market never came back to is taken back, so the
             // money is free for the next window.
             dropStale(nowSec)
@@ -1252,6 +1255,10 @@ class ProbeBot(
         for (open in waiting) {
             if (ProbePlan.stillOn(open.side, fresh)) continue
             if (!open.demo) cancelBuys(open.asset)
+            // It may have filled in the meantime, in which case there is a
+            // position to sell rather than an order to pull — and the loop
+            // above will sell it on the next tick.
+            if (adopt(open)) continue
             working = working.filterNot {
                 it.windowStart == open.windowStart && it.leg == open.leg
             }
@@ -1454,7 +1461,11 @@ class ProbeBot(
 
         for (open in waiting) {
             if (!ProbePlan.restingDone(nowSec - open.windowStart)) continue
+            // Cancel first, then ask what happened: cancelling closes the
+            // book to any further fill, so what the log says afterwards is
+            // final rather than a race.
             if (!open.demo) cancelBuys(open.asset)
+            if (adopt(open)) continue
 
             working = working.filterNot { it.windowStart == open.windowStart && it.leg == open.leg }
             rounds = rounds + open.copy(
@@ -1469,6 +1480,80 @@ class ProbeBot(
             )
             onStateChanged()
         }
+    }
+
+    /**
+     * What a bid left on the book actually bought, off the order log.
+     *
+     * This rule never hears about its own fills. The buy was left resting and
+     * whatever became of it exists only in the log, which nothing here was
+     * asking — so a bid that filled inside its first minute was cancelled
+     * (nothing to cancel), filed as "лимитка снята", and dropped from the
+     * working list, leaving real shares in the wallet with no ladder over
+     * them and a history saying the opposite of what happened.
+     *
+     * The log is brought up to date first, because the sweep that normally
+     * does that belongs to the sell rule and may not be running.
+     *
+     * Returns the round as a position, or null when nothing was bought.
+     */
+    private fun claim(open: Round, refresh: Boolean = true): Round? {
+        if (open.demo || open.resting <= 0.0 || open.shares > 1e-6) return null
+
+        if (refresh) engine.session()?.let { session ->
+            try {
+                val live = ClobApi.openOrders(session.creds, session.account.signerAddress)
+                OrderLog.reconcile(live) { id ->
+                    ClobApi.order(session.creds, session.account.signerAddress, id)
+                }
+            } catch (e: Exception) {
+                // Then the log is whatever it already knew, which is still
+                // better than assuming nothing filled.
+            }
+        }
+
+        val buys = OrderLog.forWindow(open.windowStart)
+            .filter { it.asset == open.asset && it.action == "BUY" }
+        val got = buys.sumOf { it.matched }
+        if (got <= 1e-6) return null
+        val paid = buys.sumOf { it.matched * it.realPrice }
+        return open.copy(shares = got, price = if (paid > 0.0) paid / got else open.resting)
+    }
+
+    /**
+     * Adopts a bid that turned out to have filled, and says so.
+     *
+     * Returns true when there was a fill, in which case the round belongs in
+     * the working list rather than in the history.
+     */
+    private fun adopt(open: Round, refresh: Boolean = true): Boolean {
+        val filled = claim(open, refresh) ?: return false
+        working = working.map {
+            if (it.windowStart == open.windowStart && it.leg == open.leg) filled else it
+        }
+        engine.log(
+            "trade",
+            "Проба: лимитка на ${open.side} по ${(open.resting * 100).toInt()}¢ " +
+                "всё-таки налилась — " + String.format("%.1f", filled.shares) +
+                " по ${(filled.price * 100).toInt()}¢",
+        )
+        onStateChanged()
+        return true
+    }
+
+    /**
+     * Notices a real bid that has filled, as soon as the log knows.
+     *
+     * Without this a limit entry filled at five seconds past the open sat
+     * with shares of zero until the minute ran out and the round was filed —
+     * so for that whole minute no rung, no top-up and no rescue could see the
+     * position it was holding. Costs nothing: the log is read as it stands,
+     * and the exchange is only asked on the paths that are about to write the
+     * round off for good.
+     */
+    private fun catchFills() {
+        val waiting = working.filter { !it.demo && it.resting > 0.0 && it.shares <= 0.0 }
+        for (open in waiting) adopt(open, refresh = false)
     }
 
     /** Takes back whatever this rule has resting on a side. */
@@ -2124,19 +2209,7 @@ class ProbeBot(
     private fun score(open: Round, nowSec: Long): Round {
         // A real bid that was left waiting may have been filled while nobody
         // was looking; the order log is the only place that fill exists.
-        val round = if (!open.demo && open.resting > 0.0 && open.shares <= 0.0) {
-            val buys = OrderLog.forWindow(open.windowStart)
-                .filter { it.asset == open.asset && it.action == "BUY" }
-            val got = buys.sumOf { it.matched }
-            val paid = buys.sumOf { it.matched * it.realPrice }
-            if (got > 1e-6) {
-                open.copy(shares = got, price = paid / got)
-            } else {
-                open
-            }
-        } else {
-            open
-        }
+        val round = claim(open) ?: open
 
         // A bid nobody came down to cost nothing and bought nothing. It is a
         // window with a reason, not a trade.
