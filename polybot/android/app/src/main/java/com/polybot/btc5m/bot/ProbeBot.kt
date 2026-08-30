@@ -35,8 +35,8 @@ import kotlinx.coroutines.launch
 class ProbeBot(
     private val engine: BotEngine,
     private val store: ProbeStore,
-    /** The rungs the desk's own sell rule is using, which demo sells into. */
-    private val ladder: () -> List<Double>,
+    /** The desk's own sell rule as it is set, which demo exits follow. */
+    private val exit: () -> AutoSell.Settings,
     private val onStateChanged: () -> Unit,
 ) {
 
@@ -486,11 +486,13 @@ class ProbeBot(
         val riding = working.filter { it.demo && it.shares > it.sold + 1e-9 }
         if (riding.isEmpty()) return
 
+        val rule = exit()
         var next = working
         var changed = false
         for (open in riding) {
             val elapsed = nowSec - open.windowStart
             if (elapsed < 0) continue
+            val secondsLeft = open.windowStart + WINDOW_SEC - nowSec
 
             val bid = try {
                 ClobApi.bestBid(open.asset)
@@ -498,15 +500,22 @@ class ProbeBot(
                 null
             } ?: continue
 
-            val rungs = ladder().ifEmpty { SellLadder.DEFAULT }
             val high = maxOf(open.highWater, bid)
-            val step = SellLadder.stepFor(elapsed, high, rungs, open.rung)
-            val want = rungs[step.coerceIn(0, rungs.size - 1)]
+            val step = ProbePlan.exitStep(elapsed, high, open.rung, rule)
+            val want = ProbePlan.exitPrice(
+                cost = open.price,
+                elapsedSec = elapsed,
+                secondsLeft = secondsLeft,
+                highWater = high,
+                rung = open.rung,
+                bestBid = bid,
+                exit = rule,
+            )
 
             var moved = open.copy(highWater = high, rung = maxOf(open.rung, step))
             if (bid >= want - 1e-9) {
-                // The offer would have been sitting there, so it is the rung
-                // that gets paid, not the bid that reached up to it.
+                // The offer would have been resting there, so it is the price
+                // asked that gets paid, not the bid that reached up to it.
                 val left = open.shares - open.sold
                 moved = moved.copy(
                     sold = open.shares,

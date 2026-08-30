@@ -34,7 +34,7 @@ import kotlin.math.abs
  */
 object PulsePlan {
 
-    const val DEFAULT_BANK_USD = 10.0
+    const val DEFAULT_BANK_USD = 100.0
 
     /** One clip, always. This bot's whole idea is repetition, not size. */
     const val DEFAULT_SHARES = 5.0
@@ -81,6 +81,16 @@ object PulsePlan {
         val maxPrice: Double = DEFAULT_MAX_PRICE,
         val takePct: Double = DEFAULT_TAKE_PCT,
         val cutUsd: Double = DEFAULT_CUT_USD,
+        /**
+         * Paper money. On by default, and the reason the bank above is a
+         * hundred dollars: the rule can be watched for a day before it is
+         * trusted with anything, whether or not the wallet has a cent in it.
+         *
+         * It reads the same live book, takes the same offers at the same
+         * prices and pays the same fee; only the money is imaginary and
+         * nothing is sent to the venue.
+         */
+        val demo: Boolean = true,
     )
 
     /** Everything the rule looks at, read once per check. */

@@ -237,6 +237,7 @@ export function Manual({
           watchSec: stored.autoSellWatchSec,
           rebuySlicePauseSec: stored.autoRebuySlicePauseSec,
           ladderLeadSec: stored.autoSellLeadSec,
+          ladderStepSec: stored.autoSellStepSec,
           percentMode: stored.autoSellPercentMode,
           profitPct: stored.autoSellProfitPct,
           sliceGapSec: stored.autoSellSliceGapSec,
@@ -518,6 +519,7 @@ export function Manual({
               watchSec: settingsRef.current.autoSellWatchSec,
               rebuySlicePauseSec: settingsRef.current.autoRebuySlicePauseSec,
               ladderLeadSec: settingsRef.current.autoSellLeadSec,
+              ladderStepSec: settingsRef.current.autoSellStepSec,
               percentMode: settingsRef.current.autoSellPercentMode,
               profitPct: settingsRef.current.autoSellProfitPct,
               sliceGapSec: settingsRef.current.autoSellSliceGapSec,
@@ -1190,6 +1192,12 @@ export function Manual({
           onShares={(n) => {
             if (!Number.isFinite(n) || n <= 0) return;
             void PolyBot.pulseUpdate({ shares: n })
+              .then(() => PolyBot.pulseState())
+              .then(setPulseBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onDemo={(demo) => {
+            void PolyBot.pulseUpdate({ demo })
               .then(() => PolyBot.pulseState())
               .then(setPulseBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
@@ -2464,12 +2472,14 @@ function PulseCard({
   onEnable,
   onBank,
   onShares,
+  onDemo,
   onReset,
 }: {
   state: PulseState;
   onEnable: (enabled: boolean) => void;
   onBank: (usd: number) => void;
   onShares: (shares: number) => void;
+  onDemo: (demo: boolean) => void;
   onReset: () => void;
 }) {
   const [why, setWhy] = useState(false);
@@ -2498,8 +2508,37 @@ function PulseCard({
         +{Math.round(state.takePct * 100)}% лимиткой, режет по рынку, если
         перевес развернулся, и не продаёт вовсе, если к концу окна ведёт —
         расчёт платит доллар без комиссии.
+        {state.demo &&
+          ' В демо к этому добавлена лесенка продаж: продаёт по тому, до чего' +
+            ' стакан дойдёт раньше — до своей цели или до ступени, — так что' +
+            ' позиция не остаётся висеть.'}
       </div>
       )}
+
+      {/*
+        Paper or real. It decides what every number under it means, so it is
+        the first thing after the name — and paper is the default, because a
+        rule is worth watching for a day before it is trusted with anything.
+      */}
+      <div className="proberow demorow">
+        <button
+          className={`demoflag${state.demo ? ' on' : ''}`}
+          onClick={() => onDemo(!state.demo)}
+        >
+          {state.demo ? 'демо' : 'реально'}
+        </button>
+        {state.demo ? (
+          <>
+            <span className="muted">счёт</span>
+            <b className={state.cash >= state.bankUsd ? 'up' : 'down'}>
+              {usd(state.cash)}
+            </b>
+            <span className="muted">из {usd(state.bankUsd)}</span>
+          </>
+        ) : (
+          <span className="muted">торгует на деньги кошелька</span>
+        )}
+      </div>
 
       {read && (
         <div className="pulsegrid">
@@ -2804,6 +2843,7 @@ function RuleBar({
         watchSec: next.autoSellWatchSec,
         rebuySlicePauseSec: next.autoRebuySlicePauseSec,
         ladderLeadSec: next.autoSellLeadSec,
+        ladderStepSec: next.autoSellStepSec,
         percentMode: next.autoSellPercentMode,
         profitPct: next.autoSellProfitPct,
         sliceGapSec: next.autoSellSliceGapSec,
@@ -3259,6 +3299,7 @@ function ManualSettingsForm({
       watchSec: next.autoSellWatchSec,
       rebuySlicePauseSec: next.autoRebuySlicePauseSec,
       ladderLeadSec: next.autoSellLeadSec,
+      ladderStepSec: next.autoSellStepSec,
       percentMode: next.autoSellPercentMode,
       profitPct: next.autoSellProfitPct,
       sliceGapSec: next.autoSellSliceGapSec,
@@ -3426,6 +3467,26 @@ function ManualSettingsForm({
             push({
               ...settings,
               autoSellLeadSec: Number(e.target.value.replace(',', '.')),
+            })
+          }
+        />
+      </label>
+
+      {/*
+        How long one rung holds. A minute spends the five over the whole
+        window; thirty seconds spends them by the halfway mark, asking the
+        higher prices while there is still time to reach them.
+      */}
+      <label className="field">
+        <span>ступень, с</span>
+        <input
+          type="number"
+          step="15"
+          value={String(settings.autoSellStepSec)}
+          onChange={(e) =>
+            push({
+              ...settings,
+              autoSellStepSec: Number(e.target.value.replace(',', '.')),
             })
           }
         />

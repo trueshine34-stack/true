@@ -46,8 +46,10 @@ class AutoSell(
         val retryEverySec: Int = 7,
         /** How long to keep trying on one purchase before giving up. */
         val watchSec: Int = 60,
-        /** How far ahead of each minute the next rung takes over. */
+        /** How far ahead of each boundary the next rung takes over. */
         val ladderLeadSec: Int = SellLadder.DEFAULT_LEAD_SEC,
+        /** How long each rung holds before the clock moves on. */
+        val ladderStepSec: Long = SellLadder.DEFAULT_STEP_SEC,
         /** Buy the same size back if the price falls far enough after a sale. */
         val rebuyEnabled: Boolean = false,
         /** How far below the sale price the buy-back triggers, as a fraction. */
@@ -756,6 +758,7 @@ class AutoSell(
             ladder = settings.ladder,
             floor = rung.step,
             leadSec = settings.ladderLeadSec,
+            stepSec = settings.ladderStepSec,
         )
         return rung
     }

@@ -93,6 +93,7 @@ object EngineHolder {
             pulseBot ?: PulseBot(
                 engine = host,
                 store = PulseStore(context),
+                exit = { autoSell?.settings ?: AutoSell.Settings() },
                 onStateChanged = {
                     onState?.invoke()
                     onServiceState?.invoke()
@@ -146,12 +147,10 @@ object EngineHolder {
             probeBot ?: ProbeBot(
                 engine = host,
                 store = ProbeStore(context),
-                // Its paper exits follow the same rungs the desk's own sell
-                // rule is set to, so a demo run answers a question about the
-                // ladder that is actually running.
-                ladder = {
-                    autoSell?.settings?.ladder ?: SellLadder.DEFAULT
-                },
+                // Its paper exits follow the desk's own sell rule as it is
+                // set — rungs or margin, with the same late floors — so a demo
+                // run answers a question about the ladder actually running.
+                exit = { autoSell?.settings ?: AutoSell.Settings() },
                 onStateChanged = {
                     onState?.invoke()
                     onServiceState?.invoke()

@@ -168,6 +168,73 @@ object ProbePlan {
         return ask + FEE_RATE * ask * (1 - ask)
     }
 
+    /**
+     * What the desk's sell rule is asking for a position right now.
+     *
+     * The demo places no orders, so nothing on the desk can see its position
+     * and arrange an exit for it — but "exits by the ladder" has to mean the
+     * ladder that is actually running, or the report is about a rule nobody
+     * uses. So the choice is made here, out of the same two pieces the real
+     * rule is made of: the rung for the clock and the high-water mark, or the
+     * margin over what the lot cost, with the late floors that stop a winning
+     * side riding into the close for nothing.
+     *
+     * Which of the two is the desk's own setting, not this rule's.
+     */
+    fun exitPrice(
+        cost: Double,
+        elapsedSec: Long,
+        secondsLeft: Long,
+        highWater: Double,
+        rung: Int,
+        bestBid: Double?,
+        exit: AutoSell.Settings,
+        tick: Double = 0.01,
+    ): Double {
+        if (exit.percentMode) {
+            return SellPercent.priceFor(
+                avgPrice = cost,
+                gain = exit.profitPct,
+                tick = tick,
+                // One lot per window, so there is never a slice to step over.
+                resting = null,
+                secondsLeft = secondsLeft,
+                panicSec = exit.panicSec,
+                bestBid = bestBid,
+                closeFloor = exit.closeFloor,
+                lateFloor = exit.lateFloor,
+                lateBandSec = exit.lateBandSec,
+            )
+        }
+        val rungs = exit.ladder.ifEmpty { SellLadder.DEFAULT }
+        val step = SellLadder.stepFor(
+            elapsedSec = elapsedSec.coerceAtLeast(0L),
+            highWater = highWater.takeIf { it > 0.0 },
+            ladder = rungs,
+            floor = rung,
+            leadSec = exit.ladderLeadSec,
+            stepSec = exit.ladderStepSec,
+        )
+        return rungs[step.coerceIn(0, rungs.size - 1)]
+    }
+
+    /**
+     * The rung this position has reached, which it may not slip back down.
+     */
+    fun exitStep(
+        elapsedSec: Long,
+        highWater: Double,
+        rung: Int,
+        exit: AutoSell.Settings,
+    ): Int = SellLadder.stepFor(
+        elapsedSec = elapsedSec.coerceAtLeast(0L),
+        highWater = highWater.takeIf { it > 0.0 },
+        ladder = exit.ladder.ifEmpty { SellLadder.DEFAULT },
+        floor = rung,
+        leadSec = exit.ladderLeadSec,
+        stepSec = exit.ladderStepSec,
+    )
+
     /** Crossing the spread by a tick: this is meant to be taken now. */
     fun crossPrice(ask: Double, tick: Double): Double {
         val step = if (tick > 0) tick else 0.01

@@ -1060,6 +1060,7 @@ class BotPlugin : Plugin() {
             rebuySlicePauseSec = call.getInt("rebuySlicePauseSec")
                 ?: defaults.rebuySlicePauseSec,
             ladderLeadSec = call.getInt("ladderLeadSec") ?: defaults.ladderLeadSec,
+            ladderStepSec = call.getInt("ladderStepSec")?.toLong() ?: defaults.ladderStepSec,
             percentMode = call.getBoolean("percentMode") ?: defaults.percentMode,
             profitPct = call.getDouble("profitPct") ?: defaults.profitPct,
             sliceGapSec = call.getInt("sliceGapSec") ?: defaults.sliceGapSec,
@@ -1207,6 +1208,7 @@ class BotPlugin : Plugin() {
                 maxPrice = d.maxPrice,
                 takePct = call.getDouble("takePct") ?: d.takePct,
                 cutUsd = call.getDouble("cutUsd") ?: d.cutUsd,
+                demo = call.getBoolean("demo") ?: d.demo,
             ),
         )
         call.resolve()
@@ -1233,6 +1235,7 @@ class BotPlugin : Plugin() {
                 .put("shares", bot.settings.shares)
                 .put("minEdge", bot.settings.minEdge)
                 .put("takePct", bot.settings.takePct)
+                .put("demo", bot.settings.demo)
                 .put("cash", bot.cash)
                 .put("note", bot.note)
                 .put("lastFault", bot.lastFault)

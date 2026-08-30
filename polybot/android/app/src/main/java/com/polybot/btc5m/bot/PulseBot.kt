@@ -34,6 +34,8 @@ import kotlinx.coroutines.launch
 class PulseBot(
     private val engine: BotEngine,
     private val store: PulseStore,
+    /** The desk's own sell rule as it is set, which paper exits follow. */
+    private val exit: () -> AutoSell.Settings,
     private val onStateChanged: () -> Unit,
 ) {
 
@@ -52,6 +54,11 @@ class PulseBot(
         var sold: Double = 0.0,
         var proceeds: Double = 0.0,
         var note: String? = null,
+        /** Paper: nothing about this lot reached the venue. */
+        val demo: Boolean = false,
+        /** Best bid seen while holding, and the rung it has reached. */
+        var highWater: Double = 0.0,
+        var rung: Int = 0,
     ) {
         val cost: Double get() = shares * price
         val open: Double get() = (shares - sold).coerceAtLeast(0.0)
@@ -170,7 +177,10 @@ class PulseBot(
 
     private fun tick() {
         val session = engine.session()
-        if (session == null) {
+        // On paper there is nothing to sign, so an unconnected wallet is not a
+        // reason to stop: the whole point of watching a rule on paper is that
+        // it can be watched before there is any money to watch it with.
+        if (session == null && !settings.demo) {
             lastFault = "кошелёк не подключён"
             return
         }
@@ -301,6 +311,11 @@ class PulseBot(
             BuyCap.ceiling(BuyCap.elapsedFor(market.windowStart)),
         )
 
+        if (settings.demo) {
+            paperBuy(market, token, side, ask, size, windowStart)
+            return
+        }
+
         val result = try {
             engine.placeManualOrder(
                 tokenId = token,
@@ -359,6 +374,121 @@ class PulseBot(
     }
 
     /**
+     * The same buy, on paper.
+     *
+     * Taking an offer costs what it asks plus the venue's fee, and the fee is
+     * real whether or not the money is — a demo that ignored it would report a
+     * profit the same trade would not have made.
+     */
+    private fun paperBuy(
+        market: Market,
+        token: String,
+        side: String,
+        ask: Double,
+        size: Double,
+        windowStart: Long,
+    ) {
+        val price = ProbePlan.takenPrice(ask)
+        lot = Lot(
+            asset = token,
+            conditionId = market.conditionId,
+            outcome = side,
+            shares = size,
+            price = price,
+            boughtAt = System.currentTimeMillis(),
+            windowStart = windowStart,
+            demo = true,
+        )
+        totals = totals.copy(spent = totals.spent + size * price)
+        store.saveTotals(totals)
+        engine.log(
+            "trade",
+            "Пульс (демо): взял " + String.format("%.1f", size) + " $side по " +
+                "${(ask * 100).toInt()}¢ — счёт $" + String.format("%.2f", cash),
+        )
+    }
+
+    /**
+     * The paper lot's exit: its own margin, and the desk's ladder as well.
+     *
+     * Nothing on the desk can see a position that was never placed, so both
+     * rules are applied here — whichever price the book reaches first is the
+     * one that fills, which is what would happen if both offers were real. The
+     * ladder matters most at the end, where its floor sells a side that is no
+     * longer going anywhere rather than letting it ride to nothing.
+     *
+     * The one case where neither sells is the one Pulse is built for: a lead
+     * still standing at the close pays a whole dollar and no fee, which beats
+     * every rung.
+     */
+    private fun workPaper(open: Lot, current: PulsePlan.Read, market: Market) {
+        val nowSec = Clock.nowSec()
+        val elapsed = nowSec - open.windowStart
+        val secondsLeft = open.windowStart + 300L - nowSec
+
+        val bid = try {
+            ClobApi.bestBid(open.asset)
+        } catch (e: Exception) {
+            null
+        }
+        if (bid == null || bid <= 0.0) {
+            open.note = "нет спроса"
+            return
+        }
+
+        open.highWater = maxOf(open.highWater, bid)
+        val rule = exit()
+        open.rung = maxOf(
+            open.rung,
+            ProbePlan.exitStep(elapsed, open.highWater, open.rung, rule),
+        )
+
+        when (PulsePlan.exitFor(open.outcome, current, settings)) {
+            PulsePlan.Exit.RIDE -> {
+                open.note = "довожу до расчёта"
+                return
+            }
+
+            PulsePlan.Exit.CUT -> {
+                open.note = "режу по рынку"
+                paperSell(open, bid, "режу")
+                return
+            }
+
+            PulsePlan.Exit.HOLD -> {
+                val mine = PulsePlan.takePrice(open.price, settings, market.tickSize)
+                val rungAsk = ProbePlan.exitPrice(
+                    cost = open.price,
+                    elapsedSec = elapsed,
+                    secondsLeft = secondsLeft,
+                    highWater = open.highWater,
+                    rung = open.rung,
+                    bestBid = bid,
+                    exit = rule,
+                    tick = market.tickSize,
+                )
+                val want = minOf(mine, rungAsk)
+                open.sellPrice = want
+                if (bid >= want - 1e-9) paperSell(open, want, "по ${(want * 100).toInt()}¢")
+            }
+        }
+    }
+
+    private fun paperSell(open: Lot, price: Double, why: String) {
+        val left = open.open
+        if (left <= 1e-9) return
+        val got = left * SellPercent.netSell(price)
+        open.sold += left
+        open.proceeds += got
+        totals = totals.copy(got = totals.got + got)
+        store.saveTotals(totals)
+        engine.log(
+            "trade",
+            "Пульс (демо): продал " + String.format("%.1f", left) + " ${open.outcome} $why",
+        )
+    }
+
+    /**
      * Keeps the open lot's exit honest.
      *
      * Normally that is one resting offer at the take price and nothing else.
@@ -367,6 +497,12 @@ class PulseBot(
      * still standing at the end of the window is not sold at all.
      */
     private fun work(open: Lot, current: PulsePlan.Read, market: Market) {
+        if (open.demo) {
+            workPaper(open, current, market)
+            if (open.open <= 1e-6) finish(open)
+            return
+        }
+
         collect(open)
         if (open.open <= 1e-6) {
             finish(open)

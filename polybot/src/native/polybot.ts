@@ -210,6 +210,7 @@ export interface PolyBotPlugin {
     watchSec?: number;
     rebuySlicePauseSec?: number;
     ladderLeadSec?: number;
+    ladderStepSec?: number;
     percentMode?: boolean;
     profitPct?: number;
     sliceGapSec?: number;
@@ -228,6 +229,7 @@ export interface PolyBotPlugin {
     minVolume?: number;
     takePct?: number;
     cutUsd?: number;
+    demo?: boolean;
   }): Promise<void>;
   pulseReset(): Promise<void>;
   pulseState(): Promise<PulseState>;
@@ -412,6 +414,8 @@ export type PulseState = {
   shares: number;
   minEdge: number;
   takePct: number;
+  /** Paper money, which is how it runs unless told otherwise. */
+  demo: boolean;
   cash: number;
   /** Why it is not buying, in its own words. */
   note?: string | null;
@@ -641,11 +645,12 @@ const webStub: PolyBotPlugin = {
   pulseState: async () => ({
     enabled: false,
     running: false,
-    bankUsd: 10,
+    bankUsd: 100,
     shares: 5,
     minEdge: 6,
     takePct: 0.12,
-    cash: 10,
+    demo: true,
+    cash: 100,
     rounds: 0,
     wins: 0,
     losses: 0,

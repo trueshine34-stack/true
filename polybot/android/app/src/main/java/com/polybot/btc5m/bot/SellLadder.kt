@@ -33,8 +33,18 @@ object SellLadder {
      *   null if nothing has been seen yet
      * @param floor the rung already reached, so the ladder cannot slip back
      */
-    /** Seconds before each minute boundary that the next rung takes over. */
+    /** Seconds before each boundary that the next rung takes over. */
     const val DEFAULT_LEAD_SEC = 15
+
+    /**
+     * How long a rung holds before the clock moves to the next one.
+     *
+     * A minute by default, which spends the five rungs over the whole window.
+     * Half that spends them by the halfway mark, which is a different bet: it
+     * asks the higher prices while there is still time for the market to reach
+     * them, and settles for the top rung for the rest of the window.
+     */
+    const val DEFAULT_STEP_SEC = 60L
 
     /**
      * How far each further offer sits under the one before it.
@@ -66,6 +76,7 @@ object SellLadder {
         ladder: List<Double> = DEFAULT,
         floor: Int = 0,
         leadSec: Int = DEFAULT_LEAD_SEC,
+        stepSec: Long = DEFAULT_STEP_SEC,
     ): Int {
         if (ladder.isEmpty()) return 0
         val last = ladder.size - 1
@@ -74,7 +85,8 @@ object SellLadder {
         // division truncates toward zero — so -30s would land on rung 0 either
         // way, but -90s would land on -1 and clamp wrong on some inputs. Floor
         // it first and let the range clamp do the rest.
-        val byClock = ((elapsedSec.coerceAtLeast(0L) + leadSec) / 60L)
+        val every = if (stepSec > 0L) stepSec else DEFAULT_STEP_SEC
+        val byClock = ((elapsedSec.coerceAtLeast(0L) + leadSec) / every)
             .toInt()
             .coerceIn(0, last)
         // Every rung the price has already cleared is behind us; the next one up
@@ -90,7 +102,8 @@ object SellLadder {
         ladder: List<Double> = DEFAULT,
         floor: Int = 0,
         leadSec: Int = DEFAULT_LEAD_SEC,
-    ): Double = ladder[stepFor(elapsedSec, highWater, ladder, floor, leadSec)]
+        stepSec: Long = DEFAULT_STEP_SEC,
+    ): Double = ladder[stepFor(elapsedSec, highWater, ladder, floor, leadSec, stepSec)]
 
     /** Seconds into the current five-minute window, from the wall clock. */
     fun elapsedInWindow(nowSec: Long): Long = nowSec % WINDOW_SECONDS

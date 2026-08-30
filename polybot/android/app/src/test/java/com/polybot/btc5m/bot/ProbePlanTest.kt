@@ -169,4 +169,63 @@ class ProbePlanTest {
         assertEquals(0.0, ProbePlan.takenPrice(0.0), 1e-9)
         assertEquals(1.0, ProbePlan.takenPrice(1.0), 1e-9)
     }
+
+    @Test
+    fun `on the rungs, the paper exit asks what the clock asks`() {
+        val rule = AutoSell.Settings(ladder = listOf(0.77, 0.84, 0.89, 0.93, 0.97))
+        // The lead moves each rung fifteen seconds early, so the first minute
+        // is already asking the second rung by its forty-fifth second.
+        assertEquals(
+            0.77,
+            ProbePlan.exitPrice(0.5, 0, 300, 0.0, 0, 0.5, rule),
+            1e-9,
+        )
+        assertEquals(
+            0.84,
+            ProbePlan.exitPrice(0.5, 50, 250, 0.0, 0, 0.5, rule),
+            1e-9,
+        )
+    }
+
+    @Test
+    fun `a rung the price has cleared is behind it`() {
+        val rule = AutoSell.Settings(ladder = listOf(0.77, 0.84, 0.89, 0.93, 0.97))
+        // The book has already bid 0.90, so resting at 0.89 would be leaving
+        // money on the table.
+        assertEquals(
+            0.93,
+            ProbePlan.exitPrice(0.5, 0, 300, 0.90, 0, 0.90, rule),
+            1e-9,
+        )
+    }
+
+    @Test
+    fun `in percent mode the paper exit prices off what the lot cost`() {
+        val rule = AutoSell.Settings(percentMode = true, profitPct = 0.2)
+        val asked = ProbePlan.exitPrice(0.50, 30, 270, 0.0, 0, 0.5, rule)
+        // A fifth over fifty cents, and then some for the fee that comes out
+        // of the sale.
+        assertTrue(asked > 0.60)
+        assertTrue(asked < 0.70)
+    }
+
+    @Test
+    fun `near the close the paper exit takes what the book is paying`() {
+        val rule = AutoSell.Settings(percentMode = true, profitPct = 0.2, panicSec = 60)
+        // Thirty seconds left and the book bidding ninety-four: the floor is
+        // met, so the price is the bid rather than the margin.
+        val asked = ProbePlan.exitPrice(0.50, 270, 30, 0.0, 0, 0.94, rule)
+        assertEquals(0.94, asked, 1e-9)
+    }
+
+    @Test
+    fun `a shorter rung reaches the higher asks sooner`() {
+        val long = AutoSell.Settings(ladderStepSec = 60)
+        val short = AutoSell.Settings(ladderStepSec = 30)
+        val at = 90L
+        assertTrue(
+            ProbePlan.exitPrice(0.5, at, 210, 0.0, 0, 0.5, short) >
+                ProbePlan.exitPrice(0.5, at, 210, 0.0, 0, 0.5, long),
+        )
+    }
 }

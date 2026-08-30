@@ -198,4 +198,30 @@ class SellLadderLeadTest {
         assertEquals(0.01, SellLadder.stackedPrice(0.03, 5, tick = 0.01), 1e-9)
         assertEquals(0.01, SellLadder.stackedPrice(0.01, 1, tick = 0.01), 1e-9)
     }
+
+    @Test
+    fun `a shorter rung spends the ladder sooner`() {
+        val rungs = listOf(0.77, 0.84, 0.89, 0.93, 0.97)
+        // At half a minute a rung, the ladder is at its top by the halfway
+        // mark instead of at the close.
+        val half = 30L
+        assertEquals(0, SellLadder.stepFor(0, null, rungs, stepSec = half))
+        assertEquals(1, SellLadder.stepFor(30, null, rungs, stepSec = half))
+        assertEquals(2, SellLadder.stepFor(60, null, rungs, stepSec = half))
+        assertEquals(4, SellLadder.stepFor(120, null, rungs, stepSec = half))
+        assertEquals(4, SellLadder.stepFor(280, null, rungs, stepSec = half))
+    }
+
+    @Test
+    fun `a minute stays the minute it was`() {
+        val rungs = listOf(0.77, 0.84, 0.89, 0.93, 0.97)
+        assertEquals(1, SellLadder.stepFor(60, null, rungs))
+        assertEquals(1, SellLadder.stepFor(60, null, rungs, stepSec = 60))
+    }
+
+    @Test
+    fun `a nonsense rung length falls back to the minute`() {
+        val rungs = listOf(0.77, 0.84, 0.89, 0.93, 0.97)
+        assertEquals(2, SellLadder.stepFor(120, null, rungs, stepSec = 0))
+    }
 }

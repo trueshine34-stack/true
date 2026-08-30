@@ -17,6 +17,7 @@ class PulseStore(context: Context) {
         minVolume = prefs.getFloat("minVolume", PulsePlan.DEFAULT_MIN_VOLUME.toFloat()).toDouble(),
         takePct = prefs.getFloat("takePct", PulsePlan.DEFAULT_TAKE_PCT.toFloat()).toDouble(),
         cutUsd = prefs.getFloat("cutUsd", PulsePlan.DEFAULT_CUT_USD.toFloat()).toDouble(),
+        demo = prefs.getBoolean("demo", true),
     )
 
     fun saveSettings(s: PulsePlan.Settings) {
@@ -29,6 +30,7 @@ class PulseStore(context: Context) {
             .putFloat("minVolume", s.minVolume.toFloat())
             .putFloat("takePct", s.takePct.toFloat())
             .putFloat("cutUsd", s.cutUsd.toFloat())
+            .putBoolean("demo", s.demo)
             .apply()
     }
 
