@@ -259,6 +259,7 @@ export interface PolyBotPlugin {
     stakeUsd?: number;
     leadSec?: number;
     roomShare?: number;
+    roundBand?: number;
     demo?: boolean;
     bankUsd?: number;
   }): Promise<void>;
@@ -479,6 +480,14 @@ export type ProbeState = {
    * switches the check off.
    */
   roomShare: number;
+  /**
+   * How close to a round five hundred the open may be, in dollars. Zero
+   * switches the check off.
+   */
+  roundBand: number;
+  /** The round five hundred nearest the settlement price, and how far off. */
+  roundNear?: number | null;
+  roomToRound?: number | null;
   /** Paper money, which is how it runs unless told otherwise. */
   demo: boolean;
   /** What the paper account starts at, and what it is worth now. */
@@ -634,6 +643,7 @@ const webStub: PolyBotPlugin = {
     stakeUsd: 5,
     leadSec: 20,
     roomShare: 0.35,
+    roundBand: 50,
     demo: true,
     bankUsd: 100,
     bank: 100,

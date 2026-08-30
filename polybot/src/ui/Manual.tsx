@@ -1241,6 +1241,13 @@ export function Manual({
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
+          onRound={(band) => {
+            if (!Number.isFinite(band) || band < 0) return;
+            void PolyBot.probeUpdate({ roundBand: band })
+              .then(() => PolyBot.probeState())
+              .then(setProbeBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
           onDemo={(demo) => {
             void PolyBot.probeUpdate({ demo })
               .then(() => PolyBot.probeState())
@@ -2159,6 +2166,7 @@ function ProbeCard({
   onStake,
   onLead,
   onRoom,
+  onRound,
   onDemo,
   onBank,
   onReset,
@@ -2168,6 +2176,7 @@ function ProbeCard({
   onStake: (usd: number) => void;
   onLead: (sec: number) => void;
   onRoom: (share: number) => void;
+  onRound: (band: number) => void;
   onDemo: (demo: boolean) => void;
   onBank: (usd: number) => void;
   onReset: () => void;
@@ -2205,7 +2214,10 @@ function ProbeCard({
         которую настроен стол. Не входит, если до уровня, от которого
         ждём разворот, осталось меньше{' '}
         {Math.round(state.roomShare * 100)}% обычного хода пятиминутки — тренд,
-        упирающийся в стену, кончается на ней. Всё, что наторгует, ниже по окнам.
+        упирающийся в стену, кончается на ней. И не входит, когда окно
+        открывается ближе {Math.round(state.roundBand)}$ к круглым пятистам —
+        80 000, 80 500, 81 000: стакан там стоит всегда, что бы ни говорил
+        график. Всё, что наторгует, ниже по окнам.
       </div>
       )}
 
@@ -2219,6 +2231,24 @@ function ProbeCard({
             {line.perHour >= 0 ? '+' : '−'}
             {usd(Math.abs(line.perHour))}/ч · совпадение{' '}
             {Math.round(line.fit * 100)}%
+          </span>
+        )}
+      </div>
+
+      <div className="probeline">
+        <span className="muted">круглый</span>
+        <b>{bigPrice(state.roundNear)}</b>
+        {state.roomToRound != null && (
+          <span
+            className={
+              state.roomToRound <= state.roundBand && state.roundBand > 0
+                ? 'down'
+                : 'muted'
+            }
+          >
+            {state.roomToRound <= state.roundBand && state.roundBand > 0
+              ? `на нём (±${Math.round(state.roundBand)})`
+              : `до него ${Math.round(state.roomToRound)}`}
           </span>
         )}
       </div>
@@ -2287,6 +2317,15 @@ function ProbeCard({
             onChange={(e) =>
               onRoom(Number(e.target.value.replace(',', '.')) / 100)
             }
+          />
+        </label>
+        <label className="field">
+          <span>у круглых, $</span>
+          <input
+            type="number"
+            step="10"
+            value={String(Math.round(state.roundBand))}
+            onChange={(e) => onRound(Number(e.target.value.replace(',', '.')))}
           />
         </label>
         {state.demo && (

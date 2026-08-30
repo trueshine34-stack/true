@@ -40,6 +40,34 @@ object ProbePlan {
     /** Where the bid waits when the offer is dearer than that. */
     const val REST_PRICE = 0.54
 
+    /**
+     * The grid of prices everybody else is watching too.
+     *
+     * Eighty thousand, eighty and a half, eighty-one. Nobody decided these are
+     * levels; they are levels because they are the numbers people write orders
+     * at, and the book is thick at every one of them whatever the chart says.
+     * A five-minute bet opening within reach of one is a bet on a price that
+     * has somewhere obvious to stall and turn.
+     */
+    const val ROUND_STEP = 500.0
+
+    /** How close to one of them is too close, in dollars. Zero switches off. */
+    const val DEFAULT_ROUND_BAND = 50.0
+
+    /**
+     * The round number this price is sitting on, or null if it is in open
+     * ground between two of them.
+     */
+    fun nearRound(
+        price: Double,
+        band: Double,
+        step: Double = ROUND_STEP,
+    ): Double? {
+        if (band <= 0.0 || step <= 0.0 || price <= 0.0) return null
+        val nearest = Math.round(price / step) * step
+        return if (abs(price - nearest) <= band) nearest else null
+    }
+
     /** Whether this quote is taken now or waited for. */
     fun waits(ask: Double): Boolean = ask > MAX_TAKE + 1e-9
 
@@ -73,6 +101,8 @@ object ProbePlan {
         val leadSec: Long = DEFAULT_LEAD_SEC,
         /** Room to the level ahead, against a typical window's travel. */
         val roomShare: Double = DEFAULT_ROOM,
+        /** How close to a round five hundred is too close, in dollars. */
+        val roundBand: Double = DEFAULT_ROUND_BAND,
         /**
          * Paper money. On by default, because the point of this rule is to
          * find out whether the line pays before any real money is asked to
@@ -150,6 +180,9 @@ object ProbePlan {
         // The line is read off the minute candles, so an empty answer means
         // the stream has not arrived rather than that the market is quiet.
         if (way.isEmpty()) return "нет свечей"
+        nearRound(price, settings.roundBand)?.let {
+            return "круглый " + Math.round(it)
+        }
         if (tooClose(price, level, typical, settings.roomShare)) {
             return "у разворота " + Math.round(level ?: 0.0)
         }

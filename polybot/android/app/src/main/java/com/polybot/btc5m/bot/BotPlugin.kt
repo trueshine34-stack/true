@@ -1452,6 +1452,7 @@ class BotPlugin : Plugin() {
                 stakeUsd = call.getDouble("stakeUsd") ?: d.stakeUsd,
                 leadSec = call.getInt("leadSec")?.toLong() ?: d.leadSec,
                 roomShare = call.getDouble("roomShare") ?: d.roomShare,
+                roundBand = call.getDouble("roundBand") ?: d.roundBand,
                 demo = call.getBoolean("demo") ?: d.demo,
                 bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
             ),
@@ -1504,6 +1505,9 @@ class BotPlugin : Plugin() {
                 .put("stakeUsd", bot.settings.stakeUsd)
                 .put("leadSec", bot.settings.leadSec)
                 .put("roomShare", bot.settings.roomShare)
+                .put("roundBand", bot.settings.roundBand)
+                .put("roundNear", bot.roundNear)
+                .put("roomToRound", bot.roomToRound)
                 .put("demo", bot.settings.demo)
                 .put("bankUsd", bot.settings.bankUsd)
                 .put("bank", bot.bank)

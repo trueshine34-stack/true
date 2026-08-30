@@ -112,6 +112,15 @@ class ProbeBot(
     var roomToLevel: Double? = null
         private set
 
+    /** The round five hundred nearest the settlement price, and how far off. */
+    @Volatile
+    var roundNear: Double? = null
+        private set
+
+    @Volatile
+    var roomToRound: Double? = null
+        private set
+
     /** Why nothing is being bought right now, in the person's words. */
     @Volatile
     var note: String? = null
@@ -211,6 +220,20 @@ class ProbeBot(
         engine.log("info", "Проба выключена")
         onStateChanged()
     }
+
+    /**
+     * The price the window will open on.
+     *
+     * Not the chart's price: the market settles against Polymarket's own
+     * sixty-second average, and "is the open sitting on a round number" is a
+     * question about that series and no other. The candles stand in only while
+     * the socket has nothing to say.
+     */
+    private fun here(): Double =
+        engine.feed.twap60?.value
+            ?: engine.feed.twap?.value
+            ?: BinanceCandles.oneMinute.list().lastOrNull()?.close
+            ?: 0.0
 
     private fun tick() {
         val nowSec = Clock.nowSec()
@@ -336,7 +359,7 @@ class ProbeBot(
 
         // The balance is a request, so it is only asked for once everything
         // free has already agreed.
-        val here = BinanceCandles.oneMinute.list().lastOrNull()?.close ?: 0.0
+        val here = here()
         val cheap = ProbePlan.blockedBecause(
             way = way,
             ask = ask,
@@ -670,6 +693,20 @@ class ProbeBot(
      * aside says which price it is standing aside from.
      */
     private fun readLevel() {
+        // The round number first, and whatever the trend is doing: it is about
+        // where the price is, not about which way it is going. Off the
+        // settlement series rather than the chart's — they sit a few dollars
+        // apart, and it is the settlement price that opens the window.
+        val settling = here()
+        if (settling > 0.0) {
+            val nearest = Math.round(settling / ProbePlan.ROUND_STEP) * ProbePlan.ROUND_STEP
+            roundNear = nearest
+            roomToRound = abs(settling - nearest)
+        } else {
+            roundNear = null
+            roomToRound = null
+        }
+
         val candles = BinanceCandles.oneMinute.list()
         val here = candles.lastOrNull()?.close ?: 0.0
         val way = TrendFit.lean(trend)
@@ -687,6 +724,7 @@ class ProbeBot(
         val level = Levels.ahead(walls, here, way)
         levelAhead = level
         roomToLevel = level?.let { abs(it - here) }
+
     }
 
     /** Scores every ridden round whose window has closed and settled. */

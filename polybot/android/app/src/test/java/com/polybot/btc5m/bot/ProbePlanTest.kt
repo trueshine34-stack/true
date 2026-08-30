@@ -140,11 +140,13 @@ class ProbePlanTest {
             ask = 0.5,
             cashUsd = 100.0,
             settings = on,
-            price = 100_000.0,
-            level = 100_010.0,
+            // In open ground between two round numbers, so the reversal is
+            // the only thing in the way.
+            price = 100_240.0,
+            level = 100_250.0,
             typical = 60.0,
         )
-        assertEquals("у разворота 100010", why)
+        assertEquals("у разворота 100250", why)
     }
 
     @Test
@@ -155,8 +157,8 @@ class ProbePlanTest {
                 ask = 0.5,
                 cashUsd = 100.0,
                 settings = on,
-                price = 100_000.0,
-                level = 100_200.0,
+                price = 100_240.0,
+                level = 100_440.0,
                 typical = 60.0,
             ),
         )
@@ -242,6 +244,58 @@ class ProbePlanTest {
         assertTrue(
             ProbePlan.exitPrice(0.5, at, 210, 0.0, 0, 0.5, short) >
                 ProbePlan.exitPrice(0.5, at, 210, 0.0, 0, 0.5, long),
+        )
+    }
+
+    @Test
+    fun `a price sitting on a round five hundred is one to stay out of`() {
+        // The numbers everybody else writes orders at.
+        assertEquals(80_000.0, ProbePlan.nearRound(80_012.0, 50.0)!!, 1e-9)
+        assertEquals(80_500.0, ProbePlan.nearRound(80_460.0, 50.0)!!, 1e-9)
+        assertEquals(81_000.0, ProbePlan.nearRound(80_970.0, 50.0)!!, 1e-9)
+    }
+
+    @Test
+    fun `open ground between two of them is open ground`() {
+        assertNull(ProbePlan.nearRound(80_250.0, 50.0))
+        assertNull(ProbePlan.nearRound(80_060.0, 50.0))
+    }
+
+    @Test
+    fun `the edge of the band is still the band`() {
+        assertEquals(80_000.0, ProbePlan.nearRound(80_050.0, 50.0)!!, 1e-9)
+        assertNull(ProbePlan.nearRound(80_050.01, 50.0))
+    }
+
+    @Test
+    fun `a zero band switches the check off`() {
+        assertNull(ProbePlan.nearRound(80_000.0, 0.0))
+    }
+
+    @Test
+    fun `the gate names the number it is standing off`() {
+        assertEquals(
+            "круглый 80500",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.5,
+                cashUsd = 100.0,
+                settings = on,
+                price = 80_480.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `away from the round numbers nothing is in the way`() {
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.5,
+                cashUsd = 100.0,
+                settings = on,
+                price = 80_240.0,
+            ),
         )
     }
 }

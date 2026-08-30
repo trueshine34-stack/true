@@ -25,6 +25,7 @@ class ProbeStore(context: Context) {
         stakeUsd = prefs.getFloat("stakeUsd", ProbePlan.DEFAULT_STAKE.toFloat()).toDouble(),
         leadSec = prefs.getLong("leadSec", ProbePlan.DEFAULT_LEAD_SEC),
         roomShare = prefs.getFloat("roomShare", ProbePlan.DEFAULT_ROOM.toFloat()).toDouble(),
+        roundBand = prefs.getFloat("roundBand", ProbePlan.DEFAULT_ROUND_BAND.toFloat()).toDouble(),
         demo = prefs.getBoolean("demo", true),
         bankUsd = prefs.getFloat("bankUsd", ProbePlan.DEFAULT_BANK.toFloat()).toDouble(),
     )
@@ -35,6 +36,7 @@ class ProbeStore(context: Context) {
             .putFloat("stakeUsd", s.stakeUsd.toFloat())
             .putLong("leadSec", s.leadSec)
             .putFloat("roomShare", s.roomShare.toFloat())
+            .putFloat("roundBand", s.roundBand.toFloat())
             .putBoolean("demo", s.demo)
             .putFloat("bankUsd", s.bankUsd.toFloat())
             .apply()
