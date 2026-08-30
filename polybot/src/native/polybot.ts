@@ -448,6 +448,8 @@ export type ProbeRound = {
   windowStart: number;
   /** Paper money: nothing about this round reached the venue. */
   demo: boolean;
+  /** The level the trade was taken for, and closed at when price got there. */
+  target: number;
   /** The side the chart's line was pointing at. */
   side: string;
   /** How fast that line was moving, in dollars an hour. */
@@ -490,6 +492,11 @@ export type ProbeState = {
    * green. It closes at the moment the window opens.
    */
   candleBody: number;
+  /**
+   * Why the last side was not simply the line's — "разворот" or "коррекция от
+   * уровня" — and absent when it was.
+   */
+  chose?: string | null;
   /** The round five hundred nearest the settlement price, and how far off. */
   roundNear?: number | null;
   roomToRound?: number | null;

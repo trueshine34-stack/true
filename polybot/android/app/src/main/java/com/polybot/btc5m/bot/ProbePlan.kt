@@ -55,6 +55,60 @@ object ProbePlan {
     const val DEFAULT_ROUND_BAND = 50.0
 
     /**
+     * How big a candle against the line has to be to *be* the new line.
+     *
+     * Measured against what a five-minute candle usually travels. Bigger than
+     * an ordinary one and going the other way is not noise around a trend — it
+     * is the trend ending, and the fitted line will not say so for another
+     * twenty minutes, because it is an average over half an hour.
+     */
+    const val DEFAULT_FLIP = 1.2
+
+    /** Which side the rule ends up on, and why it is not simply the line. */
+    data class Choice(val side: String, val note: String?) {
+        /** True when the line was followed, which is the ordinary case. */
+        val byLine: Boolean get() = side.isNotEmpty() && note == null
+    }
+
+    private fun other(way: String) = if (way == "Up") "Down" else "Up"
+
+    /**
+     * The side to buy, once the closing candle has had its say.
+     *
+     * The line is an average over half an hour; the candle is the last five
+     * minutes. When they disagree the question is which one the next five
+     * minutes will resemble, and there are three answers:
+     *
+     *  - a candle bigger than an ordinary one, going the other way, is the
+     *    turn itself. Take the candle's side — the line catches up later;
+     *  - a candle going the other way while the line was running into a price
+     *    that stops things is the bounce off that price, and the bounce is the
+     *    move actually available. Take the candle's side;
+     *  - anything else against the line is noise inside a trend that has not
+     *    ended, and there is no edge either way. Take neither.
+     */
+    fun choose(
+        way: String,
+        candleBody: Double,
+        typical: Double,
+        /** The line was heading into a level or a round number with no room. */
+        intoWall: Boolean,
+        flip: Double = DEFAULT_FLIP,
+    ): Choice {
+        if (way.isEmpty()) return Choice("", "нет линии")
+        if (candleBody == 0.0) return Choice(way, null)
+
+        val green = candleBody > 0.0
+        if ((way == "Up") == green) return Choice(way, null)
+
+        if (typical > 0.0 && abs(candleBody) >= typical * flip) {
+            return Choice(other(way), "разворот")
+        }
+        if (intoWall) return Choice(other(way), "коррекция от уровня")
+        return Choice("", if (green) "свеча зелёная" else "свеча красная")
+    }
+
+    /**
      * Whether the candle about to close is closing the other way.
      *
      * The entry lands twenty seconds before a window opens, which is also
@@ -194,22 +248,26 @@ object ProbePlan {
         price: Double = 0.0,
         level: Double? = null,
         typical: Double = 0.0,
-        /** The five-minute candle that is about to close with the window. */
-        candleOpen: Double = 0.0,
-        candleClose: Double = 0.0,
+        /**
+         * Whether this side came from the line.
+         *
+         * A side taken *against* the line is the correction off a level or the
+         * turn itself — so the structure that would have stopped the line is
+         * the reason for the trade and cannot also be the reason against it.
+         */
+        byLine: Boolean = true,
     ): String? {
         if (!settings.enabled) return "выключен"
         // The line is read off the minute candles, so an empty answer means
         // the stream has not arrived rather than that the market is quiet.
         if (way.isEmpty()) return "нет свечей"
-        if (closingAgainst(way, candleOpen, candleClose)) {
-            return if (way == "Up") "свеча красная" else "свеча зелёная"
-        }
-        nearRound(price, settings.roundBand)?.let {
-            return "круглый " + Math.round(it)
-        }
-        if (tooClose(price, level, typical, settings.roomShare)) {
-            return "у разворота " + Math.round(level ?: 0.0)
+        if (byLine) {
+            nearRound(price, settings.roundBand)?.let {
+                return "круглый " + Math.round(it)
+            }
+            if (tooClose(price, level, typical, settings.roomShare)) {
+                return "у разворота " + Math.round(level ?: 0.0)
+            }
         }
         if (ask == null || ask <= 0.0) return "нет цены"
         if (cashUsd < settings.stakeUsd) {

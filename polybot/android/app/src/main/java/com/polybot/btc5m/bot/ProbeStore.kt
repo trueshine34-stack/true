@@ -52,6 +52,7 @@ class ProbeStore(context: Context) {
                     windowStart = o.optLong("windowStart"),
                     asset = o.optString("asset"),
                     demo = o.optBoolean("demo", false),
+                    target = o.optDouble("target", 0.0),
                     side = o.optString("side"),
                     perHour = o.optDouble("perHour", 0.0),
                     shares = o.optDouble("shares", 0.0),
@@ -76,6 +77,7 @@ class ProbeStore(context: Context) {
                     .put("windowStart", it.windowStart)
                     .put("asset", it.asset)
                     .put("demo", it.demo)
+                    .put("target", it.target)
                     .put("side", it.side)
                     .put("perHour", it.perHour)
                     .put("shares", it.shares)

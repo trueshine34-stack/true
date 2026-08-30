@@ -321,44 +321,80 @@ class ProbePlanTest {
     }
 
     @Test
-    fun `the gate says which way the candle went`() {
+    fun `a candle going the line's way leaves the line alone`() {
         assertEquals(
-            "свеча зелёная",
-            ProbePlan.blockedBecause(
-                way = "Down",
-                ask = 0.5,
-                cashUsd = 100.0,
-                settings = on,
-                price = 80_240.0,
-                candleOpen = 80_200.0,
-                candleClose = 80_260.0,
-            ),
+            ProbePlan.Choice("Up", null),
+            ProbePlan.choose("Up", candleBody = 40.0, typical = 60.0, intoWall = false),
         )
         assertEquals(
-            "свеча красная",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.5,
-                cashUsd = 100.0,
-                settings = on,
-                price = 80_240.0,
-                candleOpen = 80_260.0,
-                candleClose = 80_200.0,
-            ),
+            ProbePlan.Choice("Down", null),
+            ProbePlan.choose("Down", candleBody = -40.0, typical = 60.0, intoWall = false),
         )
     }
 
     @Test
-    fun `a candle going the same way leaves the entry alone`() {
+    fun `a candle bigger than usual, the other way, is the turn itself`() {
+        // The line says down; the five minutes closed green by more than a
+        // candle usually travels. The line is an average over half an hour and
+        // will not say so for another twenty minutes.
+        val pick = ProbePlan.choose("Down", candleBody = 80.0, typical = 60.0, intoWall = false)
+        assertEquals("Up", pick.side)
+        assertEquals("разворот", pick.note)
+        assertTrue(!pick.byLine)
+    }
+
+    @Test
+    fun `a candle turning off a level is the bounce, and the bounce is taken`() {
+        val pick = ProbePlan.choose("Down", candleBody = 20.0, typical = 60.0, intoWall = true)
+        assertEquals("Up", pick.side)
+        assertEquals("коррекция от уровня", pick.note)
+    }
+
+    @Test
+    fun `an ordinary candle against the line in open ground is neither side`() {
+        val pick = ProbePlan.choose("Down", candleBody = 20.0, typical = 60.0, intoWall = false)
+        assertEquals("", pick.side)
+        assertEquals("свеча зелёная", pick.note)
+    }
+
+    @Test
+    fun `a candle that went nowhere leaves the line to decide`() {
+        assertEquals("Down", ProbePlan.choose("Down", 0.0, 60.0, false).side)
+    }
+
+    @Test
+    fun `without a line there is no side at all`() {
+        assertEquals("", ProbePlan.choose("", 80.0, 60.0, false).side)
+    }
+
+    @Test
+    fun `a side taken against the line is not stopped by the level it came off`() {
+        // The wall is the reason for the trade; it cannot also be the reason
+        // against it.
         assertNull(
             ProbePlan.blockedBecause(
                 way = "Up",
                 ask = 0.5,
                 cashUsd = 100.0,
                 settings = on,
-                price = 80_240.0,
-                candleOpen = 80_200.0,
-                candleClose = 80_260.0,
+                price = 80_000.0,
+                level = 80_010.0,
+                typical = 60.0,
+                byLine = false,
+            ),
+        )
+        // Following the line into it is still refused.
+        assertEquals(
+            "круглый 80000",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.5,
+                cashUsd = 100.0,
+                settings = on,
+                price = 80_000.0,
+                level = 80_010.0,
+                typical = 60.0,
+                byLine = true,
             ),
         )
     }

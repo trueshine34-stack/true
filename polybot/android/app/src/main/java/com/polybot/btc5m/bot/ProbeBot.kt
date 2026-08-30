@@ -64,6 +64,16 @@ class ProbeBot(
          * willing to buy. Until something fills, [shares] is zero.
          */
         val resting: Double = 0.0,
+        /**
+         * The price this trade is aiming at: the next level in the side's own
+         * direction, taken at entry.
+         *
+         * Trading is level to level. What is available in five minutes is the
+         * distance to the next price the market stops at, and once it is there
+         * the move is finished whatever the outcome's own quote is doing —
+         * so reaching it closes the position rather than waiting for a rung.
+         */
+        val target: Double = 0.0,
         /** Best bid seen while holding, which is what walks the ladder up. */
         val highWater: Double = 0.0,
         /** The rung reached, so a paper exit cannot slide back down. */
@@ -132,6 +142,14 @@ class ProbeBot(
     /** Why nothing is being bought right now, in the person's words. */
     @Volatile
     var note: String? = null
+        private set
+
+    /**
+     * Why the last side was not simply the line's — "разворот" or "коррекция
+     * от уровня" — and null when it was.
+     */
+    @Volatile
+    var chose: String? = null
         private set
 
     /**
@@ -346,7 +364,6 @@ class ProbeBot(
      */
     private fun enter(windowStart: Long) {
         val line = trend
-        val way = TrendFit.lean(line)
 
         val market = engine.marketForWindow(windowStart)
         if (market == null) {
@@ -354,23 +371,47 @@ class ProbeBot(
             return
         }
 
-        val token = if (way == "Up") market.up.tokenId else market.down.tokenId
-        val ask = if (way.isEmpty()) {
-            null
-        } else {
-            try {
-                ClobApi.bestAsk(token)
-            } catch (e: Exception) {
-                null
-            }
-        }
-
-        // The balance is a request, so it is only asked for once everything
-        // free has already agreed.
         val here = here()
+        val typical = Levels.typicalRange(BinanceCandles.fiveMinute.list())
         // The five-minute candle that closes as this window opens: at twenty
         // seconds out its shape is already decided enough to read.
         val closing = BinanceCandles.fiveMinute.list().lastOrNull()
+        val body = closing
+            ?.let { if (it.open > 0.0 && it.close > 0.0) it.close - it.open else 0.0 }
+            ?: 0.0
+
+        // Whether the line was walking into something. Either kind of wall
+        // counts: a price the market has turned at before, or one of the round
+        // five hundreds where the book always is.
+        val intoWall = ProbePlan.tooClose(here, levelAhead, typical, settings.roomShare) ||
+            ProbePlan.nearRound(here, settings.roundBand) != null
+
+        val pick = ProbePlan.choose(
+            way = TrendFit.lean(line),
+            candleBody = body,
+            typical = typical,
+            intoWall = intoWall,
+        )
+        val way = pick.side
+        if (way.isEmpty()) {
+            note = pick.note
+            return
+        }
+        chose = pick.note
+
+        val token = if (way == "Up") market.up.tokenId else market.down.tokenId
+        val ask = try {
+            ClobApi.bestAsk(token)
+        } catch (e: Exception) {
+            null
+        }
+
+        // Where this trade is going: the next wall the chosen side runs into,
+        // or the round five hundred that way, whichever comes first.
+        val aim = aimFor(way, here)
+
+        // The balance is a request, so it is only asked for once everything
+        // free has already agreed.
         val cheap = ProbePlan.blockedBecause(
             way = way,
             ask = ask,
@@ -381,9 +422,8 @@ class ProbeBot(
             // Levels come off the minute chart, with the line; how far a bet
             // can travel is a question about five minutes, so the scale is
             // still the five-minute candle's own range.
-            typical = Levels.typicalRange(BinanceCandles.fiveMinute.list()),
-            candleOpen = closing?.open ?: 0.0,
-            candleClose = closing?.close ?: 0.0,
+            typical = typical,
+            byLine = pick.byLine,
         )
         if (cheap != null) {
             note = cheap
@@ -412,9 +452,8 @@ class ProbeBot(
             // Levels come off the minute chart, with the line; how far a bet
             // can travel is a question about five minutes, so the scale is
             // still the five-minute candle's own range.
-            typical = Levels.typicalRange(BinanceCandles.fiveMinute.list()),
-            candleOpen = closing?.open ?: 0.0,
-            candleClose = closing?.close ?: 0.0,
+            typical = typical,
+            byLine = pick.byLine,
         )
         if (blocked != null) {
             note = blocked
@@ -439,8 +478,8 @@ class ProbeBot(
         }
 
         if (settings.demo) {
-            if (waits) paperRest(windowStart, token, way, line)
-            else paperBuy(windowStart, token, way, ask, size, line)
+            if (waits) paperRest(windowStart, token, way, line, aim)
+            else paperBuy(windowStart, token, way, ask, size, line, aim)
             return
         }
 
@@ -479,6 +518,7 @@ class ProbeBot(
                     shares = 0.0,
                     price = 0.0,
                     resting = ProbePlan.REST_PRICE,
+                    target = aim,
                 )
                 note = "жду по ${(ProbePlan.REST_PRICE * 100).toInt()}¢"
                 engine.log(
@@ -504,6 +544,7 @@ class ProbeBot(
             perHour = line?.perHour ?: 0.0,
             shares = fill.shares,
             price = price,
+            target = aim,
         )
         working = working + round
         note = "в позиции"
@@ -532,6 +573,7 @@ class ProbeBot(
         ask: Double,
         size: Double,
         line: TrendFit.Trend?,
+        aim: Double,
     ) {
         val round = Round(
             windowStart = windowStart,
@@ -543,6 +585,7 @@ class ProbeBot(
             // What a share costs to take, fee included, so the exit is priced
             // off what it actually cost rather than off the quote.
             price = ProbePlan.takenPrice(ask),
+            target = aim,
         )
         working = working + round
         note = "в позиции (демо)"
@@ -551,6 +594,34 @@ class ProbeBot(
             "Проба (демо): взяла " + String.format("%.1f", size) + " $way по " +
                 "${(ask * 100).toInt()}¢ — счёт $" + String.format("%.2f", bank),
         )
+    }
+
+    /**
+     * The next price the market stops at, that way.
+     *
+     * Trading is level to level: what a five-minute bet can actually collect
+     * is the distance to the next place price pauses, and there are two kinds
+     * — the ones the market has turned at before, and the round five hundreds
+     * where the book always sits. Whichever is nearer in the trade's own
+     * direction is the one it is aiming at.
+     */
+    private fun aimFor(way: String, here: Double): Double {
+        if (here <= 0.0 || way.isEmpty()) return 0.0
+
+        val walls = Levels.find(BinanceCandles.oneMinute.list(), here)
+            .filter { it.touches >= 2 }
+        val pivot = Levels.ahead(walls, here, way)
+
+        val step = ProbePlan.ROUND_STEP
+        val round = if (way == "Up") {
+            Math.floor(here / step) * step + step
+        } else {
+            Math.ceil(here / step) * step - step
+        }
+
+        val candidates = listOfNotNull(pivot, round.takeIf { it > 0.0 })
+            .filter { if (way == "Up") it > here else it < here }
+        return candidates.minByOrNull { abs(it - here) } ?: 0.0
     }
 
     /**
@@ -566,6 +637,7 @@ class ProbeBot(
         token: String,
         way: String,
         line: TrendFit.Trend?,
+        aim: Double,
     ) {
         working = working + Round(
             windowStart = windowStart,
@@ -576,6 +648,7 @@ class ProbeBot(
             shares = 0.0,
             price = 0.0,
             resting = ProbePlan.REST_PRICE,
+            target = aim,
         )
         note = "жду по ${(ProbePlan.REST_PRICE * 100).toInt()}¢ (демо)"
         engine.log(
@@ -671,10 +744,31 @@ class ProbeBot(
                 exit = rule,
             )
 
+            // Level to level: the trade was taken for the distance to the
+            // next price the market stops at, and once price is there the move
+            // is finished whatever the outcome's own quote is doing. Take what
+            // the book pays rather than wait for a rung that may never come.
+            val settling = here()
+            val arrived = open.target > 0.0 && settling > 0.0 && (
+                if (open.side == "Up") settling >= open.target else settling <= open.target
+            )
+
             val high = maxOf(open.highWater, bid)
             val step = ProbePlan.exitStep(elapsed, high, open.rung, rule)
             var moved = open.copy(highWater = high, rung = maxOf(open.rung, step))
-            if (bid >= want - 1e-9) {
+            if (arrived && bid > 0.0 && bid < want) {
+                val left = open.shares - open.sold
+                moved = moved.copy(
+                    sold = open.shares,
+                    proceeds = open.proceeds + left * SellPercent.netSell(bid),
+                )
+                engine.log(
+                    "trade",
+                    "Проба (демо): дошли до " + Math.round(open.target) +
+                        " — продала " + String.format("%.1f", left) +
+                        " ${open.side} по ${(bid * 100).toInt()}¢",
+                )
+            } else if (bid >= want - 1e-9) {
                 // The offer would have been resting there, so it is the price
                 // asked that gets paid, not the bid that reached up to it.
                 val left = open.shares - open.sold
