@@ -2164,24 +2164,27 @@ button.step.big {
   margin-bottom: 10px;
 }
 
+/* Nine figures should read as one block, not fill a screen. */
 .countergrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px 6px;
+  gap: 4px 6px;
 }
 
 .countergrid > div {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  line-height: 1.25;
 }
 
 .countergrid span {
-  font-size: 10px;
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .countergrid b {
-  font-size: 15px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -3246,18 +3249,6 @@ button.wide {
   five-minute window. The list is the point of the panel, so it gets the room
   and scrolls rather than pushing everything else off the screen.
 */
-.probeline {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 11px;
-  padding: 2px 0 8px;
-}
-
-.probeline b {
-  font-size: 13px;
-}
-
 .probesides {
   display: flex;
   gap: 14px;
@@ -3342,16 +3333,117 @@ button.wide {
   color: var(--muted);
 }
 
-/* The probe's three dials: what it stakes, how early, and how much room. */
-.probefields {
-  grid-template-columns: repeat(2, 1fr);
+/*
+  A bot panel, densely.
+
+  Everything a rule is looking at is a label and a number, so they go in one
+  row of four rather than four rows of one — and the dials under them are the
+  same inputs at two thirds the height. An open panel should fit on the screen
+  with the chart still visible under it.
+*/
+.botreads {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px 6px;
+  padding: 2px 0 6px;
+}
+
+.botreads > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.botreads span {
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.botreads b {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Two numbers in one cell — the five-minute candle and the minute's. */
+.botreads b i {
+  font-style: normal;
+}
+
+.botreads b i + i {
+  margin-left: 5px;
+}
+
+.botreads em {
+  font-style: normal;
+  font-size: 9px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The one word that says why the side is not simply the line's. */
+.botwhy {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding-bottom: 5px;
+}
+
+/* Paper or real, and what the account is worth: one line, not three. */
+.botbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 0;
+}
+
+.botbar > b em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.botbar .proberow {
+  flex: 1;
+  border-bottom: 0;
+  padding: 0;
+}
+
+/* The dials, at two thirds the height. */
+.botfields {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px 5px;
   align-items: end;
-  margin-top: 8px;
+  margin: 6px 0 4px;
+}
+
+.botfields .field span {
+  font-size: 9px;
+}
+
+.botfields input {
+  padding: 6px 4px;
+  font-size: 13px;
+  border-radius: 8px;
 }
 
 /* A window the probe stood out of: the reason, where the numbers would be. */
 .proberow.skipped {
   opacity: 0.6;
+}
+
+/* And the one still running, at the top of the same list it will join. */
+.proberow.live {
+  border-bottom: 1px solid var(--line);
 }
 
 /*
@@ -3380,4 +3472,20 @@ button.wide {
 .demoflag.on {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* The reset, pushed to the end of the bar it shares. */
+.botbar .pushright {
+  margin-left: auto;
+}
+
+.botbar > em {
+  font-style: normal;
+  font-size: 10px;
+}
+
+.counterlive.tight {
+  font-size: 10.5px;
+  line-height: 1.45;
+  padding: 2px 0;
 }

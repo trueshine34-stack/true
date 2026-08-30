@@ -1479,6 +1479,7 @@ class BotPlugin : Plugin() {
             .put("windowStart", r.windowStart)
             .put("demo", r.demo)
             .put("target", r.target)
+            .put("resting", r.resting)
             .put("side", r.side)
             .put("perHour", r.perHour)
             .put("shares", r.shares)

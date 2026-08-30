@@ -8,6 +8,7 @@ const round = (over: Partial<ProbeRound>): ProbeRound => {
     windowStart: 1_787_817_600,
     demo: true,
     target: 0,
+    resting: 0,
     side: 'Up',
     perHour: 120,
     shares: 10,

@@ -2095,7 +2095,7 @@ function TakeCard({
       </div>
       )}
 
-      <div className="fields botbank">
+      <div className="fields botfields">
         <label className="field">
           <span>продавать от, %</span>
           <input
@@ -2110,7 +2110,7 @@ function TakeCard({
       </div>
 
       {state.watching.length > 0 ? (
-        <div className="counterlive">
+        <div className="counterlive tight">
           {state.watching.map((w, i) => (
             <div key={i}>
               <span className={w.outcome === 'Up' ? 'up' : 'down'}>{w.outcome}</span>{' '}
@@ -2130,19 +2130,10 @@ function TakeCard({
       )}
 
       {state.takes > 0 && (
-        <div className="countergrid">
-          <div>
-            <span className="muted">забрал</span>
-            <b>{state.takes}</b>
-          </div>
-          <div>
-            <span className="muted">долей</span>
-            <b>{state.shares.toFixed(1)}</b>
-          </div>
-          <div>
-            <span className="muted">на</span>
-            <b className="up">{usd(state.got)}</b>
-          </div>
+        <div className="botbar">
+          <b>{state.takes} забрал</b>
+          <em className="muted">{state.shares.toFixed(1)} долей</em>
+          <b className="up">{usd(state.got)}</b>
         </div>
       )}
 
@@ -2200,6 +2191,10 @@ function ProbeCard({
   const disagrees = (body: number) =>
     way !== '' && body !== 0 && (way === 'Up') !== (body > 0);
   const against = disagrees(state.candleBody) || disagrees(state.minuteBody);
+  const atRound =
+    state.roundBand > 0 &&
+    state.roomToRound != null &&
+    state.roomToRound <= state.roundBand;
   const tone = all.pnl > 0 ? 'up' : all.pnl < 0 ? 'down' : 'muted';
 
   return (
@@ -2238,78 +2233,68 @@ function ProbeCard({
       </div>
       )}
 
-      <div className="probeline">
-        <span className="muted">линия 1м</span>
-        <b className={way === 'Up' ? 'up' : way === 'Down' ? 'down' : 'muted'}>
-          {way === 'Up' ? '↑ вверх' : way === 'Down' ? '↓ вниз' : '— вбок'}
-        </b>
-        {line && (
-          <span className="muted">
-            {line.perHour >= 0 ? '+' : '−'}
-            {usd(Math.abs(line.perHour))}/ч · совпадение{' '}
-            {Math.round(line.fit * 100)}%
-          </span>
-        )}
-      </div>
-
       {/*
-        The candle that closes as the window opens. Twenty seconds out its
-        shape is decided enough to read, and a candle finishing against the
-        line is the rule's own reason to sit the window out.
+        Everything the rule is looking at, in one row of four. Each is a label
+        and a number: the line it follows, the candles closing with the window,
+        the round number nearest the open and the level ahead — and under them,
+        only when there is one, the single word that says why the side is not
+        simply the line's.
       */}
-      <div className="probeline">
-        <span className="muted">свеча 5м</span>
-        <b className={candleTone}>
-          {state.candleBody > 0 ? '▲' : state.candleBody < 0 ? '▼' : '—'}{' '}
-          {usd(Math.abs(state.candleBody))}
-        </b>
-        <span className="muted">1м</span>
-        <b className={minuteTone}>
-          {state.minuteBody > 0 ? '▲' : state.minuteBody < 0 ? '▼' : '—'}{' '}
-          {usd(Math.abs(state.minuteBody))}
-        </b>
-        {state.chose ? (
-          <span className="warn">{state.chose}</span>
-        ) : (
-          against && <span className="down">против линии</span>
-        )}
+      <div className="botreads">
+        <div>
+          <span>линия 1м</span>
+          <b className={way === 'Up' ? 'up' : way === 'Down' ? 'down' : 'muted'}>
+            {way === 'Up' ? '↑' : way === 'Down' ? '↓' : '—'}
+            {line ? ` ${Math.round(Math.abs(line.perHour))}/ч` : ''}
+          </b>
+          <em>{line ? `${Math.round(line.fit * 100)}%` : '—'}</em>
+        </div>
+        <div>
+          <span>свеча 5м / 1м</span>
+          <b>
+            <i className={candleTone}>
+              {state.candleBody > 0 ? '▲' : state.candleBody < 0 ? '▼' : '—'}
+              {Math.round(Math.abs(state.candleBody))}
+            </i>
+            <i className={minuteTone}>
+              {state.minuteBody > 0 ? '▲' : state.minuteBody < 0 ? '▼' : '—'}
+              {Math.round(Math.abs(state.minuteBody))}
+            </i>
+          </b>
+          <em className={against ? 'down' : undefined}>
+            {against ? 'против' : 'по линии'}
+          </em>
+        </div>
+        <div>
+          <span>круглый</span>
+          <b className={atRound ? 'down' : undefined}>
+            {bigPrice(state.roundNear)}
+          </b>
+          <em className={atRound ? 'down' : undefined}>
+            {state.roomToRound == null
+              ? '—'
+              : atRound
+                ? 'на нём'
+                : `+${Math.round(state.roomToRound)}`}
+          </em>
+        </div>
+        <div>
+          <span>разворот</span>
+          <b className={near ? 'down' : undefined}>{bigPrice(state.levelAhead)}</b>
+          <em className={near ? 'down' : undefined}>
+            {state.roomToLevel == null ? '—' : `+${Math.round(state.roomToLevel)}`}
+          </em>
+        </div>
       </div>
 
-      <div className="probeline">
-        <span className="muted">круглый</span>
-        <b>{bigPrice(state.roundNear)}</b>
-        {state.roomToRound != null && (
-          <span
-            className={
-              state.roomToRound <= state.roundBand && state.roundBand > 0
-                ? 'down'
-                : 'muted'
-            }
-          >
-            {state.roomToRound <= state.roundBand && state.roundBand > 0
-              ? `на нём (±${Math.round(state.roundBand)})`
-              : `до него ${Math.round(state.roomToRound)}`}
-          </span>
-        )}
-      </div>
-
-      <div className="probeline">
-        <span className="muted">разворот у</span>
-        <b>{bigPrice(state.levelAhead)}</b>
-        {state.roomToLevel != null && (
-          <span className={near ? 'down' : 'muted'}>
-            запас {bigPrice(state.roomToLevel)}
-            {near ? ' — близко' : ''}
-          </span>
-        )}
-      </div>
+      {state.chose && <div className="botwhy warn">{state.chose}</div>}
 
       {/*
         Paper or real, and what the paper account is worth. The switch is the
         first thing on the card after the name because it is the thing that
         decides what every number under it means.
       */}
-      <div className="proberow demorow">
+      <div className="botbar">
         <button
           className={`demoflag${state.demo ? ' on' : ''}`}
           onClick={() => onDemo(!state.demo)}
@@ -2317,19 +2302,16 @@ function ProbeCard({
           {state.demo ? 'демо' : 'реально'}
         </button>
         {state.demo ? (
-          <>
-            <span className="muted">счёт</span>
-            <b className={state.bank >= state.bankUsd ? 'up' : 'down'}>
-              {usd(state.bank)}
-            </b>
-            <span className="muted">из {usd(state.bankUsd)}</span>
-          </>
+          <b className={state.bank >= state.bankUsd ? 'up' : 'down'}>
+            {usd(state.bank)}
+            <em> / {usd(state.bankUsd)}</em>
+          </b>
         ) : (
-          <span className="muted">торгует на деньги кошелька</span>
+          <b className="muted">кошелёк</b>
         )}
       </div>
 
-      <div className="fields probefields">
+      <div className="fields botfields">
         <label className="field">
           <span>ставка, $</span>
           <input
@@ -2379,18 +2361,6 @@ function ProbeCard({
             />
           </label>
         )}
-      </div>
-
-      <div className="counterlive muted">
-        {state.riding.length > 0
-          ? state.riding.map((r) => (
-              <div key={r.windowStart}>
-                <span className={r.side === 'Up' ? 'up' : 'down'}>{r.side}</span>{' '}
-                {r.shares.toFixed(1)} по {cents(r.price)} — окно{' '}
-                {clockOf(r.windowStart)} идёт
-              </div>
-            ))
-          : state.note || (state.enabled ? 'жду окна' : 'выключено')}
       </div>
 
       {state.rounds.length > 0 ? (
@@ -2490,15 +2460,22 @@ function ProbeCard({
             <span className="muted">свежие сверху</span>
           </div>
           <div className="probelist">
+            {/* What is open sits at the top of the same list it will join. */}
+            {state.riding.map((r) => (
+              <ProbeRow key={r.windowStart} round={r} />
+            ))}
             {state.rounds.map((r) => (
               <ProbeRow key={r.windowStart} round={r} />
             ))}
           </div>
         </>
       ) : (
-        <div className="counterlive muted">
-          Пока ни одного закрытого окна. Первая запись появится через пять
-          минут после открытия — покупкой или причиной, по которой её не было.
+        <div className="botbar muted">
+          {state.riding.length > 0 ? (
+            state.riding.map((r) => <ProbeRow key={r.windowStart} round={r} />)
+          ) : (
+            <b className="muted">{state.note || 'ждёт окна'}</b>
+          )}
         </div>
       )}
 
@@ -2509,6 +2486,25 @@ function ProbeCard({
 
 /** One window, as a line: what was taken, and what it came to. */
 function ProbeRow({ round }: { round: ProbeRound }) {
+  // A window still running shows what is held and where it is aiming; there is
+  // no result to show yet, so the clock says "идёт" instead.
+  if (round.open) {
+    return (
+      <div className="proberow live">
+        <span className="probewhen">{clockOf(round.windowStart)}</span>
+        <span className={round.side === 'Up' ? 'up' : 'down'}>{round.side}</span>
+        <span className="muted">
+          {round.shares > 0
+            ? `${round.shares.toFixed(1)} · ${cents(round.price)}`
+            : `ждёт ${cents(round.resting || 0)}`}
+          {round.target > 0 ? ` → ${bigPrice(round.target)}` : ''}
+        </span>
+        <span className="probemark">·</span>
+        <b className="warn">идёт</b>
+      </div>
+    );
+  }
+
   // A window it stood out of still gets a line, with the reason in place of
   // the numbers — that is the whole point of writing them down.
   if (!traded(round)) {
@@ -2601,50 +2597,47 @@ function PulseCard({
         the first thing after the name — and paper is the default, because a
         rule is worth watching for a day before it is trusted with anything.
       */}
-      <div className="proberow demorow">
+      <div className="botbar">
         <button
           className={`demoflag${state.demo ? ' on' : ''}`}
           onClick={() => onDemo(!state.demo)}
         >
           {state.demo ? 'демо' : 'реально'}
         </button>
-        {state.demo ? (
-          <>
-            <span className="muted">счёт</span>
-            <b className={state.cash >= state.bankUsd ? 'up' : 'down'}>
-              {usd(state.cash)}
-            </b>
-            <span className="muted">из {usd(state.bankUsd)}</span>
-          </>
-        ) : (
-          <span className="muted">торгует на деньги кошелька</span>
-        )}
+        <b className={state.cash >= state.bankUsd ? 'up' : 'down'}>
+          {usd(state.cash)}
+          {state.demo && <em> / {usd(state.bankUsd)}</em>}
+        </b>
+        <b className={tone}>{signedUsd(state.pnl)}</b>
+        <em className="muted">
+          {state.rounds} кругов · {state.wins}/{state.losses}
+        </em>
       </div>
 
       {read && (
-        <div className="pulsegrid">
+        <div className="botreads">
           <div>
-            <span className="muted">ход</span>
+            <span>ход</span>
             <b className={side}>
               {read.lead >= 0 ? '+' : '−'}
               {Math.abs(read.lead).toFixed(0)}$
             </b>
           </div>
           <div>
-            <span className="muted">импульс</span>
+            <span>импульс</span>
             <b className={read.momentum >= 0 ? 'up' : 'down'}>
               {read.momentum >= 0 ? '+' : '−'}
               {Math.abs(read.momentum).toFixed(0)}$
             </b>
           </div>
           <div>
-            <span className="muted">объём</span>
+            <span>объём</span>
             <b className={read.volume >= 1 ? 'up' : 'muted'}>
               ×{read.volume.toFixed(2)}
             </b>
           </div>
           <div>
-            <span className="muted">стакан</span>
+            <span>стакан</span>
             <b className={read.lean >= 0.5 ? 'up' : 'down'}>
               {Math.round(read.lean * 100)}%
             </b>
@@ -2652,7 +2645,7 @@ function PulseCard({
         </div>
       )}
 
-      <div className="fields botbank">
+      <div className="fields botfields">
         <label className="field">
           <span>контейнер, $</span>
           <input
@@ -2673,41 +2666,28 @@ function PulseCard({
         </label>
       </div>
 
-      <div className="countergrid">
-        <div>
-          <span className="muted">свободно</span>
-          <b>{usd(state.cash)}</b>
-        </div>
-        <div>
-          <span className="muted">итог</span>
-          <b className={tone}>{signedUsd(state.pnl)}</b>
-        </div>
-        <div>
-          <span className="muted">кругов · +/−</span>
-          <b>
-            {state.rounds} · {state.wins}/{state.losses}
-          </b>
-        </div>
-      </div>
-
-      {lot ? (
-        <div className="counterlive">
-          <span className={lot.outcome === 'Up' ? 'up' : 'down'}>{lot.outcome}</span>{' '}
-          {lot.shares.toFixed(1)} по {cents(lot.price)}
-          {lot.sellPrice > 0 ? ` → ${cents(lot.sellPrice)}` : ''}
-          {lot.note ? ` · ${lot.note}` : ''}
-        </div>
-      ) : (
-        <div className="counterlive muted">{state.note ?? 'ждёт совпадения'}</div>
-      )}
-
-      {state.lastFault && <div className="banner warn">{state.lastFault}</div>}
-
-      <div className="listhead bare">
-        <button className="linkbtn" onClick={onReset}>
-          обнулить счёт
+      {/* What it holds, or why it holds nothing — and the way to start over. */}
+      <div className="botbar">
+        {lot ? (
+          <>
+            <span className={lot.outcome === 'Up' ? 'up' : 'down'}>
+              {lot.outcome}
+            </span>
+            <b>
+              {lot.shares.toFixed(1)} · {cents(lot.price)}
+              {lot.sellPrice > 0 ? ` → ${cents(lot.sellPrice)}` : ''}
+            </b>
+            {lot.note && <em className="muted">{lot.note}</em>}
+          </>
+        ) : (
+          <b className="muted">{state.note ?? 'ждёт совпадения'}</b>
+        )}
+        <button className="linkbtn pushright" onClick={onReset}>
+          обнулить
         </button>
       </div>
+
+      {state.lastFault && <div className="banner warn">{state.lastFault}</div>}
     </div>
   );
 }

@@ -450,6 +450,8 @@ export type ProbeRound = {
   demo: boolean;
   /** The level the trade was taken for, and closed at when price got there. */
   target: number;
+  /** A bid still waiting at this price, with nothing bought yet. */
+  resting: number;
   /** The side the chart's line was pointing at. */
   side: string;
   /** How fast that line was moving, in dollars an hour. */
