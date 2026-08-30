@@ -32,6 +32,8 @@ class ProbeStore(context: Context) {
         roomShare = prefs.getFloat("roomShare", ProbePlan.DEFAULT_ROOM.toFloat()).toDouble(),
         demo = prefs.getBoolean("demo", true),
         bankUsd = prefs.getFloat("bankUsd", ProbePlan.DEFAULT_BANK.toFloat()).toDouble(),
+        inside = prefs.getBoolean("inside", false),
+        edgeUsd = prefs.getFloat("edgeUsd", ProbePlan.DEFAULT_EDGE.toFloat()).toDouble(),
     )
 
     fun saveSettings(s: ProbePlan.Settings) {
@@ -42,6 +44,8 @@ class ProbeStore(context: Context) {
             .putFloat("roomShare", s.roomShare.toFloat())
             .putBoolean("demo", s.demo)
             .putFloat("bankUsd", s.bankUsd.toFloat())
+            .putBoolean("inside", s.inside)
+            .putFloat("edgeUsd", s.edgeUsd.toFloat())
             .apply()
     }
 

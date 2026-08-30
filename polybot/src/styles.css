@@ -3486,6 +3486,14 @@ button.wide {
   padding: 2px 0;
 }
 
+/* The line beside the mode switch says what the switch means, and has to
+   stay out of the switch's way: it is a caption, not a number. */
+.botbar > b.small {
+  font-weight: 400;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
 .botbar > b em {
   font-style: normal;
   font-size: 10px;

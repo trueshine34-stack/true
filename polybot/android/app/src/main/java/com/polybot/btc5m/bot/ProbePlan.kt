@@ -671,6 +671,57 @@ object ProbePlan {
         return if (side == "Up") maxOf(0.0, -move) else maxOf(0.0, move)
     }
 
+    /**
+     * The least a side has to be underpriced by before it is worth buying.
+     *
+     * Five cents a share. The chance is a model and the model is not exact,
+     * so a side worth a cent more than it costs is not an opportunity, it is
+     * rounding — and the fee is already inside the cost being compared.
+     */
+    const val DEFAULT_EDGE = 0.05
+
+    /**
+     * The dearest side worth buying however cheap it looks.
+     *
+     * Above ninety-five cents a share risks a dollar to make five cents, and
+     * one window going the other way undoes twenty that did not. The model is
+     * least trustworthy exactly there, in the tail where it has the fewest
+     * observations to have been fitted on.
+     */
+    const val EDGE_CEILING = 0.95
+
+    /** And the earliest second of a window at which the reading means much. */
+    const val EDGE_FROM_SEC = 30L
+
+    /**
+     * What a share of this side is worth right now, less what it costs.
+     *
+     * [fair] is the chance the side wins, so a share of it is worth that many
+     * cents; [ask] is what the book wants, and what it really costs is that
+     * plus the taker fee. The difference is the edge, in cents a share, and
+     * it is the whole of the reason to buy.
+     */
+    fun edgeOn(fair: Double, ask: Double?): Double {
+        if (ask == null || ask <= 0.0 || ask >= 1.0) return 0.0
+        if (fair <= 0.0 || fair > 1.0) return 0.0
+        return fair - takenPrice(ask)
+    }
+
+    /** Whether that edge is worth acting on, at this price and this moment. */
+    fun worthTaking(
+        fair: Double,
+        ask: Double?,
+        elapsedSec: Long,
+        leftSec: Long,
+        least: Double = DEFAULT_EDGE,
+        ceiling: Double = EDGE_CEILING,
+        from: Long = EDGE_FROM_SEC,
+    ): Boolean {
+        if (ask == null || ask <= 0.0 || ask > ceiling) return false
+        if (elapsedSec < from || leftSec <= 0L) return false
+        return edgeOn(fair, ask) >= least
+    }
+
     /** Whether this quote is taken now or waited for. */
     fun waits(ask: Double): Boolean = ask > MAX_TAKE + 1e-9
 
@@ -717,6 +768,17 @@ object ProbePlan {
         val demo: Boolean = true,
         /** What that imaginary money starts at. */
         val bankUsd: Double = DEFAULT_BANK,
+        /**
+         * Buy from inside the window on price rather than before it on a read.
+         *
+         * The old entry guesses which way five minutes will go and is right
+         * 49% of the time over a month, which is no edge at all. This one
+         * waits until the window has half answered itself, works out what a
+         * side is worth, and buys only where the book is asking less.
+         */
+        val inside: Boolean = false,
+        /** How underpriced a side has to be, in cents a share. */
+        val edgeUsd: Double = DEFAULT_EDGE,
     )
 
     /**

@@ -515,6 +515,21 @@ class ProbeBot(
             return
         }
 
+        // Watching from inside replaces the guess made before the open. The
+        // side is not picked ahead of time at all: the window is left to show
+        // its hand, and whichever side the book is then asking too little for
+        // is the one that gets bought.
+        if (settings.inside) {
+            if (windowStart != aiming) {
+                giveUp(nowSec)
+                aiming = windowStart
+            }
+            inside(nowSec)
+            aimNote = note
+            onStateChanged()
+            return
+        }
+
         val target = ProbePlan.targetWindow(windowStart, elapsed, settings, WINDOW_SEC)
         // A chance that has come and gone is filed with the reason it did, so
         // "why did it not trade that one" is a question the report answers.
@@ -688,6 +703,147 @@ class ProbeBot(
             bottom = bottom ?: 0.0,
             pick = pick,
         )
+    }
+
+    /**
+     * Buys a side the book is asking less for than it is worth.
+     *
+     * The entry below guesses which way a window will go before it opens.
+     * Over a month of tape that guess is right 49% of the time, and no
+     * arrangement of chart rules moved it — there is no edge in the question.
+     *
+     * This asks a different one. A window already running has half answered
+     * itself: a side well ahead with a minute left is near certain, and the
+     * only question is what the book charges for it. So the chance is worked
+     * out from how far price has come and how long is left, the ask is read,
+     * and the side is bought only where the ask is under it by enough to
+     * matter. Every such buy is worth more than it cost whichever way that
+     * particular window happens to end, which is the whole difference between
+     * an edge and a hunch.
+     */
+    private fun inside(nowSec: Long) {
+        if (!settings.inside) return
+
+        val elapsed = SellLadder.elapsedInWindow(nowSec)
+        val windowStart = nowSec - elapsed
+        val left = WINDOW_SEC - elapsed
+        if (elapsed < ProbePlan.EDGE_FROM_SEC || left <= 0L) return
+        if (traded(windowStart)) return
+
+        val opened = WindowOpen.of(windowStart, engine.feed)
+        if (opened == null || opened <= 0.0) {
+            note = "нет цены открытия"
+            return
+        }
+        val here = here()
+        if (here <= 0.0) return
+        val typical = Levels.typicalRange(BinanceCandles.fiveMinute.list())
+        if (typical <= 0.0) return
+
+        val market = engine.marketForWindow(windowStart)
+        if (market == null) {
+            note = "рынок ещё не открыт"
+            return
+        }
+
+        // Both sides, priced and quoted, and whichever is the better buy.
+        val moved = here - opened
+        var best: Triple<String, Double, Double>? = null
+        for (way in listOf("Up", "Down")) {
+            val fair = FairValue.chance(way, moved, typical, left, WINDOW_SEC)
+            val token = if (way == "Up") market.up.tokenId else market.down.tokenId
+            val ask = try {
+                ClobApi.bestAsk(token)
+            } catch (e: Exception) {
+                null
+            } ?: continue
+            val edge = ProbePlan.edgeOn(fair, ask)
+            if (!ProbePlan.worthTaking(fair, ask, elapsed, left, settings.edgeUsd)) continue
+            if (best == null || edge > best.third) best = Triple(way, ask, edge)
+        }
+
+        val (way, ask, edge) = best ?: run {
+            note = "нет расхождения с ценой"
+            return
+        }
+
+        val fair = FairValue.chance(way, moved, typical, left, WINDOW_SEC)
+        val staking = stakeLive
+        val cash = if (settings.demo) bank else purse
+        if (cash > 0.0 && cash < staking) {
+            note = if (settings.demo) "тестовый счёт пуст" else "на счету пусто"
+            return
+        }
+
+        reading = listOf(
+            "решение: недооценена",
+            "прошло: " + elapsed + " с, осталось " + left + " с",
+            "ход от открытия: " + Math.round(moved) + "$ (" +
+                String.format("%.2f", moved / typical) + "× обычного)",
+            "обычный ход 5м: " + Math.round(typical) + "$",
+            "цена открытия: " + Math.round(opened),
+            "цена BTC: " + Math.round(here),
+            "справедливо: " + Math.round(fair * 100) + "¢",
+            "аск: " + (ask * 100).toInt() + "¢ — с комиссией " +
+                Math.round(ProbePlan.takenPrice(ask) * 100) + "¢",
+            "запас: " + Math.round(edge * 100) + "¢ на голос",
+            "ставка: \$" + String.format("%.2f", staking),
+        ).joinToString("\n")
+
+        val size = ProbePlan.shares(staking, ask, market.minimumOrderSize)
+        val token = if (way == "Up") market.up.tokenId else market.down.tokenId
+
+        if (settings.demo) {
+            paperBuy(windowStart, token, way, ask, size, trend, 0.0)
+            note = "взяла недооценённую (демо)"
+            return
+        }
+
+        val limit = minOf(
+            ProbePlan.crossPrice(ask, market.tickSize),
+            BuyCap.ceiling(BuyCap.elapsedFor(windowStart)),
+        )
+        val result = try {
+            engine.placeManualOrder(
+                tokenId = token,
+                conditionId = market.conditionId,
+                side = "BUY",
+                price = limit,
+                size = size,
+                orderType = "GTC",
+                auto = true,
+            )
+        } catch (e: Exception) {
+            note = e.message ?: "ошибка сети"
+            return
+        }
+        if (!result.success) {
+            note = result.error ?: "отказ CLOB"
+            return
+        }
+        val fill = Orders.filled("BUY", result.makingAmount, result.takingAmount)
+        if (fill.shares <= 1e-6) {
+            result.orderId?.let { cancel(it) }
+            note = "не налили по ${(ask * 100).toInt()}¢"
+            return
+        }
+        working = working + Round(
+            windowStart = windowStart,
+            asset = token,
+            demo = false,
+            side = way,
+            perHour = trend?.perHour ?: 0.0,
+            shares = fill.shares,
+            price = if (fill.usd > 0.0) fill.usd / fill.shares else limit,
+            why = reading,
+        )
+        note = "взяла недооценённую"
+        engine.log(
+            "trade",
+            "Проба: $way по ${(ask * 100).toInt()}¢ при справедливых " +
+                "${Math.round(fair * 100)}¢ — запас ${Math.round(edge * 100)}¢",
+        )
+        onStateChanged()
     }
 
     /**

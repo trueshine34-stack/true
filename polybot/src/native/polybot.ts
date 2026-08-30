@@ -261,6 +261,8 @@ export interface PolyBotPlugin {
     roomShare?: number;
     demo?: boolean;
     bankUsd?: number;
+    inside?: boolean;
+    edgeUsd?: number;
   }): Promise<void>;
   probeReset(): Promise<void>;
   probeState(): Promise<ProbeState>;
@@ -534,6 +536,13 @@ export type ProbeState = {
   bankUsd: number;
   bank: number;
   /**
+   * Whether the side is chosen from inside the running window on price
+   * rather than guessed before it opens on a read of the chart.
+   */
+  inside: boolean;
+  /** How far under fair value the ask has to be, in dollars a share. */
+  edgeUsd: number;
+  /**
    * What the next window will actually stake — the base grown by every
    * doubling, plus what the winning run has added — and that addition alone.
    */
@@ -706,6 +715,8 @@ const webStub: PolyBotPlugin = {
     demo: true,
     bankUsd: 100,
     bank: 100,
+    inside: false,
+    edgeUsd: 0.05,
     stakeNow: 5,
     streak: 0,
     losing: false,

@@ -1454,6 +1454,8 @@ class BotPlugin : Plugin() {
                 roomShare = call.getDouble("roomShare") ?: d.roomShare,
                 demo = call.getBoolean("demo") ?: d.demo,
                 bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
+                inside = call.getBoolean("inside") ?: d.inside,
+                edgeUsd = call.getDouble("edgeUsd") ?: d.edgeUsd,
             ),
         )
         // The entry lands ten seconds before a window opens, which is usually
@@ -1533,6 +1535,8 @@ class BotPlugin : Plugin() {
                 .put("roomToRound", bot.roomToRound)
                 .put("demo", bot.settings.demo)
                 .put("bankUsd", bot.settings.bankUsd)
+                .put("inside", bot.settings.inside)
+                .put("edgeUsd", bot.settings.edgeUsd)
                 .put("bank", bot.bank)
                 .put("stakeNow", bot.stakeLive)
                 .put("streak", bot.streak)
