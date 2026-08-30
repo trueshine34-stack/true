@@ -73,3 +73,69 @@ For runs longer than 3 the answer is a coin flip — 48.9%, binomial p = 0.68
 against 50%, gross −3.19% over 475 trades. The 54.5% on runs of exactly 3
 (p = 0.04) is one bucket out of five tested, so it is most likely noise, not an
 edge; it would need out-of-sample confirmation on other months.
+
+## Question 4 — is there a pattern above 70%?
+
+Short answer: not for predicting the next candle's direction. Yes, trivially, if
+you let an asymmetric target buy the win rate — but that version does not make money.
+
+The search (`search.py`) uses 8 months of 5m candles (69 120 candles,
+2026-01-02 … 2026-08-30), 32 predicates (candle directions, runs, body/range/volume
+vs the 10-candle average, wick shape, close position in range, SMA20/50 side,
+20-candle extremes, UTC session, weekday/weekend) and every conjunction of up to
+4 of them. Patterns are mined on the first 70% of the history and then read once
+on the untouched last 30%.
+
+### What the search manufactures out of nothing
+
+Run the same search with the up/down labels randomly shuffled (`python3 search.py
+candles240.json.gz 3 <seed>`) and it still returns "patterns" at 57–58% in-sample.
+That is the noise floor of the search itself. Real data returns 130 patterns above
+56% in-sample against 4–7 on shuffled labels, and the real ones keep 55–58% out of
+sample where the shuffled ones drop to ~51%. So there is a signal — it is just small.
+
+### Best directional patterns (out-of-sample column is untouched data)
+
+| pattern | side | n train | win train | n test | win test |
+|---|---|---|---|---|---|
+| close_top25% + new_high20 + run_up≥3 + weekend | SHORT | 226 | 65.5% | 103 | **67.0%** |
+| close_top25% + green10≥7 + new_high20 | SHORT | 732 | 58.2% | 304 | 57.6% |
+| close_bot25% + new_low20 + utc_18-24 | LONG | 442 | 59.7% | 228 | 59.6% |
+| close_bot25% + new_low20 + c3_up | LONG | 737 | 59.2% | 335 | 56.4% |
+| new_low20 + run_dn≥3 + weekend | LONG | 491 | 57.8% | 205 | 57.1% |
+
+They are all the same idea: a candle that makes a 20-candle extreme *and* closes in
+the far quarter of its own range is an exhausted push, and the next candle fades it.
+Nothing reaches 70% on a sample large enough to trust; the 67% one has 103 test cases.
+
+### Where 70%+ is real — and why it is still a loss
+
+Take that fade signal (`signal_tpsl.py`), enter at the next open, exit on target,
+stop, or time:
+
+| TP% | SL% | hold | n test | win% test | net per trade after 0.1% fee |
+|---|---|---|---|---|---|
+| 0.05 | 0.50 | 24 | 1883 | **86.8%** | −0.103% |
+| 0.10 | 0.50 | 24 | 1883 | **78.8%** | −0.097% |
+| 0.15 | 0.60 | 36 | 1881 | **75.1%** | −0.091% |
+| 0.20 | 0.60 | 36 | 1881 | **69.7%** | −0.089% |
+| 0.50 | 0.50 | 48 | 1880 | 54.7% | −0.071% |
+
+87% winners, and still a losing system: a small target next to a wide stop trades
+frequency for size. The signal is genuinely better than a coin flip — the same
+grid on unconditional entries (`tpsl.py`) gives worse gross at every setting — but
+its gross edge is about +0.003…+0.03% per trade and a taker round trip costs 0.10%.
+
+**Bottom line.** On 5m BTC the honest numbers are ~55–58% for the best verified
+directional pattern and 70–87% for win rate bought with an asymmetric target. Any
+single "closed-candle pattern" quoted above 70% for next-candle direction is a
+small-sample artifact — this search produces those from shuffled data on demand.
+
+### Files added
+
+* `search.py` — bitmask pattern miner with a train/test split and a shuffled-label
+  noise baseline (`MIN_N` / `MIN_WR` env vars set the filter)
+* `signal_tpsl.py` — the fade signal with TP/SL/time exits, train vs test
+* `tpsl.py` — the same targets on unconditional entries, as the baseline
+* `candles240.json.gz` — 8 months of 5m candles
+* `report_search.txt`, `report_signal_tpsl.txt` — raw output

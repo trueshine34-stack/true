@@ -1,0 +1,83 @@
+### real data
+69120 candles, 2026-01-02 .. 2026-08-30 UTC
+train: candles 60..48384 (2026-01-02 .. 2026-06-19), test: the rest
+
+32 predicates, combinations up to 3 terms
+patterns passing train filter (n>=400, wr>=56%): 130
+
+pattern                                                         n_tr   wr_tr  n_te   wr_te  side
+------------------------------------------------------------------------------------------------
+green10<=3 + new_low20 + utc_12-18                               543   59.9%   268   50.7%  LONG
+close_bot25% + new_low20 + utc_18-24                             442   59.7%   228   59.6%  LONG
+run_dn>=3 + upper_wick>body + weekend                            476   59.7%   190   53.7%  LONG
+close_top25% + new_high20 + utc_12-18                            505   59.4%   239   51.5% SHORT
+close_top25% + green10>=7 + weekend                              600   59.3%   300   51.7% SHORT
+close_bot25% + new_low20 + utc_12-18                             627   59.3%   240   55.4%  LONG
+c3_up + close_bot25% + new_low20                                 737   59.2%   335   56.4%  LONG
+new_high20 + run_up>=3 + utc_12-18                               467   58.9%   252   49.6% SHORT
+green10<=3 + run_dn>=3 + utc_12-18                               406   58.9%   210   55.2%  LONG
+above_sma20 + c1_dn + close_top25%                               474   58.9%   218   50.0% SHORT
+run_up>=3 + utc_12-18 + vol>1.5avg                               404   58.7%   200   49.0% SHORT
+close_top25% + green10>=7 + new_high20                           732   58.2%   304   57.6% SHORT
+green10<=3 + new_low20 + weekend                                 483   58.2%   272   55.5%  LONG
+below_sma20 + range>1.5avg + upper_wick>body                     413   58.1%   206   48.1%  LONG
+body<0.5avg + run_dn>=3 + weekend                                522   58.0%   278   50.4%  LONG
+new_low20 + range>1.5avg + utc_12-18                             648   58.0%   226   54.4%  LONG
+new_low20 + run_dn>=3 + utc_12-18                                515   57.9%   203   56.2%  LONG
+new_low20 + run_dn>=3 + weekend                                  491   57.8%   205   57.1%  LONG
+close_top25% + new_high20 + weekend                              511   57.7%   249   58.6% SHORT
+run_dn>=3 + vol<0.7avg + weekend                                 612   57.7%   299   47.8%  LONG
+close_bot25% + new_low20 + weekend                               560   57.7%   264   54.2%  LONG
+close_top25% + run_up>=3 + weekend                               876   57.6%   433   55.7% SHORT
+close_bot25% + run_dn>=3 + weekend                               864   57.6%   417   51.8%  LONG
+close_bot25% + green10>=7 + vol>1.5avg                           431   57.5%   199   52.3%  LONG
+body>1.5avg + range>1.5avg + run_up>=3                           756   57.5%   401   56.9% SHORT
+
+### 4 terms
+69120 candles, 2026-01-02 .. 2026-08-30 UTC
+train: candles 60..48384 (2026-01-02 .. 2026-06-19), test: the rest
+
+32 predicates, combinations up to 4 terms
+patterns passing train filter (n>=200, wr>=62%): 8
+
+pattern                                                         n_tr   wr_tr  n_te   wr_te  side
+------------------------------------------------------------------------------------------------
+close_top25% + new_high20 + run_up>=3 + weekend                  226   65.5%   103   67.0% SHORT
+green10<=3 + new_low20 + range>1.5avg + utc_12-18                202   64.4%   101   49.5%  LONG
+close_bot25% + run_dn>=3 + utc_06-12 + weekend                   213   64.3%   102   42.2%  LONG
+close_bot25% + new_low20 + range>1.5avg + utc_18-24              204   63.2%    99   58.6%  LONG
+green10<=3 + new_low20 + run_dn>=3 + utc_12-18                   230   62.6%   114   57.9%  LONG
+close_bot25% + green10<=3 + new_low20 + utc_12-18                200   62.5%   111   55.9%  LONG
+close_top25% + utc_00-06 + vol>1.5avg + weekend                  207   62.3%    99   54.5% SHORT
+c3_dn + new_low20 + utc_18-24 + weekend                          222   62.2%   111   47.7%  LONG
+
+### shuffled labels (noise baseline)
+
+32 predicates, combinations up to 3 terms
+patterns passing train filter (n>=400, wr>=56%): 7
+
+pattern                                                         n_tr   wr_tr  n_te   wr_te  side
+------------------------------------------------------------------------------------------------
+range<0.7avg + run_up>=3 + utc_06-12                             422   58.1%   182   54.9% SHORT
+body<0.5avg + run_up>=3 + utc_06-12                              513   57.5%   221   56.6% SHORT
+c1_up + close_bot25% + weekday                                   575   56.5%   257   51.0% SHORT
+
+
+32 predicates, combinations up to 3 terms
+patterns passing train filter (n>=400, wr>=56%): 4
+
+pattern                                                         n_tr   wr_tr  n_te   wr_te  side
+------------------------------------------------------------------------------------------------
+new_low20 + vol<0.7avg + weekday                                 637   56.8%   301   51.2% SHORT
+new_high20 + run_up>=3 + upper_wick>body                         569   56.6%   244   41.4%  LONG
+c1_dn + new_low20 + vol<0.7avg                                   603   56.6%   296   51.4% SHORT
+
+
+32 predicates, combinations up to 3 terms
+patterns passing train filter (n>=400, wr>=56%): 2
+
+pattern                                                         n_tr   wr_tr  n_te   wr_te  side
+------------------------------------------------------------------------------------------------
+below_sma50 + green10>=7 + utc_18-24                             480   57.1%   112   49.1%  LONG
+c2_dn + green10>=7 + utc_18-24                                   484   56.6%   185   50.8%  LONG
+
