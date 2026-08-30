@@ -745,6 +745,7 @@ class ProbeBot(
             below = below,
             body = body,
             typical = typical,
+            closing = closing,
             lastMinute = lastMinute,
             minuteRange = minuteRange,
             minuteTypical = minuteTypical,
@@ -761,6 +762,7 @@ class ProbeBot(
             settings = settings,
             price = here,
             level = ahead,
+            candleOpen = closing?.open ?: 0.0,
             candleHigh = closing?.high ?: 0.0,
             candleLow = closing?.low ?: 0.0,
             candleClose = closing?.close ?: 0.0,
@@ -803,6 +805,7 @@ class ProbeBot(
             settings = settings,
             price = here,
             level = ahead,
+            candleOpen = closing?.open ?: 0.0,
             candleHigh = closing?.high ?: 0.0,
             candleLow = closing?.low ?: 0.0,
             candleClose = closing?.close ?: 0.0,
@@ -968,6 +971,8 @@ class ProbeBot(
         below: ProbePlan.Wall?,
         body: Double,
         typical: Double,
+        /** The five-minute candle the gates read, wicks and all. */
+        closing: BinanceCandles.Candle?,
         /** The same minute the gates read, not whichever is newest. */
         lastMinute: BinanceCandles.Candle?,
         minuteRange: Double,
@@ -1012,6 +1017,17 @@ class ProbeBot(
             "обычный ход 5м: " + Math.round(typical) + "$",
             "нужен запас: " + Math.round(typical * settings.roomShare) + "$" +
                 " (" + Math.round(settings.roomShare * 100) + "% хода)",
+            "хвост свечи: " + (
+                closing?.let {
+                    val range = it.high - it.low
+                    val wick = if (pick.side == "Up") {
+                        it.high - maxOf(it.open, it.close)
+                    } else {
+                        minOf(it.open, it.close) - it.low
+                    }
+                    if (range > 0.0) Math.round(wick / range * 100).toString() + "%" else "нет"
+                } ?: "нет"
+                ),
             "размер минутки: " + (
                 if (minuteTypical > 0.0) {
                     String.format("%.1f", minuteRange / minuteTypical) + "× обычной"

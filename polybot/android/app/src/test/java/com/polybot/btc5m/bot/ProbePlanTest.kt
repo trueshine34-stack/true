@@ -912,6 +912,96 @@ class ProbePlanTest {
         assertTrue(ProbePlan.waits(0.53))
     }
 
+    /**
+     * The 22:35 entry: the move up had flattened out under 78 832, and the
+     * five minutes that closed with the window spent most of its height on an
+     * upper wick and finished about where it opened. The next five minutes
+     * was being asked to do what the last one had just failed at, from the
+     * same place.
+     */
+    @Test
+    fun `a candle that reached our way and was pushed back stops the entry`() {
+        // Opened at 78 800, poked 78 832, closed 78 806: a body of six on a
+        // range of thirty-eight, and twenty-six of it wick above.
+        assertTrue(
+            ProbePlan.refused(
+                way = "Up",
+                open = 78_800.0,
+                high = 78_832.0,
+                low = 78_794.0,
+                close = 78_806.0,
+                typical = 40.0,
+            ),
+        )
+        assertEquals(
+            "свеча с хвостом вверх",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.49,
+                cashUsd = 100.0,
+                settings = on,
+                price = 78_804.0,
+                level = 79_400.0,
+                typical = 40.0,
+                candleOpen = 78_800.0,
+                candleHigh = 78_832.0,
+                candleLow = 78_794.0,
+                candleClose = 78_806.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `it wants both halves`() {
+        // A big wick over a big body is a candle that took ground and gave
+        // some back, which is what a trending five minutes looks like.
+        assertTrue(
+            !ProbePlan.refused(
+                way = "Up",
+                open = 78_760.0,
+                high = 78_832.0,
+                low = 78_756.0,
+                close = 78_806.0,
+                typical = 40.0,
+            ),
+        )
+        // And a small body with no wick is a market standing still, which is
+        // not a refusal of anything.
+        assertTrue(
+            !ProbePlan.refused(
+                way = "Up",
+                open = 78_800.0,
+                high = 78_808.0,
+                low = 78_794.0,
+                close = 78_806.0,
+                typical = 40.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `the wick has to be on the side being bought`() {
+        // The same candle read for a Down entry: its long wick is above, so
+        // it says nothing about a move down.
+        assertTrue(
+            !ProbePlan.refused(
+                way = "Down",
+                open = 78_800.0,
+                high = 78_832.0,
+                low = 78_794.0,
+                close = 78_806.0,
+                typical = 40.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `without a candle or a scale it says nothing`() {
+        assertTrue(!ProbePlan.refused("Up", 0.0, 78_832.0, 78_794.0, 78_806.0, 40.0))
+        assertTrue(!ProbePlan.refused("Up", 78_800.0, 78_832.0, 78_794.0, 78_806.0, 0.0))
+        assertTrue(!ProbePlan.refused("", 78_800.0, 78_832.0, 78_794.0, 78_806.0, 40.0))
+    }
+
     @Test
     fun `only the same side still supports the position`() {
         assertTrue(ProbePlan.stillOn("Up", "Up"))
