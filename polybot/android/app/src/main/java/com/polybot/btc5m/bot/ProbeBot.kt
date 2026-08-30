@@ -123,6 +123,11 @@ class ProbeBot(
     var trend: TrendFit.Trend? = null
         private set
 
+    /** And the five-minute one it has to agree with. */
+    @Volatile
+    var wide: TrendFit.Trend? = null
+        private set
+
     /** Where the reversal is expected, and how much room is left to it. */
     @Volatile
     var levelAhead: Double? = null
@@ -325,6 +330,7 @@ class ProbeBot(
         val windowStart = nowSec - elapsed
 
         trend = TrendFit.onScreen()
+        wide = TrendFit.wide()
         readLevel()
 
         if (!settings.enabled) {
@@ -422,11 +428,12 @@ class ProbeBot(
 
         val pick = ProbePlan.choose(
             way = TrendFit.lean(line),
+            wide = TrendFit.lean(wide),
             candleBody = body,
             typical = typical,
             minuteBody = body(BinanceCandles.oneMinute.list().lastOrNull()),
             minuteTypical = Levels.typicalRange(BinanceCandles.oneMinute.list()),
-            intoWall = intoWall,
+            atWall = intoWall,
         )
         val way = pick.side
         if (way.isEmpty()) {

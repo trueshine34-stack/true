@@ -88,18 +88,28 @@ object ProbePlan {
      *    ended, and there is no edge either way. Take neither.
      */
     fun choose(
+        /** The minute chart's line, which is the one the rule follows. */
         way: String,
+        /** And the five-minute chart's, which has to agree with it. */
+        wide: String,
         /** The five-minute candle closing with the window, and its scale. */
         candleBody: Double,
         typical: Double,
         /** And the minute candle closing with it, against a minute's scale. */
         minuteBody: Double = 0.0,
         minuteTypical: Double = 0.0,
-        /** The line was heading into a level or a round number with no room. */
-        intoWall: Boolean = false,
+        /** The price is at a level, or at a round number. */
+        atWall: Boolean = false,
         flip: Double = DEFAULT_FLIP,
     ): Choice {
-        if (way.isEmpty()) return Choice("", "нет линии")
+        if (way.isEmpty() || wide.isEmpty()) return Choice("", "нет линии")
+
+        // Both charts or neither. The half-hour of minutes says what is
+        // happening and the hour of five-minutes says what has been happening,
+        // and a bet placed while they point opposite ways is a bet on which of
+        // them is stale. There is no way to know that in advance, so those
+        // windows are simply not traded.
+        if (way != wide) return Choice("", "тренды спорят")
 
         // Either candle can disagree, and each is judged against its own kind:
         // a twelve-dollar minute is a big minute and a small five minutes.
@@ -113,11 +123,14 @@ object ProbePlan {
             if (scale > 0.0) abs(body) / scale else 0.0
         }!!
         val (body, scale) = loudest
+        val big = scale > 0.0 && abs(body) >= scale * flip
 
-        if (scale > 0.0 && abs(body) >= scale * flip) {
-            return Choice(other(way), "разворот")
-        }
-        if (intoWall) return Choice(other(way), "коррекция от уровня")
+        // A turn is a big candle *at a price that stops things*. Either half
+        // alone is not one: a big candle in open ground is a candle, and a
+        // small one at a level is the level being tested rather than holding.
+        // Both together, against agreeing lines, is the only counter-trend
+        // entry worth having.
+        if (big && atWall) return Choice(other(way), "разворот от уровня")
         return Choice("", if (body > 0.0) "свеча зелёная" else "свеча красная")
     }
 

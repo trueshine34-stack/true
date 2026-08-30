@@ -324,47 +324,64 @@ class ProbePlanTest {
     fun `a candle going the line's way leaves the line alone`() {
         assertEquals(
             ProbePlan.Choice("Up", null),
-            ProbePlan.choose("Up", candleBody = 40.0, typical = 60.0, intoWall = false),
+            ProbePlan.choose("Up", "Up", candleBody = 40.0, typical = 60.0),
         )
         assertEquals(
             ProbePlan.Choice("Down", null),
-            ProbePlan.choose("Down", candleBody = -40.0, typical = 60.0, intoWall = false),
+            ProbePlan.choose("Down", "Down", candleBody = -40.0, typical = 60.0),
         )
     }
 
     @Test
-    fun `a candle bigger than usual, the other way, is the turn itself`() {
-        // The line says down; the five minutes closed green by more than a
-        // candle usually travels. The line is an average over half an hour and
-        // will not say so for another twenty minutes.
-        val pick = ProbePlan.choose("Down", candleBody = 80.0, typical = 60.0, intoWall = false)
+    fun `a big candle at a level is the turn, and is taken the other way`() {
+        // The lines say down; the five minutes closed green by more than a
+        // candle usually travels, and it did it at a price that stops things.
+        val pick = ProbePlan.choose("Down", "Down", candleBody = 80.0, typical = 60.0, atWall = true)
         assertEquals("Up", pick.side)
-        assertEquals("разворот", pick.note)
+        assertEquals("разворот от уровня", pick.note)
         assertTrue(!pick.byLine)
     }
 
     @Test
-    fun `a candle turning off a level is the bounce, and the bounce is taken`() {
-        val pick = ProbePlan.choose("Down", candleBody = 20.0, typical = 60.0, intoWall = true)
-        assertEquals("Up", pick.side)
-        assertEquals("коррекция от уровня", pick.note)
+    fun `the same candle in open ground is only a candle`() {
+        // Nothing there for price to turn on, so a big bar against the trend
+        // is one bar, and the window is left alone.
+        val pick = ProbePlan.choose("Down", "Down", candleBody = 80.0, typical = 60.0, atWall = false)
+        assertEquals("", pick.side)
+        assertEquals("свеча зелёная", pick.note)
+    }
+
+    @Test
+    fun `a small candle at a level is the level being tested, not turned`() {
+        val pick = ProbePlan.choose("Down", "Down", candleBody = 20.0, typical = 60.0, atWall = true)
+        assertEquals("", pick.side)
+        assertEquals("свеча зелёная", pick.note)
+    }
+
+    @Test
+    fun `lines that disagree are a window nobody can call`() {
+        // Half an hour of minutes says up and an hour of five-minutes says
+        // down. One of them is stale and there is no telling which.
+        val pick = ProbePlan.choose("Up", "Down", candleBody = 40.0, typical = 60.0)
+        assertEquals("", pick.side)
+        assertEquals("тренды спорят", pick.note)
     }
 
     @Test
     fun `an ordinary candle against the line in open ground is neither side`() {
-        val pick = ProbePlan.choose("Down", candleBody = 20.0, typical = 60.0, intoWall = false)
+        val pick = ProbePlan.choose("Down", "Down", candleBody = 20.0, typical = 60.0)
         assertEquals("", pick.side)
         assertEquals("свеча зелёная", pick.note)
     }
 
     @Test
     fun `a candle that went nowhere leaves the line to decide`() {
-        assertEquals("Down", ProbePlan.choose("Down", 0.0, 60.0, intoWall = false).side)
+        assertEquals("Down", ProbePlan.choose("Down", "Down", 0.0, 60.0).side)
     }
 
     @Test
     fun `without a line there is no side at all`() {
-        assertEquals("", ProbePlan.choose("", 80.0, 60.0, intoWall = false).side)
+        assertEquals("", ProbePlan.choose("", "Down", 80.0, 60.0).side)
     }
 
     @Test
@@ -406,6 +423,7 @@ class ProbePlanTest {
         // freshest thing on the screen.
         val pick = ProbePlan.choose(
             way = "Up",
+            wide = "Up",
             candleBody = 40.0,
             typical = 60.0,
             minuteBody = -8.0,
@@ -422,20 +440,26 @@ class ProbePlanTest {
         // five-minute candle would be noise.
         val minute = ProbePlan.choose(
             way = "Down",
+            wide = "Down",
             candleBody = 0.0,
             typical = 60.0,
             minuteBody = 20.0,
             minuteTypical = 14.0,
+            atWall = true,
         )
         assertEquals("Up", minute.side)
-        assertEquals("разворот", minute.note)
+        assertEquals("разворот от уровня", minute.note)
 
+        // The same body as a five-minute candle is noise, and stays a skip
+        // even at the level.
         val window = ProbePlan.choose(
             way = "Down",
+            wide = "Down",
             candleBody = 20.0,
             typical = 60.0,
             minuteBody = 0.0,
             minuteTypical = 14.0,
+            atWall = true,
         )
         assertEquals("", window.side)
     }
@@ -446,19 +470,22 @@ class ProbePlanTest {
         // it is the one that calls the turn.
         val pick = ProbePlan.choose(
             way = "Down",
+            wide = "Down",
             candleBody = 30.0,
             typical = 60.0,
             minuteBody = 25.0,
             minuteTypical = 14.0,
+            atWall = true,
         )
         assertEquals("Up", pick.side)
-        assertEquals("разворот", pick.note)
+        assertEquals("разворот от уровня", pick.note)
     }
 
     @Test
     fun `both candles with the line leave it alone`() {
         val pick = ProbePlan.choose(
             way = "Up",
+            wide = "Up",
             candleBody = 40.0,
             typical = 60.0,
             minuteBody = 6.0,

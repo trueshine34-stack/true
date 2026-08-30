@@ -2177,6 +2177,13 @@ function ProbeCard({
   const sides = bySide(state.rounds);
   const line = state.trend;
   const way = line?.way ?? '';
+  // Both charts have to point the same way before anything is bought, so both
+  // arrows are on the card and the cell says so when they do not.
+  const wideWay = state.wide?.way ?? '';
+  const agree = way !== '' && way === wideWay;
+  const arrow = (w: string) => (w === 'Up' ? '↑' : w === 'Down' ? '↓' : '—');
+  const arrowTone = (w: string) =>
+    w === 'Up' ? 'up' : w === 'Down' ? 'down' : 'muted';
   // Whether the rule is currently standing aside for the level, said in the
   // same words it says it in: the note it publishes starts with "у разворота".
   const near = (state.note ?? '').startsWith('у разворота');
@@ -2229,11 +2236,11 @@ function ProbeCard({
         открывается ближе {Math.round(state.roundBand)}$ к круглым пятистам —
         80 000, 80 500, 81 000: стакан там стоит всегда, что бы ни говорил
         график.{' '}
-        Когда любая из закрывающихся свечей — пятиминутная или минутная — идёт
-        против линии, решает она: больше
-        обычного хода — это разворот, и сторона берётся новая; развернулась у
-        самого уровня — это отскок, и берётся он; всё остальное против линии —
-        шум внутри тренда, и окно пропускается. Держит от уровня до уровня:
+Обе линии — минутная и пятиминутная — должны смотреть
+        в одну сторону, иначе окно не торгуется вовсе. Против линии входит
+        только в одном случае: большая свеча у самого уровня — это разворот, и
+        берётся новая сторона. Большая свеча в чистом поле или маленькая у
+        уровня — окно пропускается. Держит от уровня до уровня:
         закрывает, как только цена дошла до следующего, не дожидаясь ступени. Всё, что наторгует, ниже по окнам.
       </div>
       )}
@@ -2247,12 +2254,14 @@ function ProbeCard({
       */}
       <div className="botreads">
         <div>
-          <span>линия 1м</span>
-          <b className={way === 'Up' ? 'up' : way === 'Down' ? 'down' : 'muted'}>
-            {way === 'Up' ? '↑' : way === 'Down' ? '↓' : '—'}
-            {line ? ` ${Math.round(Math.abs(line.perHour))}/ч` : ''}
+          <span>линия 1м / 5м</span>
+          <b>
+            <i className={arrowTone(way)}>{arrow(way)}</i>
+            <i className={arrowTone(wideWay)}>{arrow(wideWay)}</i>
           </b>
-          <em>{line ? `${Math.round(line.fit * 100)}%` : '—'}</em>
+          <em className={agree ? undefined : 'down'}>
+            {agree ? `${Math.round(Math.abs(line?.perHour ?? 0))}/ч` : 'спорят'}
+          </em>
         </div>
         <div>
           <span>свеча 5м / 1м</span>

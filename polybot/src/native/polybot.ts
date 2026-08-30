@@ -521,6 +521,8 @@ export type ProbeState = {
   note?: string | null;
   lastFault?: string | null;
   trend?: { way: string; perHour: number; fit: number } | null;
+  /** The five-minute line, which has to agree before anything is bought. */
+  wide?: { way: string; perHour: number; fit: number } | null;
   /** Newest first. */
   rounds: ProbeRound[];
   riding: ProbeRound[];

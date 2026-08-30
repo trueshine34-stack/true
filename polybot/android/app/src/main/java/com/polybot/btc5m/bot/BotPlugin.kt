@@ -1522,6 +1522,12 @@ class BotPlugin : Plugin() {
                 .put("roomToLevel", bot.roomToLevel)
                 .put("note", bot.note)
                 .put("lastFault", bot.lastFault)
+                .put("wide", bot.wide?.let {
+                    JSObject()
+                        .put("way", it.way)
+                        .put("perHour", it.perHour)
+                        .put("fit", it.fit)
+                })
                 .put("trend", bot.trend?.let {
                     JSObject()
                         .put("way", it.way)
