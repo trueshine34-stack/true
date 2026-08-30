@@ -462,8 +462,8 @@ class ProbeBot(
             // money is free for the next window.
             dropStale(nowSec)
             readSales()
-            // The read is taken again ten seconds before the open, and a
-            // position bought on a picture that is no longer there is sold.
+            // The read is taken again ten seconds before the open, and a bid
+            // still waiting on a picture that is no longer there is pulled.
             recheck(nowSec)
             // A side that has fallen far enough is bought again, once, while
             // the window still has time to turn.
@@ -1292,20 +1292,24 @@ class ProbeBot(
      * cheap side is — before the book starts pricing the open. The cost of
      * being that early is that the five-minute candle has not finished yet,
      * and thirty-five seconds is long enough for it to finish the other way.
-     * So the same read is taken again with the candle all but closed, and a
-     * side it no longer supports is sold at the market. Not at a rung and not
-     * at a price to hope for: this is a decision to be out.
+     * So the same read is taken again with the candle all but closed. A bid
+     * still waiting on a read that no longer holds is taken back — there is
+     * nothing bought yet, and letting it fill would buy a side the rule has
+     * stopped believing in.
+     *
+     * A position already bought is left alone. Everything held leaves by the
+     * ladder and by nothing else, and a changed read is not a price.
      */
     private fun recheck(nowSec: Long) {
-        val due = working.filter { ProbePlan.rechecks(it.windowStart - nowSec) }
-        if (due.isEmpty()) return
-        val early = due.filter { it.shares > it.sold + 1e-9 }
-        val waiting = due.filter { it.resting > 0.0 && it.shares <= 0.0 }
-        if (early.isEmpty() && waiting.isEmpty()) return
+        val waiting = working.filter {
+            ProbePlan.rechecks(it.windowStart - nowSec) &&
+                it.resting > 0.0 && it.shares <= 0.0
+        }
+        if (waiting.isEmpty()) return
 
-        // Read for the window the position was bought for, not for whatever
-        // window the clock is in.
-        val fresh = look(due.first().windowStart).pick.side
+        // Read for the window the bid was placed for, not for whatever window
+        // the clock is in.
+        val fresh = look(waiting.first().windowStart).pick.side
 
         // A bid still waiting for a window whose read has changed is simply
         // taken back: there is nothing to sell, and letting it fill would buy
@@ -1333,40 +1337,6 @@ class ProbeBot(
             onStateChanged()
         }
 
-        for (open in early) {
-            if (ProbePlan.stillOn(open.side, fresh)) continue
-
-            val bid = try {
-                ClobApi.bestBid(open.asset)
-            } catch (e: Exception) {
-                null
-            } ?: continue
-            if (bid <= 0.0) continue
-
-            val left = open.shares - open.sold
-            val sold = if (open.demo) true else sellOut(open, bid)
-            if (!sold) continue
-
-            val why = "прогноз сменился на " + fresh.ifEmpty { "никакой" }
-            working = working.map {
-                if (it.windowStart == open.windowStart && it.leg == open.leg) {
-                    it.copy(
-                        sold = open.shares,
-                        proceeds = open.proceeds + left * SellPercent.netSell(bid),
-                        note = why,
-                    )
-                } else {
-                    it
-                }
-            }
-            engine.log(
-                "warn",
-                "Проба" + (if (open.demo) " (демо)" else "") + ": " + why +
-                    " — вышла из " + String.format("%.1f", left) +
-                    " ${open.side} по ${(bid * 100).toInt()}¢",
-            )
-            onStateChanged()
-        }
     }
 
     /**
@@ -1630,48 +1600,6 @@ class ProbeBot(
         } catch (e: Exception) {
             // Nothing to be done; the next pass tries again.
         }
-    }
-
-    /**
-     * Sells a real position into the book, pulling our own offers first.
-     *
-     * The shares under a resting sell are spoken for, and asking for them
-     * again comes back as "not enough balance" — which is true and useless.
-     */
-    private fun sellOut(open: Round, bid: Double): Boolean {
-        val session = engine.session() ?: return false
-        val market = engine.marketForWindow(open.windowStart) ?: return false
-
-        try {
-            ClobApi.openOrders(session.creds, session.account.signerAddress)
-                .filter { it.assetId == open.asset && it.side == "SELL" }
-                .forEach {
-                    try {
-                        ClobApi.cancelOrder(session.creds, session.account.signerAddress, it.id)
-                    } catch (e: Exception) {
-                        // It may have filled in between, which the log will show.
-                    }
-                }
-        } catch (e: Exception) {
-            return false
-        }
-
-        val price = maxOf(market.tickSize, bid - market.tickSize)
-        val result = try {
-            engine.placeManualOrder(
-                tokenId = open.asset,
-                conditionId = market.conditionId,
-                side = "SELL",
-                price = price,
-                size = open.shares - open.sold,
-                orderType = "GTC",
-                auto = true,
-            )
-        } catch (e: Exception) {
-            note = e.message ?: "ошибка сети"
-            return false
-        }
-        return result.success
     }
 
     /**
