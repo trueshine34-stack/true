@@ -2189,6 +2189,14 @@ function ProbeCard({
   // Whether the rule is currently standing aside for the level, said in the
   // same words it says it in: the note it publishes starts with "у разворота".
   const near = (state.note ?? '').startsWith('у разворота');
+  // Which way the closing candle went, and whether that is the way the line
+  // is pointing. Both are on the card because one of them stops the entry.
+  const candleTone =
+    state.candleBody > 0 ? 'up' : state.candleBody < 0 ? 'down' : 'muted';
+  const against =
+    way !== '' &&
+    state.candleBody !== 0 &&
+    (way === 'Up') !== (state.candleBody > 0);
   const tone = all.pnl > 0 ? 'up' : all.pnl < 0 ? 'down' : 'muted';
 
   return (
@@ -2214,10 +2222,12 @@ function ProbeCard({
         которую настроен стол. Не входит, если до уровня, от которого
         ждём разворот, осталось меньше{' '}
         {Math.round(state.roomShare * 100)}% обычного хода пятиминутки — тренд,
-        упирающийся в стену, кончается на ней. И не входит, когда окно
+        упирающийся в стену, кончается на ней. Не входит, когда окно
         открывается ближе {Math.round(state.roundBand)}$ к круглым пятистам —
         80 000, 80 500, 81 000: стакан там стоит всегда, что бы ни говорил
-        график. Всё, что наторгует, ниже по окнам.
+        график. И не входит, когда пятиминутка закрывается против линии —
+        линия вниз, а свеча зелёная: линия про полчаса, а свеча про то, что
+        рынок делает прямо сейчас. Всё, что наторгует, ниже по окнам.
       </div>
       )}
 
@@ -2233,6 +2243,20 @@ function ProbeCard({
             {Math.round(line.fit * 100)}%
           </span>
         )}
+      </div>
+
+      {/*
+        The candle that closes as the window opens. Twenty seconds out its
+        shape is decided enough to read, and a candle finishing against the
+        line is the rule's own reason to sit the window out.
+      */}
+      <div className="probeline">
+        <span className="muted">свеча 5м</span>
+        <b className={candleTone}>
+          {state.candleBody > 0 ? '▲' : state.candleBody < 0 ? '▼' : '—'}{' '}
+          {usd(Math.abs(state.candleBody))}
+        </b>
+        {against && <span className="down">против линии</span>}
       </div>
 
       <div className="probeline">

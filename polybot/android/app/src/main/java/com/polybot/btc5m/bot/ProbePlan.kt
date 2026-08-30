@@ -55,6 +55,25 @@ object ProbePlan {
     const val DEFAULT_ROUND_BAND = 50.0
 
     /**
+     * Whether the candle about to close is closing the other way.
+     *
+     * The entry lands twenty seconds before a window opens, which is also
+     * twenty seconds before the five-minute candle closes — so the shape of
+     * that candle is already on the screen. A line that says "down" over a
+     * candle that is finishing green is a line describing the half-hour and a
+     * market doing something else right now, and the bet is five minutes long.
+     *
+     * A candle that closes exactly where it opened says nothing and is left
+     * alone.
+     */
+    fun closingAgainst(way: String, open: Double, close: Double): Boolean {
+        if (way.isEmpty() || open <= 0.0 || close <= 0.0) return false
+        if (close == open) return false
+        val green = close > open
+        return if (way == "Up") !green else green
+    }
+
+    /**
      * The round number this price is sitting on, or null if it is in open
      * ground between two of them.
      */
@@ -175,11 +194,17 @@ object ProbePlan {
         price: Double = 0.0,
         level: Double? = null,
         typical: Double = 0.0,
+        /** The five-minute candle that is about to close with the window. */
+        candleOpen: Double = 0.0,
+        candleClose: Double = 0.0,
     ): String? {
         if (!settings.enabled) return "выключен"
         // The line is read off the minute candles, so an empty answer means
         // the stream has not arrived rather than that the market is quiet.
         if (way.isEmpty()) return "нет свечей"
+        if (closingAgainst(way, candleOpen, candleClose)) {
+            return if (way == "Up") "свеча красная" else "свеча зелёная"
+        }
         nearRound(price, settings.roundBand)?.let {
             return "круглый " + Math.round(it)
         }

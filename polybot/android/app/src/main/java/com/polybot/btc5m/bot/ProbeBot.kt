@@ -112,6 +112,14 @@ class ProbeBot(
     var roomToLevel: Double? = null
         private set
 
+    /**
+     * The five-minute candle in progress, which closes as the window opens.
+     * Positive is green. Zero when there is nothing to say.
+     */
+    @Volatile
+    var candleBody: Double = 0.0
+        private set
+
     /** The round five hundred nearest the settlement price, and how far off. */
     @Volatile
     var roundNear: Double? = null
@@ -360,6 +368,9 @@ class ProbeBot(
         // The balance is a request, so it is only asked for once everything
         // free has already agreed.
         val here = here()
+        // The five-minute candle that closes as this window opens: at twenty
+        // seconds out its shape is already decided enough to read.
+        val closing = BinanceCandles.fiveMinute.list().lastOrNull()
         val cheap = ProbePlan.blockedBecause(
             way = way,
             ask = ask,
@@ -371,6 +382,8 @@ class ProbeBot(
             // can travel is a question about five minutes, so the scale is
             // still the five-minute candle's own range.
             typical = Levels.typicalRange(BinanceCandles.fiveMinute.list()),
+            candleOpen = closing?.open ?: 0.0,
+            candleClose = closing?.close ?: 0.0,
         )
         if (cheap != null) {
             note = cheap
@@ -400,6 +413,8 @@ class ProbeBot(
             // can travel is a question about five minutes, so the scale is
             // still the five-minute candle's own range.
             typical = Levels.typicalRange(BinanceCandles.fiveMinute.list()),
+            candleOpen = closing?.open ?: 0.0,
+            candleClose = closing?.close ?: 0.0,
         )
         if (blocked != null) {
             note = blocked
@@ -706,6 +721,12 @@ class ProbeBot(
             roundNear = null
             roomToRound = null
         }
+
+        // The candle that closes with the window, so the card can show what
+        // the rule is about to see.
+        candleBody = BinanceCandles.fiveMinute.list().lastOrNull()
+            ?.let { if (it.open > 0.0 && it.close > 0.0) it.close - it.open else 0.0 }
+            ?: 0.0
 
         val candles = BinanceCandles.oneMinute.list()
         val here = candles.lastOrNull()?.close ?: 0.0

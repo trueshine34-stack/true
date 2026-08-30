@@ -298,4 +298,68 @@ class ProbePlanTest {
             ),
         )
     }
+
+    @Test
+    fun `a candle finishing the other way is a reason to wait`() {
+        // The line says down and the five minutes is closing green.
+        assertTrue(ProbePlan.closingAgainst("Down", 80_000.0, 80_040.0))
+        // And the other way round.
+        assertTrue(ProbePlan.closingAgainst("Up", 80_000.0, 79_960.0))
+    }
+
+    @Test
+    fun `a candle finishing with the line is no obstacle`() {
+        assertTrue(!ProbePlan.closingAgainst("Down", 80_000.0, 79_960.0))
+        assertTrue(!ProbePlan.closingAgainst("Up", 80_000.0, 80_040.0))
+    }
+
+    @Test
+    fun `a candle that went nowhere says nothing`() {
+        assertTrue(!ProbePlan.closingAgainst("Up", 80_000.0, 80_000.0))
+        assertTrue(!ProbePlan.closingAgainst("", 80_000.0, 80_040.0))
+        assertTrue(!ProbePlan.closingAgainst("Up", 0.0, 80_040.0))
+    }
+
+    @Test
+    fun `the gate says which way the candle went`() {
+        assertEquals(
+            "свеча зелёная",
+            ProbePlan.blockedBecause(
+                way = "Down",
+                ask = 0.5,
+                cashUsd = 100.0,
+                settings = on,
+                price = 80_240.0,
+                candleOpen = 80_200.0,
+                candleClose = 80_260.0,
+            ),
+        )
+        assertEquals(
+            "свеча красная",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.5,
+                cashUsd = 100.0,
+                settings = on,
+                price = 80_240.0,
+                candleOpen = 80_260.0,
+                candleClose = 80_200.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `a candle going the same way leaves the entry alone`() {
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.5,
+                cashUsd = 100.0,
+                settings = on,
+                price = 80_240.0,
+                candleOpen = 80_200.0,
+                candleClose = 80_260.0,
+            ),
+        )
+    }
 }

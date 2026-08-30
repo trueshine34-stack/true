@@ -485,6 +485,11 @@ export type ProbeState = {
    * switches the check off.
    */
   roundBand: number;
+  /**
+   * The five-minute candle in progress, as its body in dollars: positive is
+   * green. It closes at the moment the window opens.
+   */
+  candleBody: number;
   /** The round five hundred nearest the settlement price, and how far off. */
   roundNear?: number | null;
   roomToRound?: number | null;
@@ -644,6 +649,7 @@ const webStub: PolyBotPlugin = {
     leadSec: 20,
     roomShare: 0.35,
     roundBand: 50,
+    candleBody: 0,
     demo: true,
     bankUsd: 100,
     bank: 100,

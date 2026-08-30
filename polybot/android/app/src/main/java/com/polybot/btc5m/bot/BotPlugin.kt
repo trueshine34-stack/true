@@ -1506,6 +1506,7 @@ class BotPlugin : Plugin() {
                 .put("leadSec", bot.settings.leadSec)
                 .put("roomShare", bot.settings.roomShare)
                 .put("roundBand", bot.settings.roundBand)
+                .put("candleBody", bot.candleBody)
                 .put("roundNear", bot.roundNear)
                 .put("roomToRound", bot.roomToRound)
                 .put("demo", bot.settings.demo)
