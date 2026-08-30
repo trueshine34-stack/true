@@ -52,3 +52,24 @@ Longest run of consecutive losses in A: 12; longest run of wins: 11.
 * `analyze.py` — runs both strategies and prints the table
 * `candles.json` — the month of data used here
 * `report.txt` — raw output of the run above
+
+## Question 3 — reversal after a run
+
+Setup: a run of same-direction candles, then exactly one candle that closes the
+other way (the reversal candle). Question: does the candle *after* the reversal
+repeat the reversal's direction? (`streaks.py`, doji breaks a run.)
+
+| run length | cases | continues the reversal | goes back to the run | P(same as reversal) |
+|---|---|---|---|---|
+| 3 | 550 | 297 | 248 | **54.00%** |
+| 4 | 257 | 120 | 137 | 46.69% |
+| 5 | 112 | 61 | 51 | 54.46% |
+| 6 | 58 | 28 | 30 | 48.28% |
+| 7+ | 48 | 23 | 24 | 47.92% |
+| **all ≥ 4** | **475** | **232** | **242** | **48.84%** (48.95% excl. doji) |
+| all ≥ 3 | 1025 | 529 | 490 | 51.61% (51.91% excl. doji) |
+
+For runs longer than 3 the answer is a coin flip — 48.9%, binomial p = 0.68
+against 50%, gross −3.19% over 475 trades. The 54.5% on runs of exactly 3
+(p = 0.04) is one bucket out of five tested, so it is most likely noise, not an
+edge; it would need out-of-sample confirmation on other months.

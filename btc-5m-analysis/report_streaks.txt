@@ -1,0 +1,25 @@
+BTC-USDT 5m, 8640 candles. Run of >=3 same-direction candles, then exactly one reversal candle; direction of the candle after it:
+
+run length      cases  continues rev  back to run  doji   P(same as rev)   gross %
+----------------------------------------------------------------------------------
+3                 550            297          248     5           54.00%      5.29
+4                 257            120          137     0           46.69%     -2.35
+5                 112             61           51     0           54.46%     -0.14
+6                  58             28           30     0           48.28%     -0.30
+7+                 48             23           24     1           47.92%     -0.41
+----------------------------------------------------------------------------------
+ALL >=3          1025            529          490     6           51.61%      2.09
+
+excluding doji outcomes: 51.91%   avg per trade +0.0020%
+BTC-USDT 5m, 8640 candles. Run of >=4 same-direction candles, then exactly one reversal candle; direction of the candle after it:
+
+run length      cases  continues rev  back to run  doji   P(same as rev)   gross %
+----------------------------------------------------------------------------------
+4                 257            120          137     0           46.69%     -2.35
+5                 112             61           51     0           54.46%     -0.14
+6                  58             28           30     0           48.28%     -0.30
+7+                 48             23           24     1           47.92%     -0.41
+----------------------------------------------------------------------------------
+ALL >=4           475            232          242     1           48.84%     -3.19
+
+excluding doji outcomes: 48.95%   avg per trade -0.0067%
