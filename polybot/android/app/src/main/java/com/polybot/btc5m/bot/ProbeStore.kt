@@ -30,7 +30,6 @@ class ProbeStore(context: Context) {
         leadSec = prefs.getLong("leadSec", ProbePlan.DEFAULT_LEAD_SEC)
             .let { if (it in ProbePlan.OLD_LEADS) ProbePlan.DEFAULT_LEAD_SEC else it },
         roomShare = prefs.getFloat("roomShare", ProbePlan.DEFAULT_ROOM.toFloat()).toDouble(),
-        roundBand = prefs.getFloat("roundBand", ProbePlan.DEFAULT_ROUND_BAND.toFloat()).toDouble(),
         demo = prefs.getBoolean("demo", true),
         bankUsd = prefs.getFloat("bankUsd", ProbePlan.DEFAULT_BANK.toFloat()).toDouble(),
     )
@@ -41,7 +40,6 @@ class ProbeStore(context: Context) {
             .putFloat("stakeUsd", s.stakeUsd.toFloat())
             .putLong("leadSec", s.leadSec)
             .putFloat("roomShare", s.roomShare.toFloat())
-            .putFloat("roundBand", s.roundBand.toFloat())
             .putBoolean("demo", s.demo)
             .putFloat("bankUsd", s.bankUsd.toFloat())
             .apply()
@@ -58,8 +56,6 @@ class ProbeStore(context: Context) {
                     asset = o.optString("asset"),
                     demo = o.optBoolean("demo", false),
                     target = o.optDouble("target", 0.0),
-                    // Older records carried a single flag; one add is one add.
-                    adds = o.optInt("adds", if (o.optBoolean("added", false)) 1 else 0),
                     leg = o.optInt("leg", 0),
                     soldAt = o.optDouble("soldAt", 0.0),
                     back = o.optBoolean("back", false),
@@ -90,7 +86,6 @@ class ProbeStore(context: Context) {
                     .put("asset", it.asset)
                     .put("demo", it.demo)
                     .put("target", it.target)
-                    .put("adds", it.adds)
                     .put("leg", it.leg)
                     .put("soldAt", it.soldAt)
                     .put("back", it.back)

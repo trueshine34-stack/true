@@ -9,7 +9,6 @@ const round = (over: Partial<ProbeRound>): ProbeRound => {
     demo: true,
     target: 0,
     resting: 0,
-    adds: 0,
     leg: 0,
     side: 'Up',
     perHour: 120,

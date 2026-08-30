@@ -1234,13 +1234,6 @@ export function Manual({
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
-          onRound={(band) => {
-            if (!Number.isFinite(band) || band < 0) return;
-            void PolyBot.probeUpdate({ roundBand: band })
-              .then(() => PolyBot.probeState())
-              .then(setProbeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
           onDemo={(demo) => {
             void PolyBot.probeUpdate({ demo })
               .then(() => PolyBot.probeState())
@@ -2231,7 +2224,6 @@ function ProbeCard({
   onStake,
   onLead,
   onRoom,
-  onRound,
   onDemo,
   onBank,
   onReset,
@@ -2241,7 +2233,6 @@ function ProbeCard({
   onStake: (usd: number) => void;
   onLead: (sec: number) => void;
   onRoom: (share: number) => void;
-  onRound: (band: number) => void;
   onDemo: (demo: boolean) => void;
   onBank: (usd: number) => void;
   onReset: () => void;
@@ -2273,10 +2264,9 @@ function ProbeCard({
   const disagrees = (body: number) =>
     way !== '' && body !== 0 && (way === 'Up') !== (body > 0);
   const against = disagrees(state.candleBody) || disagrees(state.minuteBody);
-  const atRound =
-    state.roundBand > 0 &&
-    state.roomToRound != null &&
-    state.roomToRound <= state.roundBand;
+  // The round five hundreds are still walls on the shelf; standing on one is
+  // no longer a reason to skip, so the tile says where it is and not much else.
+  const atRound = false;
   const tone = all.pnl > 0 ? 'up' : all.pnl < 0 ? 'down' : 'muted';
 
   return (
@@ -2302,7 +2292,7 @@ function ProbeCard({
           'один раз на ту же сумму. '}
         За {state.leadSec} с до начала пятиминутки берёт {usd(state.stakeUsd)}{' '}
         той стороны, куда показывает линия тренда на минутном графике — по
-        рынку, если сторона не дороже 52¢, иначе оставляет заявку по 50¢ и
+        рынку, если сторона не дороже 52¢, иначе оставляет заявку по 52¢ и
         ждёт минуту; не налили — снимает её, чтобы деньги не висели до конца
         окна. За 10 с до начала перечитывает картину: пятиминутная свеча к
         этому моменту почти закрыта, и если она больше не показывает ту же
@@ -2321,10 +2311,10 @@ function ProbeCard({
         то, на чём предыдущие только что споткнулись. Не входит, если до
         уровня, от которого ждём разворот, осталось меньше{' '}
         {Math.round(state.roomShare * 100)}% обычного хода пятиминутки — тренд,
-        упирающийся в стену, кончается на ней. Не входит, когда окно
-        открывается ближе {Math.round(state.roundBand)}$ к круглым пятистам —
-        80 000, 80 500, 81 000: стакан там стоит всегда, что бы ни говорил
-        график.{' '}
+        упирающийся в стену, кончается на ней. И не идёт за свечой, которая
+        уже сходила в нашу сторону больше чем на половину обычного хода: ход
+        по большей части состоялся, сторона за него подорожала, а окну
+        осталось искать остаток.{' '}
 Сначала смотрит на уровни, а не на линии: цена почти всё
         время ходит от уровня к уровню, а не по тренду. Фитиль в уровень,
         закрытие обратно от него и минутка, которая уже уходит, — это отбой, и
@@ -2453,11 +2443,6 @@ function ProbeCard({
           onCommit={(n) =>
             onRoom(n / 100)
           }
-        />
-        <NumField
-          label="у круглых, $"
-          value={Math.round(state.roundBand)}
-          onCommit={(n) => onRound(n)}
         />
         {state.demo && (
           <NumField
@@ -2662,7 +2647,6 @@ function ProbeRow({ round, offer }: { round: ProbeRound; offer?: ProbeOffer }) {
           {round.shares > 0
             ? `${round.shares.toFixed(1)} · ${cents(round.price)}`
             : `ждёт ${cents(round.resting || 0)}`}
-          {round.adds > 0 ? ` ×${round.adds + 1}` : ''}
           {round.leg > 0 ? ' откуп' : ''}
           {/* Up to the last minute the rung is watched, not offered: the
               shares go into the bid the moment it reaches up, so the price is

@@ -259,7 +259,6 @@ export interface PolyBotPlugin {
     stakeUsd?: number;
     leadSec?: number;
     roomShare?: number;
-    roundBand?: number;
     demo?: boolean;
     bankUsd?: number;
   }): Promise<void>;
@@ -453,8 +452,6 @@ export type ProbeRound = {
   /** A bid still waiting at this price, with nothing bought yet. */
   resting: number;
   /** Whether the same money went into the same side a second time. */
-  /** How many times the same money went into the side again. */
-  adds: number;
   /** Which buy of the window this row is: the entry, then each buy-back. */
   leg: number;
   /** The side the chart's line was pointing at. */
@@ -516,7 +513,6 @@ export type ProbeState = {
    * How close to a round five hundred the open may be, in dollars. Zero
    * switches the check off.
    */
-  roundBand: number;
   /**
    * The five-minute candle in progress, as its body in dollars: positive is
    * green. It closes at the moment the window opens.
@@ -705,7 +701,6 @@ const webStub: PolyBotPlugin = {
     stakeUsd: 5,
     leadSec: 20,
     roomShare: 0.35,
-    roundBand: 50,
     candleBody: 0,
     minuteBody: 0,
     demo: true,
