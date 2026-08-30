@@ -247,7 +247,7 @@ class ProbeBot(
 
         // The balance is a request, so it is only asked for once everything
         // free has already agreed.
-        val here = BinanceCandles.fiveMinute.list().lastOrNull()?.close ?: 0.0
+        val here = BinanceCandles.oneMinute.list().lastOrNull()?.close ?: 0.0
         val cheap = ProbePlan.blockedBecause(
             way = way,
             ask = ask,
@@ -255,6 +255,9 @@ class ProbeBot(
             settings = settings,
             price = here,
             level = levelAhead,
+            // Levels come off the minute chart, with the line; how far a bet
+            // can travel is a question about five minutes, so the scale is
+            // still the five-minute candle's own range.
             typical = Levels.typicalRange(BinanceCandles.fiveMinute.list()),
         )
         if (cheap != null) {
@@ -275,6 +278,9 @@ class ProbeBot(
             settings = settings,
             price = here,
             level = levelAhead,
+            // Levels come off the minute chart, with the line; how far a bet
+            // can travel is a question about five minutes, so the scale is
+            // still the five-minute candle's own range.
             typical = Levels.typicalRange(BinanceCandles.fiveMinute.list()),
         )
         if (blocked != null) {
@@ -350,7 +356,7 @@ class ProbeBot(
      * aside says which price it is standing aside from.
      */
     private fun readLevel() {
-        val candles = BinanceCandles.fiveMinute.list()
+        val candles = BinanceCandles.oneMinute.list()
         val here = candles.lastOrNull()?.close ?: 0.0
         val way = trend?.way.orEmpty()
         if (here <= 0.0 || way.isEmpty()) {

@@ -1253,25 +1253,79 @@ export function Manual({
                 </button>
               </div>
             )}
-            {/*
-              A closed window's positions are gone from the exchange; what it
-              came to is the order history below, which is the thing actually
-              worth reading afterwards.
-            */}
-            {viewWindow == null && (
-              <PositionPair
-                positions={livePositions}
-                bids={{
-                  Up: books.Up.bids[0]?.price ?? null,
-                  Down: books.Down.bids[0]?.price ?? null,
+        {/*
+          The two quotes, and the one thing to do with them.
+
+          Tapping a side is the decision — it loads that price and fills the
+          size, and lights up as the side that is chosen. The button between
+          them then only has to say what it does, which is why it says it:
+          nothing is sent by a thumb landing on a number it was reading.
+
+          Closing is not here. A position is sold by tapping it in the row at
+          the bottom of the screen, at the book, and the ladder offers the
+          rest — putting a second meaning on these two buttons only made the
+          one they already had ambiguous.
+        */}
+        <div className="buybar">
+          {(['Up', 'Down'] as const).map((which, i) => {
+            const price = books[which].asks[0]?.price ?? null;
+            // A side quoting above the early ceiling still has a price worth
+            // loading — the highest one the rule allows. Refusing the tap left
+            // the field empty and the decision unmade; this leaves a bid in
+            // it, which is what a buyer at a capped price would place anyway.
+            const barred = price != null && buyBarred(price, elapsed);
+            const wanted = barred ? ceiling : price;
+            const chip = (
+              <button
+                key={which}
+                className={`buy ${which === 'Up' ? 'up' : 'down'}${
+                  barred ? ' barred' : ''
+                }${side === which ? ' on' : ''}`}
+                disabled={price == null}
+                onClick={() => {
+                  if (wanted == null) return;
+                  setSide(which);
+                  setLimitPrice(String(Math.round(wanted * 100)));
+                  // And the size the field is about to spend: all of it. The
+                  // shares wanted at this price are what the window still has
+                  // room for, and typing that out was the last thing here that
+                  // was typed.
+                  setSizePct(100);
+                  const full =
+                    sizeBudget > 0
+                      ? stakeShares(wanted, sizeBudget, 1, minSize)
+                      : null;
+                  if (full != null) setLimitSize(String(full));
                 }}
-                localAvg={localAvg}
-                secondsLeft={secondsLeft}
-                windowStart={windowStart}
-                lookAhead={lookAhead}
-                onSell={sellPosition}
-              />
-            )}
+              >
+                <b>{price != null ? cents(price) : '—'}</b>
+                <s>
+                  {price == null
+                    ? 'стакан пуст'
+                    : barred
+                      ? `→ ${cents(ceiling)}`
+                      : which}
+                </s>
+              </button>
+            );
+            // The button sits between the two sides, which is where the eye
+            // already is when it is choosing one.
+            return i === 0 ? (
+              <Fragment key={which}>
+                {chip}
+                <button
+                  className={`buygo${side ? ` on ${side === 'Up' ? 'up' : 'down'}` : ''}`}
+                  disabled={busy || locked || limitBarred || side == null}
+                  onClick={() => side && void placeLimit(side)}
+                >
+                  Купить
+                </button>
+              </Fragment>
+            ) : (
+              chip
+            );
+          })}
+        </div>
 
             {/*
               The hours before this window, as Binance's own five-minute
@@ -1574,7 +1628,8 @@ export function Manual({
         )}
         {/*
           Price and size, and nothing else. Which side and whether to send it
-          are the row below — this one is only the terms.
+          are the two quotes up by the charts — this one is only the terms,
+          left under the thumb where they are edited.
         */}
         <div className="limitrow">
           <div className="limitmid">
@@ -1603,78 +1658,25 @@ export function Manual({
           </div>
         </div>
 
-        {/*
-          The two quotes, and the one thing to do with them.
-
-          Tapping a side is the decision — it loads that price and fills the
-          size, and lights up as the side that is chosen. The button between
-          them then only has to say what it does, which is why it says it:
-          nothing is sent by a thumb landing on a number it was reading.
-
-          Closing is not here. A position is sold by tapping it, at the book,
-          and the ladder offers the rest — putting a second meaning on these
-          two buttons only made the one they already had ambiguous.
-        */}
-        <div className="buybar">
-          {(['Up', 'Down'] as const).map((which, i) => {
-            const price = books[which].asks[0]?.price ?? null;
-            // A side quoting above the early ceiling still has a price worth
-            // loading — the highest one the rule allows. Refusing the tap left
-            // the field empty and the decision unmade; this leaves a bid in
-            // it, which is what a buyer at a capped price would place anyway.
-            const barred = price != null && buyBarred(price, elapsed);
-            const wanted = barred ? ceiling : price;
-            const chip = (
-              <button
-                key={which}
-                className={`buy ${which === 'Up' ? 'up' : 'down'}${
-                  barred ? ' barred' : ''
-                }${side === which ? ' on' : ''}`}
-                disabled={price == null}
-                onClick={() => {
-                  if (wanted == null) return;
-                  setSide(which);
-                  setLimitPrice(String(Math.round(wanted * 100)));
-                  // And the size the field is about to spend: all of it. The
-                  // shares wanted at this price are what the window still has
-                  // room for, and typing that out was the last thing here that
-                  // was typed.
-                  setSizePct(100);
-                  const full =
-                    sizeBudget > 0
-                      ? stakeShares(wanted, sizeBudget, 1, minSize)
-                      : null;
-                  if (full != null) setLimitSize(String(full));
+            {/*
+              A closed window's positions are gone from the exchange; what it
+              came to is the order history below, which is the thing actually
+              worth reading afterwards.
+            */}
+            {viewWindow == null && (
+              <PositionPair
+                positions={livePositions}
+                bids={{
+                  Up: books.Up.bids[0]?.price ?? null,
+                  Down: books.Down.bids[0]?.price ?? null,
                 }}
-              >
-                <b>{price != null ? cents(price) : '—'}</b>
-                <s>
-                  {price == null
-                    ? 'стакан пуст'
-                    : barred
-                      ? `→ ${cents(ceiling)}`
-                      : which}
-                </s>
-              </button>
-            );
-            // The button sits between the two sides, which is where the eye
-            // already is when it is choosing one.
-            return i === 0 ? (
-              <Fragment key={which}>
-                {chip}
-                <button
-                  className={`buygo${side ? ` on ${side === 'Up' ? 'up' : 'down'}` : ''}`}
-                  disabled={busy || locked || limitBarred || side == null}
-                  onClick={() => side && void placeLimit(side)}
-                >
-                  Купить
-                </button>
-              </Fragment>
-            ) : (
-              chip
-            );
-          })}
-        </div>
+                localAvg={localAvg}
+                secondsLeft={secondsLeft}
+                windowStart={windowStart}
+                lookAhead={lookAhead}
+                onSell={sellPosition}
+              />
+            )}
       </div>
     </>
   );
@@ -2173,7 +2175,7 @@ function ProbeCard({
 
       <div className="counterrule muted">
         За {state.leadSec} с до начала пятиминутки берёт {usd(state.stakeUsd)}{' '}
-        той стороны, куда показывает линия тренда на 5-минутном графике, и
+        той стороны, куда показывает линия тренда на минутном графике, и
         выходит обычной лесенкой продаж. Не входит, если до уровня, от которого
         ждём разворот, осталось меньше{' '}
         {Math.round(state.roomShare * 100)}% обычного хода пятиминутки — тренд,
@@ -2181,7 +2183,7 @@ function ProbeCard({
       </div>
 
       <div className="probeline">
-        <span className="muted">линия 5м</span>
+        <span className="muted">линия 1м</span>
         <b className={way === 'Up' ? 'up' : way === 'Down' ? 'down' : 'muted'}>
           {way === 'Up' ? '↑ вверх' : way === 'Down' ? '↓ вниз' : '— вбок'}
         </b>

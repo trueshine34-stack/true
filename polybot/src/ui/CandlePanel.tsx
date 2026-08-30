@@ -3,6 +3,8 @@ import { PolyBot } from '../native/polybot';
 import { candleShape, signedPct, type Candle } from '../core/candles';
 import { findLevels } from '../core/levels';
 import { levelAhead, ratePerHour, trendOf } from '../core/trend';
+import { forecast, type BookRead } from '../core/forecast';
+import { loadTrail, rememberTrail, trailBetween } from '../core/trail';
 import { priceLabel } from '../core/depth';
 
 /** Every window is five minutes, and every window opens on a multiple of it. */
@@ -16,6 +18,18 @@ function intervalSec(interval: string): number {
 
 /** Chart width in chart units, scaled to whatever the screen gives it. */
 const W = 360;
+
+/**
+ * The share of the width kept clear on the right for the forecast.
+ *
+ * A projection drawn over the candles is an opinion about the past. Given its
+ * own lane, it is a claim about the future that the chart will walk into and
+ * settle by itself.
+ */
+const LANE = 0.25;
+
+/** So the candles get the rest. */
+const PLOT = W * (1 - LANE);
 
 /**
  * The candle in progress follows the tape rather than an interval, so the
@@ -46,6 +60,7 @@ export function CandlePanel({
   height?: number;
 }) {
   const [candles, setCandles] = useState<Candle[]>([]);
+  const [book, setBook] = useState<BookRead | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -57,6 +72,24 @@ export function CandlePanel({
         .catch(() => {
           // Still connecting; the frame fills in when it does.
         });
+      // Where the resting size is stacked right now, which is the nearest
+      // thing the forecast has to a wall it can actually see.
+      void PolyBot.binanceDepth()
+        .then((d) => {
+          if (!alive) return;
+          setBook(
+            d.ready && d.bid && d.ask
+              ? {
+                  bid: d.bid,
+                  ask: d.ask,
+                  span: d.span ?? 0,
+                  bids: d.bids ?? [],
+                  asks: d.asks ?? [],
+                }
+              : null,
+          );
+        })
+        .catch(() => {});
     };
     pull();
     const timer = window.setInterval(pull, TICK_MS);
@@ -66,21 +99,31 @@ export function CandlePanel({
     };
   }, [interval]);
 
-  return <CandleFace candles={candles} interval={interval} height={height} />;
+  return (
+    <CandleFace
+      candles={candles}
+      book={book}
+      interval={interval}
+      height={height}
+    />
+  );
 }
 
 /** The drawing, from candles and nothing else. */
 export function CandleFace({
   candles,
+  book = null,
   interval = '5m',
   height: H = 150,
 }: {
   candles: Candle[];
+  /** The order book, when there is one: the forecast leans on it. */
+  book?: BookRead | null;
   interval?: string;
   height?: number;
 }) {
-  const shape = candleShape(candles, W, H);
-  const levels = shape ? findLevels(candles, shape.last) : [];
+  const last = candles.length > 0 ? candles[candles.length - 1][4] : 0;
+  const levels = last > 0 ? findLevels(candles, last) : [];
 
   /*
     Where the last half hour has been going, fitted rather than eyeballed —
@@ -89,7 +132,44 @@ export function CandleFace({
     hour: each about a screen's worth of its own candles.
   */
   const trend = trendOf(candles, interval === '5m' ? 60 : 30);
-  const ahead = shape && trend ? levelAhead(levels, shape.last, trend.way) : null;
+  const ahead = last > 0 && trend ? levelAhead(levels, last, trend.way) : null;
+
+  /*
+    And where it is likely to go from here, drawn in the lane the candles have
+    not reached yet. The horizon is however many candles fit in that lane, so
+    the projection is always exactly as far ahead as there is room to show it.
+  */
+  const steps = Math.max(1, Math.round((candles.length * LANE) / (1 - LANE)));
+  const ahead5 = forecast(candles, trend, levels, book, steps);
+
+  /*
+    The claim is written down the first time it is made and never revised, so
+    once these intervals print, the chart can show what was said about them
+    beside what actually happened. That is the only way a line drawn into the
+    future is worth anything.
+  */
+  const trail = ahead5 ? rememberTrail(interval, ahead5.points) : loadTrail(interval);
+
+  /*
+    The frame has to hold the projection as well as the candles, or a path that
+    leaves their range is simply drawn off the panel.
+  */
+  const shape = candleShape(
+    candles,
+    PLOT,
+    H,
+    ahead5
+      ? [
+          ...ahead5.points.map((p) => p.price),
+          // And enough of the band that the near half of it is inside the
+          // frame. All of it would squash the candles the chart is for; none
+          // of it would put the cone against the ceiling from the first step.
+          ...ahead5.points
+            .slice(0, Math.ceil(ahead5.points.length / 2))
+            .flatMap((p) => [p.hi, p.lo]),
+        ]
+      : [],
+  );
 
   /*
     Where the running five minutes began.
@@ -106,6 +186,66 @@ export function CandleFace({
   // The candles' own scale, so a level lands on the price that made it.
   const y = (price: number) =>
     shape ? ((shape.top - price) / (shape.top - shape.floor)) * H : 0;
+
+  /*
+    The lane keeps the candles' own spacing, so a step of the forecast is one
+    candle wide and the two halves of the chart read as one timeline.
+  */
+  const slot = candles.length > 0 ? PLOT / candles.length : 0;
+  const futureX = (i: number) => PLOT + slot * (i + 0.5);
+
+  /*
+    What was predicted for the candles that have since printed. Each of these
+    was written down a whole horizon before its interval opened, so the gap
+    between this line and the candles under it is the forecast's own record.
+  */
+  const marked = shape
+    ? trailBetween(
+        trail,
+        shape.bars[0]?.time ?? 0,
+        shape.bars[shape.bars.length - 1]?.time ?? 0,
+      )
+        .map((p) => {
+          const bar = shape.bars.find((b) => b.time === p.time);
+          return bar ? { x: bar.x, y: y(p.price) } : null;
+        })
+        .filter((p): p is { x: number; y: number } => p !== null)
+    : [];
+
+  /** A path through points, or nothing when there are too few to draw. */
+  const track = (points: { x: number; y: number }[]) =>
+    points.length < 2
+      ? null
+      : points
+          .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+          .join('');
+
+  const path = ahead5
+    ? [
+        { x: shape?.bars[shape.bars.length - 1]?.x ?? PLOT, y: y(shape?.last ?? 0) },
+        ...ahead5.points.map((p, i) => ({ x: futureX(i), y: y(p.price) })),
+      ]
+    : [];
+
+  /*
+    The band, as one shape: out along the top and back along the bottom. It is
+    the honest part of the drawing — five candles out the answer is a cone, and
+    a bare line would claim a precision the method does not have.
+  */
+  const cone =
+    ahead5 && shape
+      ? `M${(shape.bars[shape.bars.length - 1]?.x ?? PLOT).toFixed(1)} ${y(shape.last).toFixed(1)}` +
+        ahead5.points
+          .map((p, i) => `L${futureX(i).toFixed(1)} ${y(p.hi).toFixed(1)}`)
+          .join('') +
+        [...ahead5.points]
+          .reverse()
+          .map((p, i) =>
+            `L${futureX(ahead5.points.length - 1 - i).toFixed(1)} ${y(p.lo).toFixed(1)}`,
+          )
+          .join('') +
+        'Z'
+      : null;
 
   /*
     Two levels a few dollars apart put their prices on top of each other and
@@ -160,6 +300,25 @@ export function CandleFace({
         ))}
 
         {/*
+          The lane the candles have not reached yet, marked off so the drawing
+          in it is read as a claim rather than as data.
+        */}
+        {ahead5 && (
+          <line className="lanesplit" x1={PLOT} x2={PLOT} y1="0" y2={H} />
+        )}
+
+        {cone && <path className="cone" d={cone} />}
+
+        {/*
+          What the forecast said about candles that have since printed. Drawn
+          under them, because the candles are what happened and this is only
+          what was expected.
+        */}
+        {track(marked) && (
+          <path className="forecast past" d={track(marked)!} />
+        )}
+
+        {/*
           A small mark over the candle the window opened on. It sits just above
           that candle rather than at the top of the panel, so it points at the
           price the window is being judged against and not merely at a moment.
@@ -200,6 +359,22 @@ export function CandleFace({
           </g>
         ))}
 
+        {/* The path itself, over the cone it belongs to. */}
+        {track(path) && (
+          <path className={`forecast ${ahead5?.way ?? 'flat'}`} d={track(path)!} />
+        )}
+
+        {/* Where it expects the move to run out, if something is in the way. */}
+        {ahead5?.wall != null && (
+          <line
+            className="forecast-wall"
+            x1={PLOT}
+            x2={W}
+            y1={y(ahead5.wall).toFixed(1)}
+            y2={y(ahead5.wall).toFixed(1)}
+          />
+        )}
+
         {/*
           The prices themselves go over the candles: a label a candle is
           drawn on top of is a label with its last digits missing.
@@ -239,6 +414,12 @@ export function CandleFace({
           <em className={`trendrate ${trend.way}`}>
             {trend.way === 'up' ? '↗' : trend.way === 'down' ? '↘' : '→'}{' '}
             {trend.way === 'flat' ? 'вбок' : ratePerHour(trend.perHour)}
+          </em>
+        )}
+        {ahead5 && (
+          <em className={`forecast-tag ${ahead5.way}`}>
+            прогноз {priceLabel(ahead5.target)}
+            {ahead5.wall != null ? ` · упор ${priceLabel(ahead5.wall)}` : ''}
           </em>
         )}
       </div>

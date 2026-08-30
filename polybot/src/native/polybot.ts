@@ -179,9 +179,10 @@ export interface PolyBotPlugin {
     ticker?: { mid: number; at: number };
   }>;
   /** Binance's candles for one interval: open time in seconds, then o/h/l/c. */
+  /** Open time, open, high, low, close, volume — one row per interval. */
   binanceCandles(args?: {
     interval?: string;
-  }): Promise<{ candles: [number, number, number, number, number][] }>;
+  }): Promise<{ candles: [number, number, number, number, number, number][] }>;
   /** Binance's book as a depth curve, from the locally kept order book. */
   binanceDepth(): Promise<{
     ready: boolean;

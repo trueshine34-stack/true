@@ -81,11 +81,16 @@ object TrendFit {
     }
 
     /**
-     * The line the five-minute chart is drawing, which is the one on screen.
+     * The line the one-minute chart is drawing, which is the one on screen.
      *
-     * An hour of five-minute candles: the same span the panel fits, so a rule
-     * that follows this follows what the user is looking at rather than a
-     * second opinion computed elsewhere.
+     * Half an hour of one-minute candles: the same span that panel fits, so a
+     * rule that follows this follows what the user is looking at rather than a
+     * second opinion computed elsewhere. The closer chart is the one that
+     * matters for a five-minute bet — an hour of five-minute candles describes
+     * the afternoon, and the next five minutes are decided by the last thirty.
      */
-    fun onScreen(): Trend? = of(BinanceCandles.fiveMinute.list(), 60)
+    fun onScreen(): Trend? = of(BinanceCandles.oneMinute.list(), 30)
+
+    /** The wider line, for anything that wants the afternoon's direction. */
+    fun wide(): Trend? = of(BinanceCandles.fiveMinute.list(), 60)
 }
