@@ -30,15 +30,25 @@ class ProbePlanTest {
     fun `aims at nothing through the middle of a window`() {
         assertNull(ProbePlan.targetWindow(W, 21, on))
         assertNull(ProbePlan.targetWindow(W, 150, on))
-        assertNull(ProbePlan.targetWindow(W, 279, on))
+        // The default lead is forty-five, so the entry opens at 255.
+        assertNull(ProbePlan.targetWindow(W, 254, on))
+        assertEquals(W + 300, ProbePlan.targetWindow(W, 255, on))
     }
 
+    /**
+     * The lead has two uses and they are not the same length. Being early is
+     * worth three quarters of a minute; being late is worth twenty seconds,
+     * because a bet placed forty-five seconds into a five-minute window is
+     * missing a sixth of what it is betting on.
+     */
     @Test
-    fun `a longer lead widens both chances`() {
+    fun `a longer lead widens only the early chance`() {
         val early = ProbePlan.Settings(enabled = true, leadSec = 30)
         assertEquals(W + 300, ProbePlan.targetWindow(W, 270, early))
-        assertEquals(W, ProbePlan.targetWindow(W, 30, early))
-        assertNull(ProbePlan.targetWindow(W, 31, early))
+        assertNull(ProbePlan.targetWindow(W, 269, early))
+        // The grace after the open stays where it is.
+        assertEquals(W, ProbePlan.targetWindow(W, 20, early))
+        assertNull(ProbePlan.targetWindow(W, 21, early))
     }
 
     @Test
@@ -886,6 +896,41 @@ class ProbePlanTest {
         assertEquals(5.0, ProbePlan.windowCap(base = 5.0, bank = 12.0), 1e-9)
         // With no account known there is nothing to cap against.
         assertEquals(Double.MAX_VALUE, ProbePlan.windowCap(base = 5.0, bank = 0.0), 1e-9)
+    }
+
+    /**
+     * The entry goes in three quarters of a minute early, where the cheap
+     * side is; the cost is that the five-minute candle has not finished, and
+     * thirty-five seconds is long enough for it to finish the other way.
+     */
+    @Test
+    fun `the read is taken again ten seconds before the open`() {
+        assertTrue(ProbePlan.rechecks(10))
+        assertTrue(ProbePlan.rechecks(0))
+        assertTrue(!ProbePlan.rechecks(11))
+        // Once the window has opened there is nothing left to reconsider.
+        assertTrue(!ProbePlan.rechecks(-1))
+    }
+
+    @Test
+    fun `only the same side still supports the position`() {
+        assertTrue(ProbePlan.stillOn("Up", "Up"))
+        assertTrue(!ProbePlan.stillOn("Up", "Down"))
+        // A read that has gone quiet is a reason to be out too: the entry was
+        // taken on a picture, and the picture is no longer there.
+        assertTrue(!ProbePlan.stillOn("Up", ""))
+        assertTrue(!ProbePlan.stillOn("", ""))
+    }
+
+    @Test
+    fun `the entry is forty-five seconds early but never forty-five late`() {
+        val s = ProbePlan.Settings(enabled = true, leadSec = 45L)
+        // Forty-five seconds before the next window opens: that is the entry.
+        assertEquals(300L, ProbePlan.targetWindow(0L, 255L, s))
+        assertEquals(300L, ProbePlan.targetWindow(0L, 299L, s))
+        // And the grace after an open stays at twenty, whatever the lead is.
+        assertEquals(0L, ProbePlan.targetWindow(0L, 20L, s))
+        assertNull(ProbePlan.targetWindow(0L, 21L, s))
     }
 
     /**

@@ -432,6 +432,9 @@ class ProbeBot(
             // money is free for the next window.
             dropStale(nowSec)
             readSales()
+            // The read is taken again ten seconds before the open, and a
+            // position bought on a picture that is no longer there is sold.
+            recheck(nowSec)
             // A side that went to nothing and came back is let go of the
             // moment it can be, before anything else looks at it.
             rescue()
@@ -540,21 +543,26 @@ class ProbeBot(
             rounds.any { it.windowStart == windowStart }
 
     /**
-     * Buys into the window that is about to open.
+     * Everything a decision is read off, taken in one go.
      *
-     * Gamma publishes the next market shortly before it opens, so the entry is
-     * only possible once it is there — which is the same reason the lead is
-     * ten seconds and not two minutes.
+     * The entry reads it, and so does the second look ten seconds before the
+     * open — which only means anything if both are reading the same things
+     * the same way.
      */
-    private fun enter(windowStart: Long) {
-        val line = trend
+    private data class Look(
+        val here: Double,
+        val typical: Double,
+        val closing: BinanceCandles.Candle?,
+        val body: Double,
+        val lastMinute: BinanceCandles.Candle?,
+        val minuteRange: Double,
+        val minuteTypical: Double,
+        val above: ProbePlan.Wall?,
+        val below: ProbePlan.Wall?,
+        val pick: ProbePlan.Choice,
+    )
 
-        val market = engine.marketForWindow(windowStart)
-        if (market == null) {
-            note = "рынок ещё не открыт"
-            return
-        }
-
+    private fun look(): Look {
         val here = here()
         val typical = Levels.typicalRange(BinanceCandles.fiveMinute.list())
         // The minute that closes as the window opens, and what the minutes
@@ -602,7 +610,7 @@ class ProbeBot(
         val below = shelf.filter { it.price < here }.minByOrNull { here - it.price }
 
         val pick = ProbePlan.choose(
-            way = TrendFit.lean(line),
+            way = TrendFit.lean(trend),
             // The five-minute line's own call, not merely its slope: a fit too
             // weak to name a direction has no business vetoing one.
             wide = wide?.way.orEmpty(),
@@ -622,6 +630,48 @@ class ProbeBot(
             homeAbove = above?.let { ProbePlan.homeSide(recentCloses(), it.price) }.orEmpty(),
             homeBelow = below?.let { ProbePlan.homeSide(recentCloses(), it.price) }.orEmpty(),
         )
+        return Look(
+            here = here,
+            typical = typical,
+            closing = closing,
+            body = body,
+            lastMinute = lastMinute,
+            minuteRange = minuteRange,
+            minuteTypical = minuteTypical,
+            above = above,
+            below = below,
+            pick = pick,
+        )
+    }
+
+    /**
+     * Buys into the window that is about to open.
+     *
+     * Gamma publishes the next market shortly before it opens, so the entry is
+     * only possible once it is there — which is the same reason the lead is
+     * ten seconds and not two minutes.
+     */
+    private fun enter(windowStart: Long) {
+        val line = trend
+
+        val market = engine.marketForWindow(windowStart)
+        if (market == null) {
+            note = "рынок ещё не открыт"
+            return
+        }
+
+        val seen = look()
+        val here = seen.here
+        val typical = seen.typical
+        val closing = seen.closing
+        val body = seen.body
+        val lastMinute = seen.lastMinute
+        val minuteRange = seen.minuteRange
+        val minuteTypical = seen.minuteTypical
+        val above = seen.above
+        val below = seen.below
+        val pick = seen.pick
+
         val way = pick.side
         if (way.isEmpty()) {
             note = pick.note
@@ -1174,6 +1224,84 @@ class ProbeBot(
             rounds.filter { it.windowStart == windowStart && it.demo == settings.demo }
                 .sumOf { it.cost }
         return already + more > cap + 1e-9
+    }
+
+    /**
+     * Takes the read again ten seconds before the window opens.
+     *
+     * The entry goes in three quarters of a minute early, which is where the
+     * cheap side is — before the book starts pricing the open. The cost of
+     * being that early is that the five-minute candle has not finished yet,
+     * and thirty-five seconds is long enough for it to finish the other way.
+     * So the same read is taken again with the candle all but closed, and a
+     * side it no longer supports is sold at the market. Not at a rung and not
+     * at a price to hope for: this is a decision to be out.
+     */
+    private fun recheck(nowSec: Long) {
+        val due = working.filter { ProbePlan.rechecks(it.windowStart - nowSec) }
+        if (due.isEmpty()) return
+        val early = due.filter { it.shares > it.sold + 1e-9 }
+        val waiting = due.filter { it.resting > 0.0 && it.shares <= 0.0 }
+        if (early.isEmpty() && waiting.isEmpty()) return
+
+        val fresh = look().pick.side
+
+        // A bid still waiting for a window whose read has changed is simply
+        // taken back: there is nothing to sell, and letting it fill would buy
+        // the side the rule has just stopped believing in.
+        for (open in waiting) {
+            if (ProbePlan.stillOn(open.side, fresh)) continue
+            if (!open.demo) cancelBuys(open.asset)
+            working = working.filterNot {
+                it.windowStart == open.windowStart && it.leg == open.leg
+            }
+            rounds = rounds + open.copy(
+                winner = EventStats.winnerFor(open.windowStart, nowSec),
+                note = "прогноз сменился — заявка снята",
+            )
+            store.saveRounds(rounds)
+            engine.log(
+                "info",
+                "Проба: прогноз сменился до открытия — сняла заявку на " +
+                    "${open.side} по ${(open.resting * 100).toInt()}¢",
+            )
+            onStateChanged()
+        }
+
+        for (open in early) {
+            if (ProbePlan.stillOn(open.side, fresh)) continue
+
+            val bid = try {
+                ClobApi.bestBid(open.asset)
+            } catch (e: Exception) {
+                null
+            } ?: continue
+            if (bid <= 0.0) continue
+
+            val left = open.shares - open.sold
+            val sold = if (open.demo) true else sellOut(open, bid)
+            if (!sold) continue
+
+            val why = "прогноз сменился на " + fresh.ifEmpty { "никакой" }
+            working = working.map {
+                if (it.windowStart == open.windowStart && it.leg == open.leg) {
+                    it.copy(
+                        sold = open.shares,
+                        proceeds = open.proceeds + left * SellPercent.netSell(bid),
+                        note = why,
+                    )
+                } else {
+                    it
+                }
+            }
+            engine.log(
+                "warn",
+                "Проба" + (if (open.demo) " (демо)" else "") + ": " + why +
+                    " — вышла из " + String.format("%.1f", left) +
+                    " ${open.side} по ${(bid * 100).toInt()}¢",
+            )
+            onStateChanged()
+        }
     }
 
     /**

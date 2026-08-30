@@ -23,8 +23,52 @@ object ProbePlan {
     /** What the paper account starts with. */
     const val DEFAULT_BANK = 100.0
 
-    /** How long before the window opens the entry goes in. */
-    const val DEFAULT_LEAD_SEC = 20L
+    /**
+     * How long before the window opens the entry goes in.
+     *
+     * Three quarters of a minute. Early enough to be filled before the book
+     * starts pricing the open, which is where the cheap side is; the risk of
+     * being that early — that the picture changes in the meantime — is what
+     * [RECHECK_SEC] answers.
+     */
+    const val DEFAULT_LEAD_SEC = 45L
+
+    /**
+     * How late after an open the entry may still be taken.
+     *
+     * The lead has a second use: when the venue publishes the next market too
+     * late to be bought before it opens, the same window is bought just after
+     * instead. That grace is its own number rather than the lead, because a
+     * lead long enough to be worth taking is far too long to be late by — a
+     * bet placed forty-five seconds into a five-minute window is missing a
+     * sixth of what it is betting on.
+     */
+    const val LATE_SEC = 20L
+
+    /**
+     * How long before the open the read is taken again.
+     *
+     * Ten seconds. Between the entry and here the closing candle finishes, so
+     * the picture the entry was taken on is the one thing that can still
+     * change — and a position held on a read that no longer holds is a
+     * position held for no reason. What is left is sold at the market: this
+     * is a decision to be out, not a price to hope for.
+     */
+    const val RECHECK_SEC = 10L
+
+    /** Whether the read is due to be taken again for a window not yet open. */
+    fun rechecks(secondsToOpen: Long, within: Long = RECHECK_SEC): Boolean =
+        secondsToOpen in 0..within
+
+    /**
+     * Whether the fresh read still supports a side already bought.
+     *
+     * Only the same side does. A read that has turned round is plainly a
+     * reason to be out; a read that has gone quiet is one too, because the
+     * entry was taken on a picture and that picture is no longer there.
+     */
+    fun stillOn(held: String, fresh: String): Boolean =
+        held.isNotEmpty() && held == fresh
 
     /**
      * The dearest offer worth taking at the market.
@@ -747,7 +791,7 @@ object ProbePlan {
         val left = windowSec - elapsedSec
         return when {
             left in 1..settings.leadSec -> windowStart + windowSec
-            elapsedSec in 0..settings.leadSec -> windowStart
+            elapsedSec in 0..minOf(settings.leadSec, LATE_SEC) -> windowStart
             else -> null
         }
     }
