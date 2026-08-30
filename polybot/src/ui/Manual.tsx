@@ -1,5 +1,4 @@
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -1253,79 +1252,6 @@ export function Manual({
                 </button>
               </div>
             )}
-        {/*
-          The two quotes, and the one thing to do with them.
-
-          Tapping a side is the decision — it loads that price and fills the
-          size, and lights up as the side that is chosen. The button between
-          them then only has to say what it does, which is why it says it:
-          nothing is sent by a thumb landing on a number it was reading.
-
-          Closing is not here. A position is sold by tapping it in the row at
-          the bottom of the screen, at the book, and the ladder offers the
-          rest — putting a second meaning on these two buttons only made the
-          one they already had ambiguous.
-        */}
-        <div className="buybar">
-          {(['Up', 'Down'] as const).map((which, i) => {
-            const price = books[which].asks[0]?.price ?? null;
-            // A side quoting above the early ceiling still has a price worth
-            // loading — the highest one the rule allows. Refusing the tap left
-            // the field empty and the decision unmade; this leaves a bid in
-            // it, which is what a buyer at a capped price would place anyway.
-            const barred = price != null && buyBarred(price, elapsed);
-            const wanted = barred ? ceiling : price;
-            const chip = (
-              <button
-                key={which}
-                className={`buy ${which === 'Up' ? 'up' : 'down'}${
-                  barred ? ' barred' : ''
-                }${side === which ? ' on' : ''}`}
-                disabled={price == null}
-                onClick={() => {
-                  if (wanted == null) return;
-                  setSide(which);
-                  setLimitPrice(String(Math.round(wanted * 100)));
-                  // And the size the field is about to spend: all of it. The
-                  // shares wanted at this price are what the window still has
-                  // room for, and typing that out was the last thing here that
-                  // was typed.
-                  setSizePct(100);
-                  const full =
-                    sizeBudget > 0
-                      ? stakeShares(wanted, sizeBudget, 1, minSize)
-                      : null;
-                  if (full != null) setLimitSize(String(full));
-                }}
-              >
-                <b>{price != null ? cents(price) : '—'}</b>
-                <s>
-                  {price == null
-                    ? 'стакан пуст'
-                    : barred
-                      ? `→ ${cents(ceiling)}`
-                      : which}
-                </s>
-              </button>
-            );
-            // The button sits between the two sides, which is where the eye
-            // already is when it is choosing one.
-            return i === 0 ? (
-              <Fragment key={which}>
-                {chip}
-                <button
-                  className={`buygo${side ? ` on ${side === 'Up' ? 'up' : 'down'}` : ''}`}
-                  disabled={busy || locked || limitBarred || side == null}
-                  onClick={() => side && void placeLimit(side)}
-                >
-                  Купить
-                </button>
-              </Fragment>
-            ) : (
-              chip
-            );
-          })}
-        </div>
 
             {/*
               The hours before this window, as Binance's own five-minute
@@ -1632,6 +1558,18 @@ export function Manual({
           left under the thumb where they are edited.
         */}
         <div className="limitrow">
+          {/*
+            The one thing to do, next to the terms it will do it on. The side
+            comes from whichever quote below is lit; without one there is
+            nothing to send and the button says so by being dead.
+          */}
+          <button
+            className={`buygo${side ? ` on ${side === 'Up' ? 'up' : 'down'}` : ''}`}
+            disabled={busy || locked || limitBarred || side == null}
+            onClick={() => side && void placeLimit(side)}
+          >
+            Купить
+          </button>
           <div className="limitmid">
             <div className="limitprice">
               <button className="step" onClick={() => nudgeLimit(-1)}>
@@ -1659,24 +1597,47 @@ export function Manual({
         </div>
 
             {/*
-              A closed window's positions are gone from the exchange; what it
-              came to is the order history below, which is the thing actually
-              worth reading afterwards.
+              The two sides: what each costs to buy, and what is held on it.
+
+              Always here, even while an older window is being read below —
+              the quotes are how a side is chosen, and the dock is the only
+              place they now live. The positions on it are the live window's;
+              a closed window's are gone from the exchange, and what it came
+              to is the order history further down.
             */}
-            {viewWindow == null && (
-              <PositionPair
-                positions={livePositions}
-                bids={{
-                  Up: books.Up.bids[0]?.price ?? null,
-                  Down: books.Down.bids[0]?.price ?? null,
-                }}
-                localAvg={localAvg}
-                secondsLeft={secondsLeft}
-                windowStart={windowStart}
-                lookAhead={lookAhead}
-                onSell={sellPosition}
-              />
-            )}
+            <PositionPair
+              positions={livePositions}
+              bids={{
+                Up: books.Up.bids[0]?.price ?? null,
+                Down: books.Down.bids[0]?.price ?? null,
+              }}
+              asks={{
+                Up: books.Up.asks[0]?.price ?? null,
+                Down: books.Down.asks[0]?.price ?? null,
+              }}
+              localAvg={localAvg}
+              secondsLeft={secondsLeft}
+              windowStart={windowStart}
+              lookAhead={lookAhead}
+              elapsed={elapsed}
+              ceiling={ceiling}
+              chosen={side}
+              onPick={(which, price) => {
+                setSide(which);
+                setLimitPrice(String(Math.round(price * 100)));
+                // And the size the field is about to spend: all of it. The
+                // shares wanted at this price are what the window still has
+                // room for, and typing that out was the last thing here that
+                // was typed by hand.
+                setSizePct(100);
+                const full =
+                sizeBudget > 0
+                  ? stakeShares(price, sizeBudget, 1, minSize)
+                  : null;
+                if (full != null) setLimitSize(String(full));
+              }}
+              onSell={sellPosition}
+            />
       </div>
     </>
   );
@@ -2039,6 +2000,34 @@ function EventStrip({
  * why it is not.
  */
 /**
+ * The one button every bot's explanation lives behind.
+ *
+ * Each of these panels had a paragraph across the top saying what the rule
+ * does. It is worth having and worth reading once; it is not worth the height
+ * every time the panel is opened to look at a number. So it folds away behind
+ * a question mark, which is where an explanation belongs once it has been
+ * read.
+ */
+function WhyButton({
+  open,
+  onClick,
+}: {
+  open: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`rulehint${open ? ' on' : ''}`}
+      onClick={onClick}
+      aria-label="Как это работает"
+      aria-expanded={open}
+    >
+      ?
+    </button>
+  );
+}
+
+/**
  * The rule that takes a gain the standing offer will not reach.
  *
  * One switch and one number, and under them what it is watching: what the
@@ -2055,24 +2044,28 @@ function TakeCard({
   onEnable: (enabled: boolean) => void;
   onGain: (gain: number) => void;
 }) {
+  const [why, setWhy] = useState(false);
   const pct = Math.round(state.gain * 100);
 
   return (
     <div className="card tight">
       <div className="counterhead">
         <span>Забираю плюс</span>
+        <WhyButton open={why} onClick={() => setWhy((v) => !v)} />
         <button
           className={`switch ${state.enabled ? 'on' : ''}`}
           onClick={() => onEnable(!state.enabled)}
         />
       </div>
 
+      {why && (
       <div className="counterrule muted">
         Смотрит не на свою лимитку, а на то, сколько дают в стакане. Как только
         покупатель платит больше +{pct}% к цене покупки — с учётом комиссии —
         снимает наши продажи по этой стороне и продаёт по рынку. Для случая,
         когда цена сходила в плюс, но до лимитки не дотянулась.
       </div>
+      )}
 
       <div className="fields botbank">
         <label className="field">
@@ -2154,6 +2147,7 @@ function ProbeCard({
   onRoom: (share: number) => void;
   onReset: () => void;
 }) {
+  const [why, setWhy] = useState(false);
   const all = summarise(state.rounds);
   const sides = bySide(state.rounds);
   const line = state.trend;
@@ -2167,12 +2161,14 @@ function ProbeCard({
     <div className="card tight">
       <div className="counterhead">
         <span>Проба</span>
+        <WhyButton open={why} onClick={() => setWhy((v) => !v)} />
         <button
           className={`switch ${state.enabled ? 'on' : ''}`}
           onClick={() => onEnable(!state.enabled)}
         />
       </div>
 
+      {why && (
       <div className="counterrule muted">
         За {state.leadSec} с до начала пятиминутки берёт {usd(state.stakeUsd)}{' '}
         той стороны, куда показывает линия тренда на минутном графике, и
@@ -2181,6 +2177,7 @@ function ProbeCard({
         {Math.round(state.roomShare * 100)}% обычного хода пятиминутки — тренд,
         упирающийся в стену, кончается на ней. Всё, что наторгует, ниже по окнам.
       </div>
+      )}
 
       <div className="probeline">
         <span className="muted">линия 1м</span>
@@ -2419,6 +2416,7 @@ function PulseCard({
   onShares: (shares: number) => void;
   onReset: () => void;
 }) {
+  const [why, setWhy] = useState(false);
   const tone = state.pnl > 0 ? 'up' : state.pnl < 0 ? 'down' : 'muted';
   const read = state.read;
   const lot = state.lot;
@@ -2429,12 +2427,14 @@ function PulseCard({
     <div className="card tight">
       <div className="counterhead">
         <span>Пульс</span>
+        <WhyButton open={why} onClick={() => setWhy((v) => !v)} />
         <button
           className={`switch ${state.enabled ? 'on' : ''}`}
           onClick={() => onEnable(!state.enabled)}
         />
       </div>
 
+      {why && (
       <div className="counterrule muted">
         Берёт {state.shares.toFixed(0)} долей стороны, за которую разом
         высказались четыре вещи: ход окна от его открытия, импульс минуток,
@@ -2443,6 +2443,7 @@ function PulseCard({
         перевес развернулся, и не продаёт вовсе, если к концу окна ведёт —
         расчёт платит доллар без комиссии.
       </div>
+      )}
 
       {read && (
         <div className="pulsegrid">
@@ -2954,21 +2955,35 @@ function WindowMark({ windowStart }: { windowStart: number }) {
 function PositionPair({
   positions,
   bids,
+  asks,
   localAvg,
   secondsLeft,
   windowStart,
   lookAhead,
+  elapsed,
+  ceiling,
+  chosen,
+  onPick,
   onSell,
 }: {
   positions: NativePosition[];
   /** Top of the bid side per outcome, for pricing what a close would pay. */
   bids: { Up: number | null; Down: number | null };
+  /** And the offers, which are what a buy on that side would pay. */
+  asks: { Up: number | null; Down: number | null };
   /** What this window's own orders say each side cost, when the API lags. */
   localAvg: { Up: number | null; Down: number | null };
   secondsLeft: number;
   /** The live window, which is the one the readout above the clock is about. */
   windowStart: number;
   lookAhead: boolean;
+  /** How far into the window the desk is trading, for the early ceiling. */
+  elapsed: number;
+  /** The dearest a buy may be right now; a quote over it loads this instead. */
+  ceiling: number;
+  /** The side currently chosen to buy, which is lit. */
+  chosen: 'Up' | 'Down' | null;
+  onPick: (which: 'Up' | 'Down', price: number) => void;
   onSell: (position: NativePosition) => void;
 }) {
   const leg = (name: 'Up' | 'Down') => {
@@ -3006,31 +3021,53 @@ function PositionPair({
   const down = leg('Down');
 
   /*
-    A held side is a count, what it cost, and what closing it now would pay.
-    Tapping it does exactly that — at the book, past our own resting offers —
-    so the number on it is the number the tap is worth.
+    One side, one column: what it costs to buy now, and — when there is one —
+    the position on it.
+
+    The two meanings are two buttons rather than one. The price picks the side
+    and loads the terms into the dock, which is the ordinary thing to do here;
+    the position under it sells, at the book, past our own resting offers. A
+    single button carrying both was ambiguous exactly when it mattered.
   */
-  const side = (name: 'Up' | 'Down', held: ReturnType<typeof leg>) => (
-    <button
-      className={`pairleg ${name === 'Up' ? 'up' : 'down'}${held ? '' : ' idle'}`}
-      disabled={!held}
-      onClick={() => held && onSell(held.position)}
-    >
-      <b>{name}</b>
-      {held ? (
-        <>
-          <span className="pairsize">{held.size.toFixed(1)}</span>
-          <span className="pairavg">{held.avg > 0 ? cents(held.avg) : '…'}</span>
-          {/* What it is worth to close at the price on the screen. */}
-          <span className={`pairpnl ${held.pnl >= 0 ? 'up' : 'down'}`}>
-            {held.priced ? signedUsd(held.pnl) : '…'}
-          </span>
-        </>
-      ) : (
-        <span className="muted pairsize">—</span>
-      )}
-    </button>
-  );
+  const side = (name: 'Up' | 'Down', held: ReturnType<typeof leg>) => {
+    const ask = asks[name];
+    // A side quoting over the early ceiling still has a price worth loading —
+    // the highest one the rule allows. Refusing the tap left the field empty
+    // and the decision unmade; this leaves a bid in it, which is what a buyer
+    // at a capped price would place anyway.
+    const barred = ask != null && buyBarred(ask, elapsed);
+    const wanted = barred ? ceiling : ask;
+
+    return (
+      <div
+        className={`pairleg ${name === 'Up' ? 'up' : 'down'}${
+          chosen === name ? ' on' : ''
+        }`}
+      >
+        <button
+          className="pairpick"
+          disabled={ask == null}
+          onClick={() => wanted != null && onPick(name, wanted)}
+        >
+          <b>{name}</b>
+          <span className="pairask">{ask != null ? cents(ask) : '—'}</span>
+          {barred && <span className="pairover">→ {cents(ceiling)}</span>}
+        </button>
+
+        {held && (
+          <button className="pairsell" onClick={() => onSell(held.position)}>
+            <span className="pairhold">
+              {held.size.toFixed(1)} · {held.avg > 0 ? cents(held.avg) : '…'}
+            </span>
+            {/* What it is worth to close at the price on the screen. */}
+            <span className={`pairpnl ${held.pnl >= 0 ? 'up' : 'down'}`}>
+              {held.priced ? signedUsd(held.pnl) : '…'}
+            </span>
+          </button>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="pair">

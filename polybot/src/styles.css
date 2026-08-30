@@ -2124,10 +2124,38 @@ button.step.big {
 .counterhead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 8px;
+}
+
+/* The name takes the room, so the switch and its hint stay together. */
+.counterhead > span:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Where each bot's explanation went. */
+.rulehint {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.rulehint.on {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .counterrule {
@@ -2285,31 +2313,58 @@ button.step.big {
   padding: 4px 0 2px;
 }
 
+/*
+  One side of the row: the price to buy at, and the position on it.
+
+  Two buttons in one frame, because there are two things to do with a side and
+  they are not the same thing. The frame lights up when the side is the one
+  chosen to buy.
+*/
 .pairleg {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding: 8px 4px;
+  gap: 4px;
+  padding: 5px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface-2);
   color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.pairleg.up.on {
+  border-color: var(--up);
+  background: rgba(35, 192, 123, 0.12);
+}
+
+.pairleg.down.on {
+  border-color: var(--down);
+  background: rgba(255, 90, 106, 0.12);
+}
+
+.pairleg button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 100%;
+  border: none;
+  background: none;
+  color: inherit;
   font-family: inherit;
   font-variant-numeric: tabular-nums;
+  padding: 3px 2px;
+  border-radius: 8px;
   cursor: pointer;
 }
 
-.pairleg:active {
-  border-color: var(--text);
-}
-
-.pairleg.idle {
+.pairleg button:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
 .pairleg b {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .pairleg.up b {
@@ -2320,17 +2375,51 @@ button.step.big {
   color: var(--down);
 }
 
-.pairsize {
-  font-size: 22px;
-  font-weight: 600;
+/* The price is what the tap is about, so it is the number on the button. */
+.pairask {
+  font-size: 26px;
+  font-weight: 700;
   letter-spacing: -0.01em;
+  line-height: 1.05;
 }
 
-/* The average, sized to be read at the same glance as the count. */
-.pairavg {
-  font-size: 15px;
+/* A quote over the early ceiling: what would be placed instead. */
+.pairover {
+  font-size: 10px;
+  color: var(--warn);
+}
+
+/*
+  The position, and what closing it pays. Its own button, under a hairline —
+  tapping here sells, which is a different sentence from the one above it.
+*/
+.pairsell {
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px !important;
+  padding-top: 4px !important;
+}
+
+.pairsell:active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pairhold {
+  font-size: 13px;
   font-weight: 600;
   color: var(--muted);
+}
+
+.pairpnl {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pairpnl.up {
+  color: var(--up);
+}
+
+.pairpnl.down {
+  color: var(--down);
 }
 
 .pairmid {
@@ -2773,13 +2862,6 @@ button.wide {
 
 .sellsheet .primary.compact {
   flex: 2;
-}
-
-/* What closing this side now would pay, which is what tapping it does. */
-.pairpnl {
-  font-size: 14px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
 }
 
 /* Which build this is — the answer to "did the new one install". */
