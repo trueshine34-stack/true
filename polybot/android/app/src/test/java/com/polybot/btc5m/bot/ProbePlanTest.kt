@@ -465,6 +465,126 @@ class ProbePlanTest {
         assertEquals(5.0, ProbePlan.stakeFor(5.0, 0.0, 100.0, live), 1e-9)
     }
 
+    /**
+     * The screenshot: price dipped under 78 000, wicked back up into it and
+     * closed below, and the rule read a bounce off resistance and sold. But
+     * the hour before that had been spent above 78 000 — the level was the
+     * floor of the range, being under it was the exception, and the way back
+     * was up.
+     */
+    @Test
+    fun `a bounce away from where the market lives is refused`() {
+        val hour = List(54) { 78_120.0 } + List(6) { 77_960.0 }
+        assertEquals("Up", ProbePlan.homeSide(hour, 78_000.0))
+
+        val pick = ProbePlan.choose(
+            way = "Down",
+            wide = "",
+            candleBody = -40.0,
+            typical = 60.0,
+            candleHigh = 78_004.0,
+            candleLow = 77_950.0,
+            candleClose = 77_969.0,
+            minuteBody = -12.0,
+            minuteTypical = 20.0,
+            above = ProbePlan.Wall(78_000.0, 0, round = true),
+            below = ProbePlan.Wall(77_900.0, 2, round = false),
+            homeAbove = "Up",
+        )
+        assertEquals("", pick.side)
+        assertEquals("под 78000, живём выше", pick.note)
+    }
+
+    @Test
+    fun `a bounce off a level the market is not living behind is taken`() {
+        val pick = ProbePlan.choose(
+            way = "Down",
+            wide = "",
+            candleBody = -40.0,
+            typical = 60.0,
+            candleHigh = 78_004.0,
+            candleLow = 77_950.0,
+            candleClose = 77_969.0,
+            minuteBody = -12.0,
+            minuteTypical = 20.0,
+            above = ProbePlan.Wall(78_000.0, 0, round = true),
+            below = ProbePlan.Wall(77_900.0, 2, round = false),
+            homeAbove = "",
+        )
+        assertEquals("Down", pick.side)
+        assertEquals("отбой от 78000", pick.note)
+    }
+
+    @Test
+    fun `and the same the other way up`() {
+        val hour = List(54) { 77_800.0 } + List(6) { 78_050.0 }
+        assertEquals("Down", ProbePlan.homeSide(hour, 78_000.0))
+
+        val pick = ProbePlan.choose(
+            way = "Up",
+            wide = "",
+            candleBody = 40.0,
+            typical = 60.0,
+            candleHigh = 78_090.0,
+            candleLow = 77_996.0,
+            candleClose = 78_040.0,
+            minuteBody = 12.0,
+            minuteTypical = 20.0,
+            above = ProbePlan.Wall(78_200.0, 2, round = false),
+            below = ProbePlan.Wall(78_000.0, 0, round = true),
+            homeBelow = "Down",
+        )
+        assertEquals("", pick.side)
+        assertEquals("над 78000, живём ниже", pick.note)
+    }
+
+    @Test
+    fun `an even record names no home side`() {
+        val even = List(30) { 78_100.0 } + List(30) { 77_900.0 }
+        assertEquals("", ProbePlan.homeSide(even, 78_000.0))
+        // And too little history to judge on says nothing either.
+        assertEquals("", ProbePlan.homeSide(List(8) { 78_100.0 }, 78_000.0))
+    }
+
+    /**
+     * A run that compounds without a ceiling ends with the whole account on
+     * one five-minute window.
+     */
+    @Test
+    fun `the run never stakes more than a quarter of the account`() {
+        // Base five, a run of forty — but the account is a hundred.
+        assertEquals(
+            25.0,
+            ProbePlan.stakeFor(5.0, won = 0.0, start = 100.0, streak = 40.0, bank = 100.0),
+            1e-9,
+        )
+        // Under the ceiling the run is untouched.
+        assertEquals(
+            15.0,
+            ProbePlan.stakeFor(5.0, won = 0.0, start = 100.0, streak = 10.0, bank = 100.0),
+            1e-9,
+        )
+    }
+
+    @Test
+    fun `the ceiling never cuts into the base stake`() {
+        // An account of ten has no room for a run, but the base is the base.
+        assertEquals(
+            5.0,
+            ProbePlan.stakeFor(5.0, won = 0.0, start = 100.0, streak = 20.0, bank = 10.0),
+            1e-9,
+        )
+    }
+
+    @Test
+    fun `an unknown account leaves the run uncapped`() {
+        assertEquals(
+            45.0,
+            ProbePlan.stakeFor(5.0, won = 0.0, start = 100.0, streak = 40.0),
+            1e-9,
+        )
+    }
+
     @Test
     fun `a loss ends the run`() {
         assertEquals(0.0, ProbePlan.nextStreak(3.0, -1.0), 1e-9)

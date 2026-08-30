@@ -228,12 +228,22 @@ class ProbeBot(
      * account has doubled, plus whatever the winning run has added.
      */
     val stakeNow: Double
-        get() = ProbePlan.stakeFor(settings.stakeUsd, won, settings.bankUsd, streak)
+        get() = ProbePlan.stakeFor(settings.stakeUsd, won, settings.bankUsd, streak, held())
 
     /** Set while the window still running is already showing a loss. */
     @Volatile
     var losing: Boolean = false
         private set
+
+    /**
+     * What the account was worth when the rule last looked.
+     *
+     * The paper purse in demo, the wallet in real money. It is what the run's
+     * ceiling is a quarter of, and it is remembered rather than asked for on
+     * every read so the card can show the same stake the entry will use.
+     */
+    @Volatile
+    private var purse: Double = 0.0
 
     /** The run's addition as the last tick found it. */
     @Volatile
@@ -241,7 +251,10 @@ class ProbeBot(
 
     /** What the next window will stake, the open window's state included. */
     val stakeLive: Double
-        get() = ProbePlan.stakeFor(settings.stakeUsd, won, settings.bankUsd, riding)
+        get() = ProbePlan.stakeFor(settings.stakeUsd, won, settings.bankUsd, riding, held())
+
+    /** The account the run is a quarter of: the paper purse, or the wallet. */
+    private fun held(): Double = if (settings.demo) bank else purse
 
     /**
      * Reads the run against the window that is still running.
@@ -291,6 +304,14 @@ class ProbeBot(
         const val TICK_MS = 1_000L
 
         const val WINDOW_SEC = 300L
+
+        /**
+         * How many minutes back "where the market has been living" reaches.
+         *
+         * An hour: long enough for a range to be a range, short enough that a
+         * level from this morning does not out-vote the one price is at.
+         */
+        const val HOME_OVER = 60
 
         /**
          * How long after the close to wait before scoring the round.
@@ -372,6 +393,14 @@ class ProbeBot(
      */
     private fun body(candle: BinanceCandles.Candle?): Double =
         candle?.let { if (it.open > 0.0 && it.close > 0.0) it.close - it.open else 0.0 } ?: 0.0
+
+    /**
+     * The last hour of minute closes, which is what says where the market has
+     * been living. An hour is long enough to be a range and short enough that
+     * a level from this morning does not out-vote the one price is at.
+     */
+    private fun recentCloses(): List<Double> =
+        BinanceCandles.oneMinute.list().takeLast(HOME_OVER).map { it.close }
 
     private fun here(): Double =
         engine.feed.twap60?.value
@@ -552,6 +581,12 @@ class ProbeBot(
             minuteTypical = Levels.typicalRange(BinanceCandles.oneMinute.list()),
             above = above,
             below = below,
+            // Which side of each wall the market has actually been living on.
+            // A level with the whole hour above it is the floor of a range,
+            // not resistance met from below, and a bounce away from it is a
+            // bounce out of the range.
+            homeAbove = above?.let { ProbePlan.homeSide(recentCloses(), it.price) }.orEmpty(),
+            homeBelow = below?.let { ProbePlan.homeSide(recentCloses(), it.price) }.orEmpty(),
         )
         val way = pick.side
         if (way.isEmpty()) {
@@ -631,6 +666,10 @@ class ProbeBot(
                 return
             }
         }
+        // Now the account is known, so the run's ceiling is too — and it is
+        // this window's, not the last one's.
+        purse = cash
+        val stake = ProbePlan.capped(staking, settings.stakeUsd, cash)
         val blocked = ProbePlan.blockedBecause(
             way = way,
             ask = ask,
@@ -646,7 +685,7 @@ class ProbeBot(
             // still the five-minute candle's own range.
             typical = typical,
             byLine = pick.byLine,
-            stake = staking,
+            stake = stake,
         )
         if (blocked != null) {
             note = blocked
@@ -658,7 +697,7 @@ class ProbeBot(
         // bid where it is willing to buy and lets the window come to it.
         val waits = ProbePlan.waits(ask)
         val pay = ProbePlan.entryPrice(ask)
-        val size = ProbePlan.shares(staking, pay, market.minimumOrderSize)
+        val size = ProbePlan.shares(stake, pay, market.minimumOrderSize)
         // Crossing the spread can step over the window's own ceiling, and the
         // venue refuses such an order rather than shaving it.
         val limit = if (waits) {
@@ -784,10 +823,20 @@ class ProbeBot(
     ): String {
         val cents = { p: Double -> "${(p * 100).toInt()}¢" }
         val dollars = { v: Double -> (if (v >= 0) "+" else "−") + Math.round(abs(v)) + "$" }
+        val closes = recentCloses()
         val wall = { w: ProbePlan.Wall? ->
             w?.let {
                 Math.round(it.price).toString() +
-                    (if (it.round) " (круглый)" else " (×" + it.touches + ")")
+                    (if (it.round) " (круглый)" else " (×" + it.touches + ")") +
+                    // Which side of it the hour has been spent on, when one
+                    // side has clearly had it.
+                    (
+                        when (ProbePlan.homeSide(closes, it.price)) {
+                            "Up" -> " · час выше"
+                            "Down" -> " · час ниже"
+                            else -> ""
+                        }
+                        )
             } ?: "нет"
         }
         val minute = body(BinanceCandles.oneMinute.list().lastOrNull())
@@ -821,7 +870,14 @@ class ProbeBot(
                 } ?: "нет цены"
                 ),
             "ставка: $" + String.format("%.2f", staking) +
-                (if (streak > 0.0) " (серия +$" + String.format("%.2f", streak) + ")" else ""),
+                (if (streak > 0.0) " (серия +$" + String.format("%.2f", streak) + ")" else "") +
+                (
+                    if (held() > 0.0) {
+                        " · потолок $" + String.format("%.2f", held() * ProbePlan.MAX_SHARE)
+                    } else {
+                        ""
+                    }
+                    ),
         ).joinToString("\n")
     }
 

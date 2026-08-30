@@ -111,6 +111,33 @@ object ProbePlan {
      *  - anything else against the line is noise inside a trend that has not
      *    ended, and there is no edge either way. Take neither.
      */
+    /**
+     * How lopsided the recent record has to be before one side of a level
+     * counts as where the market lives.
+     */
+    const val HOME_SHARE = 0.7
+
+    /**
+     * The side of a level the market has been living on, or "" when it is even.
+     *
+     * A level with almost the whole recent hour on one side of it is not a
+     * wall to be thrown off in either direction: it is the edge of where price
+     * lives. Being on the other side of it is the exception, and what follows
+     * an exception is the return — so a bounce off such a level points back
+     * into the range, never further out of it.
+     */
+    fun homeSide(closes: List<Double>, level: Double, share: Double = HOME_SHARE): String {
+        if (level <= 0.0 || share <= 0.5) return ""
+        val used = closes.filter { it > 0.0 }
+        if (used.size < 12) return ""
+        val above = used.count { it > level }.toDouble() / used.size
+        return when {
+            above >= share -> "Up"
+            1.0 - above >= share -> "Down"
+            else -> ""
+        }
+    }
+
     fun choose(
         /** The minute chart's line. */
         way: String,
@@ -129,6 +156,12 @@ object ProbePlan {
         /** The nearest price the market has stopped at, either side of here. */
         above: Wall? = null,
         below: Wall? = null,
+        /**
+         * Which side of each of those walls the market has been living on,
+         * from [homeSide]. Empty when neither side is lopsided enough to say.
+         */
+        homeAbove: String = "",
+        homeBelow: String = "",
         touch: Double = TOUCH,
     ): Choice {
         // The bounce comes first, and it comes before the lines.
@@ -166,11 +199,20 @@ object ProbePlan {
             if (candleBody > 0.0 && above?.important != true) {
                 return Choice("", "свеча зелёная")
             }
+            // A level the market has spent the hour above is not resistance
+            // met from below; it is the floor of the range, and being under it
+            // is the exception. Selling away from it sells the exception.
+            if (homeAbove == "Up") {
+                return Choice("", "под " + Math.round(above?.price ?: 0.0) + ", живём выше")
+            }
             return Choice("Down", "отбой от " + Math.round(above?.price ?: 0.0))
         }
         if (hitFloor && minuteBody > 0.0) {
             if (candleBody < 0.0 && below?.important != true) {
                 return Choice("", "свеча красная")
+            }
+            if (homeBelow == "Down") {
+                return Choice("", "над " + Math.round(below?.price ?: 0.0) + ", живём ниже")
             }
             return Choice("Up", "отбой от " + Math.round(below?.price ?: 0.0))
         }
@@ -305,11 +347,49 @@ object ProbePlan {
         return Math.floor(Math.log(1.0 + won / start) / Math.log(2.0)).toInt()
     }
 
-    /** What the next window is worth staking, all of the above together. */
-    fun stakeFor(stake: Double, won: Double, start: Double, streak: Double): Double {
+    /**
+     * The most of the account one window may stake, however long the run.
+     *
+     * A quarter. A run that compounds without a ceiling ends with the whole
+     * account riding on one five-minute window, and the whole point of a run
+     * is that it stakes winnings — a bet that can take the account out in a
+     * single window is not staking winnings, it is staking the account.
+     */
+    const val MAX_SHARE = 0.25
+
+    /**
+     * The run trimmed to that ceiling.
+     *
+     * The ceiling never cuts into the base stake the user set: an account too
+     * small for a quarter of it to cover the base is an account with no room
+     * for a run, and the answer there is the base alone, not less than it.
+     */
+    fun capped(
+        want: Double,
+        base: Double,
+        bank: Double,
+        share: Double = MAX_SHARE,
+    ): Double {
+        if (bank <= 0.0 || share <= 0.0) return want
+        return minOf(want, maxOf(base, bank * share))
+    }
+
+    /**
+     * What the next window is worth staking, all of the above together.
+     *
+     * [bank] is what the account is worth right now, and caps the run; zero
+     * when it is not known, which leaves the run uncapped until it is.
+     */
+    fun stakeFor(
+        stake: Double,
+        won: Double,
+        start: Double,
+        streak: Double,
+        bank: Double = 0.0,
+    ): Double {
         if (stake <= 0.0) return 0.0
         val base = stake * Math.pow(DOUBLE_STEP, doublings(won, start).toDouble())
-        return base + maxOf(0.0, streak)
+        return capped(base + maxOf(0.0, streak), base, bank)
     }
 
     /**
