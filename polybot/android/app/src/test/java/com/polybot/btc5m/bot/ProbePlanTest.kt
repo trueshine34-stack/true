@@ -684,4 +684,16 @@ class ProbePlanTest {
             ),
         )
     }
+
+    @Test
+    fun `a bid the market never came back to is pulled after a minute`() {
+        assertTrue(ProbePlan.restingDone(60))
+        assertTrue(ProbePlan.restingDone(200))
+    }
+
+    @Test
+    fun `and left out for that minute`() {
+        assertTrue(!ProbePlan.restingDone(0))
+        assertTrue(!ProbePlan.restingDone(59))
+    }
 }

@@ -41,6 +41,21 @@ object ProbePlan {
     const val REST_PRICE = 0.54
 
     /**
+     * How long that bid is left out before it is pulled.
+     *
+     * One minute. The entry was for a window that is five minutes long, and a
+     * side that has not come back to the price in the first fifth of it is not
+     * coming back to it as the same trade — what would fill later is a
+     * different bet at the same number. Meanwhile the money is committed and
+     * the next window cannot use it.
+     */
+    const val REST_UNTIL_SEC = 60L
+
+    /** Whether a bid that has not been reached should be taken back. */
+    fun restingDone(elapsedSec: Long, untilSec: Long = REST_UNTIL_SEC): Boolean =
+        elapsedSec >= untilSec
+
+    /**
      * The grid of prices everybody else is watching too.
      *
      * Eighty thousand, eighty and a half, eighty-one. Nobody decided these are

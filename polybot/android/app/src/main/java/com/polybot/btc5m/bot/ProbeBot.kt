@@ -309,6 +309,9 @@ class ProbeBot(
         // that has been bought.
         if (settings.enabled) {
             fillResting(nowSec)
+            // And a bid the market never came back to is taken back, so the
+            // money is free for the next window.
+            dropStale(nowSec)
             readSales()
             // A winner that has stopped at a level is taken there, before any
             // rung is consulted: the rung is above the level and the level is
@@ -778,6 +781,56 @@ class ProbeBot(
                     "${(paid * 100).toInt()}¢ — средняя ${(price * 100).toInt()}¢",
             )
             onStateChanged()
+        }
+    }
+
+    /**
+     * Pulls a bid that the market never came back to.
+     *
+     * It was left at the rest price for a window five minutes long; a side
+     * that has not reached it in the first minute is not going to fill as the
+     * same trade, and what would fill later is a different bet at the same
+     * number. Taking it back frees the money for the next window and files the
+     * one it was for with that as the reason.
+     */
+    private fun dropStale(nowSec: Long) {
+        val waiting = working.filter { it.resting > 0.0 && it.shares <= 0.0 }
+        if (waiting.isEmpty()) return
+
+        for (open in waiting) {
+            if (!ProbePlan.restingDone(nowSec - open.windowStart)) continue
+            if (!open.demo) cancelBuys(open.asset)
+
+            working = working.filterNot { it.windowStart == open.windowStart }
+            rounds = rounds + open.copy(
+                winner = EventStats.winnerFor(open.windowStart, nowSec),
+                note = "лимитка ${(open.resting * 100).toInt()}¢ снята",
+            )
+            store.saveRounds(rounds)
+            engine.log(
+                "info",
+                "Проба: сняла заявку на ${open.side} по " +
+                    "${(open.resting * 100).toInt()}¢ — за минуту не налили",
+            )
+            onStateChanged()
+        }
+    }
+
+    /** Takes back whatever this rule has resting on a side. */
+    private fun cancelBuys(asset: String) {
+        val session = engine.session() ?: return
+        try {
+            ClobApi.openOrders(session.creds, session.account.signerAddress)
+                .filter { it.assetId == asset && it.side == "BUY" }
+                .forEach {
+                    try {
+                        ClobApi.cancelOrder(session.creds, session.account.signerAddress, it.id)
+                    } catch (e: Exception) {
+                        // It may have filled in between, which the log will show.
+                    }
+                }
+        } catch (e: Exception) {
+            // Nothing to be done; the next pass tries again.
         }
     }
 
