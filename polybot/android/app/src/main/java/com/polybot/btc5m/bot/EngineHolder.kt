@@ -146,6 +146,12 @@ object EngineHolder {
             probeBot ?: ProbeBot(
                 engine = host,
                 store = ProbeStore(context),
+                // Its paper exits follow the same rungs the desk's own sell
+                // rule is set to, so a demo run answers a question about the
+                // ladder that is actually running.
+                ladder = {
+                    autoSell?.settings?.ladder ?: SellLadder.DEFAULT
+                },
                 onStateChanged = {
                     onState?.invoke()
                     onServiceState?.invoke()

@@ -10,187 +10,12 @@ import {
   type BalancePoint,
 } from '../core/balance';
 import { signedPct, signedUsd, usd } from '../core/money';
-import { PolyBot } from '../native/polybot';
-import { GOAL_GAIN, WITHDRAW_SHARE, goalProgress, type GoalState } from '../core/goal';
 
 const W = 320;
 const H = 132;
 
-/**
- * An address, with one tap to copy it.
- *
- * An address that cannot be copied is an address that gets retyped, and a
- * retyped address is how money goes to a stranger. The clipboard API is not
- * always there, so the old textarea trick stands behind it.
- */
-function Address({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false);
-  if (!value) return null;
 
-  const copy = () => {
-    const done = () => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    };
-    try {
-      void navigator.clipboard.writeText(value).then(done, () => fallback(value, done));
-    } catch {
-      fallback(value, done);
-    }
-  };
 
-  return (
-    <button className="addrline" onClick={copy}>
-      <span className="muted">{label}</span>
-      <b>{value}</b>
-      <i>{copied ? 'скопировано' : 'копировать'}</i>
-    </button>
-  );
-}
-
-function fallback(text: string, done: () => void) {
-  const area = document.createElement('textarea');
-  area.value = text;
-  area.style.position = 'fixed';
-  area.style.opacity = '0';
-  document.body.appendChild(area);
-  area.select();
-  try {
-    document.execCommand('copy');
-    done();
-  } catch {
-    // Nothing to be done; the address is on the screen to be read.
-  }
-  document.body.removeChild(area);
-}
-
-/**
- * Taking money off the venue, to an address of your own.
- *
- * One transfer of USDC on Polygon, signed by the app with the key it already
- * holds. It lands on Polygon at the same address — the wallet has to be
- * switched to that network to see it — because Polygon and BSC are different
- * chains and no transaction crosses between them.
- *
- * The two things that stop it are worth saying before the button is pressed
- * rather than after: collateral sitting on a Polymarket proxy instead of on
- * the key's own address, and no POL to pay for the block. So the state is read
- * when the panel opens and the button says which it is.
- */
-function Withdraw({ address }: { address: string }) {
-  const [info, setInfo] = useState<Awaited<
-    ReturnType<typeof PolyBot.withdrawInfo>
-  > | null>(null);
-  const [amount, setAmount] = useState('0.05');
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const [hash, setHash] = useState<string | null>(null);
-
-  const usdAmount = Number(amount.replace(',', '.'));
-  const ready =
-    info != null &&
-    info.gasReady &&
-    info.sendable > 0 &&
-    Number.isFinite(usdAmount) &&
-    usdAmount > 0 &&
-    usdAmount <= info.sendable + 1e-9;
-
-  const look = () => {
-    setNote(null);
-    void PolyBot.withdrawInfo()
-      .then(setInfo)
-      .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-  };
-
-  const send = () => {
-    if (!ready) return;
-    setBusy(true);
-    setNote(null);
-    setHash(null);
-    void PolyBot.withdraw({ to: address, usd: usdAmount })
-      .then((r) => {
-        setHash(r.hash);
-        look();
-      })
-      .catch((e) => setNote(e instanceof Error ? e.message : String(e)))
-      .finally(() => setBusy(false));
-  };
-
-  if (!address) return null;
-
-  return (
-    <div className="withdraw">
-      {info == null ? (
-        <button className="ghost wide" onClick={look}>
-          вывести на этот кошелёк
-        </button>
-      ) : (
-        <>
-          <div className="withdraw-state muted">
-            на ключе {usd(info.sendable)} · газ{' '}
-            <b className={info.gasReady ? 'up' : 'down'}>{info.pol.toFixed(3)} POL</b>
-            {info.proxy && info.sendable <= 0 && ' · деньги на прокси Polymarket'}
-          </div>
-
-          {/*
-            The two addresses, because "top it up" is a different address than
-            "trade with it". Money for trading goes to the funder — that is the
-            deposit address Polymarket itself shows — and the gas for a
-            withdrawal has to be on the key, which is the one that signs.
-          */}
-          <Address
-            label="пополнить торговый баланс · USDC (Polygon)"
-            value={info.funder}
-          />
-          <Address label="газ для вывода · POL (Polygon)" value={info.signer} />
-
-          {info.proxy && info.sendable <= 0 ? (
-            /*
-              The one case the button can never answer, said as a sentence
-              instead of as a disabled control. The trading balance lives in a
-              Polymarket wallet the app's key does not own — it may trade that
-              balance, which is what the key was authorised for, but moving the
-              coins is the owner's to do and the owner is the Polymarket
-              account itself.
-            */
-            <div className="withdraw-blocked">
-              Торговый баланс лежит в кошельке Polymarket, а не на ключе
-              приложения. Ключ имеет право им <b>торговать</b>, но не
-              переводить — вывод оттуда только через сайт Polymarket.
-              <br />
-              Отсюда уходит то, что лежит на адресе ключа: газ уже есть,
-              осталось положить туда USDC.
-            </div>
-          ) : (
-            <div className="withdraw-row">
-              <input
-                type="text"
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-              <button className="primary" disabled={!ready || busy} onClick={send}>
-                {busy ? 'шлю…' : `вывести ${usd(usdAmount || 0)}`}
-              </button>
-            </div>
-          )}
-
-          <div className="withdraw-note muted">
-            USDC в сети Polygon на {address.slice(0, 6)}…{address.slice(-4)} — в
-            кошельке переключите сеть на Polygon
-          </div>
-        </>
-      )}
-
-      {hash && (
-        <div className="banner info withdraw-hash">
-          отправлено · {hash.slice(0, 10)}…{hash.slice(-6)}
-        </div>
-      )}
-      {note && <div className="banner warn">{note}</div>}
-    </div>
-  );
-}
 
 /**
  * The balance over time.
@@ -206,8 +31,6 @@ export function BalanceSheet({
   savings,
   savingsAddress,
   onSavingsAddress,
-  goal,
-  onRestart,
   onClose,
 }: {
   history: BalancePoint[];
@@ -217,9 +40,6 @@ export function BalanceSheet({
   savings: number;
   savingsAddress: string;
   onSavingsAddress: (address: string) => void;
-  goal: GoalState | null;
-  /** The money is out: record how much, and start the run again. */
-  onRestart: (withdrawn: number) => void;
   onClose: () => void;
 }) {
   const [span, setSpan] = useState(2);
@@ -294,8 +114,6 @@ export function BalanceSheet({
           />
         </label>
 
-        <Withdraw address={savingsAddress} />
-
         {path ? (
           <svg
             className="balchart"
@@ -334,8 +152,6 @@ export function BalanceSheet({
             Пока нечего показать — история набирается, пока приложение открыто.
           </div>
         )}
-
-        {goal && balance != null && <GoalCard goal={goal} balance={balance} onRestart={onRestart} />}
 
         <div className="pcts spanrow">
           {SPANS.map((s, i) => (
@@ -376,106 +192,3 @@ export function BalanceSheet({
     </div>
   );
 }
-
-/**
- * How the run is doing against its goal, and what to take out when it gets
- * there. The figure is the point — "withdraw some" is advice nobody acts on,
- * "вывести 8.03 $" is a decision already made.
- */
-function GoalCard({
-  goal,
-  balance,
-  onRestart,
-}: {
-  goal: GoalState;
-  balance: number;
-  onRestart: (withdrawn: number) => void;
-}) {
-  const p = goalProgress(goal, balance);
-  const share = Math.round((p.gain / GOAL_GAIN) * 100);
-  const [confirming, setConfirming] = useState(false);
-  const [amount, setAmount] = useState('');
-
-  return (
-    <div className={`goal${p.reached ? ' goal-hit' : ''}`}>
-      <div className="goal-head">
-        <span>
-          Цель ×2 от {usd(p.baseline)}
-          {goal.rounds > 0 && <span className="muted"> · круг {goal.rounds + 1}</span>}
-        </span>
-        <span className={p.profit >= 0 ? 'up' : 'down'}>{signedUsd(p.profit)}</span>
-      </div>
-
-      <div className="bar">
-        <i style={{ width: `${Math.max(0, Math.min(100, share))}%` }} />
-      </div>
-
-      {p.reached ? (
-        <>
-          <div className="goal-call">
-            Баланс удвоился. Вывести <b>{usd(p.suggested)}</b> —{' '}
-            {Math.round(WITHDRAW_SHARE * 100)}% профита. Останется{' '}
-            {usd(p.leftAfter)}, всё ещё больше, чем в начале круга.
-          </div>
-          {confirming ? (
-            <div className="draftrow">
-              {/*
-                The figure matters: it is what gets carried back into the
-                balance line, so a withdrawal reads as a step aside rather than
-                a loss. Pre-filled with the suggestion, editable because the
-                amount that actually left the wallet is the one that counts.
-              */}
-              <label className="mini">
-                <span>вывел, $</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  autoFocus
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
-              </label>
-              <button
-                className="primary compact"
-                onClick={() => {
-                  onRestart(Math.max(0, Number(amount.replace(',', '.')) || 0));
-                  setConfirming(false);
-                }}
-              >
-                Записать
-              </button>
-            </div>
-          ) : (
-            <button
-              className="ghost compact"
-              onClick={() => {
-                setAmount(p.suggested.toFixed(2));
-                setConfirming(true);
-              }}
-            >
-              Вывел — считать заново
-            </button>
-          )}
-        </>
-      ) : (
-        <div className="muted goal-call">
-          До цели {usd(p.remaining)} — это {usd(p.target)} на балансе. Тогда
-          напомню вывести {Math.round(WITHDRAW_SHARE * 100)}% профита.{' '}
-          {/* Money can leave the wallet without the goal being reached, and a
-              baseline that no longer matches reality measures nothing. */}
-          <button className="linkbtn" onClick={() => onRestart(0)}>
-            считать от текущего
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * What is on the exchange and not for trading.
- *
- * A share off the top that no order can reach, plus whatever is set aside for a
- * particular strategy. The free figure is the one that matters — it is what the
- * buy buttons are allowed to spend — so it is the one in bold.
- */

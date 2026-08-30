@@ -14,20 +14,29 @@ import kotlinx.coroutines.launch
  * The experiment, run once per window and written down.
  *
  * Ten seconds before a window opens it buys five dollars of the side the
- * five-minute chart's line is pointing at, and then does nothing else: the
- * exit is the desk's own sell ladder, which is already watching every position
- * in the wallet. That is the whole design, and it is deliberate — the question
- * being asked is whether following that line pays, so the only thing this rule
- * is allowed to be clever about is the direction.
+ * minute chart's line is pointing at, and then does nothing else: the exit is
+ * the sell ladder. That is the whole design, and it is deliberate — the
+ * question being asked is whether following that line pays, so the only thing
+ * this rule is allowed to be clever about is the direction.
  *
- * What it does do carefully is keep the books. Every round is recorded when
- * its window settles: the side, how strong the line was, what the shares cost,
- * what the ladder got for them, and what the market paid on anything still
- * held. That record is the report, and it is the only reason the rule exists.
+ * On paper, by default. In demo it reads the same live book, takes the same
+ * offers at the same prices, pays the same fee and leaves by the same rungs —
+ * only the money is imaginary and nothing is sent to the venue. That is the
+ * point: a question about whether a signal pays should be answered before the
+ * money is asked to answer it, and a bot that cannot trade because the wallet
+ * is empty has answered nothing.
+ *
+ * What it does carefully either way is keep the books. Every round is recorded
+ * when its window settles: the side, how strong the line was, what the shares
+ * cost, what the ladder got for them, and what the market paid on anything
+ * still held. That record is the report, and it is the only reason the rule
+ * exists.
  */
 class ProbeBot(
     private val engine: BotEngine,
     private val store: ProbeStore,
+    /** The rungs the desk's own sell rule is using, which demo sells into. */
+    private val ladder: () -> List<Double>,
     private val onStateChanged: () -> Unit,
 ) {
 
@@ -35,6 +44,8 @@ class ProbeBot(
     data class Round(
         val windowStart: Long,
         val asset: String,
+        /** Paper money: nothing about this round reached the venue. */
+        val demo: Boolean,
         val side: String,
         /** How fast the line was climbing or falling when it was followed. */
         val perHour: Double,
@@ -45,6 +56,10 @@ class ProbeBot(
         val settled: Double = 0.0,
         val winner: String = "",
         val note: String? = null,
+        /** Best bid seen while holding, which is what walks the ladder up. */
+        val highWater: Double = 0.0,
+        /** The rung reached, so a paper exit cannot slide back down. */
+        val rung: Int = 0,
     ) {
         val cost: Double get() = shares * price
         val pnl: Double get() = proceeds + settled - cost
@@ -94,6 +109,19 @@ class ProbeBot(
     var note: String? = null
         private set
 
+    /**
+     * What the paper account is worth: what it started with, plus everything
+     * closed rounds came to, less what is currently in the market.
+     *
+     * Only demo rounds count. A run that traded for real and then switched to
+     * paper should not have its paper balance moved by real money, and the
+     * other way round.
+     */
+    val bank: Double
+        get() = settings.bankUsd +
+            rounds.filter { it.demo && it.shares > 0.0 }.sumOf { it.pnl } -
+            working.filter { it.demo }.sumOf { it.cost }
+
     private var scope: CoroutineScope? = null
     private var job: Job? = null
 
@@ -118,6 +146,7 @@ class ProbeBot(
 
         /** After this, an unscoreable round is filed as it stands. */
         const val GIVE_UP_SEC = 180L
+
     }
 
     fun update(next: ProbePlan.Settings) {
@@ -181,6 +210,9 @@ class ProbeBot(
         // Scoring first: a round whose window has settled is finished business
         // and should be off the books before the next entry is considered.
         settleDue(nowSec)
+        // And the paper positions walk their own ladder, since no rule on the
+        // desk can see them.
+        if (settings.enabled) workPaper(nowSec)
 
         val session = engine.session()
         if (session == null) {
@@ -245,6 +277,7 @@ class ProbeBot(
         val skipped = Round(
             windowStart = missed,
             asset = "",
+            demo = settings.demo,
             side = TrendFit.lean(trend),
             perHour = trend?.perHour ?: 0.0,
             shares = 0.0,
@@ -309,11 +342,17 @@ class ProbeBot(
             return
         }
 
-        val cash = try {
-            engine.usdcBalance()
-        } catch (e: Exception) {
-            note = e.message ?: "не прочитать баланс"
-            return
+        // On paper the purse is the paper purse, and asking the venue what the
+        // wallet holds would be asking the wrong question of the wrong money.
+        val cash = if (settings.demo) {
+            bank
+        } else {
+            try {
+                engine.usdcBalance()
+            } catch (e: Exception) {
+                note = e.message ?: "не прочитать баланс"
+                return
+            }
         }
         val blocked = ProbePlan.blockedBecause(
             way = way,
@@ -340,6 +379,11 @@ class ProbeBot(
             ProbePlan.crossPrice(ask, market.tickSize),
             BuyCap.ceiling(BuyCap.elapsedFor(market.windowStart)),
         )
+
+        if (settings.demo) {
+            paperBuy(windowStart, token, way, ask, size, line)
+            return
+        }
 
         val result = try {
             engine.placeManualOrder(
@@ -375,6 +419,7 @@ class ProbeBot(
         val round = Round(
             windowStart = windowStart,
             asset = token,
+            demo = false,
             side = way,
             perHour = line?.perHour ?: 0.0,
             shares = fill.shares,
@@ -389,6 +434,99 @@ class ProbeBot(
                 (if ((line?.perHour ?: 0.0) >= 0) "+" else "−") + "$" +
                 String.format("%.0f", abs(line?.perHour ?: 0.0)) + "/ч",
         )
+    }
+
+    /**
+     * The same buy, on paper.
+     *
+     * Taking an offer costs what the offer asks plus the venue's fee, and the
+     * fee on a buy is real money whether or not the money is. Nothing is sent
+     * anywhere; the round goes straight into the books as filled, because a
+     * marketable order into a resting offer is what actually happens when this
+     * rule fires for real.
+     */
+    private fun paperBuy(
+        windowStart: Long,
+        token: String,
+        way: String,
+        ask: Double,
+        size: Double,
+        line: TrendFit.Trend?,
+    ) {
+        val round = Round(
+            windowStart = windowStart,
+            asset = token,
+            demo = true,
+            side = way,
+            perHour = line?.perHour ?: 0.0,
+            shares = size,
+            // What a share costs to take, fee included, so the exit is priced
+            // off what it actually cost rather than off the quote.
+            price = ProbePlan.takenPrice(ask),
+        )
+        working = working + round
+        note = "в позиции (демо)"
+        engine.log(
+            "trade",
+            "Проба (демо): взяла " + String.format("%.1f", size) + " $way по " +
+                "${(ask * 100).toInt()}¢ — счёт $" + String.format("%.2f", bank),
+        )
+    }
+
+    /**
+     * Walks the paper position up the same ladder the desk's own rule uses.
+     *
+     * The real probe places no sells: it buys, and the standing sell rule
+     * arranges the exit. On paper there is nothing for that rule to see, so the
+     * ladder is followed here — the rung for the time and the high-water mark,
+     * and the moment the book is bidding it, the shares are gone at that price.
+     * Which is what the resting offer would have done.
+     */
+    private fun workPaper(nowSec: Long) {
+        val riding = working.filter { it.demo && it.shares > it.sold + 1e-9 }
+        if (riding.isEmpty()) return
+
+        var next = working
+        var changed = false
+        for (open in riding) {
+            val elapsed = nowSec - open.windowStart
+            if (elapsed < 0) continue
+
+            val bid = try {
+                ClobApi.bestBid(open.asset)
+            } catch (e: Exception) {
+                null
+            } ?: continue
+
+            val rungs = ladder().ifEmpty { SellLadder.DEFAULT }
+            val high = maxOf(open.highWater, bid)
+            val step = SellLadder.stepFor(elapsed, high, rungs, open.rung)
+            val want = rungs[step.coerceIn(0, rungs.size - 1)]
+
+            var moved = open.copy(highWater = high, rung = maxOf(open.rung, step))
+            if (bid >= want - 1e-9) {
+                // The offer would have been sitting there, so it is the rung
+                // that gets paid, not the bid that reached up to it.
+                val left = open.shares - open.sold
+                moved = moved.copy(
+                    sold = open.shares,
+                    proceeds = open.proceeds + left * SellPercent.netSell(want),
+                )
+                engine.log(
+                    "trade",
+                    "Проба (демо): продала " + String.format("%.1f", left) +
+                        " ${open.side} по ${(want * 100).toInt()}¢",
+                )
+            }
+            if (moved != open) {
+                next = next.map { if (it.windowStart == open.windowStart) moved else it }
+                changed = true
+            }
+        }
+        if (changed) {
+            working = next
+            onStateChanged()
+        }
     }
 
     /**
@@ -459,10 +597,20 @@ class ProbeBot(
      * share on the winning side and nothing on the other.
      */
     private fun score(open: Round, nowSec: Long): Round {
-        val sells = OrderLog.forWindow(open.windowStart)
-            .filter { it.asset == open.asset && it.action == "SELL" }
-        val sold = sells.sumOf { it.matched }.coerceAtMost(open.shares)
-        val proceeds = sells.sumOf { it.matched * it.realPrice }
+        // A paper round has been keeping its own books all along; a real one's
+        // sales exist only in the order log, because this rule never placed
+        // them.
+        val sold: Double
+        val proceeds: Double
+        if (open.demo) {
+            sold = open.sold
+            proceeds = open.proceeds
+        } else {
+            val sells = OrderLog.forWindow(open.windowStart)
+                .filter { it.asset == open.asset && it.action == "SELL" }
+            sold = sells.sumOf { it.matched }.coerceAtMost(open.shares)
+            proceeds = sells.sumOf { it.matched * it.realPrice }
+        }
 
         val winner = EventStats.winnerFor(open.windowStart, nowSec)
         val left = (open.shares - sold).coerceAtLeast(0.0)

@@ -1233,6 +1233,19 @@ export function Manual({
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
+          onDemo={(demo) => {
+            void PolyBot.probeUpdate({ demo })
+              .then(() => PolyBot.probeState())
+              .then(setProbeBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onBank={(bankUsd) => {
+            if (!Number.isFinite(bankUsd) || bankUsd <= 0) return;
+            void PolyBot.probeUpdate({ bankUsd })
+              .then(() => PolyBot.probeState())
+              .then(setProbeBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
           onReset={() => {
             void PolyBot.probeReset()
               .then(() => PolyBot.probeState())
@@ -2138,6 +2151,8 @@ function ProbeCard({
   onStake,
   onLead,
   onRoom,
+  onDemo,
+  onBank,
   onReset,
 }: {
   state: ProbeState;
@@ -2145,6 +2160,8 @@ function ProbeCard({
   onStake: (usd: number) => void;
   onLead: (sec: number) => void;
   onRoom: (share: number) => void;
+  onDemo: (demo: boolean) => void;
+  onBank: (usd: number) => void;
   onReset: () => void;
 }) {
   const [why, setWhy] = useState(false);
@@ -2170,6 +2187,9 @@ function ProbeCard({
 
       {why && (
       <div className="counterrule muted">
+        {state.demo
+          ? 'На бумаге: читает тот же живой стакан, берёт те же предложения по тем же ценам, платит ту же комиссию и выходит по тем же ступеням — только деньги ненастоящие и на биржу ничего не уходит. '
+          : 'На реальные деньги. '}
         За {state.leadSec} с до начала пятиминутки берёт {usd(state.stakeUsd)}{' '}
         той стороны, куда показывает линия тренда на минутном графике, и
         выходит обычной лесенкой продаж. Не входит, если до уровня, от которого
@@ -2204,6 +2224,31 @@ function ProbeCard({
         )}
       </div>
 
+      {/*
+        Paper or real, and what the paper account is worth. The switch is the
+        first thing on the card after the name because it is the thing that
+        decides what every number under it means.
+      */}
+      <div className="proberow demorow">
+        <button
+          className={`demoflag${state.demo ? ' on' : ''}`}
+          onClick={() => onDemo(!state.demo)}
+        >
+          {state.demo ? 'демо' : 'реально'}
+        </button>
+        {state.demo ? (
+          <>
+            <span className="muted">счёт</span>
+            <b className={state.bank >= state.bankUsd ? 'up' : 'down'}>
+              {usd(state.bank)}
+            </b>
+            <span className="muted">из {usd(state.bankUsd)}</span>
+          </>
+        ) : (
+          <span className="muted">торгует на деньги кошелька</span>
+        )}
+      </div>
+
       <div className="fields probefields">
         <label className="field">
           <span>ставка, $</span>
@@ -2234,6 +2279,17 @@ function ProbeCard({
             }
           />
         </label>
+        {state.demo && (
+          <label className="field">
+            <span>тестовый счёт, $</span>
+            <input
+              type="number"
+              step="10"
+              value={String(state.bankUsd)}
+              onChange={(e) => onBank(Number(e.target.value.replace(',', '.')))}
+            />
+          </label>
+        )}
       </div>
 
       <div className="counterlive muted">

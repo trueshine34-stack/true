@@ -257,6 +257,8 @@ export interface PolyBotPlugin {
     stakeUsd?: number;
     leadSec?: number;
     roomShare?: number;
+    demo?: boolean;
+    bankUsd?: number;
   }): Promise<void>;
   probeReset(): Promise<void>;
   probeState(): Promise<ProbeState>;
@@ -439,6 +441,8 @@ export type TakeWatch = {
 /** One window the test bot traded, from the entry to the settlement. */
 export type ProbeRound = {
   windowStart: number;
+  /** Paper money: nothing about this round reached the venue. */
+  demo: boolean;
   /** The side the chart's line was pointing at. */
   side: string;
   /** How fast that line was moving, in dollars an hour. */
@@ -471,6 +475,11 @@ export type ProbeState = {
    * switches the check off.
    */
   roomShare: number;
+  /** Paper money, which is how it runs unless told otherwise. */
+  demo: boolean;
+  /** What the paper account starts at, and what it is worth now. */
+  bankUsd: number;
+  bank: number;
   /** The price the reversal is expected at, and how far off it is. */
   levelAhead?: number | null;
   roomToLevel?: number | null;
@@ -620,7 +629,10 @@ const webStub: PolyBotPlugin = {
     running: false,
     stakeUsd: 5,
     leadSec: 10,
-    roomShare: 0.6,
+    roomShare: 0.35,
+    demo: true,
+    bankUsd: 100,
+    bank: 100,
     rounds: [],
     riding: [],
   }),

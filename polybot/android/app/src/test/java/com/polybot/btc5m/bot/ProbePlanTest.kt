@@ -47,7 +47,13 @@ class ProbePlanTest {
         assertEquals("нет свечей", ProbePlan.blockedBecause("", 0.5, 100.0, on))
         assertEquals("нет цены", ProbePlan.blockedBecause("Up", null, 100.0, on))
         assertEquals("нет цены", ProbePlan.blockedBecause("Up", 0.0, 100.0, on))
-        assertEquals("контейнер пуст", ProbePlan.blockedBecause("Up", 0.5, 1.0, on))
+        assertEquals("тестовый счёт пуст", ProbePlan.blockedBecause("Up", 0.5, 1.0, on))
+        // And on real money it is the wallet that is empty, which is a
+        // different sentence about a different purse.
+        assertEquals(
+            "на счету пусто",
+            ProbePlan.blockedBecause("Up", 0.5, 1.0, on.copy(demo = false)),
+        )
     }
 
     @Test
@@ -140,5 +146,27 @@ class ProbePlanTest {
                 typical = 60.0,
             ),
         )
+    }
+
+    @Test
+    fun `a taken share costs the quote plus the fee`() {
+        // The fee is largest in the middle, where the outcome is least decided.
+        assertEquals(0.5175, ProbePlan.takenPrice(0.50), 1e-9)
+        assertEquals(0.263125, ProbePlan.takenPrice(0.25), 1e-9)
+        // And vanishes at the ends, along with the doubt.
+        assertEquals(0.99 + 0.07 * 0.99 * 0.01, ProbePlan.takenPrice(0.99), 1e-9)
+    }
+
+    @Test
+    fun `paper money pays the fee too`() {
+        // A demo that ignored it would report a profit the same trade would
+        // not have made, which is the one thing a demo must not do.
+        assertTrue(ProbePlan.takenPrice(0.42) > 0.42)
+    }
+
+    @Test
+    fun `a price outside the book is left alone`() {
+        assertEquals(0.0, ProbePlan.takenPrice(0.0), 1e-9)
+        assertEquals(1.0, ProbePlan.takenPrice(1.0), 1e-9)
     }
 }

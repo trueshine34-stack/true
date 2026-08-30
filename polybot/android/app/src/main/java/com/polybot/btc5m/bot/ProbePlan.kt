@@ -20,6 +20,9 @@ object ProbePlan {
     /** What each window is worth risking, in dollars. */
     const val DEFAULT_STAKE = 5.0
 
+    /** What the paper account starts with. */
+    const val DEFAULT_BANK = 100.0
+
     /** How long before the window opens the entry goes in. */
     const val DEFAULT_LEAD_SEC = 10L
 
@@ -53,6 +56,18 @@ object ProbePlan {
         val leadSec: Long = DEFAULT_LEAD_SEC,
         /** Room to the level ahead, against a typical window's travel. */
         val roomShare: Double = DEFAULT_ROOM,
+        /**
+         * Paper money. On by default, because the point of this rule is to
+         * find out whether the line pays before any real money is asked to
+         * find out.
+         *
+         * Nothing is sent to the venue: it reads the same live book, takes
+         * the same offers at the same prices, pays the same fee, and leaves
+         * by the same ladder — only the money is imaginary.
+         */
+        val demo: Boolean = true,
+        /** What that imaginary money starts at. */
+        val bankUsd: Double = DEFAULT_BANK,
     )
 
     /**
@@ -123,7 +138,9 @@ object ProbePlan {
         }
         if (ask == null || ask <= 0.0) return "нет цены"
         if (ask > MAX_PRICE + 1e-9) return "дорого " + "${Math.round(ask * 100)}¢"
-        if (cashUsd < settings.stakeUsd) return "контейнер пуст"
+        if (cashUsd < settings.stakeUsd) {
+            return if (settings.demo) "тестовый счёт пуст" else "на счету пусто"
+        }
         return null
     }
 
@@ -133,6 +150,22 @@ object ProbePlan {
         val floor = Orders.minShares(ask, minimumOrderSize)
         val wanted = stakeUsd / ask
         return maxOf(floor, Math.round(wanted * 10.0) / 10.0)
+    }
+
+    /** The venue's taker fee, which paper money pays too. */
+    const val FEE_RATE = 0.07
+
+    /**
+     * What one share actually costs when an offer is taken.
+     *
+     * The quote is what the seller asks; the fee is what the venue takes on
+     * top, and on a buy it comes out in shares. Paper money pays it because a
+     * demo that ignored the fee would report a profit the same trade would not
+     * have made — which is the one thing a demo must not do.
+     */
+    fun takenPrice(ask: Double): Double {
+        if (ask <= 0.0 || ask >= 1.0) return ask
+        return ask + FEE_RATE * ask * (1 - ask)
     }
 
     /** Crossing the spread by a tick: this is meant to be taken now. */

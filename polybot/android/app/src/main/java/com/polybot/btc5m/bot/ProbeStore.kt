@@ -25,6 +25,8 @@ class ProbeStore(context: Context) {
         stakeUsd = prefs.getFloat("stakeUsd", ProbePlan.DEFAULT_STAKE.toFloat()).toDouble(),
         leadSec = prefs.getLong("leadSec", ProbePlan.DEFAULT_LEAD_SEC),
         roomShare = prefs.getFloat("roomShare", ProbePlan.DEFAULT_ROOM.toFloat()).toDouble(),
+        demo = prefs.getBoolean("demo", true),
+        bankUsd = prefs.getFloat("bankUsd", ProbePlan.DEFAULT_BANK.toFloat()).toDouble(),
     )
 
     fun saveSettings(s: ProbePlan.Settings) {
@@ -33,6 +35,8 @@ class ProbeStore(context: Context) {
             .putFloat("stakeUsd", s.stakeUsd.toFloat())
             .putLong("leadSec", s.leadSec)
             .putFloat("roomShare", s.roomShare.toFloat())
+            .putBoolean("demo", s.demo)
+            .putFloat("bankUsd", s.bankUsd.toFloat())
             .apply()
     }
 
@@ -45,6 +49,7 @@ class ProbeStore(context: Context) {
                 ProbeBot.Round(
                     windowStart = o.optLong("windowStart"),
                     asset = o.optString("asset"),
+                    demo = o.optBoolean("demo", false),
                     side = o.optString("side"),
                     perHour = o.optDouble("perHour", 0.0),
                     shares = o.optDouble("shares", 0.0),
@@ -68,6 +73,7 @@ class ProbeStore(context: Context) {
                 JSONObject()
                     .put("windowStart", it.windowStart)
                     .put("asset", it.asset)
+                    .put("demo", it.demo)
                     .put("side", it.side)
                     .put("perHour", it.perHour)
                     .put("shares", it.shares)

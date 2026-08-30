@@ -3344,7 +3344,7 @@ button.wide {
 
 /* The probe's three dials: what it stakes, how early, and how much room. */
 .probefields {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   align-items: end;
   margin-top: 8px;
 }
@@ -3352,4 +3352,32 @@ button.wide {
 /* A window the probe stood out of: the reason, where the numbers would be. */
 .proberow.skipped {
   opacity: 0.6;
+}
+
+/*
+  Paper or real, said once at the top of the probe's panel: it decides what
+  every number under it means.
+*/
+.demorow {
+  grid-template-columns: auto auto auto 1fr;
+  gap: 8px;
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+
+.demoflag {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.demoflag.on {
+  border-color: var(--accent);
+  color: var(--accent);
 }

@@ -11,11 +11,10 @@ import { SettingsScreen } from './ui/Settings';
 import { Setup } from './ui/Setup';
 import { BalanceSheet } from './ui/BalanceSheet';
 import {
-  appendAdjustment,
   appendBalance,
+  shouldRecord,
   loadAdjustments,
   loadBalanceHistory,
-  saveAdjustments,
   saveBalanceHistory,
   type Adjustment,
   type BalancePoint,
@@ -24,7 +23,6 @@ import {
   WITHDRAW_SHARE,
   goalProgress,
   loadGoal,
-  restartRun,
   saveGoal,
   shouldRemind,
   snoozeGoal,
@@ -189,13 +187,26 @@ export function App() {
 
     const read = () => {
       void PolyBot.getBalance()
-        .then((r) => {
+        .then(async (r) => {
           if (cancelled) return;
           setBalance(r.usdc);
-          // Every reading is a point on the line. Repeats are dropped inside
-          // appendBalance, which returns the same array — so an unchanged
-          // balance costs neither a render nor a write.
+
+          // Whether any of the money is currently shares rather than cash.
+          // A reading taken while it is would put the cost of the position on
+          // the line as a loss, which is what made it read as a permanent
+          // drawdown: on a five-minute market something is nearly always open.
+          let holding = false;
+          try {
+            const held = await PolyBot.getPositions();
+            holding = (held.positions ?? []).some((p) => p.size > 0.01);
+          } catch {
+            // Cannot tell: treat it as held and wait for a clearer moment.
+            holding = true;
+          }
+          if (cancelled) return;
+
           setBalanceHistory((current) => {
+            if (!shouldRecord(current, Date.now(), holding)) return current;
             const next = appendBalance(current, r.usdc + savingsRef.current);
             if (next !== current) void saveBalanceHistory(next);
             return next;
@@ -288,27 +299,6 @@ export function App() {
     void saveGoal(next);
   }, [goal, worth]);
 
-  /**
-   * The money is out: the next run starts from what is left, and the amount
-   * withdrawn is remembered so the balance line does not read it as a loss.
-   */
-  const restart = useCallback(
-    (withdrawn: number) => {
-      if (!goal || worth == null) return;
-      const next = restartRun(goal, worth);
-      setGoal(next);
-      void saveGoal(next);
-
-      if (withdrawn > 0) {
-        setAdjustments((current) => {
-          const list = appendAdjustment(current, withdrawn, 'withdraw');
-          void saveAdjustments(list);
-          return list;
-        });
-      }
-    },
-    [goal, worth],
-  );
 
   const askDay = dayAsked && needsBaseline(day) && worth != null;
   const locked = isLocked(day);
@@ -365,11 +355,6 @@ export function App() {
           onSavingsAddress={(next) => {
             setSavingsAddress(next.trim());
             void saveSavingsAddress(next);
-          }}
-          goal={goal}
-          onRestart={(withdrawn) => {
-            restart(withdrawn);
-            setShowBalance(false);
           }}
           onClose={() => setShowBalance(false)}
         />

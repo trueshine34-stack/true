@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The ground the icon's mark sits on.
+
+  A flat colour behind an adaptive icon looks like a sticker; this is the same
+  near-black the desk itself is painted in, lifted a little at the top so the
+  tile has somewhere for the light to come from.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#1C2637"
+        android:centerColor="#101724"
+        android:endColor="#070A10"
+        android:type="linear" />
+</shape>

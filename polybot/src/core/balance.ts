@@ -26,6 +26,39 @@ const NOISE = 0.005;
 /** Keep a point every few minutes even when nothing moves, so the line has a floor. */
 const HEARTBEAT_MS = 5 * 60_000;
 
+/** Every window is five minutes, and every window opens on a multiple of it. */
+export const WINDOW_MS = 300_000;
+
+/** Which five minutes a moment belongs to. */
+export const windowOf = (at: number): number =>
+  Math.floor(at / WINDOW_MS) * WINDOW_MS;
+
+/**
+ * Whether this reading belongs on the line.
+ *
+ * The wallet is not the run. Buying shares moves money out of it and into a
+ * position, so a line drawn from the wallet alone dips at every entry and
+ * climbs back at every exit — it reports a drawdown for the ordinary act of
+ * placing a bet, and on a five-minute market it is in that state most of the
+ * time.
+ *
+ * So the line takes one reading per window, and only while nothing is held:
+ * that reading is the wallet with nothing owed to it, which is exactly what
+ * the last five minutes came to. Between those moments the header still shows
+ * the live figure — it is the history that waits for the result.
+ */
+export function shouldRecord(
+  history: BalancePoint[],
+  at: number,
+  /** Shares held, or settled shares not yet redeemed: money that is not cash. */
+  holding: boolean,
+): boolean {
+  if (holding) return false;
+  const last = history[history.length - 1];
+  if (!last) return true;
+  return windowOf(at) > windowOf(last.at);
+}
+
 export async function loadBalanceHistory(): Promise<BalancePoint[]> {
   const { value } = await Preferences.get({ key: KEY });
   if (!value) return [];

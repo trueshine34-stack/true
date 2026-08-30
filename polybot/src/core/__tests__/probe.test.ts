@@ -6,6 +6,7 @@ import type { ProbeRound } from '../../native/polybot';
 const round = (over: Partial<ProbeRound>): ProbeRound => {
   const base: ProbeRound = {
     windowStart: 1_787_817_600,
+    demo: true,
     side: 'Up',
     perHour: 120,
     shares: 10,

@@ -1449,6 +1449,8 @@ class BotPlugin : Plugin() {
                 stakeUsd = call.getDouble("stakeUsd") ?: d.stakeUsd,
                 leadSec = call.getInt("leadSec")?.toLong() ?: d.leadSec,
                 roomShare = call.getDouble("roomShare") ?: d.roomShare,
+                demo = call.getBoolean("demo") ?: d.demo,
+                bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
             ),
         )
         // The entry lands ten seconds before a window opens, which is usually
@@ -1471,6 +1473,7 @@ class BotPlugin : Plugin() {
 
         fun row(r: ProbeBot.Round, open: Boolean): JSObject = JSObject()
             .put("windowStart", r.windowStart)
+            .put("demo", r.demo)
             .put("side", r.side)
             .put("perHour", r.perHour)
             .put("shares", r.shares)
@@ -1498,6 +1501,9 @@ class BotPlugin : Plugin() {
                 .put("stakeUsd", bot.settings.stakeUsd)
                 .put("leadSec", bot.settings.leadSec)
                 .put("roomShare", bot.settings.roomShare)
+                .put("demo", bot.settings.demo)
+                .put("bankUsd", bot.settings.bankUsd)
+                .put("bank", bot.bank)
                 .put("levelAhead", bot.levelAhead)
                 .put("roomToLevel", bot.roomToLevel)
                 .put("note", bot.note)

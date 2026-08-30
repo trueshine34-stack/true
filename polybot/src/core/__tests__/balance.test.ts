@@ -9,6 +9,7 @@ import {
   sliceFor,
   statsFor,
   type BalancePoint,
+  shouldRecord,
 } from '../balance';
 
 const at = (minutes: number) => new Date('2026-08-25T12:00:00Z').getTime() + minutes * 60_000;
@@ -173,5 +174,34 @@ describe('withdrawals', () => {
 
   it('adds up what has been taken out', () => {
     expect(totalWithdrawn([...out, { at: at(40), usd: 5, kind: 'deposit' }])).toBe(30);
+  });
+});
+
+describe('shouldRecord', () => {
+  const at = 1_788_060_600_000;
+  const point = (t: number) => ({ at: t, usd: 100 });
+
+  it('takes the first reading it can', () => {
+    expect(shouldRecord([], at, false)).toBe(true);
+  });
+
+  it('refuses while money is sitting in shares', () => {
+    // This is the whole fix: the wallet is short by the cost of the position,
+    // and a line drawn from it reads every open bet as a loss.
+    expect(shouldRecord([], at, true)).toBe(false);
+    expect(shouldRecord([point(at - 600_000)], at, true)).toBe(false);
+  });
+
+  it('takes one reading per five-minute window', () => {
+    const last = [point(at + 10_000)];
+    // Same window, a minute later: already recorded.
+    expect(shouldRecord(last, at + 70_000, false)).toBe(false);
+    // The next window: a new result to record.
+    expect(shouldRecord(last, at + 300_000, false)).toBe(true);
+  });
+
+  it('does not go back for a window it has passed', () => {
+    const last = [point(at + 300_000)];
+    expect(shouldRecord(last, at + 60_000, false)).toBe(false);
   });
 });
