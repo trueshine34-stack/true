@@ -465,13 +465,6 @@ class ProbeBot(
             // The read is taken again ten seconds before the open, and a
             // position bought on a picture that is no longer there is sold.
             recheck(nowSec)
-            // A side that went to nothing and came back is let go of the
-            // moment it can be, before anything else looks at it.
-            rescue(nowSec)
-            // A winner that has stopped at a level is taken there, before any
-            // rung is consulted: the rung is above the level and the level is
-            // where the move ends.
-            stall(nowSec)
             // A side that has fallen far enough is bought again, once, while
             // the window still has time to turn.
             addUp(nowSec)
@@ -1640,185 +1633,6 @@ class ProbeBot(
     }
 
     /**
-     * Takes a winning position that has stopped dead at a level.
-     *
-     * The move that was bought has arrived — price is at one of the prices
-     * that stop it, the last minute has gone nowhere, and the book is paying
-     * enough that the position is plainly ahead. Waiting past that is not
-     * holding a winner, it is holding a coin toss on whether the level lets it
-     * through, and a level that has stopped the market before usually does
-     * not. The window before this was written stood on its level for minutes
-     * with the profit there for the taking, and gave it all back.
-     */
-    private fun stall(nowSec: Long) {
-        val riding = working.filter { it.shares > it.sold + 1e-9 }
-        if (riding.isEmpty()) return
-
-        val here = here()
-        if (here <= 0.0) return
-        val typical = Levels.typicalRange(BinanceCandles.fiveMinute.list())
-        if (typical <= 0.0) return
-
-        // Where price was a minute ago, off the closed minute candle behind
-        // the one in progress.
-        val minutes = BinanceCandles.oneMinute.list()
-        if (minutes.size < 2) return
-        val was = minutes[minutes.size - 2].close
-        if (was <= 0.0) return
-
-        // At a level: any price the market has stopped at before, within a
-        // wick's reach of here.
-        val near = typical * ProbePlan.TOUCH
-        val atLevel = walls(here).any { abs(it.price - here) <= near } ||
-            ProbePlan.nearRound(here, near) != null
-
-        for (open in riding) {
-            val moved = here - was
-            val progress = if (open.side == "Up") moved else -moved
-            val bid = try {
-                ClobApi.bestBid(open.asset)
-            } catch (e: Exception) {
-                null
-            } ?: continue
-
-            if (!ProbePlan.stalling(progress, nowSec - open.windowStart, bid, atLevel)) {
-                continue
-            }
-
-            val left = open.shares - open.sold
-            val sold = if (open.demo) true else sellOut(open, bid)
-            if (!sold) continue
-
-            working = working.map {
-                if (it.windowStart == open.windowStart && it.leg == open.leg) {
-                    it.copy(
-                        sold = open.shares,
-                        proceeds = open.proceeds + left * SellPercent.netSell(bid),
-                        note = "встали на уровне",
-                    )
-                } else {
-                    it
-                }
-            }
-            engine.log(
-                "trade",
-                "Проба" + (if (open.demo) " (демо)" else "") + ": встали на уровне " +
-                    Math.round(here) + " — забрала " + String.format("%.1f", left) +
-                    " ${open.side} по ${(bid * 100).toInt()}¢",
-            )
-            onStateChanged()
-        }
-    }
-
-    /**
-     * Lets go of a side the book wrote off, the moment it is worth a third.
-     *
-     * Under a dime the market is saying one chance in ten and the position
-     * has stopped being a position. Getting back to thirty-three cents means
-     * the window turned round — and a turn that far is exactly the kind that
-     * turns again, so this does not wait for a rung or for the close. It is
-     * checked before the ladder, because the ladder's own price is up at
-     * seventy-seven and would never fire here.
-     */
-    private fun rescue(nowSec: Long) {
-        val riding = working.filter { it.shares > it.sold + 1e-9 }
-        if (riding.isEmpty()) return
-
-        for (open in riding) {
-            val bid = try {
-                ClobApi.bestBid(open.asset)
-            } catch (e: Exception) {
-                null
-            } ?: continue
-
-            // The worst the side has been worth, which is what arms the first
-            // two rules below.
-            val low = if (open.lowWater <= 0.0) bid else minOf(open.lowWater, bid)
-            val worth = SellPercent.netSell(bid)
-
-            // How long it has been under water, which resets the moment
-            // it is not.
-            val under = worth < open.price
-            val redFrom = when {
-                !under -> 0L
-                open.redFrom == 0L -> nowSec
-                else -> open.redFrom
-            }
-            val wasRed = open.wasRed ||
-                (under && redFrom > 0L && nowSec - redFrom >= ProbePlan.RED_SEC)
-
-            // Whether the move is still one clean run. A real position's
-            // high-water mark is kept here, because the paper ladder keeps its
-            // own further down and deliberately prices its offer off the
-            // pre-tick value — walking it early would put the rung above the
-            // very bid being tested, which is a bug this rule already had once.
-            val high = if (open.demo) open.highWater else maxOf(open.highWater, bid)
-            val dipped = open.dipped || SellLadder.dipping(open.highWater, bid)
-
-            val why = when {
-                // Written off under a dime, and handed back at a third.
-                ProbePlan.rescues(low, bid) -> "спасена с " + (low * 100).toInt() + "¢"
-                // Halved, and back in profit: the money back is the whole of
-                // what is left to want here.
-                ProbePlan.recovered(low, open.price, worth) ->
-                    "падала до " + (low * 100).toInt() + "¢ — вышла в плюс"
-                // Half a minute on the wrong side of the entry, and now a
-                // fifth ahead: the ladder's own price stops being the thing
-                // to wait for on a read that has already been wrong.
-                //
-                // Only once the move is over, though. A position that dipped
-                // early and then went straight up is exactly the one worth
-                // holding to ninety.
-                wasRed && dipped &&
-                    ProbePlan.gained(worth, open.price, ProbePlan.RED_GAIN) ->
-                    "была в минусе — забрала +" +
-                        Math.round((worth / open.price - 1.0) * 100) + "%"
-                else -> null
-            }
-            if (why == null) {
-                working = working.map {
-                    if (it.windowStart == open.windowStart && it.leg == open.leg) {
-                        it.copy(
-                            lowWater = low,
-                            highWater = high,
-                            dipped = dipped,
-                            redFrom = redFrom,
-                            wasRed = wasRed,
-                        )
-                    } else {
-                        it
-                    }
-                }
-                continue
-            }
-
-            val left = open.shares - open.sold
-            val sold = if (open.demo) true else sellOut(open, bid)
-            if (!sold) continue
-
-            working = working.map {
-                if (it.windowStart == open.windowStart && it.leg == open.leg) {
-                    it.copy(
-                        sold = open.shares,
-                        proceeds = open.proceeds + left * SellPercent.netSell(bid),
-                        lowWater = low,
-                        note = why,
-                    )
-                } else {
-                    it
-                }
-            }
-            engine.log(
-                "trade",
-                "Проба" + (if (open.demo) " (демо)" else "") + ": " + why +
-                    " — забрала " + String.format("%.1f", left) +
-                    " ${open.side} по ${(bid * 100).toInt()}¢",
-            )
-            onStateChanged()
-        }
-    }
-
-    /**
      * Sells a real position into the book, pulling our own offers first.
      *
      * The shares under a resting sell are spoken for, and asking for them
@@ -2020,15 +1834,6 @@ class ProbeBot(
                 dipped = open.dipped,
             )
 
-            // Level to level: the trade was taken for the distance to the
-            // next price the market stops at, and once price is there the move
-            // is finished whatever the outcome's own quote is doing. Take what
-            // the book pays rather than wait for a rung that may never come.
-            val settling = here()
-            val arrived = open.target > 0.0 && settling > 0.0 && (
-                if (open.side == "Up") settling >= open.target else settling <= open.target
-            )
-
             val high = maxOf(open.highWater, bid)
             val step = ProbePlan.exitStep(elapsed, high, open.rung, rule)
             // Six cents given back ends the run, and it stays ended.
@@ -2038,19 +1843,7 @@ class ProbeBot(
                 rung = maxOf(open.rung, step),
                 dipped = dipped,
             )
-            if (arrived && bid > 0.0 && bid < want) {
-                val left = open.shares - open.sold
-                moved = moved.copy(
-                    sold = open.shares,
-                    proceeds = open.proceeds + left * SellPercent.netSell(bid),
-                )
-                engine.log(
-                    "trade",
-                    "Проба (демо): дошли до " + Math.round(open.target) +
-                        " — продала " + String.format("%.1f", left) +
-                        " ${open.side} по ${(bid * 100).toInt()}¢",
-                )
-            } else if (SellLadder.reached(bid, want)) {
+            if (SellLadder.reached(bid, want)) {
                 // Up to the last minute the rung is a price to wait for, not
                 // one to sit at: nothing is on the book, and the shares go
                 // into the bid the moment it reaches up — so the rung is a

@@ -48,16 +48,6 @@ export type ManualSettings = {
   autoSellStepSec: number;
   /** Price the exit off what the position cost rather than off the clock. */
   autoSellPercentMode: boolean;
-  /**
-   * The trend bot's own exits, applied to everything held.
-   *
-   * A side written off under a dime and handed back at a third, one that
-   * halved and came back into profit, one that spent half a minute under
-   * water and is now a fifth ahead: none of those are waiting for a rung in
-   * any useful sense, and the rules describe the position rather than who
-   * bought it.
-   */
-  autoSellSmartExit: boolean;
   /** The margin to hold out for, net of the fee. */
   autoSellProfitPct: number;
   /** Pause between slices when a position was built out of several buys. */
@@ -136,7 +126,6 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellLeadSec: 15,
   autoSellStepSec: 30,
   autoSellPercentMode: false,
-  autoSellSmartExit: true,
   autoSellProfitPct: 0.2,
   autoSellSliceGapSec: 2,
   autoSellPanicSec: 60,

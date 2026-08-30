@@ -240,7 +240,6 @@ export function Manual({
           ladderLeadSec: stored.autoSellLeadSec,
           ladderStepSec: stored.autoSellStepSec,
           percentMode: stored.autoSellPercentMode,
-          smartExit: stored.autoSellSmartExit,
           profitPct: stored.autoSellProfitPct,
           sliceGapSec: stored.autoSellSliceGapSec,
           panicSec: stored.autoSellPanicSec,
@@ -523,7 +522,6 @@ export function Manual({
               ladderLeadSec: settingsRef.current.autoSellLeadSec,
               ladderStepSec: settingsRef.current.autoSellStepSec,
               percentMode: settingsRef.current.autoSellPercentMode,
-              smartExit: settingsRef.current.autoSellSmartExit,
               profitPct: settingsRef.current.autoSellProfitPct,
               sliceGapSec: settingsRef.current.autoSellSliceGapSec,
               panicSec: settingsRef.current.autoSellPanicSec,
@@ -2281,14 +2279,11 @@ function ProbeCard({
         ждёт минуту; не налили — снимает её, чтобы деньги не висели до конца
         окна. За 10 с до начала перечитывает картину: пятиминутная свеча к
         этому моменту почти закрыта, и если она больше не показывает ту же
-        сторону — выходит по рынку, а невыкупленную заявку снимает. Выходит обычной лесенкой продаж — той, на
-        которую настроен стол; но если сторона падала ниже 10¢, забирает её
-        сразу на 33¢, а если проваливалась вдвое от цены входа — на первом же
-        плюсе. Если позиция полминуты простояла в минусе — забирает
-        при +20%, но только когда ход уже закончился. А пока
-        цена идёт в нашу сторону и ни разу не отдала 6¢ от своего максимума,
-        держит до 90¢ — первые четыре минуты; после отката продаёт по лесенке
-        сразу, как только цена до неё дошла. Не входит, если до уровня, от которого
+        сторону — выходит по рынку, а невыкупленную заявку снимает. Выходит только лесенкой продаж — той, на
+        которую настроен стол. Пока цена идёт в нашу сторону и ни разу не
+        отдала 6¢ от своего максимума, держит до 90¢ — первые четыре минуты;
+        после отката продаёт по лесенке сразу, как только цена до неё дошла.
+        И забирает удвоение цены входа, не дожидаясь ступеньки. Не входит, если до уровня, от которого
         ждём разворот, осталось меньше{' '}
         {Math.round(state.roomShare * 100)}% обычного хода пятиминутки — тренд,
         упирающийся в стену, кончается на ней. Не входит, когда окно
@@ -3047,7 +3042,6 @@ function RuleBar({
         ladderLeadSec: next.autoSellLeadSec,
         ladderStepSec: next.autoSellStepSec,
         percentMode: next.autoSellPercentMode,
-        smartExit: next.autoSellSmartExit,
         profitPct: next.autoSellProfitPct,
         sliceGapSec: next.autoSellSliceGapSec,
         panicSec: next.autoSellPanicSec,
@@ -3517,7 +3511,6 @@ function ManualSettingsForm({
       ladderLeadSec: next.autoSellLeadSec,
       ladderStepSec: next.autoSellStepSec,
       percentMode: next.autoSellPercentMode,
-      smartExit: next.autoSellSmartExit,
       profitPct: next.autoSellProfitPct,
       sliceGapSec: next.autoSellSliceGapSec,
       panicSec: next.autoSellPanicSec,
@@ -3694,28 +3687,6 @@ function ManualSettingsForm({
         ))}
       </div>
 
-      {/*
-        The bot's own exits, on everything held. They read the position's
-        price against what it cost, which is as true of a hand-placed buy as
-        of the bot's — so this is a switch rather than a second rule.
-      */}
-      <div className="counterhead" style={{ marginTop: 10 }}>
-        <span>Умный выход</span>
-        <button
-          className={`switch ${settings.autoSellSmartExit ? 'on' : ''}`}
-          onClick={() =>
-            push({
-              ...settings,
-              autoSellSmartExit: !settings.autoSellSmartExit,
-            })
-          }
-        />
-      </div>
-      <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
-        Не ждёт ступеньку, если ждать больше нечего: сторону, упавшую ниже
-        10¢, забирает на 33¢; упавшую вдвое — на первом же плюсе; простоявшую
-        полминуты в минусе — при +20%, когда ход уже закончился.
-      </div>
         </>
       )}
 

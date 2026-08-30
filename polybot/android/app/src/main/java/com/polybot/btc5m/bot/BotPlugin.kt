@@ -1068,7 +1068,6 @@ class BotPlugin : Plugin() {
             closeFloor = call.getDouble("closeFloor") ?: defaults.closeFloor,
             lateFloor = call.getDouble("lateFloor") ?: defaults.lateFloor,
             lateBandSec = call.getInt("lateBandSec") ?: defaults.lateBandSec,
-            smartExit = call.getBoolean("smartExit") ?: defaults.smartExit,
         )
         if (next.enabled && !engine.isConfigured()) {
             call.reject("Сначала подключите кошелёк")
@@ -1145,7 +1144,6 @@ class BotPlugin : Plugin() {
                 .put("closeFloor", bot.settings.closeFloor)
                 .put("lateFloor", bot.settings.lateFloor)
                 .put("lateBandSec", bot.settings.lateBandSec)
-                .put("smartExit", bot.settings.smartExit)
                 .put("timings", JSObject()
                     .put("sellReadyMs", Timings.readyMs())
                     .put("sellReadySamples", Timings.readySamples())

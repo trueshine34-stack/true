@@ -218,8 +218,6 @@ export interface PolyBotPlugin {
     closeFloor?: number;
     lateFloor?: number;
     lateBandSec?: number;
-    /** The trend bot's own exits, applied to everything held. */
-    smartExit?: boolean;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
   pulseUpdate(args: {
