@@ -15,6 +15,7 @@ import {
   spendableBalance,
   stakeShares,
   windowCapPct,
+  stretchLadder,
 } from '../manual';
 
 /**
@@ -423,5 +424,40 @@ describe('the ladder default', () => {
     for (let i = 1; i < ladder.length; i++) {
       expect(ladder[i]).toBeGreaterThan(ladder[i - 1]);
     }
+  });
+});
+
+describe('stretchLadder', () => {
+  it('keeps a hand-made ladder and reads it at twice the resolution', () => {
+    // The one on the screen that started this: five rungs of somebody's own
+    // choosing, which should survive the change to half-minute steps.
+    const mine = [0.82, 0.86, 0.89, 0.94, 0.97];
+    const ten = stretchLadder(mine, 10);
+    expect(ten).toHaveLength(10);
+    expect(ten[0]).toBeCloseTo(0.82, 9);
+    expect(ten[9]).toBeCloseTo(0.97, 9);
+  });
+
+  it('never stops climbing', () => {
+    const ten = stretchLadder([0.82, 0.86, 0.89, 0.94, 0.97], 10);
+    for (let i = 1; i < ten.length; i++) {
+      expect(ten[i]).toBeGreaterThanOrEqual(ten[i - 1]);
+    }
+  });
+
+  it('stays on the curve it was given', () => {
+    // A straight ladder resamples to a straight one.
+    const ten = stretchLadder([0.5, 0.9], 5);
+    expect(ten).toEqual([0.5, 0.6, 0.7, 0.8, 0.9]);
+  });
+
+  it('leaves a ladder that is already long enough alone', () => {
+    const ten = DEFAULT_MANUAL_SETTINGS.autoSellLadder;
+    expect(stretchLadder(ten, 10)).toEqual(ten);
+  });
+
+  it('has nothing to stretch from one rung or none', () => {
+    expect(stretchLadder([0.8], 10)).toEqual([0.8]);
+    expect(stretchLadder([], 10)).toEqual([]);
   });
 });

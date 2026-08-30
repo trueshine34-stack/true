@@ -82,6 +82,40 @@ export type ManualSettings = {
  */
 export const LIMIT_LADDER_COUNT = 3;
 
+/**
+ * The same ladder at a finer resolution.
+ *
+ * The rungs used to be one a minute and are one every thirty seconds now,
+ * which needs twice as many of them to reach the close. A ladder the user has
+ * edited is theirs, so it is not replaced with the default — it is resampled:
+ * the same curve, from the same first price to the same last one, read at
+ * twice as many points.
+ *
+ * Rounded to the cent, because that is what the venue trades in, and kept
+ * climbing: two rungs at the same price are one rung with a gap after it.
+ */
+export function stretchLadder(ladder: number[], count: number): number[] {
+  const clean = ladder.filter((p) => Number.isFinite(p) && p > 0 && p < 1);
+  if (clean.length < 2 || count < 2 || clean.length >= count) return [...clean];
+
+  const span = clean.length - 1;
+  const out: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const at = (i / (count - 1)) * span;
+    const low = Math.min(Math.floor(at), span - 1);
+    const part = at - low;
+    const value = clean[low] + (clean[low + 1] - clean[low]) * part;
+    const cents = Math.round(value * 100) / 100;
+    // Never below the rung before it, and never level with it while there is
+    // room above: a ladder that stops climbing has stopped being one.
+    const last = out[out.length - 1];
+    out.push(last === undefined ? cents : Math.max(cents, last));
+  }
+  // The top is the top, whatever the rounding did on the way.
+  out[out.length - 1] = clean[span];
+  return out;
+}
+
 export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellEnabled: false,
   autoSellLadder: [

@@ -1,5 +1,9 @@
 import { Preferences } from '@capacitor/preferences';
-import { DEFAULT_MANUAL_SETTINGS, type ManualSettings } from './manual';
+import {
+  DEFAULT_MANUAL_SETTINGS,
+  stretchLadder,
+  type ManualSettings,
+} from './manual';
 import type { AccountConfig } from './account';
 
 /**
@@ -68,13 +72,8 @@ export async function saveManualSettings(settings: ManualSettings): Promise<void
   await Preferences.set({ key: KEY_MANUAL, value: JSON.stringify(settings) });
 }
 
-/** The five rungs a minute apart that the ladder used to be. */
-const OLD_LADDER = [0.77, 0.84, 0.89, 0.93, 0.97];
-
-const isOldLadder = (ladder: number[] | undefined): boolean =>
-  Array.isArray(ladder) &&
-  ladder.length === OLD_LADDER.length &&
-  ladder.every((price, i) => Math.abs(price - OLD_LADDER[i]) < 1e-9);
+/** How long a rung used to hold, back when there were five of them. */
+const OLD_STEP_SEC = 60;
 
 export async function loadManualSettings(): Promise<ManualSettings> {
   const { value } = await Preferences.get({ key: KEY_MANUAL });
@@ -91,13 +90,19 @@ export async function loadManualSettings(): Promise<ManualSettings> {
         stored.autoSellRetrySec === 7
           ? DEFAULT_MANUAL_SETTINGS.autoSellRetrySec
           : (stored.autoSellRetrySec ?? DEFAULT_MANUAL_SETTINGS.autoSellRetrySec),
-      // The ladder used to be five rungs at a minute each. It steps every
-      // thirty seconds now, which needs ten of them to reach the close — so a
-      // stored ladder that is still the old five is read as "never edited"
-      // rather than as a choice, and gets the new one.
-      autoSellLadder: isOldLadder(stored.autoSellLadder)
-        ? [...DEFAULT_MANUAL_SETTINGS.autoSellLadder]
-        : (stored.autoSellLadder ?? [...DEFAULT_MANUAL_SETTINGS.autoSellLadder]),
+      // The rung used to hold for a minute, and a stored sixty is that old
+      // default rather than a choice — nothing else was ever offered.
+      autoSellStepSec:
+        (stored.autoSellStepSec ?? OLD_STEP_SEC) === OLD_STEP_SEC
+          ? DEFAULT_MANUAL_SETTINGS.autoSellStepSec
+          : stored.autoSellStepSec,
+      // And half-minute rungs need twice as many of them to reach the close.
+      // A ladder the user has edited is theirs, so it is resampled rather than
+      // replaced: the same curve read at twice as many points.
+      autoSellLadder: stretchLadder(
+        stored.autoSellLadder ?? DEFAULT_MANUAL_SETTINGS.autoSellLadder,
+        DEFAULT_MANUAL_SETTINGS.autoSellLadder.length,
+      ),
     };
   } catch {
     return { ...DEFAULT_MANUAL_SETTINGS };
