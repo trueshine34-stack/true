@@ -456,7 +456,12 @@ class PulseBot(
             }
 
             PulsePlan.Exit.HOLD -> {
-                val mine = PulsePlan.takePrice(open.price, settings, market.tickSize)
+                // A doubling is taken whatever the take price says; the rung
+                // is already capped the same way.
+                val mine = SellLadder.capped(
+                    PulsePlan.takePrice(open.price, settings, market.tickSize),
+                    open.price,
+                )
                 val rungAsk = ProbePlan.exitPrice(
                     cost = open.price,
                     elapsedSec = elapsed,
@@ -565,7 +570,11 @@ class PulseBot(
             }
 
             PulsePlan.Exit.HOLD -> {
-                val want = PulsePlan.takePrice(open.price, settings, market.tickSize)
+                // A doubling is taken whatever the take price says.
+                val want = SellLadder.capped(
+                    PulsePlan.takePrice(open.price, settings, market.tickSize),
+                    open.price,
+                )
                 val secondsLeft = open.windowStart + PulsePlan.WINDOW_SEC - Clock.nowSec()
 
                 // Up to the last minute the price is watched rather than

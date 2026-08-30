@@ -303,3 +303,40 @@ class SellLadderWatchTest {
         assertEquals(true, SellLadder.restsNow(30, restSec = 30))
     }
 }
+
+/**
+ * Doubling the money ends the window, whatever the clock says.
+ *
+ * The ladder's first rung is at seventy-seven cents, so a side bought at a
+ * third that comes back to two thirds has doubled and the ladder has not
+ * noticed. Five minutes is not long enough for that to be a step on the way to
+ * something better.
+ */
+class SellLadderDoubleTest {
+
+    @Test
+    fun `a side bought cheap is sold at twice what it cost`() {
+        // Bought at 34, the first rung asks 77 — but 68 is the double.
+        assertEquals(0.68, SellLadder.capped(0.77, 0.34), 1e-9)
+        assertEquals(0.40, SellLadder.capped(0.97, 0.20), 1e-9)
+    }
+
+    @Test
+    fun `it never asks for more than the rung`() {
+        // Bought at 54, twice is 108 — over a dollar, and not a price.
+        assertEquals(0.77, SellLadder.capped(0.77, 0.54), 1e-9)
+        // Exactly the rung is the rung.
+        assertEquals(0.84, SellLadder.capped(0.84, 0.42), 1e-9)
+    }
+
+    @Test
+    fun `without a cost there is nothing to double`() {
+        assertEquals(0.84, SellLadder.capped(0.84, 0.0), 1e-9)
+        assertEquals(0.84, SellLadder.capped(0.84, -1.0), 1e-9)
+    }
+
+    @Test
+    fun `the multiple is adjustable`() {
+        assertEquals(0.51, SellLadder.capped(0.77, 0.34, over = 1.5), 1e-9)
+    }
+}

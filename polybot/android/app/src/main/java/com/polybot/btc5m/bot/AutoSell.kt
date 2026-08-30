@@ -462,7 +462,16 @@ class AutoSell(
             // before it opens used to read the current window's elapsed time
             // and start four rungs up.
             val rung = trackRung(position, meta?.windowStart ?: windowStart, now)
-            val ladderTarget = settings.ladder.getOrElse(rung.step) { settings.ladder.last() }
+            // A doubling is taken whatever rung the clock is on. The first
+            // rung sits at seventy-seven cents, so a side bought at a third
+            // that comes back to two thirds has doubled the money with the
+            // ladder none the wiser.
+            val paid = OrderLog.uncoveredLots(position.asset).firstOrNull()?.price
+                ?: position.avgPrice
+            val ladderTarget = SellLadder.capped(
+                settings.ladder.getOrElse(rung.step) { settings.ladder.last() },
+                paid,
+            )
 
             // The venue locks freshly bought shares, and how long for is
             // something the app has measured rather than something the

@@ -705,18 +705,21 @@ object ProbePlan {
         tick: Double = 0.01,
     ): Double {
         if (exit.percentMode) {
-            return SellPercent.priceFor(
-                avgPrice = cost,
-                gain = exit.profitPct,
-                tick = tick,
-                // One lot per window, so there is never a slice to step over.
-                resting = null,
-                secondsLeft = secondsLeft,
-                panicSec = exit.panicSec,
-                bestBid = bestBid,
-                closeFloor = exit.closeFloor,
-                lateFloor = exit.lateFloor,
-                lateBandSec = exit.lateBandSec,
+            return SellLadder.capped(
+                SellPercent.priceFor(
+                    avgPrice = cost,
+                    gain = exit.profitPct,
+                    tick = tick,
+                    // One lot per window, so there is never a slice to step over.
+                    resting = null,
+                    secondsLeft = secondsLeft,
+                    panicSec = exit.panicSec,
+                    bestBid = bestBid,
+                    closeFloor = exit.closeFloor,
+                    lateFloor = exit.lateFloor,
+                    lateBandSec = exit.lateBandSec,
+                ),
+                cost,
             )
         }
         val rungs = exit.ladder.ifEmpty { SellLadder.DEFAULT }
@@ -728,7 +731,11 @@ object ProbePlan {
             leadSec = exit.ladderLeadSec,
             stepSec = exit.ladderStepSec,
         )
-        return rungs[step.coerceIn(0, rungs.size - 1)]
+        // A doubling is taken whatever rung the clock is on: the first rung
+        // sits at seventy-seven cents, so a side bought at a third that comes
+        // back to two thirds has doubled the money with the ladder none the
+        // wiser.
+        return SellLadder.capped(rungs[step.coerceIn(0, rungs.size - 1)], cost)
     }
 
     /**

@@ -83,6 +83,29 @@ object SellLadder {
     }
 
     /**
+     * What a doubling is worth: taking, whatever rung the clock is on.
+     *
+     * The ladder is a clock, and its first rung is up at seventy-seven cents —
+     * so a side bought at a third that comes back to two thirds has doubled
+     * the money and the ladder has not noticed. Doubling in five minutes is
+     * not a step on the way to something better; it is the move, and the rest
+     * of the window is the market deciding whether to take it back.
+     */
+    const val DOUBLE_TAKE = 2.0
+
+    /**
+     * The price to sell at: the rung, or double what it cost if that comes
+     * first.
+     *
+     * Never higher than the rung — this only ever brings the exit forward.
+     */
+    fun capped(rung: Double, cost: Double, over: Double = DOUBLE_TAKE): Double {
+        if (cost <= 0.0 || over <= 0.0) return rung
+        val twice = cost * over
+        return if (twice < rung) twice else rung
+    }
+
+    /**
      * How long before the close the ladder stops watching and starts resting.
      *
      * The last minute. Up to then the rung is a price to *wait for*: nothing
