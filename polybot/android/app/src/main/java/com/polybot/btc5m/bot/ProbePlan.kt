@@ -168,37 +168,6 @@ object ProbePlan {
     }
 
     /**
-     * How far a position has to fall to be treated as lost.
-     *
-     * Under twenty cents the market has all but decided against it, and every
-     * rung of the sell ladder is now somewhere the price will not go — the
-     * offer sits at seventy-seven and the shares expire at nothing.
-     */
-    const val SINK_PRICE = 0.20
-
-    /** And how far back it has to come to be worth abandoning at a loss. */
-    const val BAIL_PRICE = 0.40
-
-    /**
-     * Whether a position that went nearly worthless has come back far enough
-     * to sell.
-     *
-     * This is not a profit rule. A side that fell under twenty cents and is
-     * being bid forty again is a side the market is arguing about a second
-     * time, and forty cents back is worth more than the whole dollar it will
-     * probably never pay. Taking it turns a write-off into a part refund.
-     */
-    fun bail(
-        lowWater: Double,
-        bid: Double,
-        sink: Double = SINK_PRICE,
-        back: Double = BAIL_PRICE,
-    ): Boolean {
-        if (lowWater <= 0.0 || bid <= 0.0) return false
-        return lowWater < sink && bid >= back
-    }
-
-    /**
      * How much of a win rides on the next window.
      *
      * A quarter, and it compounds: each win adds a quarter of itself to what

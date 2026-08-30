@@ -76,8 +76,7 @@ class ProbeBot(
         val target: Double = 0.0,
         /** Best bid seen while holding, which is what walks the ladder up. */
         val highWater: Double = 0.0,
-        /** And the worst, which is what says the position was written off. */
-        val lowWater: Double = 0.0,
+
         /** The rung reached, so a paper exit cannot slide back down. */
         val rung: Int = 0,
     ) {
@@ -308,9 +307,7 @@ class ProbeBot(
         // that has been bought.
         if (settings.enabled) {
             fillResting(nowSec)
-            // A position the market has written off comes first: it has no
-            // rung left to reach, so nothing below would ever sell it.
-            guard(nowSec)
+            readSales()
             workPaper(nowSec)
         }
 
@@ -668,127 +665,41 @@ class ProbeBot(
     }
 
     /**
-     * The rule that abandons a position the market has decided against.
+     * Reads what the desk's own sell rule has managed to sell.
      *
-     * Every rung of the sell ladder is above the entry, so a side that has
-     * fallen under twenty cents has no exit at all: the offer rests at
-     * seventy-seven and the shares expire at nothing. But a side that fell
-     * that far and is being bid forty again is one the market is arguing about
-     * a second time, and forty cents in hand beats the dollar it will probably
-     * never pay. Taking it turns a write-off into a part refund.
-     *
-     * Runs over paper and real positions alike — on paper it books the sale,
-     * and with real shares it pulls whatever the desk has resting on them
-     * first, because the shares under a standing offer are spoken for and
-     * asking for them again is refused.
+     * A real position is exited by that rule, and the order log is where the
+     * sale shows up — reading it every tick is what lets a window be filed the
+     * moment the ladder's price is touched rather than five minutes later.
+     * Paper positions keep their own books and are not looked at here.
      */
-    private fun guard(nowSec: Long) {
-        val held = working.filter { it.shares > it.sold + 1e-9 }
+    private fun readSales() {
+        val held = working.filter { !it.demo && it.shares > it.sold + 1e-9 }
         if (held.isEmpty()) return
 
         var next = working
         var changed = false
         for (open in held) {
-            if (nowSec >= open.windowStart + WINDOW_SEC) continue
-            val bid = try {
-                ClobApi.bestBid(open.asset)
-            } catch (e: Exception) {
-                null
-            } ?: continue
+            val sells = OrderLog.forWindow(open.windowStart)
+                .filter { it.asset == open.asset && it.action == "SELL" }
+            val sold = sells.sumOf { it.matched }.coerceAtMost(open.shares)
+            if (sold <= open.sold + 1e-9) continue
 
-            val low = if (open.lowWater <= 0.0) bid else minOf(open.lowWater, bid)
-            var moved = open.copy(lowWater = low)
-
-            // A real position is sold by the desk's own rule, and the order
-            // log is where that shows up. Reading it here is what lets a
-            // window be filed the moment the ladder's price is touched rather
-            // than five minutes later.
-            if (!open.demo) {
-                val sells = OrderLog.forWindow(open.windowStart)
-                    .filter { it.asset == open.asset && it.action == "SELL" }
-                val sold = sells.sumOf { it.matched }.coerceAtMost(open.shares)
-                if (sold > open.sold + 1e-9) {
-                    moved = moved.copy(
+            next = next.map {
+                if (it.windowStart == open.windowStart) {
+                    it.copy(
                         sold = sold,
-                        proceeds = sells.sumOf { it.matched * it.realPrice },
+                        proceeds = sells.sumOf { row -> row.matched * row.realPrice },
                     )
-                }
-            }
-
-            if (ProbePlan.bail(low, bid)) {
-                val left = open.shares - open.sold
-                val sold = if (open.demo) {
-                    true
                 } else {
-                    sellOut(open, bid)
-                }
-                if (sold) {
-                    moved = moved.copy(
-                        sold = open.shares,
-                        proceeds = open.proceeds + left * SellPercent.netSell(bid),
-                        note = "спасено с " + (low * 100).toInt() + "¢",
-                    )
-                    engine.log(
-                        "warn",
-                        "Проба" + (if (open.demo) " (демо)" else "") + ": падала до " +
-                            "${(low * 100).toInt()}¢ — забрала " +
-                            String.format("%.1f", left) + " ${open.side} по " +
-                            "${(bid * 100).toInt()}¢",
-                    )
+                    it
                 }
             }
-
-            if (moved != open) {
-                next = next.map { if (it.windowStart == open.windowStart) moved else it }
-                changed = true
-            }
+            changed = true
         }
         if (changed) {
             working = next
             onStateChanged()
         }
-    }
-
-    /**
-     * Sells a real position into the book, pulling our own offers first.
-     *
-     * The shares under a resting sell are spoken for, and asking for them
-     * again comes back as "not enough balance" — which is true and useless.
-     */
-    private fun sellOut(open: Round, bid: Double): Boolean {
-        val session = engine.session() ?: return false
-        val market = engine.marketForWindow(open.windowStart) ?: return false
-
-        try {
-            ClobApi.openOrders(session.creds, session.account.signerAddress)
-                .filter { it.assetId == open.asset && it.side == "SELL" }
-                .forEach {
-                    try {
-                        ClobApi.cancelOrder(session.creds, session.account.signerAddress, it.id)
-                    } catch (e: Exception) {
-                        // It may have filled in between, which the log will show.
-                    }
-                }
-        } catch (e: Exception) {
-            return false
-        }
-
-        val price = maxOf(market.tickSize, bid - market.tickSize)
-        val result = try {
-            engine.placeManualOrder(
-                tokenId = open.asset,
-                conditionId = market.conditionId,
-                side = "SELL",
-                price = price,
-                size = open.shares - open.sold,
-                orderType = "GTC",
-                auto = true,
-            )
-        } catch (e: Exception) {
-            note = e.message ?: "ошибка сети"
-            return false
-        }
-        return result.success
     }
 
     /**

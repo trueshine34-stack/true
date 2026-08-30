@@ -495,33 +495,9 @@ class ProbePlanTest {
         assertNull(pick.note)
     }
 
-    @Test
-    fun `a position that fell under twenty is abandoned when it comes back`() {
-        // It went to fifteen and is bid forty again: forty in hand beats the
-        // dollar it will probably never pay.
-        assertTrue(ProbePlan.bail(lowWater = 0.15, bid = 0.40))
-        assertTrue(ProbePlan.bail(lowWater = 0.05, bid = 0.62))
-    }
 
-    @Test
-    fun `a position still on the floor is not sold at the floor`() {
-        assertTrue(!ProbePlan.bail(lowWater = 0.15, bid = 0.18))
-        assertTrue(!ProbePlan.bail(lowWater = 0.15, bid = 0.39))
-    }
 
-    @Test
-    fun `a position that never fell that far keeps its ladder`() {
-        // Down to thirty and back to fifty is an ordinary wobble, and the
-        // rungs above are still reachable.
-        assertTrue(!ProbePlan.bail(lowWater = 0.30, bid = 0.55))
-        assertTrue(!ProbePlan.bail(lowWater = ProbePlan.SINK_PRICE, bid = 0.90))
-    }
 
-    @Test
-    fun `nothing to say before a price has been seen`() {
-        assertTrue(!ProbePlan.bail(lowWater = 0.0, bid = 0.50))
-        assertTrue(!ProbePlan.bail(lowWater = 0.10, bid = 0.0))
-    }
 
     @Test
     fun `a win puts a quarter of itself on the next window`() {
