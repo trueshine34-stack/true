@@ -263,16 +263,7 @@ object ProbePlan {
         // second half it is a level being tested, not turned — the lines carry
         // the window instead, and buying into the tested level is refused
         // separately by `rejectedAt`.
-        //
-        // And when the bounce would be bought against the candle that is
-        // closing — a green five minutes turned back from resistance, say —
-        // the level has to be one worth arguing with the close about: a round
-        // five hundred, or a price that has turned the market more than twice.
-        // Anything less and the candle wins.
         if (hitTop && minuteBody < 0.0) {
-            if (candleBody > 0.0 && above?.important != true) {
-                return Choice("", "свеча зелёная")
-            }
             // A level the market has spent the hour above is not resistance
             // met from below; it is the floor of the range, and being under it
             // is the exception. Selling away from it sells the exception.
@@ -282,33 +273,25 @@ object ProbePlan {
             return Choice("Down", "отбой от " + Math.round(above?.price ?: 0.0))
         }
         if (hitFloor && minuteBody > 0.0) {
-            if (candleBody < 0.0 && below?.important != true) {
-                return Choice("", "свеча красная")
-            }
             if (homeBelow == "Down") {
                 return Choice("", "над " + Math.round(below?.price ?: 0.0) + ", живём ниже")
             }
             return Choice("Up", "отбой от " + Math.round(below?.price ?: 0.0))
         }
 
-        // Nothing was touched, so the question is the ordinary one: is there a
-        // direction, and is the closing candle going that way.
+        // Nothing was touched, so the question is the ordinary one: is there
+        // a direction at all.
         if (way.isEmpty()) return Choice("", "нет линии")
 
         // A flat five minutes is not an opposite direction, it is silence, and
         // silence should not veto a minute chart that is perfectly clear.
         if (wide.isNotEmpty() && wide != way) return Choice("", "тренды спорят")
 
-        // Either candle can disagree, and each is judged against its own kind:
-        // a twelve-dollar minute is a big minute and a small five minutes.
-        val against = listOf(candleBody to typical, minuteBody to minuteTypical)
-            .filter { (body, _) -> body != 0.0 && (way == "Up") != (body > 0.0) }
-        if (against.isEmpty()) return Choice(way, null)
-
-        val loudest = against.maxByOrNull { (body, scale) ->
-            if (scale > 0.0) abs(body) / scale else 0.0
-        }!!
-        return Choice("", if (loudest.first > 0.0) "свеча зелёная" else "свеча красная")
+        // The candle that is closing no longer votes. It vetoed more windows
+        // than anything else here and had no say in which of them were worth
+        // vetoing: a red five minutes under a line pointing up is as often
+        // the last of the move as the first of the next one.
+        return Choice(way, null)
     }
 
     /**

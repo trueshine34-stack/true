@@ -874,6 +874,15 @@ button.compact.narrow {
   height: 190px;
 }
 
+/*
+  With no side chosen the dock has no terms on it, and the spacer that keeps
+  the page clear of it should not reserve their height. Forty-one pixels is
+  what the row measures.
+*/
+.dockgap.short {
+  height: 149px;
+}
+
 .limitrow {
   display: flex;
   align-items: stretch;

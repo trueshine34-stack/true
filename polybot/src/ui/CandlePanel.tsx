@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 import { PolyBot } from '../native/polybot';
 import { candleShape, signedPct, type Candle } from '../core/candles';
 import { findLevels } from '../core/levels';
-import { levelAhead, ratePerHour, trendOf } from '../core/trend';
+import {
+  NEAR_MINUTES,
+  WIDE_MINUTES,
+  levelAhead,
+  ratePerHour,
+  trendOf,
+} from '../core/trend';
 import { priceLabel } from '../core/depth';
 
 /** Every window is five minutes, and every window opens on a multiple of it. */
@@ -88,7 +94,10 @@ export function CandleFace({
     the three. The close chart looks at thirty minutes, the wide one at an
     hour: each about a screen's worth of its own candles.
   */
-  const trend = trendOf(candles, interval === '5m' ? 60 : 30);
+  // The same windows the rules fit their lines over, so the line on the
+  // screen is the line the bot is reading — three hours on the five-minute
+  // chart, half an hour on the minute one.
+  const trend = trendOf(candles, interval === '5m' ? WIDE_MINUTES : NEAR_MINUTES);
   const ahead = shape && trend ? levelAhead(levels, shape.last, trend.way) : null;
 
   /*

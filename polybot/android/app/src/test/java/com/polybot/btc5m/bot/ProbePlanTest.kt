@@ -1127,10 +1127,16 @@ class ProbePlanTest {
         assertTrue(!ProbePlan.restingDone(59))
     }
 
+    /**
+     * The closing candle used to veto a bounce off a level it disagreed with,
+     * unless the level was a round five hundred or thrice-touched. It vetoed
+     * more windows than anything else here and had no say in which of them
+     * were worth vetoing, so it no longer votes: the bounce stands on the
+     * wick, the level and the minute that ends the window.
+     */
     @Test
-    fun `a bounce against the closing candle needs a level worth it`() {
-        // The five minutes is closing green and the bounce would buy Down. A
-        // pivot touched twice is not enough to argue with the close.
+    fun `the closing candle no longer vetoes a bounce`() {
+        // The five minutes is closing green and the bounce buys Down.
         val weak = ProbePlan.choose(
             way = "Up",
             wide = "Up",
@@ -1143,8 +1149,8 @@ class ProbePlanTest {
             minuteTypical = 14.0,
             above = ProbePlan.Wall(78_311.0, touches = 2, round = false),
         )
-        assertEquals("", weak.side)
-        assertEquals("свеча зелёная", weak.note)
+        assertEquals("Down", weak.side)
+        assertEquals("отбой от 78311", weak.note)
     }
 
     @Test

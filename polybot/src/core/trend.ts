@@ -35,6 +35,19 @@ export interface Trend {
 const MIN_FIT = 0.25;
 const MIN_TRAVEL = 0.3;
 
+/**
+ * How long each chart's line looks back, in minutes.
+ *
+ * An hour of five-minute candles is twelve points, which is a line drawn
+ * through the last hour's noise as readily as through its direction; three
+ * hours is thirty-six, and a slope fitted through that many describes the
+ * session rather than the last few candles of it.
+ */
+export const WIDE_MINUTES = 180;
+
+/** And the close view, which is meant to be the last half hour. */
+export const NEAR_MINUTES = 30;
+
 export function trendOf(candles: Candle[], overMinutes: number): Trend | null {
   const clean = candles.filter(([t, o, h, l, c]) => t > 0 && o > 0 && h > 0 && l > 0 && c > 0);
   if (clean.length < 4) return null;

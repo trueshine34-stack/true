@@ -1479,7 +1479,12 @@ export function Manual({
 
       {note && <div className="banner info">{note}</div>}
 
-      {tab !== 'settings' && <div className="dockgap" aria-hidden />}
+      {tab !== 'settings' && (
+        <div
+          className={`dockgap${side == null ? ' short' : ''}`}
+          aria-hidden
+        />
+      )}
 
       {/*
         The trading row is pinned to the bottom edge of the screen, not to the
@@ -1488,6 +1493,17 @@ export function Manual({
         have to look for.
       */}
       <div className={`dock${tab === 'settings' ? ' away' : ''}`}>
+        {/*
+          Nothing to buy with until a side is chosen.
+
+          The terms — price, size, and the button that sends them — are only
+          answers to "which side", and a row of them sitting under an
+          unanswered question is a row that has to be ignored on every glance.
+          Tapping a quote below opens it; tapping the lit one again puts it
+          away.
+        */}
+        {side != null && (
+        <>
         {/*
           The size is picked, not typed: a share of what this window may still
           take, one tap, against a keypad that covers the book you are pricing
@@ -1616,6 +1632,8 @@ export function Manual({
             </button>
           </div>
         </div>
+        </>
+        )}
 
             {/*
               The two sides: what each costs to buy, and what is held on it.
@@ -1645,6 +1663,14 @@ export function Manual({
               ceiling={ceiling}
               chosen={side}
               onPick={(which, price) => {
+                // Tapping the side already chosen puts the terms away again,
+                // which is the only way to close them.
+                if (which === side) {
+                  setSide(null);
+                  setPickingPrice(false);
+                  setSizingLimit(false);
+                  return;
+                }
                 setSide(which);
                 setLimitPrice(String(Math.round(price * 100)));
                 // And the size the field is about to spend: all of it. The
@@ -2241,8 +2267,9 @@ function ProbeCard({
     state.candleBody > 0 ? 'up' : state.candleBody < 0 ? 'down' : 'muted';
   const minuteTone =
     state.minuteBody > 0 ? 'up' : state.minuteBody < 0 ? 'down' : 'muted';
-  // Either candle disagreeing with the line is enough to hold the entry back,
-  // so either one is worth colouring.
+  // Whether either candle is going the other way. It no longer stops an
+  // entry — the closing candle stopped voting — so this is said plainly
+  // rather than in the red of something being refused.
   const disagrees = (body: number) =>
     way !== '' && body !== 0 && (way === 'Up') !== (body > 0);
   const against = disagrees(state.candleBody) || disagrees(state.minuteBody);
@@ -2337,9 +2364,7 @@ function ProbeCard({
               {Math.round(Math.abs(state.minuteBody))}
             </i>
           </b>
-          <em className={against ? 'down' : undefined}>
-            {against ? 'против' : 'по линии'}
-          </em>
+          <em className="muted">{against ? 'против' : 'по линии'}</em>
         </div>
         <div>
           <span>круглый</span>
