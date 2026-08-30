@@ -576,6 +576,24 @@ class ProbePlanTest {
         )
     }
 
+    /**
+     * The ceiling is on the progression, not on the entry. A base stake the
+     * user set goes in whatever share of the account it happens to be.
+     */
+    @Test
+    fun `the base stake goes in even when it is over a quarter of the account`() {
+        // Five dollars of a twelve dollar account is more than a quarter, and
+        // it is still the stake.
+        assertEquals(
+            5.0,
+            ProbePlan.stakeFor(5.0, won = 0.0, start = 100.0, streak = 0.0, bank = 12.0),
+            1e-9,
+        )
+        assertEquals(5.0, ProbePlan.capped(5.0, base = 5.0, bank = 12.0), 1e-9)
+        // Only what the run added on top is trimmed.
+        assertEquals(5.0, ProbePlan.capped(9.0, base = 5.0, bank = 12.0), 1e-9)
+    }
+
     @Test
     fun `an unknown account leaves the run uncapped`() {
         assertEquals(
@@ -720,6 +738,81 @@ class ProbePlanTest {
     fun `with no low seen there is nothing to rescue`() {
         assertTrue(!ProbePlan.rescues(lowWater = 0.0, bid = 0.90))
         assertTrue(!ProbePlan.rescues(lowWater = 0.05, bid = 0.0))
+    }
+
+    /**
+     * The screenshot: a minute several times the size of the ones around it
+     * spiked and closed red, and the rule bought Down with it — paying up for
+     * a move that had already happened, into a side the book had already
+     * repriced.
+     */
+    @Test
+    fun `a minute that has already fired is not followed`() {
+        // Eighty dollars where a minute usually covers twenty.
+        assertEquals(
+            "минутка выстрелила вниз",
+            ProbePlan.blockedBecause(
+                way = "Down",
+                ask = 0.54,
+                cashUsd = 100.0,
+                settings = on,
+                price = 78_050.0,
+                level = 77_500.0,
+                typical = 60.0,
+                minuteRange = 80.0,
+                minuteBody = -55.0,
+                minuteTypical = 20.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `the other side of that minute is still open`() {
+        // Nothing about a big red minute stops a bet the other way.
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.54,
+                cashUsd = 100.0,
+                settings = on,
+                price = 78_150.0,
+                level = 78_600.0,
+                typical = 60.0,
+                minuteRange = 80.0,
+                minuteBody = -55.0,
+                minuteTypical = 20.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `an ordinary minute is followed as before`() {
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Down",
+                ask = 0.54,
+                cashUsd = 100.0,
+                settings = on,
+                price = 78_150.0,
+                level = 77_500.0,
+                typical = 60.0,
+                // Twice the usual is large; two and a half is anomalous.
+                minuteRange = 40.0,
+                minuteBody = -30.0,
+                minuteTypical = 20.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `size is the whole candle and direction is the body`() {
+        // A long wick makes the candle big even when the body is modest.
+        assertTrue(ProbePlan.spent("Up", minuteRange = 60.0, minuteBody = 5.0, minuteTypical = 20.0))
+        assertTrue(!ProbePlan.spent("Down", minuteRange = 60.0, minuteBody = 5.0, minuteTypical = 20.0))
+        // A candle that closed where it opened points nowhere.
+        assertTrue(!ProbePlan.spent("Up", minuteRange = 60.0, minuteBody = 0.0, minuteTypical = 20.0))
+        // And with nothing to compare against, nothing is anomalous.
+        assertTrue(!ProbePlan.spent("Up", minuteRange = 60.0, minuteBody = 5.0, minuteTypical = 0.0))
     }
 
     /**

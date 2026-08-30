@@ -548,6 +548,15 @@ class ProbeBot(
 
         val here = here()
         val typical = Levels.typicalRange(BinanceCandles.fiveMinute.list())
+        // The minute that closes as the window opens, and what the minutes
+        // before it were — the candle itself is left out of its own average,
+        // or an outsized one raises the bar it is being measured against.
+        val minutes = BinanceCandles.oneMinute.list()
+        val lastMinute = minutes.lastOrNull()
+        val minuteRange = lastMinute
+            ?.let { if (it.high > 0.0 && it.low > 0.0) it.high - it.low else 0.0 }
+            ?: 0.0
+        val minuteTypical = Levels.typicalRange(minutes.dropLast(1))
         // The five-minute candle that closes as this window opens: at twenty
         // seconds out its shape is already decided enough to read.
         val closing = BinanceCandles.fiveMinute.list().lastOrNull()
@@ -646,6 +655,9 @@ class ProbeBot(
             // can travel is a question about five minutes, so the scale is
             // still the five-minute candle's own range.
             typical = typical,
+            minuteRange = minuteRange,
+            minuteBody = body(lastMinute),
+            minuteTypical = minuteTypical,
             byLine = pick.byLine,
             stake = staking,
         )
@@ -684,6 +696,9 @@ class ProbeBot(
             // can travel is a question about five minutes, so the scale is
             // still the five-minute candle's own range.
             typical = typical,
+            minuteRange = minuteRange,
+            minuteBody = body(lastMinute),
+            minuteTypical = minuteTypical,
             byLine = pick.byLine,
             stake = stake,
         )
@@ -839,7 +854,12 @@ class ProbeBot(
                         )
             } ?: "нет"
         }
-        val minute = body(BinanceCandles.oneMinute.list().lastOrNull())
+        val minutes = BinanceCandles.oneMinute.list()
+        val minute = body(minutes.lastOrNull())
+        val minuteRange = minutes.lastOrNull()
+            ?.let { if (it.high > 0.0 && it.low > 0.0) it.high - it.low else 0.0 }
+            ?: 0.0
+        val minuteTypical = Levels.typicalRange(minutes.dropLast(1))
         val room = if (aim > 0.0 && here > 0.0) abs(aim - here) else 0.0
 
         return listOf(
@@ -850,6 +870,13 @@ class ProbeBot(
             "тренд 5м: " + (wide?.way.orEmpty().ifEmpty { "вбок" }),
             "свеча 5м: " + dollars(body) + " · минутка: " + dollars(minute),
             "обычный ход 5м: " + Math.round(typical) + "$",
+            "размер минутки: " + (
+                if (minuteTypical > 0.0) {
+                    String.format("%.1f", minuteRange / minuteTypical) + "× обычной"
+                } else {
+                    "нечем мерить"
+                }
+                ),
             "цена BTC: " + Math.round(here),
             "стена сверху: " + wall(above),
             "стена снизу: " + wall(below),

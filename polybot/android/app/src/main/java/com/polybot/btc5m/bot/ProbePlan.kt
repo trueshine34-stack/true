@@ -491,6 +491,42 @@ object ProbePlan {
     const val SHOCK = 2.0
 
     /**
+     * How many times the usual minute the last one has to be before the move
+     * it made counts as already spent.
+     *
+     * Higher than [SHOCK], which guards a top-up. A top-up refused costs
+     * nothing but a smaller position; an entry refused costs the whole window,
+     * so the candle has to be plainly anomalous — the kind a person looking at
+     * the chart would point at — rather than merely large.
+     */
+    const val SPENT = 2.5
+
+    /**
+     * Whether the minute that just closed is too big to be followed.
+     *
+     * Measured on the whole candle, wicks included, because that is what
+     * "a big candle" means to the eye; the direction comes from the body. A
+     * minute two and a half times the size of the minutes around it has made
+     * its move, and the side it made it in is the dear side by the time the
+     * window opens — so buying with it is paying up for something that has
+     * already happened.
+     */
+    fun spent(
+        way: String,
+        minuteRange: Double,
+        minuteBody: Double,
+        minuteTypical: Double,
+        limit: Double = SPENT,
+    ): Boolean {
+        if (way.isEmpty() || minuteTypical <= 0.0 || limit <= 0.0) return false
+        if (minuteRange <= minuteTypical * limit) return false
+        // A candle that closed where it opened points nowhere, whatever it
+        // did in between.
+        if (minuteBody == 0.0) return false
+        return (way == "Up") == (minuteBody > 0.0)
+    }
+
+    /**
      * Whether the move that made this price is too big to buy into.
      *
      * [against] is how far the running minute has travelled the wrong way for
@@ -706,6 +742,10 @@ object ProbePlan {
         candleHigh: Double = 0.0,
         candleLow: Double = 0.0,
         candleClose: Double = 0.0,
+        /** And the minute that just closed, against a minute's usual size. */
+        minuteRange: Double = 0.0,
+        minuteBody: Double = 0.0,
+        minuteTypical: Double = 0.0,
     ): String? {
         if (!settings.enabled) return "выключен"
         // The line is read off the minute candles, so an empty answer means
@@ -713,6 +753,13 @@ object ProbePlan {
         if (way.isEmpty()) return "нет свечей"
         if (rejectedAt(way, candleHigh, candleLow, candleClose, level, typical)) {
             return "отбой от " + Math.round(level ?: 0.0)
+        }
+        // A minute far bigger than the minutes around it has made its move,
+        // and by the time the window opens that side is the dear one. Going
+        // with it is paying up for something that has already happened.
+        if (spent(way, minuteRange, minuteBody, minuteTypical)) {
+            return "минутка выстрелила " +
+                (if (minuteBody > 0.0) "вверх" else "вниз")
         }
         // The room ahead is checked for every entry, whatever chose the side.
         // A level beats a line: the trend can say what it likes, but a trade
