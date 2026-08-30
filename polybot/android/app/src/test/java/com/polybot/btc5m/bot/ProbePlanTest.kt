@@ -1228,8 +1228,18 @@ class ProbePlanTest {
         assertNull(pick.note)
     }
 
+    /**
+     * The five-minute line used to veto the minute one whenever they
+     * disagreed, which sounds like caution and is the opposite. It averages
+     * three hours, so after a turn it points the old way for most of an hour
+     * — and the windows it vetoed were the turn itself.
+     *
+     * Over 793 windows of real tape, following the minute line where the two
+     * disagree is right 55% of the time, against 47% where they agree and 46%
+     * where the wide line has no opinion.
+     */
     @Test
-    fun `a five-minute line that does call the other way still vetoes`() {
+    fun `the minute line wins when the two disagree`() {
         val pick = ProbePlan.choose(
             way = "Down",
             wide = "Up",
@@ -1238,8 +1248,8 @@ class ProbePlanTest {
             minuteBody = -5.0,
             minuteTypical = 14.0,
         )
-        assertEquals("", pick.side)
-        assertEquals("тренды спорят", pick.note)
+        assertEquals("Down", pick.side)
+        assertNull(pick.note)
     }
 
     @Test

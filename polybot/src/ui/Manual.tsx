@@ -2311,7 +2311,9 @@ function ProbeCard({
         которую настроен стол. Пока цена идёт в нашу сторону и ни разу не
         отдала 6¢ от своего максимума, держит до 90¢ — первые четыре минуты;
         после отката продаёт по лесенке сразу, как только цена до неё дошла.
-        И забирает удвоение цены входа, не дожидаясь ступеньки. Не покупает вверх у самого верха
+        И забирает удвоение цены входа, не дожидаясь ступеньки. Когда линии 1м и 5м спорят,
+        решает минутная: пятиминутная усредняет три часа и после разворота
+        ещё долго показывает старую сторону. Не покупает вверх у самого верха
         пятиминутного графика и вниз у самого низа — там, где цена сама стала
         стеной и впереди уже ничего нет. Не входит и тогда, когда пятиминутка потянулась
         в нашу сторону и была отбита — большой хвост на нашей стороне при
@@ -2354,8 +2356,12 @@ function ProbeCard({
             <i className={arrowTone(way)}>{arrow(way)}</i>
             <i className={arrowTone(wideWay)}>{arrow(wideWay)}</i>
           </b>
-          <em className={agree ? undefined : 'down'}>
-            {agree ? `${Math.round(Math.abs(line?.perHour ?? 0))}/ч` : 'спорят'}
+          {/* The rate the minute line is moving at, which is the one that
+              decides — said the same way whether or not the wide line
+              agrees, because disagreeing no longer stops anything. */}
+          <em className={agree ? undefined : 'muted'}>
+            {Math.round(Math.abs(line?.perHour ?? 0))}/ч
+            {!agree && ' · 1м'}
           </em>
         </div>
         <div>
