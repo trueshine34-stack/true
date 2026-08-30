@@ -60,7 +60,7 @@ class ProbePlanTest {
     fun `takes a side at the market only while it is cheap enough`() {
         assertTrue(!ProbePlan.waits(0.42))
         assertTrue(!ProbePlan.waits(ProbePlan.MAX_TAKE))
-        assertTrue(ProbePlan.waits(0.57))
+        assertTrue(ProbePlan.waits(0.58))
         assertTrue(ProbePlan.waits(0.90))
     }
 
