@@ -693,6 +693,59 @@ object ProbePlan {
     }
 
     /**
+     * How wide the outcome's own price may wander and still be standing still.
+     *
+     * Five cents. A quote inside a nickel is not a market deciding anything;
+     * it is a market waiting, and a five-minute bet cannot afford to wait
+     * with it.
+     */
+    const val FLAT_BAND = 0.05
+
+    /** And how long it has to stand there before that means something. */
+    const val FLAT_SEC = 30L
+
+    /**
+     * The profit worth taking off a price that has stopped moving.
+     *
+     * A fifth. The ladder overhead wants far more, but it is asking a price
+     * that requires the market to do something, and a market inside a nickel
+     * for half a minute has said it is not going to.
+     */
+    const val FLAT_GAIN = 0.20
+
+    /** How long under water before the ambition drops. */
+    const val RED_SEC = 30L
+
+    /**
+     * And the profit worth taking after that.
+     *
+     * A tenth. Half a minute on the wrong side of the entry is the read
+     * having been wrong for a tenth of the window; getting out ahead is
+     * already better than the position deserved.
+     */
+    const val RED_GAIN = 0.10
+
+    /**
+     * Whether the quote has stood inside its band for long enough.
+     *
+     * [span] is how far the best bid has travelled since the stretch began —
+     * its highest less its lowest — and [heldSec] how long that stretch has
+     * lasted.
+     */
+    fun stoodStill(
+        heldSec: Long,
+        span: Double,
+        band: Double = FLAT_BAND,
+        forSec: Long = FLAT_SEC,
+    ): Boolean = heldSec >= forSec && span <= band + 1e-9
+
+    /** Whether what a share nets is this far above what it cost. */
+    fun gained(worth: Double, cost: Double, share: Double): Boolean {
+        if (cost <= 0.0 || worth <= 0.0) return false
+        return worth >= cost * (1.0 + share) - 1e-9
+    }
+
+    /**
      * How far price has to travel in a minute for the move to still be moving.
      *
      * Seven dollars. Under that it is not going anywhere: the position is

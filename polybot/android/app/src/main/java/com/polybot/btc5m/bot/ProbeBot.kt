@@ -98,6 +98,23 @@ class ProbeBot(
          * there rather than ridden to the close.
          */
         val lowWater: Double = 0.0,
+        /**
+         * The stretch the quote has spent inside one nickel: when it began,
+         * and the lowest and highest bid seen since.
+         *
+         * A price that has not left a five-cent band for half a minute is a
+         * market that has stopped deciding, and a five-minute bet cannot
+         * afford to wait with it.
+         */
+        val flatFrom: Long = 0L,
+        val flatLow: Double = 0.0,
+        val flatHigh: Double = 0.0,
+        /**
+         * When the position went under water, and whether it stayed there
+         * long enough to change what it is worth waiting for.
+         */
+        val redFrom: Long = 0L,
+        val wasRed: Boolean = false,
 
         /** The rung reached, so a paper exit cannot slide back down. */
         val rung: Int = 0,
@@ -452,7 +469,7 @@ class ProbeBot(
             recheck(nowSec)
             // A side that went to nothing and came back is let go of the
             // moment it can be, before anything else looks at it.
-            rescue()
+            rescue(nowSec)
             // A winner that has stopped at a level is taken there, before any
             // rung is consulted: the rung is above the level and the level is
             // where the move ends.
@@ -1704,7 +1721,7 @@ class ProbeBot(
      * checked before the ladder, because the ladder's own price is up at
      * seventy-seven and would never fire here.
      */
-    private fun rescue() {
+    private fun rescue(nowSec: Long) {
         val riding = working.filter { it.shares > it.sold + 1e-9 }
         if (riding.isEmpty()) return
 
@@ -1715,10 +1732,31 @@ class ProbeBot(
                 null
             } ?: continue
 
-            // The worst the side has been worth, which is what arms both of
-            // the rules below.
+            // The worst the side has been worth, which is what arms the first
+            // two rules below.
             val low = if (open.lowWater <= 0.0) bid else minOf(open.lowWater, bid)
             val worth = SellPercent.netSell(bid)
+
+            // How long the quote has stayed inside one nickel. A bid that
+            // leaves the band starts the stretch again from where it landed.
+            val lo = if (open.flatFrom == 0L) bid else minOf(open.flatLow, bid)
+            val hi = if (open.flatFrom == 0L) bid else maxOf(open.flatHigh, bid)
+            val wide = hi - lo > ProbePlan.FLAT_BAND + 1e-9
+            val flatFrom = if (open.flatFrom == 0L || wide) nowSec else open.flatFrom
+            val flatLow = if (wide) bid else lo
+            val flatHigh = if (wide) bid else hi
+
+            // And how long it has been under water, which resets the moment
+            // it is not.
+            val under = worth < open.price
+            val redFrom = when {
+                !under -> 0L
+                open.redFrom == 0L -> nowSec
+                else -> open.redFrom
+            }
+            val wasRed = open.wasRed ||
+                (under && redFrom > 0L && nowSec - redFrom >= ProbePlan.RED_SEC)
+
             val why = when {
                 // Written off under a dime, and handed back at a third.
                 ProbePlan.rescues(low, bid) -> "спасена с " + (low * 100).toInt() + "¢"
@@ -1726,16 +1764,33 @@ class ProbeBot(
                 // what is left to want here.
                 ProbePlan.recovered(low, open.price, worth) ->
                     "падала до " + (low * 100).toInt() + "¢ — вышла в плюс"
+                // Half a minute on the wrong side of the entry, and now ahead:
+                // a tenth is already better than the position deserved.
+                wasRed && ProbePlan.gained(worth, open.price, ProbePlan.RED_GAIN) ->
+                    "была в минусе — забрала +" +
+                        Math.round((worth / open.price - 1.0) * 100) + "%"
+                // Or a quote that has not left a nickel for half a minute:
+                // the ladder wants a move this market has said it will not
+                // make.
+                ProbePlan.stoodStill(nowSec - flatFrom, flatHigh - flatLow) &&
+                    ProbePlan.gained(worth, open.price, ProbePlan.FLAT_GAIN) ->
+                    "стоит на месте — забрала +" +
+                        Math.round((worth / open.price - 1.0) * 100) + "%"
                 else -> null
             }
             if (why == null) {
-                if (low != open.lowWater) {
-                    working = working.map {
-                        if (it.windowStart == open.windowStart && it.leg == open.leg) {
-                            it.copy(lowWater = low)
-                        } else {
-                            it
-                        }
+                working = working.map {
+                    if (it.windowStart == open.windowStart && it.leg == open.leg) {
+                        it.copy(
+                            lowWater = low,
+                            flatFrom = flatFrom,
+                            flatLow = flatLow,
+                            flatHigh = flatHigh,
+                            redFrom = redFrom,
+                            wasRed = wasRed,
+                        )
+                    } else {
+                        it
                     }
                 }
                 continue
