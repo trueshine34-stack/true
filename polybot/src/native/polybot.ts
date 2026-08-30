@@ -474,8 +474,26 @@ export type ProbeRound = {
   /** Whether the line called the window right. */
   right: boolean;
   note?: string | null;
+  /**
+   * Everything the rule was looking at when it chose this side, one fact a
+   * line. Shown when a row in the history is tapped.
+   */
+  why?: string | null;
   /** Still riding: bought, not yet scored. */
   open: boolean;
+};
+
+/** A sell offer the rule is showing right now, paper or real. */
+export type ProbeOffer = {
+  windowStart: number;
+  side: string;
+  price: number;
+  size: number;
+  /** The rung reached, which the offer never slips back below. */
+  rung: number;
+  demo: boolean;
+  /** Which buy of the window it stands over. */
+  leg: number;
 };
 
 export type ProbeState = {
@@ -533,6 +551,8 @@ export type ProbeState = {
   /** Newest first. */
   rounds: ProbeRound[];
   riding: ProbeRound[];
+  /** What is on offer for everything still held. */
+  offers: ProbeOffer[];
 };
 
 export type TakeState = {
@@ -685,6 +705,7 @@ const webStub: PolyBotPlugin = {
     losing: false,
     rounds: [],
     riding: [],
+    offers: [],
   }),
   pulseUpdate: async () => {},
   pulseReset: async () => {},

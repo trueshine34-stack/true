@@ -3280,6 +3280,14 @@ button.wide {
   -webkit-overflow-scrolling: touch;
 }
 
+/*
+  A reading is a dozen lines, and reading it through a 220px window is worse
+  than not showing it. The list stays short until one is open.
+*/
+.probelist:has(.probewhy) {
+  max-height: 420px;
+}
+
 .proberow {
   display: grid;
   grid-template-columns: 42px 34px 1fr 14px auto;
@@ -3451,6 +3459,51 @@ button.wide {
   padding: 6px 4px;
   font-size: 13px;
   border-radius: 8px;
+}
+
+/*
+  A row with a reading behind it is a button, and has to be talked out of
+  looking like one: the grid, the type and the alignment are the row's, and all
+  the button brings is the tap.
+*/
+.proberow.tappable {
+  width: 100%;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.proberow.tappable.opened {
+  background: var(--surface-2);
+  border-bottom-color: transparent;
+}
+
+/* What the rule was looking at, under the row it belongs to. */
+.probewhy {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px 8px;
+  margin-bottom: 4px;
+  background: var(--surface-2);
+  border-radius: 0 0 8px 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.probefact {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.probefact b {
+  text-align: right;
 }
 
 /* A window the probe stood out of: the reason, where the numbers would be. */

@@ -50,6 +50,7 @@ import {
   type TakeState,
   type PulseState,
   type ProbeState,
+  type ProbeOffer,
   type ProbeRound,
   type NativePosition,
   type OpenOrder,
@@ -2520,17 +2521,27 @@ function ProbeCard({
           <div className="probelist">
             {/* What is open sits at the top of the same list it will join. */}
             {state.riding.map((r) => (
-              <ProbeRow key={r.windowStart} round={r} />
+              <ProbeRow
+                key={`${r.windowStart}-${r.leg}`}
+                round={r}
+                offer={offerFor(state.offers, r)}
+              />
             ))}
             {state.rounds.map((r) => (
-              <ProbeRow key={r.windowStart} round={r} />
+              <ProbeRow key={`${r.windowStart}-${r.leg}`} round={r} />
             ))}
           </div>
         </>
       ) : (
         <div className="botbar muted">
           {state.riding.length > 0 ? (
-            state.riding.map((r) => <ProbeRow key={r.windowStart} round={r} />)
+            state.riding.map((r) => (
+              <ProbeRow
+                key={`${r.windowStart}-${r.leg}`}
+                round={r}
+                offer={offerFor(state.offers, r)}
+              />
+            ))
           ) : (
             <b className="muted">{state.note || 'ждёт окна'}</b>
           )}
@@ -2542,13 +2553,63 @@ function ProbeCard({
   );
 }
 
-/** One window, as a line: what was taken, and what it came to. */
-function ProbeRow({ round }: { round: ProbeRound }) {
-  // A window still running shows what is held and where it is aiming; there is
-  // no result to show yet, so the clock says "идёт" instead.
+/** The offer standing over a position, matched by window and leg. */
+function offerFor(
+  offers: ProbeOffer[] | undefined,
+  round: ProbeRound,
+): ProbeOffer | undefined {
+  return (offers ?? []).find(
+    (o) => o.windowStart === round.windowStart && o.leg === round.leg,
+  );
+}
+
+/**
+ * One window, as a line: what was taken, and what it came to.
+ *
+ * Tapping it opens what the rule was looking at when it chose the side. A
+ * history that only says "Down, lost" cannot be argued with; the round carries
+ * its whole reading, so the line can show it.
+ */
+function ProbeRow({ round, offer }: { round: ProbeRound; offer?: ProbeOffer }) {
+  const [open, setOpen] = useState(false);
+  const why = (round.why ?? '').trim();
+
+  // Only a row with something to say is worth tapping.
+  const body = (inner: React.ReactNode, cls: string) =>
+    why ? (
+      <>
+        <button
+          type="button"
+          className={`proberow tappable ${cls}${open ? ' opened' : ''}`}
+          onClick={() => setOpen(!open)}
+        >
+          {inner}
+        </button>
+        {open && (
+          <div className="probewhy">
+            {why.split('\n').map((line) => {
+              const at = line.indexOf(':');
+              const name = at > 0 ? line.slice(0, at) : '';
+              const value = at > 0 ? line.slice(at + 1).trim() : line;
+              return (
+                <div className="probefact" key={line}>
+                  <span className="muted">{name}</span>
+                  <b>{value}</b>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </>
+    ) : (
+      <div className={`proberow ${cls}`}>{inner}</div>
+    );
+
+  // A window still running shows what is held, where it is aiming, and — the
+  // part nothing else on the screen shows in demo — the offer standing over it.
   if (round.open) {
-    return (
-      <div className="proberow live">
+    return body(
+      <>
         <span className="probewhen">{clockOf(round.windowStart)}</span>
         <span className={round.side === 'Up' ? 'up' : 'down'}>{round.side}</span>
         <span className="muted">
@@ -2557,25 +2618,31 @@ function ProbeRow({ round }: { round: ProbeRound }) {
             : `ждёт ${cents(round.resting || 0)}`}
           {round.adds > 0 ? ` ×${round.adds + 1}` : ''}
           {round.leg > 0 ? ' откуп' : ''}
-          {round.target > 0 ? ` → ${bigPrice(round.target)}` : ''}
+          {offer
+            ? ` · продаёт ${cents(offer.price)}`
+            : round.target > 0
+              ? ` → ${bigPrice(round.target)}`
+              : ''}
         </span>
         <span className="probemark">·</span>
         <b className="warn">идёт</b>
-      </div>
+      </>,
+      'live',
     );
   }
 
   // A window it stood out of still gets a line, with the reason in place of
   // the numbers — that is the whole point of writing them down.
   if (!traded(round)) {
-    return (
-      <div className="proberow skipped">
+    return body(
+      <>
         <span className="probewhen">{clockOf(round.windowStart)}</span>
         <span className="muted">—</span>
         <span className="muted">пропуск: {round.note || 'без причины'}</span>
         <span className="probemark">·</span>
         <b className="muted">—</b>
-      </div>
+      </>,
+      'skipped',
     );
   }
 
@@ -2586,8 +2653,8 @@ function ProbeRow({ round }: { round: ProbeRound }) {
   const out =
     round.shares > 0 ? (round.proceeds + round.settled) / round.shares : 0;
 
-  return (
-    <div className="proberow">
+  return body(
+    <>
       <span className="probewhen">{clockOf(round.windowStart)}</span>
       <span className={round.side === 'Up' ? 'up' : 'down'}>{round.side}</span>
       <span className="muted">
@@ -2600,7 +2667,8 @@ function ProbeRow({ round }: { round: ProbeRound }) {
         {money >= 0 ? '+' : '−'}
         {usd(Math.abs(money))}
       </b>
-    </div>
+    </>,
+    '',
   );
 }
 

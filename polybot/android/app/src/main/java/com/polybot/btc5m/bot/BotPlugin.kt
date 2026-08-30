@@ -1493,6 +1493,7 @@ class BotPlugin : Plugin() {
             .put("pnl", r.pnl)
             .put("right", r.right)
             .put("note", r.note)
+            .put("why", r.why)
             .put("open", open)
 
         val rounds = JSArray()
@@ -1501,6 +1502,23 @@ class BotPlugin : Plugin() {
 
         val riding = JSArray()
         bot.working.forEach { riding.put(row(it, open = true)) }
+
+        // What the rule is currently asking for anything it holds. In demo
+        // these live nowhere else, so without them the card shows a position
+        // and no sign of the offer standing over it.
+        val offers = JSArray()
+        bot.offers.forEach {
+            offers.put(
+                JSObject()
+                    .put("windowStart", it.windowStart)
+                    .put("side", it.side)
+                    .put("price", it.price)
+                    .put("size", it.size)
+                    .put("rung", it.rung)
+                    .put("demo", it.demo)
+                    .put("leg", it.leg),
+            )
+        }
 
         call.resolve(
             JSObject()
@@ -1538,7 +1556,8 @@ class BotPlugin : Plugin() {
                         .put("fit", it.fit)
                 })
                 .put("rounds", rounds)
-                .put("riding", riding),
+                .put("riding", riding)
+                .put("offers", offers),
         )
     }
 }

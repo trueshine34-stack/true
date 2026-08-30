@@ -101,6 +101,14 @@ class ProbeBot(
 
         /** The rung reached, so a paper exit cannot slide back down. */
         val rung: Int = 0,
+        /**
+         * Everything the rule was looking at when it chose this side.
+         *
+         * One line per fact, in the order a person would check them. A
+         * history that only says "Down, lost" cannot be argued with; one that
+         * says which trend, which candle, which walls and how much room can.
+         */
+        val why: String = "",
     ) {
         val cost: Double get() = shares * price
         val pnl: Double get() = proceeds + settled - cost
@@ -178,6 +186,15 @@ class ProbeBot(
     @Volatile
     var roomToRound: Double? = null
         private set
+
+    /**
+     * Everything the last entry was decided on, one fact a line.
+     *
+     * Built in [enter] and copied onto whichever buy the branch below takes,
+     * so a round in the history can say what it was looking at rather than
+     * only what it did.
+     */
+    private var reading: String = ""
 
     /** Why nothing is being bought right now, in the person's words. */
     @Volatile
@@ -399,8 +416,11 @@ class ProbeBot(
             readRun()
         }
 
+        // Paper money needs no wallet: it reads the same public book, and
+        // nothing it does is ever signed. Only real orders need a session, and
+        // the demo is meant to keep running whether one is connected or not.
         val session = engine.session()
-        if (session == null) {
+        if (session == null && !settings.demo) {
             lastFault = "кошелёк не подключён"
             // So the window this costs is filed with the reason rather than
             // as a silent gap.
@@ -470,6 +490,7 @@ class ProbeBot(
             price = 0.0,
             winner = EventStats.winnerFor(missed, nowSec),
             note = aimNote ?: "не успел",
+            why = reading,
         )
         rounds = rounds + skipped
         store.saveRounds(rounds)
@@ -557,6 +578,22 @@ class ProbeBot(
         // What this window will actually stake, which is the run's addition
         // only while the run is still alive.
         val staking = stakeLive
+
+        // Everything the decision rests on, written down before any gate has
+        // had its say — so a window that is stood out of carries the same
+        // reading as one that is traded, which is the half worth reading.
+        reading = readingOf(
+            pick = pick,
+            line = line,
+            here = here,
+            aim = aim,
+            above = above,
+            below = below,
+            body = body,
+            typical = typical,
+            ask = ask,
+            staking = staking,
+        )
 
         // The balance is a request, so it is only asked for once everything
         // free has already agreed.
@@ -675,6 +712,7 @@ class ProbeBot(
                     price = 0.0,
                     resting = ProbePlan.REST_PRICE,
                     target = aim,
+                    why = reading,
                 )
                 note = "жду по ${(ProbePlan.REST_PRICE * 100).toInt()}¢"
                 engine.log(
@@ -701,6 +739,7 @@ class ProbeBot(
             shares = fill.shares,
             price = price,
             target = aim,
+            why = reading,
         )
         working = working + round
         note = "в позиции"
@@ -722,6 +761,116 @@ class ProbeBot(
      * marketable order into a resting offer is what actually happens when this
      * rule fires for real.
      */
+    /**
+     * Everything the entry was decided on, one fact a line.
+     *
+     * Written in the order a person checks them — what chose the side, then
+     * the two trends, then the two candles, then the walls either side and
+     * the room to the one in front, then the round number, then what it cost.
+     * The point is that a losing round can be argued with afterwards: a
+     * history saying only "Down, lost" teaches nothing.
+     */
+    private fun readingOf(
+        pick: ProbePlan.Choice,
+        line: TrendFit.Trend?,
+        here: Double,
+        aim: Double,
+        above: ProbePlan.Wall?,
+        below: ProbePlan.Wall?,
+        body: Double,
+        typical: Double,
+        ask: Double?,
+        staking: Double,
+    ): String {
+        val cents = { p: Double -> "${(p * 100).toInt()}¢" }
+        val dollars = { v: Double -> (if (v >= 0) "+" else "−") + Math.round(abs(v)) + "$" }
+        val wall = { w: ProbePlan.Wall? ->
+            w?.let {
+                Math.round(it.price).toString() +
+                    (if (it.round) " (круглый)" else " (×" + it.touches + ")")
+            } ?: "нет"
+        }
+        val minute = body(BinanceCandles.oneMinute.list().lastOrNull())
+        val room = if (aim > 0.0 && here > 0.0) abs(aim - here) else 0.0
+
+        return listOf(
+            "решение: " + (pick.note ?: "по тренду"),
+            "тренд 1м: " + (line?.way.orEmpty().ifEmpty { "вбок" }) +
+                " " + Math.round(line?.perHour ?: 0.0) + "$/ч" +
+                " R² " + String.format("%.2f", line?.fit ?: 0.0),
+            "тренд 5м: " + (wide?.way.orEmpty().ifEmpty { "вбок" }),
+            "свеча 5м: " + dollars(body) + " · минутка: " + dollars(minute),
+            "обычный ход 5м: " + Math.round(typical) + "$",
+            "цена BTC: " + Math.round(here),
+            "стена сверху: " + wall(above),
+            "стена снизу: " + wall(below),
+            "цель: " + (if (aim > 0.0) Math.round(aim).toString() +
+                " (" + Math.round(room) + "$)" else "нет"),
+            "круглый: " + (roundNear?.let {
+                Math.round(it).toString() + " в " + Math.round(roomToRound ?: 0.0) + "$"
+            } ?: "нет"),
+            "аск: " + (
+                ask?.let {
+                    cents(it) + (
+                        if (ProbePlan.waits(it)) {
+                            " — дорого, жду по " + cents(ProbePlan.REST_PRICE)
+                        } else {
+                            " — беру по " + cents(ProbePlan.entryPrice(it))
+                        }
+                        )
+                } ?: "нет цены"
+                ),
+            "ставка: $" + String.format("%.2f", staking) +
+                (if (streak > 0.0) " (серия +$" + String.format("%.2f", streak) + ")" else ""),
+        ).joinToString("\n")
+    }
+
+    /**
+     * A sell offer the rule is showing right now.
+     *
+     * In demo nothing is sent anywhere, so the only place these exist is here
+     * — which is exactly why they are worth publishing: without them the card
+     * shows a position and no sign of what it is asking for it.
+     */
+    data class Offer(
+        val windowStart: Long,
+        val side: String,
+        val price: Double,
+        val size: Double,
+        val rung: Int,
+        val demo: Boolean,
+        val leg: Int,
+    )
+
+    /** What is on offer for everything still held, paper or real. */
+    val offers: List<Offer>
+        get() {
+            val nowSec = Clock.nowSec()
+            val rule = exit()
+            return working
+                .filter { it.shares > it.sold + 1e-9 }
+                .map { open ->
+                    val elapsed = nowSec - open.windowStart
+                    Offer(
+                        windowStart = open.windowStart,
+                        side = open.side,
+                        price = ProbePlan.exitPrice(
+                            cost = open.price,
+                            elapsedSec = elapsed,
+                            secondsLeft = open.windowStart + WINDOW_SEC - nowSec,
+                            highWater = open.highWater,
+                            rung = open.rung,
+                            bestBid = null,
+                            exit = rule,
+                        ),
+                        size = open.shares - open.sold,
+                        rung = open.rung,
+                        demo = open.demo,
+                        leg = open.leg,
+                    )
+                }
+        }
+
     private fun paperBuy(
         windowStart: Long,
         token: String,
@@ -742,6 +891,7 @@ class ProbeBot(
             // off what it actually cost rather than off the quote.
             price = ProbePlan.takenPrice(ask),
             target = aim,
+            why = reading,
         )
         working = working + round
         note = "в позиции (демо)"
@@ -1295,6 +1445,7 @@ class ProbeBot(
             price = 0.0,
             resting = ProbePlan.REST_PRICE,
             target = aim,
+            why = reading,
         )
         note = "жду по ${(ProbePlan.REST_PRICE * 100).toInt()}¢ (демо)"
         engine.log(
