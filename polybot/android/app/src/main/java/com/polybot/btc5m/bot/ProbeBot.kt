@@ -582,6 +582,9 @@ class ProbeBot(
         val minuteTypical: Double,
         val above: ProbePlan.Wall?,
         val below: ProbePlan.Wall?,
+        /** The high and the low of everything the five-minute chart holds. */
+        val top: Double,
+        val bottom: Double,
         val pick: ProbePlan.Choice,
     )
 
@@ -674,6 +677,8 @@ class ProbeBot(
             minuteTypical = minuteTypical,
             above = above,
             below = below,
+            top = top ?: 0.0,
+            bottom = bottom ?: 0.0,
             pick = pick,
         )
     }
@@ -770,6 +775,8 @@ class ProbeBot(
             // can travel is a question about five minutes, so the scale is
             // still the five-minute candle's own range.
             typical = typical,
+            top = seen.top,
+            bottom = seen.bottom,
             minuteRange = minuteRange,
             minuteBody = body(lastMinute),
             minuteTypical = minuteTypical,
@@ -813,6 +820,8 @@ class ProbeBot(
             // can travel is a question about five minutes, so the scale is
             // still the five-minute candle's own range.
             typical = typical,
+            top = seen.top,
+            bottom = seen.bottom,
             minuteRange = minuteRange,
             minuteBody = body(lastMinute),
             minuteTypical = minuteTypical,

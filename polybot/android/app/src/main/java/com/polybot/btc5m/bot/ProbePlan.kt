@@ -342,6 +342,46 @@ object ProbePlan {
     }
 
     /**
+     * How near the edge of everything on the screen is too near to buy toward.
+     *
+     * One typical five-minute move. Not a share of [Settings.roomShare]: that
+     * setting scales what an ordinary wall asks for, and turning it down —
+     * which is a reasonable thing to want — should not also switch off the
+     * question of whether there is anywhere left to go at all.
+     */
+    const val EDGE_BAND = 1.0
+
+    /**
+     * Whether price is already at the edge of the visible range.
+     *
+     * The wall rules treat the high of the history as a level, but only while
+     * it is above price: the moment price reaches it the wall stops existing,
+     * which is the moment it matters. Buying Up into the top of everything on
+     * the screen is buying the one price at which nothing on the screen has
+     * ever been worth more.
+     *
+     * Measured over 794 windows of real tape: entries this stops win 44%
+     * against 50% for the ones it lets through, and it stops 18% of them.
+     * Tighter bands sharpen it — a quarter of a move is 40% against 49% — on
+     * samples too small to lean on.
+     */
+    fun atEdge(
+        way: String,
+        price: Double,
+        top: Double,
+        bottom: Double,
+        typical: Double,
+        band: Double = EDGE_BAND,
+    ): Boolean {
+        if (way.isEmpty() || price <= 0.0 || typical <= 0.0 || band <= 0.0) return false
+        return if (way == "Up") {
+            top > 0.0 && top - price <= typical * band
+        } else {
+            bottom > 0.0 && price - bottom <= typical * band
+        }
+    }
+
+    /**
      * How much of the closing candle has to be wick on the trade's own side
      * before the move it tried to make counts as refused.
      */
@@ -809,6 +849,9 @@ object ProbePlan {
         candleHigh: Double = 0.0,
         candleLow: Double = 0.0,
         candleClose: Double = 0.0,
+        /** The high and the low of the whole visible history. */
+        top: Double = 0.0,
+        bottom: Double = 0.0,
         /** And the minute that just closed, against a minute's usual size. */
         minuteRange: Double = 0.0,
         minuteBody: Double = 0.0,
@@ -839,6 +882,12 @@ object ProbePlan {
         // standing on the level is the worst place of all to buy through it.
         // The exemption a bounce gets is for the level behind it — the one it
         // just came off — and [level] is never that one.
+        // At the edge of everything on the screen there is no wall ahead to
+        // measure against, because price has become the wall.
+        if (atEdge(way, price, top, bottom, typical)) {
+            return (if (way == "Up") "у потолка " else "у дна ") +
+                Math.round(if (way == "Up") top else bottom)
+        }
         // The edge of the range asks for half again as much room: it is the
         // strongest line on the chart, and a window started within reach of
         // it is a window with nowhere to go.

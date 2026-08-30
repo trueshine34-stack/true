@@ -1002,6 +1002,82 @@ class ProbePlanTest {
         assertTrue(!ProbePlan.refused("", 78_800.0, 78_832.0, 78_794.0, 78_806.0, 40.0))
     }
 
+    /**
+     * The 23:39 entry bought Up with price at the top of everything the
+     * five-minute chart held. The wall rules had nothing to say: they treat
+     * that high as a level only while it is above price, and price had
+     * reached it — so the wall stopped existing at the moment it mattered.
+     */
+    @Test
+    fun `the top of the visible range is not a place to buy upwards`() {
+        assertTrue(
+            ProbePlan.atEdge(
+                way = "Up",
+                price = 79_166.0,
+                top = 79_250.0,
+                bottom = 78_700.0,
+                typical = 145.0,
+            ),
+        )
+        assertEquals(
+            "у потолка 79250",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.47,
+                cashUsd = 100.0,
+                settings = on,
+                price = 79_166.0,
+                level = 79_600.0,
+                typical = 145.0,
+                top = 79_250.0,
+                bottom = 78_700.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `and the bottom is not a place to buy downwards`() {
+        assertTrue(
+            ProbePlan.atEdge("Down", 78_760.0, 79_250.0, 78_700.0, typical = 145.0),
+        )
+        // The same price bought upwards has the whole range in front of it.
+        assertTrue(
+            !ProbePlan.atEdge("Up", 78_760.0, 79_250.0, 78_700.0, typical = 145.0),
+        )
+    }
+
+    /**
+     * The band is a typical move rather than a share of the room setting.
+     * Turning that setting down is a reasonable thing to want, and it should
+     * not also switch off the question of whether there is anywhere to go.
+     */
+    @Test
+    fun `the middle of the range is open whatever the room setting says`() {
+        assertTrue(
+            !ProbePlan.atEdge("Up", 79_050.0, 79_250.0, 78_700.0, typical = 145.0),
+        )
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.47,
+                cashUsd = 100.0,
+                settings = on.copy(roomShare = 0.15, roundBand = 0.0),
+                price = 79_050.0,
+                level = 79_600.0,
+                typical = 145.0,
+                top = 79_250.0,
+                bottom = 78_700.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `without a range there is no edge`() {
+        assertTrue(!ProbePlan.atEdge("Up", 79_166.0, 0.0, 0.0, typical = 145.0))
+        assertTrue(!ProbePlan.atEdge("Up", 79_166.0, 79_250.0, 78_700.0, typical = 0.0))
+        assertTrue(!ProbePlan.atEdge("", 79_166.0, 79_250.0, 78_700.0, typical = 145.0))
+    }
+
     @Test
     fun `only the same side still supports the position`() {
         assertTrue(ProbePlan.stillOn("Up", "Up"))
