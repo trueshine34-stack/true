@@ -369,10 +369,33 @@ class ProbePlanTest {
 
 
     @Test
-    fun `a win puts a quarter of itself on the next window`() {
-        assertEquals(1.0, ProbePlan.nextStreak(0.0, 4.0), 1e-9)
-        // And the next win adds a quarter of its own on top.
-        assertEquals(1.5, ProbePlan.nextStreak(1.0, 2.0), 1e-9)
+    fun `a win puts half of itself on the next window`() {
+        assertEquals(2.0, ProbePlan.nextStreak(0.0, 4.0), 1e-9)
+        // And the next win adds half of its own on top.
+        assertEquals(2.0, ProbePlan.nextStreak(1.0, 2.0), 1e-9)
+    }
+
+    /**
+     * The next entry is placed while the window before it is still open, so a
+     * run that is about to be ended by that window would otherwise stake its
+     * largest bet on the way out.
+     */
+    @Test
+    fun `a run does not ride a window that is already losing`() {
+        // Five dollars in, the book would pay four: the run is over.
+        assertEquals(0.0, ProbePlan.riding(3.0, worth = 4.0, cost = 5.0), 1e-9)
+        // Ahead, so it rides.
+        assertEquals(3.0, ProbePlan.riding(3.0, worth = 7.0, cost = 5.0), 1e-9)
+        // Exactly flat is not a loss.
+        assertEquals(3.0, ProbePlan.riding(3.0, worth = 5.0, cost = 5.0), 1e-9)
+    }
+
+    @Test
+    fun `the reset takes the stake back to base`() {
+        val streak = 4.0
+        assertEquals(9.0, ProbePlan.stakeFor(5.0, 0.0, 100.0, streak), 1e-9)
+        val live = ProbePlan.riding(streak, worth = 1.0, cost = 5.0)
+        assertEquals(5.0, ProbePlan.stakeFor(5.0, 0.0, 100.0, live), 1e-9)
     }
 
     @Test
@@ -413,34 +436,93 @@ class ProbePlanTest {
     }
 
     @Test
-    fun `a side that fell under a third is bought again`() {
-        assertTrue(ProbePlan.addsUp(elapsedSec = 30, ask = 0.30, alreadyAdded = false))
-        assertTrue(ProbePlan.addsUp(elapsedSec = 120, ask = 0.12, alreadyAdded = false))
+    fun `a side that fell under forty-two is bought again`() {
+        assertTrue(ProbePlan.addsUp(elapsedSec = 30, ask = 0.41, adds = 0))
+        assertTrue(ProbePlan.addsUp(elapsedSec = 120, ask = 0.35, adds = 0))
+    }
+
+    @Test
+    fun `the second buy waits for thirty-three`() {
+        // Forty-one is the first rung's price, not the second's.
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.41, adds = 1))
+        assertTrue(ProbePlan.addsUp(elapsedSec = 30, ask = 0.32, adds = 1))
     }
 
     @Test
     fun `a side that has not fallen that far is left alone`() {
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.34, alreadyAdded = false))
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.45, alreadyAdded = false))
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.42, adds = 0))
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.45, adds = 0))
     }
 
     @Test
     fun `past two minutes a cheap side is late rather than cheap`() {
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 121, ask = 0.20, alreadyAdded = false))
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 280, ask = 0.05, alreadyAdded = false))
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 121, ask = 0.20, adds = 0))
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 280, ask = 0.05, adds = 0))
     }
 
     @Test
-    fun `the same money goes in once and no more`() {
+    fun `a window holds three buys and never a fourth`() {
         // A rule that keeps doubling into a falling side loses the account on
         // the day the read is simply wrong.
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.20, alreadyAdded = true))
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.05, adds = 2))
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.05, adds = 9))
     }
 
     @Test
     fun `without a price there is nothing to buy`() {
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = null, alreadyAdded = false))
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.0, alreadyAdded = false))
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = null, adds = 0))
+        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.0, adds = 0))
+    }
+
+    /**
+     * The ladder sold at eighty; the market handed the same side back at
+     * sixty-four, which is a fifth off what it went for.
+     */
+    @Test
+    fun `a side is bought back a fifth under its own sale`() {
+        assertTrue(ProbePlan.buysBack(60, ask = 0.64, soldAt = 0.80, alreadyBack = false))
+        assertTrue(ProbePlan.buysBack(60, ask = 0.60, soldAt = 0.80, alreadyBack = false))
+        // A cent short of the drop is not the drop.
+        assertTrue(!ProbePlan.buysBack(60, ask = 0.65, soldAt = 0.80, alreadyBack = false))
+    }
+
+    @Test
+    fun `the buy-back stops at forty-four cents`() {
+        // Sold at ninety, so a fifth off is seventy-two — but by the time the
+        // price is here the side is no longer the favourite.
+        assertTrue(!ProbePlan.buysBack(60, ask = 0.43, soldAt = 0.90, alreadyBack = false))
+        assertTrue(ProbePlan.buysBack(60, ask = 0.44, soldAt = 0.90, alreadyBack = false))
+    }
+
+    @Test
+    fun `a sale is bought back once, and only while there is time`() {
+        assertTrue(!ProbePlan.buysBack(60, ask = 0.60, soldAt = 0.80, alreadyBack = true))
+        assertTrue(!ProbePlan.buysBack(200, ask = 0.60, soldAt = 0.80, alreadyBack = false))
+        // And a sale that never happened has no price to measure under.
+        assertTrue(!ProbePlan.buysBack(60, ask = 0.60, soldAt = 0.0, alreadyBack = false))
+    }
+
+    /**
+     * The dip is only worth buying while it is noise. A minute several times
+     * the size of the minutes around it is the news that moved the price.
+     */
+    @Test
+    fun `an outsized minute is not bought into`() {
+        // Minutes usually cover fifty dollars; this one covered a hundred and
+        // twenty, all of it the wrong way.
+        assertTrue(ProbePlan.shocked(against = 120.0, typical = 50.0))
+        assertTrue(!ProbePlan.shocked(against = 90.0, typical = 50.0))
+        // With nothing to compare against, nothing is anomalous.
+        assertTrue(!ProbePlan.shocked(against = 500.0, typical = 0.0))
+    }
+
+    @Test
+    fun `only the move against the side counts`() {
+        // Down eighty dollars: bad for Up, and nothing at all for Down.
+        assertEquals(80.0, ProbePlan.againstBy("Up", 80_000.0, 79_920.0), 1e-9)
+        assertEquals(0.0, ProbePlan.againstBy("Down", 80_000.0, 79_920.0), 1e-9)
+        assertEquals(80.0, ProbePlan.againstBy("Down", 80_000.0, 80_080.0), 1e-9)
+        assertEquals(0.0, ProbePlan.againstBy("Up", 80_000.0, 80_080.0), 1e-9)
     }
 
     /** A five-minute candle that ran into resistance and closed back under. */

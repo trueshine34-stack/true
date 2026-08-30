@@ -2380,9 +2380,12 @@ function ProbeCard({
           <b className="muted">кошелёк</b>
         )}
         {/* What the next window will actually stake, when it is not the base. */}
-        <b className={state.streak > 0 ? 'up pushright' : 'pushright'}>
+        <b className={state.streak > 0 && !state.losing ? 'up pushright' : 'pushright'}>
           {usd(state.stakeNow)}
-          {state.streak > 0 && <em> серия +{usd(state.streak)}</em>}
+          {/* A run riding on a window that is already losing is over: the
+              stake falls back to base before the next entry, not after. */}
+          {state.streak > 0 && !state.losing && <em> серия +{usd(state.streak)}</em>}
+          {state.streak > 0 && state.losing && <em className="down"> серия сброшена</em>}
         </b>
       </div>
 
@@ -2552,7 +2555,8 @@ function ProbeRow({ round }: { round: ProbeRound }) {
           {round.shares > 0
             ? `${round.shares.toFixed(1)} · ${cents(round.price)}`
             : `ждёт ${cents(round.resting || 0)}`}
-          {round.added ? ' ×2' : ''}
+          {round.adds > 0 ? ` ×${round.adds + 1}` : ''}
+          {round.leg > 0 ? ' откуп' : ''}
           {round.target > 0 ? ` → ${bigPrice(round.target)}` : ''}
         </span>
         <span className="probemark">·</span>

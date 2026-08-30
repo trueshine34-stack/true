@@ -259,13 +259,13 @@ object ProbePlan {
     /**
      * How much of a win rides on the next window.
      *
-     * A quarter, and it compounds: each win adds a quarter of itself to what
-     * the next entry stakes, and the next win adds a quarter of its own on top
-     * of that. A losing window ends the run and the stake goes back to base.
-     * The stake grows out of money the rule has already made, so a run that
-     * gives it all back gives back winnings, never the base.
+     * Half, and it compounds: each win adds half of itself to what the next
+     * entry stakes, and the next win adds half of its own on top of that. A
+     * losing window ends the run and the stake goes back to base. The stake
+     * grows out of money the rule has already made, so a run that gives it all
+     * back gives back winnings, never the base.
      */
-    const val STREAK_SHARE = 0.25
+    const val STREAK_SHARE = 0.5
 
     /** And what a doubled account is worth to the base stake. */
     const val DOUBLE_STEP = 1.5
@@ -279,6 +279,18 @@ object ProbePlan {
      */
     fun nextStreak(streak: Double, pnl: Double, share: Double = STREAK_SHARE): Double =
         if (pnl > 1e-9) maxOf(0.0, streak) + pnl * share else 0.0
+
+    /**
+     * What the run is worth staking while a window is still open.
+     *
+     * The next entry goes in twenty seconds before this window closes, so its
+     * result is not booked yet — but by then it is usually plain to see. What
+     * the book would pay for the position right now decides it: if closing
+     * here is a loss, the run is already over and the next window goes in at
+     * the base stake rather than at the top of a sequence that has ended.
+     */
+    fun riding(streak: Double, worth: Double, cost: Double): Double =
+        if (worth < cost - 1e-9) 0.0 else streak
 
     /**
      * How many times the account has doubled from where it started.
@@ -310,28 +322,95 @@ object ProbePlan {
      * still time for the move to happen, which is why it stops after two
      * minutes: past that the price is not cheap, it is late.
      */
-    const val ADD_PRICE = 0.34
+    val ADD_PRICES = listOf(0.42, 0.33)
 
     /** And the last second of the window at which it is still early. */
     const val ADD_UNTIL_SEC = 120L
 
     /**
-     * Whether to put the same money into the same side a second time.
+     * Whether to put the same money into the same side again.
      *
-     * Once per window. A rule that keeps doubling into a falling side is a
-     * rule that loses the whole account on the day the read is simply wrong.
+     * Twice at most, at forty-two cents and then at thirty-three, so a window
+     * holds three buys and no more. A rule that keeps doubling into a falling
+     * side is a rule that loses the whole account on the day the read is
+     * simply wrong, and each rung has to be reached in its own turn.
      */
     fun addsUp(
         elapsedSec: Long,
         ask: Double?,
-        alreadyAdded: Boolean,
-        price: Double = ADD_PRICE,
+        adds: Int,
+        prices: List<Double> = ADD_PRICES,
         untilSec: Long = ADD_UNTIL_SEC,
     ): Boolean {
-        if (alreadyAdded) return false
+        if (adds < 0 || adds >= prices.size) return false
         if (elapsedSec < 0 || elapsedSec > untilSec) return false
         if (ask == null || ask <= 0.0) return false
-        return ask < price
+        return ask < prices[adds]
+    }
+
+    /**
+     * How far a side has to fall under its own sale before it is bought back.
+     *
+     * The ladder sold because the price came to it, which is the move having
+     * happened. A fifth off that price afterwards is the market handing the
+     * same side back cheaper than it was let go of — the read has not changed,
+     * only the quote.
+     */
+    const val BACK_DROP = 0.20
+
+    /**
+     * And the price under which it is not handed back but taken away.
+     *
+     * Below forty-four cents the side is no longer the favourite, and buying
+     * back into a side the book has stopped believing in is not the same trade
+     * at a better price, it is a different trade at a worse one.
+     */
+    const val BACK_FLOOR = 0.44
+
+    /** Whether the side just sold is worth buying back at this ask. */
+    fun buysBack(
+        elapsedSec: Long,
+        ask: Double?,
+        soldAt: Double,
+        alreadyBack: Boolean,
+        untilSec: Long = ADD_UNTIL_SEC,
+        drop: Double = BACK_DROP,
+        floor: Double = BACK_FLOOR,
+    ): Boolean {
+        if (alreadyBack) return false
+        if (soldAt <= 0.0) return false
+        if (elapsedSec < 0 || elapsedSec > untilSec) return false
+        if (ask == null || ask <= 0.0) return false
+        if (ask < floor) return false
+        return ask <= soldAt * (1.0 - drop) + 1e-9
+    }
+
+    /**
+     * How many times the usual minute a candle has to be to stop a top-up.
+     *
+     * Buying a dip assumes the dip is noise. A minute several times the size
+     * of the minutes around it is not noise: it is the thing that moved the
+     * price, and it is still moving it. Averaging into that is paying twice
+     * for the same wrong read.
+     */
+    const val SHOCK = 2.0
+
+    /**
+     * Whether the move that made this price is too big to buy into.
+     *
+     * [against] is how far the running minute has travelled the wrong way for
+     * the side held; [typical] is what a minute usually covers.
+     */
+    fun shocked(against: Double, typical: Double, limit: Double = SHOCK): Boolean {
+        if (typical <= 0.0 || limit <= 0.0) return false
+        return against > typical * limit
+    }
+
+    /** How far the running minute has gone against a side, in dollars. */
+    fun againstBy(side: String, open: Double, close: Double): Double {
+        if (open <= 0.0 || close <= 0.0) return 0.0
+        val move = close - open
+        return if (side == "Up") maxOf(0.0, -move) else maxOf(0.0, move)
     }
 
     /**

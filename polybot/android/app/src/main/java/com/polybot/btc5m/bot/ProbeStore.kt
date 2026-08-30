@@ -53,7 +53,11 @@ class ProbeStore(context: Context) {
                     asset = o.optString("asset"),
                     demo = o.optBoolean("demo", false),
                     target = o.optDouble("target", 0.0),
-                    added = o.optBoolean("added", false),
+                    // Older records carried a single flag; one add is one add.
+                    adds = o.optInt("adds", if (o.optBoolean("added", false)) 1 else 0),
+                    leg = o.optInt("leg", 0),
+                    soldAt = o.optDouble("soldAt", 0.0),
+                    back = o.optBoolean("back", false),
                     side = o.optString("side"),
                     perHour = o.optDouble("perHour", 0.0),
                     shares = o.optDouble("shares", 0.0),
@@ -79,7 +83,10 @@ class ProbeStore(context: Context) {
                     .put("asset", it.asset)
                     .put("demo", it.demo)
                     .put("target", it.target)
-                    .put("added", it.added)
+                    .put("adds", it.adds)
+                    .put("leg", it.leg)
+                    .put("soldAt", it.soldAt)
+                    .put("back", it.back)
                     .put("side", it.side)
                     .put("perHour", it.perHour)
                     .put("shares", it.shares)

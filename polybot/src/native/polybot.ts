@@ -453,7 +453,10 @@ export type ProbeRound = {
   /** A bid still waiting at this price, with nothing bought yet. */
   resting: number;
   /** Whether the same money went into the same side a second time. */
-  added: boolean;
+  /** How many times the same money went into the side again. */
+  adds: number;
+  /** Which buy of the window this row is: the entry, then each buy-back. */
+  leg: number;
   /** The side the chart's line was pointing at. */
   side: string;
   /** How fast that line was moving, in dollars an hour. */
@@ -517,6 +520,8 @@ export type ProbeState = {
    */
   stakeNow: number;
   streak: number;
+  /** Set while the window still running is already showing a loss. */
+  losing?: boolean;
   /** The price the reversal is expected at, and how far off it is. */
   levelAhead?: number | null;
   roomToLevel?: number | null;
@@ -677,6 +682,7 @@ const webStub: PolyBotPlugin = {
     bank: 100,
     stakeNow: 5,
     streak: 0,
+    losing: false,
     rounds: [],
     riding: [],
   }),
