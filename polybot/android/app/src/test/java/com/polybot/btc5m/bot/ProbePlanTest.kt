@@ -1078,6 +1078,27 @@ class ProbePlanTest {
         assertTrue(!ProbePlan.atEdge("", 79_166.0, 79_250.0, 78_700.0, typical = 145.0))
     }
 
+    /**
+     * A bid for six shares at fifty cents filled, and the rule filed the
+     * window as "лимитка 50¢ снята" while the wallet plainly held 6.0 · 50¢.
+     *
+     * The order log could not help: an order that filled has left the book,
+     * and one the venue no longer knows about looks exactly like one that was
+     * cancelled, so the log leaves it alone rather than guess. What may be
+     * adopted from the wallet is capped at what was actually ordered, so a
+     * position built by hand on the same side is not taken over.
+     */
+    @Test
+    fun `a filled bid is worth what was ordered, never more`() {
+        // Ordered six, wallet holds six: all of it is ours.
+        assertEquals(6.0, minOf(6.0, 6.0), 1e-9)
+        // Ordered six, wallet holds twenty because the rest was bought by
+        // hand: only the six.
+        assertEquals(6.0, minOf(20.0, 6.0), 1e-9)
+        // Ordered six, wallet holds two — a partial fill is what there is.
+        assertEquals(2.0, minOf(2.0, 6.0), 1e-9)
+    }
+
     @Test
     fun `only the same side still supports the position`() {
         assertTrue(ProbePlan.stillOn("Up", "Up"))

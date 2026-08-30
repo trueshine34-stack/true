@@ -65,6 +65,15 @@ class ProbeBot(
          */
         val resting: Double = 0.0,
         /**
+         * How many shares that bid was for.
+         *
+         * The wallet is the only thing that reliably knows a resting buy
+         * filled, and it also holds whatever was bought by hand on the same
+         * side — so what may be adopted is capped at what was actually
+         * ordered.
+         */
+        val restingSize: Double = 0.0,
+        /**
          * The price this trade is aiming at: the next level in the side's own
          * direction, taken at entry.
          *
@@ -348,6 +357,9 @@ class ProbeBot(
          * looking at the chart.
          */
         const val MERGE_USD = 5.0
+
+        /** How often the wallet may be asked whether a resting bid filled. */
+        const val WALLET_EVERY_MS = 5_000L
 
         /**
          * How long after the close to wait before scoring the round.
@@ -892,6 +904,7 @@ class ProbeBot(
                     shares = 0.0,
                     price = 0.0,
                     resting = ProbePlan.REST_PRICE,
+                    restingSize = size,
                     target = aim,
                     why = reading,
                 )
@@ -923,6 +936,7 @@ class ProbeBot(
                 shares = 0.0,
                 price = 0.0,
                 resting = limit,
+                restingSize = size,
                 target = aim,
                 why = reading,
             )
@@ -1568,9 +1582,54 @@ class ProbeBot(
         val buys = OrderLog.forWindow(open.windowStart)
             .filter { it.asset == open.asset && it.action == "BUY" }
         val got = buys.sumOf { it.matched }
-        if (got <= 1e-6) return null
-        val paid = buys.sumOf { it.matched * it.realPrice }
-        return open.copy(shares = got, price = if (paid > 0.0) paid / got else open.resting)
+        if (got > 1e-6) {
+            val paid = buys.sumOf { it.matched * it.realPrice }
+            return open.copy(shares = got, price = if (paid > 0.0) paid / got else open.resting)
+        }
+
+        // The log did not hear about it, and that is a thing that happens: an
+        // order that filled has left the book, and an order the venue no
+        // longer knows about looks exactly like one that was cancelled — so
+        // the log deliberately leaves it alone rather than guess, and waits
+        // for the trade feed, which belongs to another rule and may not be
+        // running.
+        //
+        // The wallet does not guess. Shares of this outcome that are there
+        // when a bid for them was out mean the bid filled, whatever anything
+        // else believes. Only up to the size ordered, so a position the user
+        // built by hand on the same side is not quietly adopted.
+        // On the path that is about to write the round off, the wallet is
+        // asked whatever the rate limit says: being told "ask later" there
+        // would file a filled bid as a cancelled one, which is the whole
+        // fault being fixed.
+        return heldNow(open, force = refresh)?.let { held ->
+            val size = minOf(held, open.restingSize)
+            if (size <= 1e-6) null else open.copy(shares = size, price = open.resting)
+        }
+    }
+
+    /**
+     * When the wallet was last asked, so a bid out for a minute does not ask
+     * it sixty times. Five seconds is soon enough to notice a fill and slow
+     * enough not to earn a rate limit — which the desk's sell rule has
+     * already been punished with once.
+     */
+    @Volatile
+    private var askedWalletAt: Long = 0L
+
+    /** What the wallet actually holds of this outcome, or null if unknown. */
+    private fun heldNow(open: Round, force: Boolean): Double? {
+        val session = engine.session() ?: return null
+        val now = System.currentTimeMillis()
+        if (!force && now - askedWalletAt < WALLET_EVERY_MS) return null
+        askedWalletAt = now
+        return try {
+            DataApi.positions(session.account.funderAddress)
+                .firstOrNull { it.asset == open.asset }
+                ?.size
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /**
@@ -1689,6 +1748,7 @@ class ProbeBot(
             shares = 0.0,
             price = 0.0,
             resting = ProbePlan.REST_PRICE,
+            restingSize = ProbePlan.shares(stakeLive, ProbePlan.REST_PRICE, 5.0),
             target = aim,
             why = reading,
         )
