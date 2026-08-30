@@ -23,12 +23,12 @@ class ProbeStore(context: Context) {
     fun loadSettings(): ProbePlan.Settings = ProbePlan.Settings(
         enabled = prefs.getBoolean("enabled", false),
         stakeUsd = prefs.getFloat("stakeUsd", ProbePlan.DEFAULT_STAKE.toFloat()).toDouble(),
-        // The lead moved from twenty seconds to forty-five, and a setting
-        // still sitting on the old default is the old default rather than a
-        // choice — so it moves with it. A lead the user has actually changed
-        // is theirs and is left alone.
+        // The lead has been ten seconds, then twenty, and is now forty-five.
+        // A setting still sitting on either of the old defaults is an old
+        // default rather than a choice, so it moves with them; a lead the
+        // user has actually typed is theirs and is left alone.
         leadSec = prefs.getLong("leadSec", ProbePlan.DEFAULT_LEAD_SEC)
-            .let { if (it == 20L) ProbePlan.DEFAULT_LEAD_SEC else it },
+            .let { if (it in ProbePlan.OLD_LEADS) ProbePlan.DEFAULT_LEAD_SEC else it },
         roomShare = prefs.getFloat("roomShare", ProbePlan.DEFAULT_ROOM.toFloat()).toDouble(),
         roundBand = prefs.getFloat("roundBand", ProbePlan.DEFAULT_ROUND_BAND.toFloat()).toDouble(),
         demo = prefs.getBoolean("demo", true),

@@ -912,6 +912,22 @@ class ProbePlanTest {
         assertTrue(!ProbePlan.rechecks(-1))
     }
 
+    /**
+     * The order log showed the buy going in nine seconds before the open when
+     * the lead had been asked to be forty-five: the saved setting was still
+     * on ten, which was the default two versions ago rather than anything the
+     * user chose.
+     */
+    @Test
+    fun `a lead left on an old default is not a choice`() {
+        assertTrue(10L in ProbePlan.OLD_LEADS)
+        assertTrue(20L in ProbePlan.OLD_LEADS)
+        // Forty-five is where they land, and is not itself migrated away.
+        assertTrue(ProbePlan.DEFAULT_LEAD_SEC !in ProbePlan.OLD_LEADS)
+        // A lead actually typed is left alone.
+        assertTrue(35L !in ProbePlan.OLD_LEADS)
+    }
+
     @Test
     fun `only the same side still supports the position`() {
         assertTrue(ProbePlan.stillOn("Up", "Up"))

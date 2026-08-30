@@ -34,6 +34,16 @@ object ProbePlan {
     const val DEFAULT_LEAD_SEC = 45L
 
     /**
+     * Leads that were once the default, and so are not a choice.
+     *
+     * A setting saved while one of these was the default carries it forever,
+     * because saving any one setting saves all of them — so a lead sitting on
+     * an old default is the old default rather than something the user typed,
+     * and it moves when the default does.
+     */
+    val OLD_LEADS = setOf(10L, 20L)
+
+    /**
      * How late after an open the entry may still be taken.
      *
      * The lead has a second use: when the venue publishes the next market too

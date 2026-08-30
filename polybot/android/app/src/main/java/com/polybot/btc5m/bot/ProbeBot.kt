@@ -857,9 +857,29 @@ class ProbeBot(
                 )
                 return
             }
-            // Nothing was taken at a price it meant to take. A resting buy is
-            // a bet the rule did not mean to place.
+            // Nothing was taken at a price it meant to take, so the order is
+            // pulled: a resting buy is a bet the rule did not mean to place.
+            //
+            // But the cancel and a late fill race each other, and losing that
+            // race used to leave real shares in the wallet with no round over
+            // them — no ladder, no top-up, nothing in this rule's history at
+            // all, while the desk plainly showed the position. So it is
+            // written down as an order being watched either way: if the
+            // cancel won, the minute mark files it; if the fill won, the log
+            // says so and it becomes the position it always was.
             result.orderId?.let { cancel(it) }
+            working = working + Round(
+                windowStart = windowStart,
+                asset = token,
+                demo = false,
+                side = way,
+                perHour = line?.perHour ?: 0.0,
+                shares = 0.0,
+                price = 0.0,
+                resting = limit,
+                target = aim,
+                why = reading,
+            )
             note = "не налили по ${(ask * 100).toInt()}¢"
             return
         }
