@@ -113,7 +113,7 @@ export function CandleFace({
     hour: each about a screen's worth of its own candles.
   */
   // The same windows the rules fit their lines over, so the line on the
-  // screen is the line the bot is reading — three hours on the five-minute
+  // screen is the line the bot is reading — an hour on the five-minute
   // chart, half an hour on the minute one.
   const trend = trendOf(candles, interval === '5m' ? WIDE_MINUTES : NEAR_MINUTES);
   const ahead = shape && trend ? levelAhead(levels, shape.last, trend.way) : null;

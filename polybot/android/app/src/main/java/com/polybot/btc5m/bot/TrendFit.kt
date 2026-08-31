@@ -94,12 +94,12 @@ object TrendFit {
     /**
      * How long the wider line looks back, in minutes.
      *
-     * Three hours. An hour of five-minute candles is twelve points, which is
-     * a line drawn through the last hour's noise as readily as through its
-     * direction; three hours is thirty-six, and a slope fitted through that
-     * many is describing the session rather than the last few candles of it.
+     * An hour, which on the five-minute chart is twelve points. Three hours
+     * is thirty-six and a steadier fit, but what it fits is the session: by
+     * the time a line that long has turned, the move it was describing is
+     * over. A five-minute bet is decided by what price is doing now.
      */
-    const val WIDE_MINUTES = 180
+    const val WIDE_MINUTES = 60
 
     /** The wider line, for anything that wants the session's direction. */
     fun wide(): Trend? = of(BinanceCandles.fiveMinute.list(), WIDE_MINUTES)

@@ -38,12 +38,12 @@ const MIN_TRAVEL = 0.3;
 /**
  * How long each chart's line looks back, in minutes.
  *
- * An hour of five-minute candles is twelve points, which is a line drawn
- * through the last hour's noise as readily as through its direction; three
- * hours is thirty-six, and a slope fitted through that many describes the
- * session rather than the last few candles of it.
+ * An hour on the five-minute chart, which is twelve points. Three hours is a
+ * steadier fit, but it is a fit to the session, and by the time it has turned
+ * the move it was describing is over — a five-minute bet is decided by what
+ * price is doing now, not by where the afternoon started.
  */
-export const WIDE_MINUTES = 180;
+export const WIDE_MINUTES = 60;
 
 /** And the close view, which is meant to be the last half hour. */
 export const NEAR_MINUTES = 30;

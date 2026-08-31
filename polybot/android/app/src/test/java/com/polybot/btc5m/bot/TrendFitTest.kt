@@ -78,4 +78,32 @@ class TrendFitTest {
         assertEquals("", TrendFit.lean(null))
         assertEquals("", TrendFit.lean(TrendFit.Trend(perHour = 0.0, way = "", fit = 0.0)))
     }
+    /** The same, on five-minute candles, which is what the wide line reads. */
+    private fun walk5(closes: List<Double>): List<BinanceCandles.Candle> =
+        closes.mapIndexed { i, c ->
+            BinanceCandles.Candle(1_787_817_600 + i * 300L, c, c + 1, c - 1, c, 1.0)
+        }
+
+    /**
+     * The wide line is fitted over an hour, which on the five-minute chart is
+     * twelve candles. It was three hours, and three hours fits the session:
+     * by the time a line that long has turned, the move it described is over.
+     */
+    @Test
+    fun `the wide line looks back one hour`() {
+        assertEquals(60, TrendFit.WIDE_MINUTES)
+
+        // Three hours of five-minute candles: flat for two, climbing through
+        // the last one. The hour-long fit sees only the climb.
+        val flat = (0 until 24).map { 100.0 }
+        val up = (1..12).map { 100.0 + it * 5.0 }
+        val hour = TrendFit.of(walk5(flat + up), TrendFit.WIDE_MINUTES)!!
+        assertEquals("Up", hour.way)
+
+        // Over three hours the same climb is a third of the picture, and the
+        // slope fitted to it is gentler than the one the hour sees.
+        val session = TrendFit.of(walk5(flat + up), 180)!!
+        assertTrue(session.perHour < hour.perHour)
+    }
+
 }
