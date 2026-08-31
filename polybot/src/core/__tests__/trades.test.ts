@@ -292,6 +292,8 @@ describe('withLiveOrders', () => {
     assetId = 'token-up',
   ) => ({ id, side, price, remaining, assetId });
 
+  const onDesk = (assetId: string) => (assetId === 'token-up' ? 'Up' : 'Down');
+
   it('adds an order the rows never heard of', () => {
     const rows = withLiveOrders([], [live('a', 'BUY', 0.44, 7)], () => 'Down');
 
@@ -303,14 +305,20 @@ describe('withLiveOrders', () => {
     expect(rows[0].outcome).toBe('Down');
   });
 
-  it('names an order it cannot place rather than leaving it blank', () => {
-    const rows = withLiveOrders([], [live('a', 'BUY', 0.44, 7, 'other-token')]);
+  it('leaves out an order resting on another event', () => {
+    // A limit on a window that has settled is not something still out there,
+    // and showing it read as a position on the event in front of you.
+    const rows = withLiveOrders(
+      [],
+      [live('a', 'BUY', 0.44, 7, 'other-token')],
+      (id) => (id === 'token-up' ? 'Up' : ''),
+    );
 
-    expect(rows[0].outcome).toBe('—');
+    expect(rows).toHaveLength(0);
   });
 
   it('files a live sell as an offer standing over the position', () => {
-    const rows = withLiveOrders([], [live('s', 'SELL', 0.88, 7)]);
+    const rows = withLiveOrders([], [live('s', 'SELL', 0.88, 7)], onDesk);
 
     expect(rows[0].status).toBe('pending');
     expect(rows[0].sellPrice).toBe(0.88);
@@ -323,17 +331,17 @@ describe('withLiveOrders', () => {
     ]);
     const id = rows[0].orderId as string;
 
-    const merged = withLiveOrders(rows, [live(id, 'BUY', 0.44, 7)]);
+    const merged = withLiveOrders(rows, [live(id, 'BUY', 0.44, 7)], onDesk);
 
     expect(merged).toHaveLength(rows.length);
   });
 
   it('ignores an order with nothing left on the book', () => {
-    expect(withLiveOrders([], [live('a', 'BUY', 0.44, 0)])).toHaveLength(0);
+    expect(withLiveOrders([], [live('a', 'BUY', 0.44, 0)], onDesk)).toHaveLength(0);
   });
 
   it('leaves the rows untouched when the venue lists nothing', () => {
     const rows = pairOrders([order('BUY', 0.44, 7)]);
-    expect(withLiveOrders(rows, [])).toBe(rows);
+    expect(withLiveOrders(rows, [], onDesk)).toBe(rows);
   });
 });

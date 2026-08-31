@@ -235,7 +235,15 @@ export function withLiveOrders(
   rows: TradeRow[],
   live: { id: string; side: 'BUY' | 'SELL'; price: number; remaining: number;
           outcome?: string | null; assetId?: string }[],
-  outcomeFor?: (assetId: string) => string,
+  /**
+   * Which side of the desk's own event a token is, or '' for one that is not
+   * on it. Orders on another event are left out: a limit resting on a window
+   * that has already settled is not something still out there — it is a
+   * leftover the settlement clears — and on this list it read as an open
+   * position on the event in front of you, which is the one thing this list
+   * must never say.
+   */
+  outcomeFor: (assetId: string) => string,
 ): TradeRow[] {
   const known = new Set(
     rows.map((r) => r.orderId).filter((id): id is string => !!id),
@@ -244,14 +252,8 @@ export function withLiveOrders(
   for (const order of live) {
     if (!order.id || known.has(order.id)) continue;
     if (!(order.remaining > 1e-9)) continue;
-    // The venue names the side where it knows it; the desk can name it for
-    // its own market's tokens. An order on some other market — a leftover from
-    // a window that has closed — is nameless here, and shown anyway: an order
-    // nobody can name is exactly the one nobody remembers to cancel.
-    const outcome =
-      order.outcome ||
-      (order.assetId && outcomeFor ? outcomeFor(order.assetId) : '') ||
-      '—';
+    const outcome = order.assetId ? outcomeFor(order.assetId) : '';
+    if (!outcome) continue;
     const buying = order.side === 'BUY';
     extra.push({
       key: `live-${order.id}`,

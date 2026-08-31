@@ -793,6 +793,17 @@ export function Manual({
               )} × ${cents(price)}`
             : (r.error ?? 'CLOB отклонил ордер'),
         );
+        // And read the books back at once, so the order appears on the list
+        // with its ✕ now rather than on the next four-second beat. The venue's
+        // listing may not have indexed it yet; the app's own log has.
+        if (r.success) {
+          const [fresh, log] = await Promise.all([
+            PolyBot.getOpenOrders().catch(() => null),
+            PolyBot.getOrderLog({ windowStart: deskWindow }).catch(() => null),
+          ]);
+          if (fresh) setOrders(fresh.orders);
+          if (log) setLogged(log.orders);
+        }
       } catch (e) {
         setNote(e instanceof Error ? e.message : String(e));
       } finally {
@@ -856,6 +867,25 @@ export function Manual({
    * the book gives a price that clears the size, and anything that does not
    * fill rests harmlessly at the bottom of it.
    */
+
+  /**
+   * The side a replacement for this row would be signed against.
+   *
+   * The live order's own token where the venue is listing it — that is the
+   * only thing that is true whatever the row says. Failing that, the row's own
+   * side, and only while this event is the one on screen: a past window's
+   * "Down" is a different token from this window's, and signing the second
+   * against the first is a new order on the wrong market.
+   */
+  const sideForEdit = useCallback(
+    (row: TradeRow): 'Up' | 'Down' | null => {
+      const live = orders.find((x) => x.id === row.orderId);
+      if (live) return sideOfToken(live.assetId);
+      if (viewWindow != null) return null;
+      return row.outcome === 'Up' || row.outcome === 'Down' ? row.outcome : null;
+    },
+    [orders, sideOfToken, viewWindow],
+  );
 
   /** The ids the exchange itself is still listing, for anything that asks. */
   const liveIds = useMemo(
@@ -1447,11 +1477,19 @@ export function Manual({
                   const live = t.orderId
                     ? orders.find((x) => x.id === t.orderId)
                     : undefined;
+                  // Which side to sign a replacement against. The live order's
+                  // own token where the venue is listing it; otherwise the
+                  // row's printed side, which is this event's — but only while
+                  // this event is the one on screen, since a past window's
+                  // "Down" is a different token from this window's.
+                  const editSide = live
+                    ? sideOfToken(live.assetId)
+                    : viewWindow == null && (t.outcome === 'Up' || t.outcome === 'Down')
+                      ? t.outcome
+                      : null;
                   // A resting sell is as much a price you might want to move
                   // as a resting buy — and it is the one you move in a hurry.
-                  // Only on this market, though: a new price is a new order,
-                  // signed against a token this market has to own.
-                  const editable = live != null && sideOfToken(live.assetId) != null;
+                  const editable = t.orderId != null && editSide != null;
                   const price = (t.status === 'buying' ? t.buyPrice : t.sellPrice) ?? 0;
                   return (
                     <div
@@ -1474,13 +1512,22 @@ export function Manual({
                           {t.shares.toFixed(t.shares % 1 ? 1 : 0)}
                         </span>
                       </span>
-                      {live ? (
+                      {/*
+                        The ✕ needs an order id and nothing else. It used to
+                        wait for the venue's listing to confirm the order, and
+                        the listing lags a placement by a second or two — so
+                        the one moment you most want to pull a limit back, just
+                        after putting it out, was the one moment there was no
+                        way to. Cancelling goes by id: the venue either pulls it
+                        or says it is already inactive, and both are answers.
+                      */}
+                      {t.orderId ? (
                         <button
                           className="xbtn"
                           disabled={busy}
                           onClick={(e) => {
                             e.stopPropagation();
-                            void cancel(live.id);
+                            void cancel(t.orderId as string);
                           }}
                           aria-label="Снять ордер"
                         >
@@ -1596,8 +1643,7 @@ export function Manual({
             printed label — those agree on this market and only on this one.
           */
           marketPrice={(() => {
-            const live = orders.find((x) => x.id === editing.orderId);
-            const side = live ? sideOfToken(live.assetId) : null;
+            const side = sideForEdit(editing);
             if (side == null) return null;
             const level =
               editing.status === 'buying'
@@ -1606,8 +1652,7 @@ export function Manual({
             return level != null ? Math.round(level * 100) : null;
           })()}
           onSave={(price, shares) => {
-            const live = orders.find((x) => x.id === editing.orderId);
-            const side = live ? sideOfToken(live.assetId) : null;
+            const side = sideForEdit(editing);
             if (side == null) {
               setNote('Этот ордер не с этого события — его можно только снять');
               return;
