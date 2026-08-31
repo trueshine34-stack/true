@@ -235,6 +235,7 @@ export function Manual({
           ladder: stored.autoSellLadder,
           retryEverySec: stored.autoSellRetrySec,
           watchSec: stored.autoSellWatchSec,
+          chime: stored.chime,
           ladderLeadSec: stored.autoSellLeadSec,
           ladderStepSec: stored.autoSellStepSec,
           percentMode: stored.autoSellPercentMode,
@@ -533,6 +534,7 @@ export function Manual({
               ladder: settingsRef.current.autoSellLadder,
               retryEverySec: settingsRef.current.autoSellRetrySec,
               watchSec: settingsRef.current.autoSellWatchSec,
+              chime: settingsRef.current.chime,
               ladderLeadSec: settingsRef.current.autoSellLeadSec,
               ladderStepSec: settingsRef.current.autoSellStepSec,
               percentMode: settingsRef.current.autoSellPercentMode,
@@ -3380,6 +3382,7 @@ function RuleBar({
         ladder: next.autoSellLadder,
         retryEverySec: next.autoSellRetrySec,
         watchSec: next.autoSellWatchSec,
+        chime: next.chime,
         ladderLeadSec: next.autoSellLeadSec,
         ladderStepSec: next.autoSellStepSec,
         percentMode: next.autoSellPercentMode,
@@ -3438,6 +3441,15 @@ function RuleBar({
               ? `+${Math.round(settings.autoSellProfitPct * 100)}%`
               : 'лесенкой'}
           </i>
+        </button>
+
+        <button
+          className={`ruletile${settings.chime ? ' on' : ''}`}
+          onClick={() => push({ ...settings, chime: !settings.chime })}
+        >
+          <span className={`switch mini ${settings.chime ? 'on' : ''}`} />
+          <b>звук</b>
+          <i>вверх · вниз · монета</i>
         </button>
 
         <button
@@ -3831,6 +3843,7 @@ function ManualSettingsForm({
       ladder: next.autoSellLadder,
       retryEverySec: next.autoSellRetrySec,
       watchSec: next.autoSellWatchSec,
+      chime: next.chime,
       ladderLeadSec: next.autoSellLeadSec,
       ladderStepSec: next.autoSellStepSec,
       percentMode: next.autoSellPercentMode,

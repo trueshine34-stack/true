@@ -85,6 +85,21 @@ object TradeSync {
                     at = trade.at,
                 )
             }
+            // And the cue in the headphones. This is the one place every
+            // real fill passes through — the rule's, the desk's, and an order
+            // placed by hand — and it fires on the fill rather than on the
+            // order, which is the moment worth hearing. The first pass is
+            // silent: it is reading history, not watching it happen.
+            if (!first) {
+                if (trade.side == "BUY") {
+                    Chime.bought(
+                        trade.outcome.ifEmpty { meta?.outcomes?.get(trade.asset) ?: "" },
+                    )
+                } else {
+                    Chime.sold()
+                }
+            }
+
             // A sale is the start of the other wait worth knowing: how long
             // its money takes to become spendable. Armed here rather than in
             // the sell rule so it is measured whether the rule is on or not.

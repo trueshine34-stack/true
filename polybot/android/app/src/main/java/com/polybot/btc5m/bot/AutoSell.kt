@@ -46,6 +46,14 @@ class AutoSell(
         val retryEverySec: Int = 7,
         /** How long to keep trying on one purchase before giving up. */
         val watchSec: Int = 60,
+        /**
+         * Whether a fill makes a sound.
+         *
+         * The window is decided while the phone is in a pocket, so a cue in
+         * the headphones is the only way to know what happened when it
+         * happened. Off is for when the phone is not in a pocket.
+         */
+        val chime: Boolean = true,
         /** How far ahead of each boundary the next rung takes over. */
         val ladderLeadSec: Int = SellLadder.DEFAULT_LEAD_SEC,
         /**
@@ -225,10 +233,8 @@ class AutoSell(
      * restart threw away the watch it was in the middle of.
      */
     fun update(next: Settings) {
+        Chime.on = next.chime
         settings = next
-        // The buy-back needs the loop as much as the sell ladder does — it is
-        // how a filled sell gets noticed at all. Tying the loop to the ladder
-        // alone left "buy-back on, ladder off" as a switch that did nothing.
         val shouldRun = next.enabled
         when {
             shouldRun && !running -> start()

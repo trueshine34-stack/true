@@ -230,6 +230,8 @@ export interface PolyBotPlugin {
     ladder?: number[];
     retryEverySec?: number;
     watchSec?: number;
+    /** Whether a fill makes a sound in the headphones. */
+    chime?: boolean;
     ladderLeadSec?: number;
     ladderStepSec?: number;
     percentMode?: boolean;
@@ -658,6 +660,8 @@ export type AutoSellState = {
   /** Purchases still being chased, and how long each is chased for. */
   watching?: number;
   watchSec?: number;
+  /** Whether a fill makes a sound in the headphones. */
+  chime?: boolean;
   rebuys: AutoSellRebuy[];
   rebuysDone?: AutoSellRebuyDone[];
   timings?: Timings;

@@ -1570,6 +1570,7 @@ class ProbeBot(
         )
         working = working + round
         note = "в позиции (демо)"
+        Chime.bought(way)
         engine.log(
             "trade",
             "Проба (демо): взяла " + String.format("%.1f", size) + " $way по " +
@@ -1980,6 +1981,7 @@ class ProbeBot(
                     it
                 }
             }
+            Chime.sold()
             engine.log(
                 "trade",
                 "Проба (демо): $why — продала " + String.format("%.1f", left) +
@@ -2234,6 +2236,7 @@ class ProbeBot(
                     sold = open.shares,
                     proceeds = open.proceeds + left * SellPercent.netSell(want),
                 )
+                Chime.sold()
                 engine.log(
                     "trade",
                     "Проба (демо): лимитка сработала — " +

@@ -15,6 +15,15 @@
 export const DEFAULT_CLICK_SHARES = 5;
 
 export type ManualSettings = {
+  /**
+   * Whether a fill makes a sound.
+   *
+   * A window is decided while the phone is in a pocket, so the report is read
+   * afterwards and the moment itself is missed. Up rises, Down falls, and a
+   * sale rings like a coin — three shapes that are told apart without
+   * looking, which is the whole point.
+   */
+  chime: boolean;
   autoSellEnabled: boolean;
   /**
    * Sell price by step of the window, cheapest rung first.
@@ -117,6 +126,7 @@ export function stretchLadder(ladder: number[], count: number): number[] {
 }
 
 export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
+  chime: true,
   autoSellEnabled: false,
   autoSellLadder: [
     0.77, 0.8, 0.83, 0.86, 0.88, 0.9, 0.92, 0.94, 0.96, 0.97,
