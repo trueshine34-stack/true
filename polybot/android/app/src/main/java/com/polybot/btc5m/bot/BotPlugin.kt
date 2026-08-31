@@ -266,6 +266,17 @@ class BotPlugin : Plugin() {
         notifyState()
     }
 
+    /**
+     * Plays one cue now, so the sounds can be heard without a trade.
+     *
+     * "up", "down", or anything else for the coin.
+     */
+    @PluginMethod
+    fun playChime(call: PluginCall) {
+        Chime.demo(call.getString("kind") ?: "sold")
+        call.resolve()
+    }
+
     @PluginMethod
     fun getOpenOrders(call: PluginCall) {
         val market = call.getString("market")

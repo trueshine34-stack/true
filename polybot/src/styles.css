@@ -2716,6 +2716,18 @@ button.step.big {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * Two answers to one irreversible question, side by side and full height.
+ * They are the same buttons the screen uses everywhere else — the destructive
+ * one has to look destructive, which it stops doing inside a row of chips.
+ */
+.confirmrow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 /* The reserve: its number, and which of the two things that number is. */
 .lockrow {
   display: grid;

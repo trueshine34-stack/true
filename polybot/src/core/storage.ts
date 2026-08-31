@@ -20,6 +20,7 @@ const KEY_VAULT = 'vault.v1';
 const KEY_ACCOUNT = 'account.v1';
 const KEY_MANUAL = 'manual.v1';
 const KEY_SAVINGS = 'savings.v1';
+const KEY_CHIMETEST = 'chimetest.v1';
 
 /**
  * Where profit is withdrawn to, so the balance can still see it.
@@ -45,6 +46,23 @@ export async function loadSavingsAddress(): Promise<string> {
   const { value } = await Preferences.get({ key: KEY_SAVINGS });
   if (value == null) return DEFAULT_SAVINGS;
   return value.trim();
+}
+
+/**
+ * Whether the sound-test buttons are still on the settings screen.
+ *
+ * They exist to answer one question — does this phone make the sound — and
+ * once it is answered they are three buttons in the way of the ones that are
+ * used. So they can be taken off, and the answer is remembered rather than
+ * asked for again on every launch.
+ */
+export async function loadChimeTest(): Promise<boolean> {
+  const { value } = await Preferences.get({ key: KEY_CHIMETEST });
+  return value !== 'off';
+}
+
+export async function saveChimeTest(shown: boolean): Promise<void> {
+  await Preferences.set({ key: KEY_CHIMETEST, value: shown ? 'on' : 'off' });
 }
 
 export async function clearVault(): Promise<void> {

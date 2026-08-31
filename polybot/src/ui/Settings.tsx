@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SignatureType, type AccountConfig } from '../core/account';
-import { clearVault } from '../core/storage';
+import { clearVault, loadChimeTest, saveChimeTest } from '../core/storage';
 import { PolyBot } from '../native/polybot';
 import { Diagnostics } from './Diagnostics';
 import { Logs } from './Logs';
@@ -21,11 +21,21 @@ export function SettingsScreen({
   const [checking, setChecking] = useState(false);
   const [batteryExempt, setBatteryExempt] = useState<boolean | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  /**
+   * The sound test, and whether it is still here.
+   *
+   * Null while the answer is being read off disk, so the block does not flash
+   * onto the screen of someone who has already taken it away.
+   */
+  const [chimeTest, setChimeTest] = useState<boolean | null>(null);
+  /** The delete button asks once before it does something irreversible. */
+  const [dropping, setDropping] = useState(false);
 
   useEffect(() => {
     void PolyBot.isBatteryExempt()
       .then((r) => setBatteryExempt(r.exempt))
       .catch(() => setBatteryExempt(null));
+    void loadChimeTest().then(setChimeTest);
   }, []);
 
   const checkBalance = async () => {
@@ -134,6 +144,68 @@ export function SettingsScreen({
           Отключить кошелёк
         </button>
       </Fold>
+
+      {chimeTest && (
+        <Fold title="Звук сделки">
+          {/*
+            Three buttons that make the three sounds. A cue only ever fires at
+            the moment of a trade, which is the worst possible time to discover
+            that it does not — and silence answers "did I miss it?" and "is it
+            broken?" identically.
+          */}
+          <div className="muted balhint" style={{ margin: '0 0 10px' }}>
+            Звучит на медиа-канале: слышно в наушниках и при беззвучном режиме
+            телефона, поверх музыки. Громкость — медиа.
+          </div>
+          <div className="pcts">
+            <button onClick={() => void PolyBot.playChime({ kind: 'up' })}>
+              Up
+            </button>
+            <button onClick={() => void PolyBot.playChime({ kind: 'down' })}>
+              Down
+            </button>
+            <button onClick={() => void PolyBot.playChime({ kind: 'sold' })}>
+              Продажа
+            </button>
+          </div>
+
+          {/*
+            And the way out. Once the question is answered these are three
+            buttons in the way of the ones that get used — so the block takes
+            itself off, delete button and all, rather than waiting for a new
+            build to do it.
+          */}
+          {dropping ? (
+            <div className="banner warn" style={{ marginTop: 10 }}>
+              Убрать проверку звука насовсем? Кнопки исчезнут вместе с этой —
+              вернуть их можно будет только новой сборкой.
+              <div className="confirmrow">
+                <button
+                  className="danger"
+                  onClick={() => {
+                    setChimeTest(false);
+                    setDropping(false);
+                    void saveChimeTest(false);
+                  }}
+                >
+                  Убрать
+                </button>
+                <button className="ghost" onClick={() => setDropping(false)}>
+                  Оставить
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="ghost"
+              style={{ marginTop: 10 }}
+              onClick={() => setDropping(true)}
+            >
+              Убрать проверку звука
+            </button>
+          )}
+        </Fold>
+      )}
 
       <Fold title="Журнал">
         <Logs />

@@ -23,9 +23,13 @@ import kotlin.math.sin
  * package — and being generated, they can be tuned by changing a number
  * instead of by finding a new recording.
  *
- * Played as sonification, which is the category that belongs over music: the
- * cue mixes with whatever is playing instead of pausing it, and follows the
- * headphones because that is where the media stream goes.
+ * Played on the media stream. Sonification is the category these tones belong
+ * to by description, and it is the wrong one to send them out on: it is routed
+ * with the system sounds, so a phone on silent — which is how a phone with
+ * headphones in it usually is — plays nothing at all, and the cue that exists
+ * to be heard without looking is the one thing that is not. Media survives the
+ * ringer switch, follows the headphones, and mixes with whatever is playing
+ * rather than pausing it, because no audio focus is asked for.
  */
 object Chime {
 
@@ -65,6 +69,29 @@ object Chime {
         when (side) {
             "Up" -> boughtUp()
             "Down" -> boughtDown()
+        }
+    }
+
+    /**
+     * One cue on demand, whatever the switch says.
+     *
+     * A cue only ever fires at the moment of a trade, which is the worst
+     * possible time to find out that it does not — and "did I not hear it, or
+     * did nothing happen?" is a question the sound itself cannot answer. So it
+     * can be asked for directly, and it ignores [on]: the point of pressing
+     * the button is to hear whether the phone will make the sound at all.
+     */
+    fun demo(kind: String) {
+        val was = on
+        on = true
+        try {
+            when (kind) {
+                "up" -> boughtUp()
+                "down" -> boughtDown()
+                else -> sold()
+            }
+        } finally {
+            on = was
         }
     }
 
@@ -125,7 +152,7 @@ object Chime {
         val track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build(),
             )

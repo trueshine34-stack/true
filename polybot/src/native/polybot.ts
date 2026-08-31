@@ -182,6 +182,8 @@ export interface PolyBotPlugin {
     usd: number;
     pct?: number;
   }): Promise<{ lockedUsd: number; lockedPct: number }>;
+  /** Plays one trade cue now, so it can be heard without waiting for a trade. */
+  playChime(args: { kind: 'up' | 'down' | 'sold' }): Promise<void>;
   exportJournal(): Promise<{ file: string; bytes: number }>;
   clearJournal(): Promise<void>;
   getJournalSize(): Promise<{ bytes: number }>;
@@ -728,6 +730,7 @@ const webStub: PolyBotPlugin = {
     throw new Error('Баланс доступен только в приложении Android');
   },
   setLocked: async () => ({ lockedUsd: 0, lockedPct: 0 }),
+  playChime: async () => {},
   exportJournal: async () => {
     throw new Error('Экспорт доступен только в приложении Android');
   },
