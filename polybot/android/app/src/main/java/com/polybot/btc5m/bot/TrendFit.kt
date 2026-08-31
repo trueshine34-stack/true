@@ -14,11 +14,22 @@ import kotlin.math.abs
  */
 object TrendFit {
 
-    /** A line has to explain this much of the movement to be a direction. */
-    const val MIN_FIT = 0.25
+    /**
+     * A line has to explain this much of the movement to be a direction.
+     *
+     * Fifteen per cent. It was a quarter, and a quarter refused a third of
+     * all windows for untidiness rather than for standing still — "вбок" is
+     * meant to mean the line has not gone anywhere, not that it got there by
+     * a crooked path. Measured over 7907 windows split by time, the tighter
+     * bar bought nothing: the side goes more than a quarter of a typical move
+     * our way in 57.6% then 61.0% of the windows it allowed, against 57.8%
+     * then 60.5% at this one and 57.3% then 61.0% with no bar at all. It cost
+     * a third of the entries and separated nothing, so it is the loose one.
+     */
+    const val MIN_FIT = 0.15
 
     /** And carry the span this far against its own range. */
-    const val MIN_TRAVEL = 0.3
+    const val MIN_TRAVEL = 0.2
 
     data class Trend(
         val perHour: Double,
@@ -105,12 +116,15 @@ object TrendFit {
     /**
      * How long the wider line looks back, in minutes.
      *
-     * An hour, which on the five-minute chart is twelve points. Three hours
-     * is thirty-six and a steadier fit, but what it fits is the session: by
-     * the time a line that long has turned, the move it was describing is
-     * over. A five-minute bet is decided by what price is doing now.
+     * Half an hour, which on the five-minute chart is six candles.
+     *
+     * It has been three hours, then one. Each time the answer was the same:
+     * what a long line fits is the session, and by the time it has turned,
+     * the move it was describing is over. This one is only there to say
+     * whether the wider frame disagrees with the minute chart, and for that
+     * it has to be looking at roughly the same stretch of tape.
      */
-    const val WIDE_MINUTES = 60
+    const val WIDE_MINUTES = 30
 
     /** The wider line, for anything that wants the session's direction. */
     fun wide(): Trend? = of(BinanceCandles.fiveMinute.list(), WIDE_MINUTES)

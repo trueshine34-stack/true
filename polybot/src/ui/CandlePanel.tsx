@@ -186,10 +186,10 @@ export function CandleFace({
     Where the last half hour has been going, fitted rather than eyeballed —
     and the level it is heading into, which is the one worth watching out of
     the three. The close chart looks at a quarter of an hour, the wide one at
-    a whole one.
+    half of one.
   */
   // The same windows the rules fit their lines over, so the line on the
-  // screen is the line the bot is reading — an hour on the five-minute
+  // screen is the line the bot is reading — half an hour on the five-minute
   // chart, a quarter of an hour on the minute one.
   const trend = trendOf(candles, interval === '5m' ? WIDE_MINUTES : NEAR_MINUTES);
   const ahead = shape && trend ? levelAhead(levels, shape.last, trend.way) : null;

@@ -32,8 +32,8 @@ export interface Trend {
  * A line has to explain this much of the movement, and carry the span this far
  * against its own noise, before it is a direction rather than a drift.
  */
-const MIN_FIT = 0.25;
-const MIN_TRAVEL = 0.3;
+const MIN_FIT = 0.15;
+const MIN_TRAVEL = 0.2;
 
 /**
  * How long each chart's line looks back, in minutes.
@@ -43,7 +43,7 @@ const MIN_TRAVEL = 0.3;
  * the move it was describing is over — a five-minute bet is decided by what
  * price is doing now, not by where the afternoon started.
  */
-export const WIDE_MINUTES = 60;
+export const WIDE_MINUTES = 30;
 
 /**
  * And the close view: a quarter of an hour.
@@ -51,7 +51,9 @@ export const WIDE_MINUTES = 60;
  * It was half an hour, and half an hour is three windows of history deciding
  * one window's bet — by the time a turn shows up in a thirty-minute fit, five
  * minutes of it have already happened. Fifteen points is still enough to fit
- * a line through, and few enough that the line is about now.
+ * a line through, and few enough that the line is about now. The wide view is
+ * half an hour for the same reason: it is there to say whether the wider
+ * frame disagrees, and for that it has to be looking at the same tape.
  */
 export const NEAR_MINUTES = 15;
 

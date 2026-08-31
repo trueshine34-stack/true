@@ -707,7 +707,11 @@ class ProbeBot(
                 windowStart = missed,
                 asset = "",
                 demo = demo,
-                side = aimSide.ifEmpty { TrendFit.lean(trend) },
+                // The side it was going to buy, and nothing when there was not
+            // one. Falling back to the line's tilt here printed "Up · хотел,
+            // но нет линии" — a row claiming a side in the same breath as
+            // the reason there was none.
+            side = aimSide,
                 perHour = trend?.perHour ?: 0.0,
                 shares = 0.0,
                 price = 0.0,

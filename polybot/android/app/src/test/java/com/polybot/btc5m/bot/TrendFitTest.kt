@@ -90,20 +90,20 @@ class TrendFitTest {
      * by the time a line that long has turned, the move it described is over.
      */
     @Test
-    fun `the wide line looks back one hour`() {
-        assertEquals(60, TrendFit.WIDE_MINUTES)
+    fun `the wide line looks back half an hour`() {
+        assertEquals(30, TrendFit.WIDE_MINUTES)
 
-        // Three hours of five-minute candles: flat for two, climbing through
-        // the last one. The hour-long fit sees only the climb.
-        val flat = (0 until 24).map { 100.0 }
-        val up = (1..12).map { 100.0 + it * 5.0 }
-        val hour = TrendFit.of(walk5(flat + up), TrendFit.WIDE_MINUTES)!!
-        assertEquals("Up", hour.way)
+        // Three hours of five-minute candles: flat for most of it, climbing
+        // through the last half hour. The short fit sees only the climb.
+        val flat = (0 until 30).map { 100.0 }
+        val up = (1..6).map { 100.0 + it * 10.0 }
+        val near = TrendFit.of(walk5(flat + up), TrendFit.WIDE_MINUTES)!!
+        assertEquals("Up", near.way)
 
-        // Over three hours the same climb is a third of the picture, and the
-        // slope fitted to it is gentler than the one the hour sees.
+        // Over three hours the same climb is a corner of the picture, and the
+        // slope fitted to it is gentler than the one the half hour sees.
         val session = TrendFit.of(walk5(flat + up), 180)!!
-        assertTrue(session.perHour < hour.perHour)
+        assertTrue(session.perHour < near.perHour)
     }
 
     /**
