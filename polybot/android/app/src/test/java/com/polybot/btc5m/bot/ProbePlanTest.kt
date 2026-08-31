@@ -1540,4 +1540,61 @@ class ProbePlanTest {
         assertEquals(78_000.0, round.facing("Down"), 1e-9)
     }
 
+    /**
+     * A line the fit refuses to call is not a direction.
+     *
+     * The 11:00 entry: the card printed "тренд 1м: вбок 128$/ч R² 0,18" and
+     * the rule bought Up "по тренду" off the same reading. [TrendFit.lean]
+     * answers "which end is higher" and never says "no direction", so a fit
+     * that had refused to name one still produced a side.
+     */
+    @Test
+    fun `a sideways line is no reason to buy`() {
+        assertEquals(
+            ProbePlan.Choice("", "нет линии"),
+            ProbePlan.choose(way = "", wide = "Up", candleBody = -30.0, typical = 77.0),
+        )
+        // Even with the five-minute line perfectly clear, which is what the
+        // window that prompted this had.
+        assertEquals(
+            "нет линии",
+            ProbePlan.choose(way = "", wide = "Up", candleBody = 40.0, typical = 77.0).note,
+        )
+    }
+
+    /**
+     * But a level still speaks when the line has nothing to say — which is
+     * the whole of "a level outranks a line".
+     */
+    @Test
+    fun `a bounce is read off the levels with no line at all`() {
+        val floor = ProbePlan.Wall(77_500.0, 3, round = false)
+        val pick = ProbePlan.choose(
+            way = "",
+            wide = "",
+            candleBody = -10.0,
+            typical = 77.0,
+            // A wick down into the level and a close back off it, with the
+            // minute that ends the window already leaving upwards.
+            candleHigh = 77_620.0,
+            candleLow = 77_505.0,
+            candleClose = 77_580.0,
+            minuteBody = 12.0,
+            below = floor,
+        )
+        assertEquals("Up", pick.side)
+        assertEquals("отбой от 77500", pick.note)
+    }
+
+    /**
+     * And [TrendFit.lean] itself is unchanged — it is still the right answer
+     * for "which way is this line tilted", which the record and the card ask.
+     */
+    @Test
+    fun `the tilt still has an answer when the call does not`() {
+        val weak = TrendFit.Trend(perHour = 128.0, way = "", fit = 0.18)
+        assertEquals("Up", TrendFit.lean(weak))
+        assertEquals("", weak.way)
+    }
+
 }

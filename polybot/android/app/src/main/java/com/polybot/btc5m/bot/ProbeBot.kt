@@ -802,7 +802,22 @@ class ProbeBot(
         val below = shelf.filter { it.price < here }.minByOrNull { here - it.price }
 
         val pick = ProbePlan.choose(
-            way = TrendFit.lean(trend),
+            // The line's own call, not the way it happens to be tilted.
+            //
+            // [TrendFit.lean] answers "which end is higher" and never says
+            // "no direction", so a fit that has refused to name one still
+            // produced a side and the rule bought it. The 11:00 entry is the
+            // case: the card printed "тренд 1м: вбок 128$/ч R² 0,18" — the
+            // honest answer, a line explaining a fifth of the movement — and
+            // the rule bought Up "по тренду" off the same reading, into a
+            // five minutes that had just closed thirty dollars red off the
+            // level. A rule that states a reason it does not have is a rule
+            // nobody can check, and "нет линии" was unreachable.
+            //
+            // A bounce still works with the line silent: it is read off the
+            // levels above, which is where a level outranking a line has to
+            // mean something.
+            way = trend?.way.orEmpty(),
             // The five-minute line's own call, not merely its slope: a fit too
             // weak to name a direction has no business vetoing one.
             wide = wide?.way.orEmpty(),
