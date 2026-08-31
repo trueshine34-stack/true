@@ -566,19 +566,23 @@ class ProbePlanTest {
     }
 
     /**
-     * The take price and the price the bid waits at are one rule seen twice.
-     * Above it a limit is the same money for the same side on worse terms,
-     * wearing an order type as a disguise; below it is money left on the
-     * table, since what the rule would have paid at the market it should also
-     * be willing to wait at.
+     * Everything at or below the take price is bought at the market. The
+     * limit is the exception, for the one case where there is nothing worth
+     * taking — and it sits under the take price, because a side that has to
+     * come down anyway may as well come down far enough to be worth having.
      */
     @Test
-    fun `the resting bid waits at the price it would have paid`() {
-        assertEquals(ProbePlan.MAX_TAKE, ProbePlan.REST_PRICE, 1e-9)
+    fun `the market takes it, and only a dear side is waited for`() {
         assertEquals(0.56, ProbePlan.MAX_TAKE, 1e-9)
-        // Fifty-six is taken; a cent over it waits.
+        assertEquals(0.54, ProbePlan.REST_PRICE, 1e-9)
+        assertTrue(ProbePlan.REST_PRICE < ProbePlan.MAX_TAKE)
+        // Fifty-six is taken at the market; a cent over it is waited for.
         assertTrue(!ProbePlan.waits(0.56))
         assertTrue(ProbePlan.waits(0.57))
+        // And what it pays: the offer itself up to the cap, the limit above.
+        assertEquals(0.50, ProbePlan.entryPrice(0.50), 1e-9)
+        assertEquals(0.56, ProbePlan.entryPrice(0.56), 1e-9)
+        assertEquals(0.54, ProbePlan.entryPrice(0.70), 1e-9)
     }
 
     /**

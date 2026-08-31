@@ -94,12 +94,17 @@ object ProbePlan {
     /**
      * Where the bid waits when the offer is dearer than that.
      *
-     * The take price itself. A bid above it would be the same money for the
-     * same side on worse terms, wearing a limit order as a disguise; below it
-     * is money left on the table, since anything the rule would have paid at
-     * the market it should also be willing to wait at.
+     * Two cents under the take price. Everything at or below [MAX_TAKE] is
+     * bought at the market — crossed, not offered — because a window is five
+     * minutes long and a bid that waits for a price already on the screen
+     * spends them waiting. The limit is the exception, for the one case where
+     * there is nothing to take: the side opened dearer than the rule will pay,
+     * so it leaves a bid where it would have paid and lets the window come
+     * back to it. Under the take price rather than at it, because a side that
+     * has to come down anyway may as well come down far enough to be worth
+     * having.
      */
-    const val REST_PRICE = MAX_TAKE
+    const val REST_PRICE = 0.54
 
     /**
      * How long that bid is left out before it is pulled.
