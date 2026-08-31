@@ -57,6 +57,8 @@ export function CandlePanel({
   height?: number;
 }) {
   const [candles, setCandles] = useState<Candle[]>([]);
+  const [levels, setLevels] = useState<DayLevel[]>([]);
+  const [settled, setSettled] = useState<Record<string, 'Up' | 'Down'>>({});
 
   useEffect(() => {
     let alive = true;
@@ -77,6 +79,55 @@ export function CandlePanel({
     };
   }, [interval]);
 
+  /*
+    The levels the rule actually holds, rather than a second set computed here
+    off what happens to be on screen. They are merged over a day and only added
+    to, so they do not move between frames and there is nothing to animate —
+    once a second is plenty.
+  */
+  useEffect(() => {
+    let alive = true;
+    const pull = () => {
+      void PolyBot.dayLevels()
+        .then((r) => {
+          if (alive) setLevels(r.levels ?? []);
+        })
+        .catch(() => {});
+    };
+    pull();
+    const timer = window.setInterval(pull, 1000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  /*
+    And how each window on screen settled. Only the five-minute chart has one
+    window per candle, so only it asks — and it asks for what it is showing,
+    which fills in over a few seconds as the answers arrive.
+  */
+  const times = candles.map((c) => c[0]).join(',');
+  useEffect(() => {
+    if (interval !== '5m') return undefined;
+    let alive = true;
+    const windows = times ? times.split(',').map(Number) : [];
+    if (windows.length === 0) return undefined;
+    const pull = () => {
+      void PolyBot.windowResults({ windows })
+        .then((r) => {
+          if (alive) setSettled(r.results ?? {});
+        })
+        .catch(() => {});
+    };
+    pull();
+    const timer = window.setInterval(pull, 2000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [interval, times]);
+
   return (
     <CandleFace
       candles={candles}
@@ -84,9 +135,20 @@ export function CandlePanel({
       height={height}
       onPick={onPick}
       picked={picked}
+      levels={levels}
+      settled={settled}
     />
   );
 }
+
+/** A level as the rule holds it: a zone, with the band it covers. */
+export type DayLevel = {
+  price: number;
+  touches: number;
+  kind: 'support' | 'resistance';
+  low: number;
+  high: number;
+};
 
 /** The drawing, from candles and nothing else. */
 export function CandleFace({
@@ -95,6 +157,8 @@ export function CandleFace({
   height: H = 150,
   onPick,
   picked,
+  levels: held,
+  settled,
 }: {
   candles: Candle[];
   interval?: string;
@@ -102,9 +166,21 @@ export function CandleFace({
   /** Called with a candle's open time when it is tapped. */
   onPick?: (time: number) => void;
   picked?: number | null;
+  /** The levels the rule holds. Without them the chart falls back to its own. */
+  levels?: DayLevel[];
+  /** How each window settled on Polymarket, keyed by window start. */
+  settled?: Record<string, 'Up' | 'Down'>;
 }) {
   const shape = candleShape(candles, W, H);
-  const levels = shape ? findLevels(candles, shape.last) : [];
+  // The rule's own levels when they are to hand, so the line under the candle
+  // is the line a window was refused at. The chart's own reading is the
+  // fallback for a frame drawn before the first answer arrives.
+  const levels =
+    held && held.length > 0
+      ? held
+      : shape
+        ? findLevels(candles, shape.last)
+        : [];
 
   /*
     Where the last half hour has been going, fitted rather than eyeballed —
@@ -284,6 +360,33 @@ export function CandleFace({
             />
           </g>
         ))}
+
+        {/*
+          How each window settled, over the candle that is that window.
+          Polymarket does not settle on this candle — it reads its own
+          sixty-second average at the boundary and again at the close — so a
+          candle that finishes green can pay Down, and the arrow is the half
+          that decides whether a bet was right. Blank while the answer has
+          not arrived, which is better than a guess drawn from the candle.
+        */}
+        {interval === '5m' &&
+          shape?.bars.map((bar, i) => {
+            const won = settled?.[String(candles[i]?.[0])];
+            if (!won) return null;
+            const up = won === 'Up';
+            // Just over the wick, and pushed back inside at the ceiling.
+            const tip = Math.max(5, bar.high - 3);
+            return (
+              <text
+                key={`won-${i}`}
+                className={`wonmark ${up ? 'up' : 'down'}`}
+                x={bar.x.toFixed(1)}
+                y={tip.toFixed(1)}
+              >
+                {up ? '▲' : '▼'}
+              </text>
+            );
+          })}
 
         {/*
           The prices themselves go over the candles: a label a candle is

@@ -3094,6 +3094,27 @@ button.wide {
   everything — but it is the edge of this band, not the line through its
   middle, that the entry is measured to.
 */
+/*
+  The settlement arrow over a candle: how Polymarket actually paid that window,
+  which is not always the way the candle closed. Small and centred on the
+  candle, because there is one over every one of them.
+*/
+.wonmark {
+  font-size: 6px;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 2px;
+}
+
+.wonmark.up {
+  fill: var(--up);
+}
+
+.wonmark.down {
+  fill: var(--down);
+}
+
 .sband {
   stroke: none;
 }

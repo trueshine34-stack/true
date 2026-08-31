@@ -538,6 +538,21 @@ class ProbeBot(
     private fun recentCloses(): List<Double> =
         BinanceCandles.oneMinute.list().takeLast(HOME_OVER).map { it.close }
 
+    /**
+     * The last *completed* minute's body: close less open, positive is green.
+     *
+     * The forming minute is left out. A minute two seconds old is red or green
+     * by accident, and an exit that reads it sells on the first tick that goes
+     * the wrong way.
+     */
+    private fun lastMinuteBody(): Double {
+        val minutes = BinanceCandles.oneMinute.list()
+        if (minutes.size < 2) return 0.0
+        val done = minutes[minutes.size - 2]
+        if (done.open <= 0.0 || done.close <= 0.0) return 0.0
+        return done.close - done.open
+    }
+
     private fun here(): Double =
         engine.feed.twap60?.value
             ?: engine.feed.twap?.value
@@ -602,6 +617,10 @@ class ProbeBot(
 
         trend = TrendFit.onScreen()
         wide = TrendFit.wide()
+        // The day's levels are re-read at most once a minute and merged into
+        // what is already known, so a line the rule refused at is still there
+        // on the next tick and still on the screen.
+        DayLevels.refresh(nowSec)
         readLevel()
 
         if (!settings.enabled) {
@@ -808,34 +827,11 @@ class ProbeBot(
             // "no direction", so a fit that has refused to name one still
             // produced a side and the rule bought it. The 11:00 entry is the
             // case: the card printed "тренд 1м: вбок 128$/ч R² 0,18" — the
-            // honest answer, a line explaining a fifth of the movement — and
-            // the rule bought Up "по тренду" off the same reading, into a
-            // five minutes that had just closed thirty dollars red off the
-            // level. A rule that states a reason it does not have is a rule
-            // nobody can check, and "нет линии" was unreachable.
-            //
-            // A bounce still works with the line silent: it is read off the
-            // levels above, which is where a level outranking a line has to
-            // mean something.
+            // honest answer — and the rule bought Up "по тренду" off it.
             way = trend?.way.orEmpty(),
             // The five-minute line's own call, not merely its slope: a fit too
             // weak to name a direction has no business vetoing one.
             wide = wide?.way.orEmpty(),
-            candleBody = body,
-            typical = typical,
-            candleHigh = closing?.high ?: 0.0,
-            candleLow = closing?.low ?: 0.0,
-            candleClose = closing?.close ?: 0.0,
-            minuteBody = body(lastMinute),
-            minuteTypical = minuteTypical,
-            above = above,
-            below = below,
-            // Which side of each wall the market has actually been living on.
-            // A level with the whole hour above it is the floor of a range,
-            // not resistance met from below, and a bounce away from it is a
-            // bounce out of the range.
-            homeAbove = above?.let { ProbePlan.homeSide(recentCloses(), it.price) }.orEmpty(),
-            homeBelow = below?.let { ProbePlan.homeSide(recentCloses(), it.price) }.orEmpty(),
         )
         return Look(
             here = here,
@@ -1384,12 +1380,6 @@ class ProbeBot(
         }
         val minute = body(lastMinute)
         val room = if (aim > 0.0 && here > 0.0) abs(aim - here) else 0.0
-        // What this entry actually has to have in front of it, which is the
-        // setting or the floor under it — and half again when the wall ahead
-        // is the edge of the range.
-        val aheadWall = if (pick.side == "Up") above else below
-        val need = ProbePlan.roomNeeded(rules(demo).roomShare, aheadWall?.edge == true)
-
         // The side comes first, because every line under it is evidence for
         // or against that one word — and a window that was skipped keeps this
         // reading, where "у уровня 78700" without a direction says nothing
@@ -1408,9 +1398,8 @@ class ProbeBot(
             "тренд 5м: " + (wide?.way.orEmpty().ifEmpty { "вбок" }),
             "свеча 5м: " + dollars(body) + " · минутка: " + dollars(minute),
             "обычный ход 5м: " + Math.round(typical) + "$",
-            "нужен запас: " + Math.round(typical * need) + "$" +
-                " (" + Math.round(need * 100) + "% хода" +
-                (if (need > rules(demo).roomShare + 1e-9) ", минимум" else "") + ")",
+            // The wick on our side, and the third of the range that stops
+            // an entry — the one candle rule the entry still has.
             "хвост свечи: " + (
                 closing?.let {
                     val range = it.high - it.low
@@ -1419,7 +1408,12 @@ class ProbeBot(
                     } else {
                         minOf(it.open, it.close) - it.low
                     }
-                    if (range > 0.0) Math.round(wick / range * 100).toString() + "%" else "нет"
+                    if (range > 0.0) {
+                        Math.round(wick / range * 100).toString() + "% из " +
+                            Math.round(ProbePlan.WICK_AT * 100) + "%"
+                    } else {
+                        "нет"
+                    }
                 } ?: "нет"
                 ),
             "размер минутки: " + (
@@ -2245,18 +2239,36 @@ class ProbeBot(
                 bid = bid,
                 cost = open.price,
             )
-            if (wall) {
+            // And the minute turning against us, which is the move pausing at
+            // best. While the minutes keep closing our way there is nothing
+            // to decide and the ladder is the ceiling; the first one the
+            // other way, on a position already up by a sixth, is taken there
+            // rather than handed back on the way to a rung it may not reach.
+            val turned = ProbePlan.turnedAgainst(
+                side = open.side,
+                minuteBody = lastMinuteBody(),
+                bid = bid,
+                cost = open.price,
+            )
+            if (wall || turned) {
                 val left = open.shares - open.sold
                 moved = moved.copy(
                     sold = open.shares,
                     proceeds = open.proceeds + left * SellPercent.netSell(bid),
-                    note = "уровень " + Math.round(open.target),
+                    note = if (wall) "уровень " + Math.round(open.target) else "минутка развернулась",
                 )
                 engine.log(
                     "trade",
-                    "Проба (демо): дошли до " + Math.round(open.target) + " — забрала " +
-                        String.format("%.1f", left) + " ${open.side} по " +
-                        "${(bid * 100).toInt()}¢, не дожидаясь лесенки",
+                    "Проба (демо): " +
+                        (
+                            if (wall) {
+                                "дошли до " + Math.round(open.target)
+                            } else {
+                                "минутка против"
+                            }
+                            ) +
+                        " — забрала " + String.format("%.1f", left) +
+                        " ${open.side} по ${(bid * 100).toInt()}¢, не дожидаясь лесенки",
                 )
             } else if (SellLadder.reached(bid, want)) {
                 // Up to the last minute the rung is a price to wait for, not
@@ -2361,15 +2373,18 @@ class ProbeBot(
      */
     private fun walls(here: Double): List<Levels.Level> {
         if (here <= 0.0) return emptyList()
-        // Every price either chart has actually turned at more than once,
-        // and not the three the chart chose to draw. Those three seat the
+        // The day's levels, which do not move, plus whatever the minute
+        // chart has turned at since — a shelf made in the last twenty minutes
+        // is real and is too young to be in the day's reading yet.
+        //
+        // All of them, not a chart's pick of three. Those three seat the
         // nearest turn either side whether or not anything bounced there, so
-        // the filter below used to throw away two of the three and leave the
-        // rule with one wall — which is how a support the five-minute chart
-        // had plainly bounced off twice was not a support as far as the gate
-        // was concerned.
-        return Levels.tested(BinanceCandles.oneMinute.list(), here) +
-            Levels.tested(BinanceCandles.fiveMinute.list(), here)
+        // the filter used to throw away two of the three and leave the rule
+        // with one wall, which is how a support the five-minute chart had
+        // plainly bounced off twice was not a support as far as the gate was
+        // concerned.
+        return DayLevels.all(here) +
+            Levels.tested(BinanceCandles.oneMinute.list(), here)
     }
 
     private fun readLevel() {

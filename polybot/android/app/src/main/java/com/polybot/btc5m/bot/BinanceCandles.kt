@@ -52,7 +52,23 @@ class BinanceCandles(
         val fiveMinute = BinanceCandles("5m", 48)
         val oneMinute = BinanceCandles("1m", 30)
 
-        val all = listOf(fiveMinute, oneMinute)
+        /**
+         * And a whole day, for the levels.
+         *
+         * Ninety-six quarter-hours is twenty-four hours. Support and
+         * resistance are not properties of the last four hours — a price the
+         * market turned at this morning still has the orders sitting on it
+         * this evening — and a level list rebuilt from a four-hour window
+         * changes every few minutes because the window slid, which is not the
+         * market changing its mind about anything.
+         *
+         * Quarter-hours rather than five-minute candles: a day of fives is
+         * two hundred and eighty-eight bars whose small wiggles become pivots
+         * and then levels, and the answer is a grid rather than a shelf.
+         */
+        val day = BinanceCandles("15m", 96)
+
+        val all = listOf(fiveMinute, oneMinute, day)
 
         fun of(interval: String): BinanceCandles =
             all.firstOrNull { it.interval == interval } ?: fiveMinute

@@ -117,64 +117,6 @@ class ProbePlanTest {
     }
 
     @Test
-    fun `stands aside when the reversal is one window away`() {
-        // A typical window travels sixty dollars, and the rule wants a whole
-        // one of room. Thirty is not enough: what is left is smaller than the
-        // move a candle makes by accident.
-        assertTrue(ProbePlan.tooClose(price = 100_000.0, level = 100_030.0, typical = 60.0))
-        // Ninety away, and the window has somewhere to go first.
-        assertTrue(!ProbePlan.tooClose(price = 100_000.0, level = 100_090.0, typical = 60.0))
-    }
-
-    @Test
-    fun `measures the room the same either side of the price`() {
-        assertTrue(ProbePlan.tooClose(price = 100_000.0, level = 99_970.0, typical = 60.0))
-    }
-
-    @Test
-    fun `has no opinion without a level or a scale`() {
-        assertTrue(!ProbePlan.tooClose(100_000.0, null, 60.0))
-        assertTrue(!ProbePlan.tooClose(100_000.0, 100_010.0, 0.0))
-        assertTrue(!ProbePlan.tooClose(0.0, 100_010.0, 60.0))
-    }
-
-    @Test
-    fun `a zero share switches the check off`() {
-        assertTrue(!ProbePlan.tooClose(100_000.0, 100_001.0, 60.0, share = 0.0))
-    }
-
-    @Test
-    fun `says which price it is standing aside from`() {
-        val why = ProbePlan.blockedBecause(
-            way = "Up",
-            ask = 0.5,
-            cashUsd = 100.0,
-            settings = on,
-            // In open ground between two round numbers, so the reversal is
-            // the only thing in the way.
-            price = 100_240.0,
-            level = 100_270.0,
-            typical = 60.0,
-        )
-        assertEquals("у уровня 100270", why)
-    }
-
-    @Test
-    fun `room in front of the line is not in the way`() {
-        assertNull(
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.5,
-                cashUsd = 100.0,
-                settings = on,
-                price = 100_240.0,
-                level = 100_440.0,
-                typical = 60.0,
-            ),
-        )
-    }
-
-    @Test
     fun `a taken share costs the quote plus the fee`() {
         // The fee is largest in the middle, where the outcome is least decided.
         assertEquals(0.5175, ProbePlan.takenPrice(0.50), 1e-9)
@@ -346,106 +288,6 @@ class ProbePlanTest {
      * still a wall, and [level] is only ever the one in front.
      */
     @Test
-    fun `a wall in front stops the trade however the side was chosen`() {
-        assertEquals(
-            "у уровня 80010",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.5,
-                cashUsd = 100.0,
-                settings = on,
-                price = 80_000.0,
-                level = 80_010.0,
-                typical = 60.0,
-                byLine = false,
-            ),
-        )
-        // And following the line into it is refused for the same reason.
-        assertEquals(
-            "у уровня 80010",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.5,
-                cashUsd = 100.0,
-                settings = on,
-                price = 80_000.0,
-                level = 80_010.0,
-                typical = 60.0,
-                byLine = true,
-            ),
-        )
-    }
-
-    /**
-     * The screenshot: price sat on support at 78 034 with the round 78 000
-     * under it, and the rule bought Down into both.
-     */
-    @Test
-    fun `standing on support is not a place to buy downwards`() {
-        assertEquals(
-            "у уровня 78034",
-            ProbePlan.blockedBecause(
-                way = "Down",
-                ask = 0.34,
-                cashUsd = 100.0,
-                settings = on,
-                price = 78_054.0,
-                level = 78_034.0,
-                typical = 60.0,
-                byLine = false,
-            ),
-        )
-    }
-
-    /** A bounce with the whole room in front of it still trades. */
-    @Test
-    fun `a bounce with somewhere to go is taken`() {
-        assertNull(
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.5,
-                cashUsd = 100.0,
-                settings = on,
-                // Off support, with resistance a full window's travel away.
-                price = 80_010.0,
-                level = 80_200.0,
-                typical = 60.0,
-                byLine = false,
-            ),
-        )
-    }
-
-    /** Standing on a round number is a reason to bounce off it, not to follow into it. */
-    @Test
-    fun `a bounce off a round number is not refused for standing on it`() {
-        assertNull(
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.5,
-                cashUsd = 100.0,
-                settings = on,
-                price = 80_000.0,
-                level = 80_200.0,
-                typical = 60.0,
-                byLine = false,
-            ),
-        )
-        assertEquals(
-            "круглый 80000",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.5,
-                cashUsd = 100.0,
-                settings = on,
-                price = 80_000.0,
-                level = 80_200.0,
-                typical = 60.0,
-                byLine = true,
-            ),
-        )
-    }
-
-    @Test
     fun `a win puts half of itself on the next window`() {
         assertEquals(2.0, ProbePlan.nextStreak(0.0, 4.0), 1e-9)
         // And the next win adds half of its own on top.
@@ -482,72 +324,6 @@ class ProbePlanTest {
      * floor of the range, being under it was the exception, and the way back
      * was up.
      */
-    @Test
-    fun `a bounce away from where the market lives is refused`() {
-        val hour = List(54) { 78_120.0 } + List(6) { 77_960.0 }
-        assertEquals("Up", ProbePlan.homeSide(hour, 78_000.0))
-
-        val pick = ProbePlan.choose(
-            way = "Down",
-            wide = "",
-            candleBody = -40.0,
-            typical = 60.0,
-            candleHigh = 78_004.0,
-            candleLow = 77_950.0,
-            candleClose = 77_969.0,
-            minuteBody = -12.0,
-            minuteTypical = 20.0,
-            above = ProbePlan.Wall(78_000.0, 0, round = true),
-            below = ProbePlan.Wall(77_900.0, 2, round = false),
-            homeAbove = "Up",
-        )
-        assertEquals("", pick.side)
-        assertEquals("под 78000, живём выше", pick.note)
-    }
-
-    @Test
-    fun `a bounce off a level the market is not living behind is taken`() {
-        val pick = ProbePlan.choose(
-            way = "Down",
-            wide = "",
-            candleBody = -40.0,
-            typical = 60.0,
-            candleHigh = 78_004.0,
-            candleLow = 77_950.0,
-            candleClose = 77_969.0,
-            minuteBody = -12.0,
-            minuteTypical = 20.0,
-            above = ProbePlan.Wall(78_000.0, 0, round = true),
-            below = ProbePlan.Wall(77_900.0, 2, round = false),
-            homeAbove = "",
-        )
-        assertEquals("Down", pick.side)
-        assertEquals("отбой от 78000", pick.note)
-    }
-
-    @Test
-    fun `and the same the other way up`() {
-        val hour = List(54) { 77_800.0 } + List(6) { 78_050.0 }
-        assertEquals("Down", ProbePlan.homeSide(hour, 78_000.0))
-
-        val pick = ProbePlan.choose(
-            way = "Up",
-            wide = "",
-            candleBody = 40.0,
-            typical = 60.0,
-            candleHigh = 78_090.0,
-            candleLow = 77_996.0,
-            candleClose = 78_040.0,
-            minuteBody = 12.0,
-            minuteTypical = 20.0,
-            above = ProbePlan.Wall(78_200.0, 2, round = false),
-            below = ProbePlan.Wall(78_000.0, 0, round = true),
-            homeBelow = "Down",
-        )
-        assertEquals("", pick.side)
-        assertEquals("над 78000, живём ниже", pick.note)
-    }
-
     @Test
     fun `an even record names no home side`() {
         val even = List(30) { 78_100.0 } + List(30) { 77_900.0 }
@@ -719,51 +495,6 @@ class ProbePlanTest {
         assertTrue(!ProbePlan.buysBack(60, ask = 0.60, soldAt = 0.0, alreadyBack = false))
     }
 
-    /**
-     * The screenshot: a minute several times the size of the ones around it
-     * spiked and closed red, and the rule bought Down with it — paying up for
-     * a move that had already happened, into a side the book had already
-     * repriced.
-     */
-    @Test
-    fun `a minute that has already fired is not followed`() {
-        // Eighty dollars where a minute usually covers twenty.
-        assertEquals(
-            "минутка выстрелила вниз",
-            ProbePlan.blockedBecause(
-                way = "Down",
-                ask = 0.54,
-                cashUsd = 100.0,
-                settings = on,
-                price = 78_050.0,
-                level = 77_500.0,
-                typical = 60.0,
-                minuteRange = 80.0,
-                minuteBody = -55.0,
-                minuteTypical = 20.0,
-            ),
-        )
-    }
-
-    @Test
-    fun `the other side of that minute is still open`() {
-        // Nothing about a big red minute stops a bet the other way.
-        assertNull(
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.54,
-                cashUsd = 100.0,
-                settings = on,
-                price = 78_150.0,
-                level = 78_600.0,
-                typical = 60.0,
-                minuteRange = 80.0,
-                minuteBody = -55.0,
-                minuteTypical = 20.0,
-            ),
-        )
-    }
-
     @Test
     fun `an ordinary minute is followed as before`() {
         assertNull(
@@ -779,69 +510,6 @@ class ProbePlanTest {
                 minuteRange = 40.0,
                 minuteBody = -30.0,
                 minuteTypical = 20.0,
-            ),
-        )
-    }
-
-    @Test
-    fun `size is the whole candle and direction is the body`() {
-        // A long wick makes the candle big even when the body is modest.
-        assertTrue(ProbePlan.spent("Up", minuteRange = 60.0, minuteBody = 5.0, minuteTypical = 20.0))
-        assertTrue(!ProbePlan.spent("Down", minuteRange = 60.0, minuteBody = 5.0, minuteTypical = 20.0))
-        // A candle that closed where it opened points nowhere.
-        assertTrue(!ProbePlan.spent("Up", minuteRange = 60.0, minuteBody = 0.0, minuteTypical = 20.0))
-        // And with nothing to compare against, nothing is anomalous.
-        assertTrue(!ProbePlan.spent("Up", minuteRange = 60.0, minuteBody = 5.0, minuteTypical = 0.0))
-    }
-
-    /**
-     * The 18:10 window: price nineteen dollars under the high of the whole
-     * four hours on the screen, and the rule bought Up into it because the
-     * high had turned the market once, not twice, and so was filtered out of
-     * the shelf. The retest could never add a second touch either — a pivot
-     * is the extreme of two candles either side of it, and the candle being
-     * tested on is the last one there is.
-     */
-    @Test
-    fun `the edge of the range needs half again the room`() {
-        // Nineteen dollars under a high, where a five minutes covers thirty.
-        assertEquals(
-            "край диапазона 78207",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.48,
-                cashUsd = 100.0,
-                settings = on,
-                price = 78_188.0,
-                level = 78_207.0,
-                typical = 32.0,
-                levelEdge = true,
-            ),
-        )
-        // An ordinary wall at forty dollars is far enough; the edge is not.
-        assertNull(
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.48,
-                cashUsd = 100.0,
-                settings = on,
-                price = 78_188.0,
-                level = 78_228.0,
-                typical = 32.0,
-                levelEdge = false,
-            ),
-        )
-        assertEquals(
-            "край диапазона 78228",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.48,
-                cashUsd = 100.0,
-                settings = on,
-                price = 78_188.0,
-                level = 78_228.0,
-                typical = 32.0,
-                levelEdge = true,
             ),
         )
     }
@@ -907,10 +575,10 @@ class ProbePlanTest {
     @Test
     fun `the resting bid waits at the price it would have paid`() {
         assertEquals(ProbePlan.MAX_TAKE, ProbePlan.REST_PRICE, 1e-9)
-        assertEquals(0.54, ProbePlan.MAX_TAKE, 1e-9)
-        // Fifty-four is taken; a cent over it waits.
-        assertTrue(!ProbePlan.waits(0.54))
-        assertTrue(ProbePlan.waits(0.55))
+        assertEquals(0.56, ProbePlan.MAX_TAKE, 1e-9)
+        // Fifty-six is taken; a cent over it waits.
+        assertTrue(!ProbePlan.waits(0.56))
+        assertTrue(ProbePlan.waits(0.57))
     }
 
     /**
@@ -919,99 +587,6 @@ class ProbePlanTest {
      * upper wick and finished about where it opened. The next five minutes
      * was being asked to do what the last one had just failed at, from the
      * same place.
-     */
-    @Test
-    fun `a candle that reached our way and was pushed back stops the entry`() {
-        // Opened at 78 800, poked 78 832, closed 78 806: a body of six on a
-        // range of thirty-eight, and twenty-six of it wick above.
-        assertTrue(
-            ProbePlan.refused(
-                way = "Up",
-                open = 78_800.0,
-                high = 78_832.0,
-                low = 78_794.0,
-                close = 78_806.0,
-                typical = 40.0,
-            ),
-        )
-        assertEquals(
-            "свеча с хвостом вверх",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.49,
-                cashUsd = 100.0,
-                settings = on,
-                price = 78_804.0,
-                level = 79_400.0,
-                typical = 40.0,
-                candleOpen = 78_800.0,
-                candleHigh = 78_832.0,
-                candleLow = 78_794.0,
-                candleClose = 78_806.0,
-            ),
-        )
-    }
-
-    @Test
-    fun `it wants both halves`() {
-        // A big wick over a big body is a candle that took ground and gave
-        // some back, which is what a trending five minutes looks like.
-        assertTrue(
-            !ProbePlan.refused(
-                way = "Up",
-                open = 78_760.0,
-                high = 78_832.0,
-                low = 78_756.0,
-                close = 78_806.0,
-                typical = 40.0,
-            ),
-        )
-        // And a small body with no wick is a market standing still, which is
-        // not a refusal of anything.
-        assertTrue(
-            !ProbePlan.refused(
-                way = "Up",
-                open = 78_800.0,
-                high = 78_808.0,
-                low = 78_794.0,
-                close = 78_806.0,
-                typical = 40.0,
-            ),
-        )
-    }
-
-    @Test
-    fun `the wick has to be on the side being bought`() {
-        // The same candle read for a Down entry: its long wick is above, so
-        // it says nothing about a move down.
-        assertTrue(
-            !ProbePlan.refused(
-                way = "Down",
-                open = 78_800.0,
-                high = 78_832.0,
-                low = 78_794.0,
-                close = 78_806.0,
-                typical = 40.0,
-            ),
-        )
-    }
-
-    @Test
-    fun `without a candle or a scale it says nothing`() {
-        assertTrue(!ProbePlan.refused("Up", 0.0, 78_832.0, 78_794.0, 78_806.0, 40.0))
-        assertTrue(!ProbePlan.refused("Up", 78_800.0, 78_832.0, 78_794.0, 78_806.0, 0.0))
-        assertTrue(!ProbePlan.refused("", 78_800.0, 78_832.0, 78_794.0, 78_806.0, 40.0))
-    }
-
-    /**
-     * A bid for six shares at fifty cents filled, and the rule filed the
-     * window as "лимитка 50¢ снята" while the wallet plainly held 6.0 · 50¢.
-     *
-     * The order log could not help: an order that filled has left the book,
-     * and one the venue no longer knows about looks exactly like one that was
-     * cancelled, so the log leaves it alone rather than guess. What may be
-     * adopted from the wallet is capped at what was actually ordered, so a
-     * position built by hand on the same side is not taken over.
      */
     @Test
     fun `a filled bid is worth what was ordered, never more`() {
@@ -1060,174 +635,6 @@ class ProbePlanTest {
     }
 
     @Test
-    fun `only the move against the side counts`() {
-        // Down eighty dollars: bad for Up, and nothing at all for Down.
-        assertEquals(80.0, ProbePlan.againstBy("Up", 80_000.0, 79_920.0), 1e-9)
-        assertEquals(0.0, ProbePlan.againstBy("Down", 80_000.0, 79_920.0), 1e-9)
-        assertEquals(80.0, ProbePlan.againstBy("Down", 80_000.0, 80_080.0), 1e-9)
-        assertEquals(0.0, ProbePlan.againstBy("Up", 80_000.0, 80_080.0), 1e-9)
-    }
-
-    /** A five-minute candle that ran into resistance and closed back under. */
-    private fun offTop(minute: Double) = ProbePlan.choose(
-        way = "Up",
-        wide = "Up",
-        candleBody = 30.0,
-        typical = 60.0,
-        candleHigh = 78_308.0,
-        candleLow = 78_240.0,
-        candleClose = 78_260.0,
-        minuteBody = minute,
-        minuteTypical = 14.0,
-        above = ProbePlan.Wall(78_311.0, touches = 4, round = false),
-        below = ProbePlan.Wall(78_145.0, touches = 3, round = false),
-    )
-
-    @Test
-    fun `a wick into resistance and a close back under is a bounce`() {
-        // The lines both say up and it is bought Down anyway: the level turned
-        // it, and the line will not know for another twenty minutes.
-        val pick = offTop(minute = -6.0)
-        assertEquals("Down", pick.side)
-        assertEquals("отбой от 78311", pick.note)
-        assertTrue(!pick.byLine)
-    }
-
-    @Test
-    fun `a bounce needs the last minute to be leaving`() {
-        // The wick is there but the minute is still pushing into the level, so
-        // it is not a bounce — and the lines then carry the window.
-        val pick = offTop(minute = 6.0)
-        assertEquals("Up", pick.side)
-    }
-
-    @Test
-    fun `a wick into support and a close back over it is the other bounce`() {
-        val pick = ProbePlan.choose(
-            way = "Down",
-            wide = "Down",
-            candleBody = -30.0,
-            typical = 60.0,
-            candleHigh = 78_200.0,
-            candleLow = 78_148.0,
-            candleClose = 78_170.0,
-            minuteBody = 5.0,
-            minuteTypical = 14.0,
-            above = ProbePlan.Wall(78_311.0, touches = 4, round = false),
-            below = ProbePlan.Wall(78_145.0, touches = 3, round = false),
-        )
-        assertEquals("Up", pick.side)
-        assertEquals("отбой от 78145", pick.note)
-    }
-
-    @Test
-    fun `a candle that spanned the whole shelf settled nothing`() {
-        val pick = ProbePlan.choose(
-            way = "Up",
-            wide = "Up",
-            candleBody = 5.0,
-            typical = 60.0,
-            candleHigh = 78_308.0,
-            candleLow = 78_148.0,
-            candleClose = 78_200.0,
-            minuteBody = -3.0,
-            minuteTypical = 14.0,
-            above = ProbePlan.Wall(78_311.0, touches = 4, round = false),
-            below = ProbePlan.Wall(78_145.0, touches = 3, round = false),
-        )
-        assertEquals("", pick.side)
-        assertEquals("зажато между уровнями", pick.note)
-    }
-
-    @Test
-    fun `away from every level the lines decide as before`() {
-        val far = ProbePlan.choose(
-            way = "Up",
-            wide = "Up",
-            candleBody = 30.0,
-            typical = 60.0,
-            candleHigh = 78_260.0,
-            candleLow = 78_220.0,
-            candleClose = 78_255.0,
-            minuteBody = 4.0,
-            minuteTypical = 14.0,
-            above = ProbePlan.Wall(78_600.0, touches = 2, round = false),
-            below = ProbePlan.Wall(77_900.0, touches = 2, round = false),
-        )
-        assertEquals("Up", far.side)
-        assertNull(far.note)
-    }
-
-    @Test
-    fun `a flat five-minute line does not veto a clear minute one`() {
-        // The five-minute fit is too weak to call a direction. That is
-        // silence, not disagreement — and it used to cost the window.
-        val pick = ProbePlan.choose(
-            way = "Down",
-            wide = "",
-            candleBody = -30.0,
-            typical = 60.0,
-            minuteBody = -5.0,
-            minuteTypical = 14.0,
-        )
-        assertEquals("Down", pick.side)
-        assertNull(pick.note)
-    }
-
-    @Test
-    fun `a five-minute line that does call the other way still vetoes`() {
-        val pick = ProbePlan.choose(
-            way = "Down",
-            wide = "Up",
-            candleBody = -30.0,
-            typical = 60.0,
-            minuteBody = -5.0,
-            minuteTypical = 14.0,
-        )
-        assertEquals("", pick.side)
-        assertEquals("тренды спорят", pick.note)
-    }
-
-    @Test
-    fun `buying into a level the candle was just refused at is refused too`() {
-        assertTrue(
-            ProbePlan.rejectedAt(
-                way = "Up",
-                high = 78_308.0,
-                low = 78_240.0,
-                close = 78_260.0,
-                level = 78_311.0,
-                typical = 60.0,
-            ),
-        )
-        // Closing above it is a break, not a refusal.
-        assertTrue(
-            !ProbePlan.rejectedAt(
-                way = "Up",
-                high = 78_330.0,
-                low = 78_240.0,
-                close = 78_320.0,
-                level = 78_311.0,
-                typical = 60.0,
-            ),
-        )
-    }
-
-    @Test
-    fun `a level the candle never reached refuses nothing`() {
-        assertTrue(
-            !ProbePlan.rejectedAt(
-                way = "Up",
-                high = 78_250.0,
-                low = 78_200.0,
-                close = 78_240.0,
-                level = 78_500.0,
-                typical = 60.0,
-            ),
-        )
-    }
-
-    @Test
     fun `a bid the market never came back to is pulled after a minute`() {
         assertTrue(ProbePlan.restingDone(60))
         assertTrue(ProbePlan.restingDone(200))
@@ -1247,79 +654,6 @@ class ProbePlanTest {
      * wick, the level and the minute that ends the window.
      */
     @Test
-    fun `the closing candle no longer vetoes a bounce`() {
-        // The five minutes is closing green and the bounce buys Down.
-        val weak = ProbePlan.choose(
-            way = "Up",
-            wide = "Up",
-            candleBody = 30.0,
-            typical = 60.0,
-            candleHigh = 78_308.0,
-            candleLow = 78_240.0,
-            candleClose = 78_260.0,
-            minuteBody = -6.0,
-            minuteTypical = 14.0,
-            above = ProbePlan.Wall(78_311.0, touches = 2, round = false),
-        )
-        assertEquals("Down", weak.side)
-        assertEquals("отбой от 78311", weak.note)
-    }
-
-    @Test
-    fun `a round five hundred is always worth it`() {
-        val round = ProbePlan.choose(
-            way = "Up",
-            wide = "Up",
-            candleBody = 30.0,
-            typical = 60.0,
-            candleHigh = 78_497.0,
-            candleLow = 78_440.0,
-            candleClose = 78_470.0,
-            minuteBody = -6.0,
-            minuteTypical = 14.0,
-            above = ProbePlan.Wall(78_500.0, touches = 0, round = true),
-        )
-        assertEquals("Down", round.side)
-        assertEquals("отбой от 78500", round.note)
-    }
-
-    @Test
-    fun `so is a price that has turned the market three times`() {
-        val strong = ProbePlan.choose(
-            way = "Up",
-            wide = "Up",
-            candleBody = 30.0,
-            typical = 60.0,
-            candleHigh = 78_308.0,
-            candleLow = 78_240.0,
-            candleClose = 78_260.0,
-            minuteBody = -6.0,
-            minuteTypical = 14.0,
-            above = ProbePlan.Wall(78_311.0, touches = 3, round = false),
-        )
-        assertEquals("Down", strong.side)
-    }
-
-    @Test
-    fun `a bounce that agrees with the closing candle needs no such licence`() {
-        // Red five minutes, bouncing down off a twice-touched pivot: the entry
-        // and the close say the same thing, so the level need not be special.
-        val agreed = ProbePlan.choose(
-            way = "Up",
-            wide = "Up",
-            candleBody = -30.0,
-            typical = 60.0,
-            candleHigh = 78_308.0,
-            candleLow = 78_240.0,
-            candleClose = 78_260.0,
-            minuteBody = -6.0,
-            minuteTypical = 14.0,
-            above = ProbePlan.Wall(78_311.0, touches = 2, round = false),
-        )
-        assertEquals("Down", agreed.side)
-    }
-
-    @Test
     fun `what makes a level important`() {
         assertTrue(ProbePlan.Wall(78_500.0, touches = 0, round = true).important)
         assertTrue(ProbePlan.Wall(78_311.0, touches = 3, round = false).important)
@@ -1335,96 +669,6 @@ class ProbePlanTest {
      * forty-seven; and the round-number check exempts a bounce, on the
      * reasoning that a bounce trades away from the number it just came off —
      * which this one did not, it ran straight at a different one.
-     */
-    @Test
-    fun `a bounce running into a round number is refused`() {
-        assertEquals(
-            "круглый 78000",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.51,
-                cashUsd = 100.0,
-                settings = on.copy(roomShare = 0.15),
-                price = 77_953.0,
-                // The wall the bounce is heading into is the round number
-                // itself; pass it far away so this is the round check alone.
-                level = 79_000.0,
-                typical = 157.0,
-                byLine = false,
-            ),
-        )
-    }
-
-    @Test
-    fun `a bounce off a round number may still trade away from it`() {
-        // The same distance, the other way: 78 000 is behind a Down trade,
-        // which is exactly the case the exemption exists for.
-        assertNull(
-            ProbePlan.blockedBecause(
-                way = "Down",
-                ask = 0.51,
-                cashUsd = 100.0,
-                settings = on.copy(roomShare = 0.15),
-                price = 77_953.0,
-                level = 77_000.0,
-                typical = 157.0,
-                byLine = false,
-            ),
-        )
-    }
-
-    /**
-     * And the room in front is floored. The setting may ask for more than
-     * half a typical move; it may not ask for less, because a wall reached
-     * before the window is half over is not a matter of preference.
-     */
-    @Test
-    fun `the room setting cannot be turned below a whole move`() {
-        assertEquals(1.0, ProbePlan.roomNeeded(0.15, levelEdge = false), 1e-9)
-        assertEquals(1.0, ProbePlan.roomNeeded(0.0, levelEdge = false), 1e-9)
-        // A setting above the floor is honoured as it stands.
-        assertEquals(2.0, ProbePlan.roomNeeded(2.0, levelEdge = false), 1e-9)
-        // And the edge of the range still asks half again on top of whichever.
-        assertEquals(1.5, ProbePlan.roomNeeded(0.15, levelEdge = true), 1e-9)
-        assertEquals(3.0, ProbePlan.roomNeeded(2.0, levelEdge = true), 1e-9)
-    }
-
-    @Test
-    fun `forty-seven dollars of room is refused on a hundred and fifty-seven`() {
-        // The floor is a whole typical move, and the wall is at forty-seven.
-        assertEquals(
-            "у уровня 78000",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.51,
-                cashUsd = 100.0,
-                settings = on.copy(roomShare = 0.15, roundBand = 0.0),
-                price = 77_953.0,
-                level = 78_000.0,
-                typical = 157.0,
-                byLine = false,
-            ),
-        )
-        // A whole typical move away and the same window is open ground.
-        assertNull(
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.51,
-                cashUsd = 100.0,
-                settings = on.copy(roomShare = 0.15, roundBand = 0.0),
-                price = 77_840.0,
-                level = 78_000.0,
-                typical = 157.0,
-                byLine = false,
-            ),
-        )
-    }
-
-    /**
-     * Reaching the wall the trade was bought to travel to is a reason to be
-     * out. The room is spent, and a price the market has turned at before
-     * usually turns again — so the side just carried up to it is about to be
-     * carried back, and the rung may be somewhere this window never reaches.
      */
     @Test
     fun `arriving at the wall in profit closes the position`() {
@@ -1489,112 +733,151 @@ class ProbePlanTest {
      * half the zone counted as clear air.
      */
     @Test
-    fun `the room in front is measured to where the zone starts`() {
-        // Turns at 77 740, 77 757 and 77 774: one wall, seventeen dollars
-        // wide, whose middle is 77 757 and whose near side is 77 740.
-        val wall = ProbePlan.Wall(
-            price = 77_757.0,
-            touches = 3,
-            round = false,
-            low = 77_740.0,
-            high = 77_774.0,
-        )
-        assertEquals(77_740.0, wall.facing("Up"), 1e-9)
-        assertEquals(77_774.0, wall.facing("Down"), 1e-9)
-
-        // Price at 77 690 with a typical move of sixty. To the middle it is
-        // sixty-seven dollars, which clears a floor of sixty; to the near
-        // edge it is fifty, which does not.
-        assertNull(
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.47,
-                cashUsd = 100.0,
-                settings = on.copy(roundBand = 0.0),
-                price = 77_690.0,
-                level = wall.price,
-                typical = 60.0,
-                byLine = true,
-            ),
-        )
-        assertEquals(
-            "у уровня 77740",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.47,
-                cashUsd = 100.0,
-                settings = on.copy(roundBand = 0.0),
-                price = 77_690.0,
-                level = wall.facing("Up"),
-                typical = 60.0,
-                byLine = true,
-            ),
-        )
-    }
-
-    @Test
-    fun `a wall with no band behaves exactly as a line`() {
-        // A round number and a range edge have no turns to span.
-        val round = ProbePlan.Wall(78_000.0, 0, round = true)
-        assertEquals(78_000.0, round.facing("Up"), 1e-9)
-        assertEquals(78_000.0, round.facing("Down"), 1e-9)
-    }
-
-    /**
-     * A line the fit refuses to call is not a direction.
-     *
-     * The 11:00 entry: the card printed "тренд 1м: вбок 128$/ч R² 0,18" and
-     * the rule bought Up "по тренду" off the same reading. [TrendFit.lean]
-     * answers "which end is higher" and never says "no direction", so a fit
-     * that had refused to name one still produced a side.
-     */
-    @Test
-    fun `a sideways line is no reason to buy`() {
-        assertEquals(
-            ProbePlan.Choice("", "нет линии"),
-            ProbePlan.choose(way = "", wide = "Up", candleBody = -30.0, typical = 77.0),
-        )
-        // Even with the five-minute line perfectly clear, which is what the
-        // window that prompted this had.
-        assertEquals(
-            "нет линии",
-            ProbePlan.choose(way = "", wide = "Up", candleBody = 40.0, typical = 77.0).note,
-        )
-    }
-
-    /**
-     * But a level still speaks when the line has nothing to say — which is
-     * the whole of "a level outranks a line".
-     */
-    @Test
-    fun `a bounce is read off the levels with no line at all`() {
-        val floor = ProbePlan.Wall(77_500.0, 3, round = false)
-        val pick = ProbePlan.choose(
-            way = "",
-            wide = "",
-            candleBody = -10.0,
-            typical = 77.0,
-            // A wick down into the level and a close back off it, with the
-            // minute that ends the window already leaving upwards.
-            candleHigh = 77_620.0,
-            candleLow = 77_505.0,
-            candleClose = 77_580.0,
-            minuteBody = 12.0,
-            below = floor,
-        )
-        assertEquals("Up", pick.side)
-        assertEquals("отбой от 77500", pick.note)
-    }
-
-    /**
-     * And [TrendFit.lean] itself is unchanged — it is still the right answer
-     * for "which way is this line tilted", which the record and the card ask.
-     */
-    @Test
     fun `the tilt still has an answer when the call does not`() {
         val weak = TrendFit.Trend(perHour = 128.0, way = "", fit = 0.18)
         assertEquals("Up", TrendFit.lean(weak))
         assertEquals("", weak.way)
+    }
+
+    /**
+     * While the minute candles keep closing our way the move is still
+     * happening; the first one that closes the other way is it pausing at
+     * best, and a position already up by a sixth is taken there rather than
+     * handed back on the way to a rung it may not reach.
+     */
+    @Test
+    fun `a minute against us takes the profit`() {
+        // Bought Up at 50c, bid 62c — net of the fee that is well over 15% —
+        // and the last completed minute closed red.
+        assertTrue(ProbePlan.turnedAgainst("Up", minuteBody = -18.0, bid = 0.62, cost = 0.50))
+        // And the mirror: bought Down, the minute closed green.
+        assertTrue(ProbePlan.turnedAgainst("Down", minuteBody = 18.0, bid = 0.62, cost = 0.50))
+    }
+
+    @Test
+    fun `a minute still going our way is left alone`() {
+        assertTrue(!ProbePlan.turnedAgainst("Up", minuteBody = 18.0, bid = 0.62, cost = 0.50))
+        assertTrue(!ProbePlan.turnedAgainst("Down", minuteBody = -18.0, bid = 0.62, cost = 0.50))
+        // A minute that closed exactly flat said nothing.
+        assertTrue(!ProbePlan.turnedAgainst("Up", minuteBody = 0.0, bid = 0.62, cost = 0.50))
+    }
+
+    @Test
+    fun `and a turn is only taken when there is a profit to take`() {
+        // 56c on a side that cost 50c is under a tenth after the fee: a green
+        // run has red minutes in it, and this one is not worth ending.
+        assertTrue(!ProbePlan.turnedAgainst("Up", minuteBody = -18.0, bid = 0.56, cost = 0.50))
+        // 60c is the first cent that clears fifteen per cent net.
+        assertTrue(ProbePlan.turnedAgainst("Up", minuteBody = -18.0, bid = 0.60, cost = 0.50))
+        // And a position under water is never sold on a red minute.
+        assertTrue(!ProbePlan.turnedAgainst("Up", minuteBody = -18.0, bid = 0.44, cost = 0.50))
+    }
+
+    @Test
+    fun `the gain it asks for is fifteen per cent of what the side cost`() {
+        assertEquals(0.15, ProbePlan.TURN_GAIN, 1e-9)
+        // Fifteen per cent *after* the fee, so a side bought at fifty has to
+        // be bid sixty rather than fifty-eight: the fee on the way out is
+        // real money and the gain is what is left of the sale.
+        val need = 0.50 * 1.15
+        assertTrue(SellPercent.netSell(0.60) >= need)
+        assertTrue(SellPercent.netSell(0.59) < need)
+        assertTrue(ProbePlan.turnedAgainst("Up", -18.0, 0.60, 0.50))
+        assertTrue(!ProbePlan.turnedAgainst("Up", -18.0, 0.59, 0.50))
+    }
+
+    /**
+     * The entry is the trend, the round five hundreds and the wick — and
+     * nothing else about levels.
+     *
+     * The pivot levels used to choose sides here as well as refuse them, and
+     * the rule became an argument between two readings of the same chart. The
+     * round numbers stay because they are a fact about where the book sits
+     * rather than a reading of anything, and they only ever refuse.
+     */
+    @Test
+    fun `the side is the line and nothing else`() {
+        assertEquals(ProbePlan.Choice("Up", null), ProbePlan.choose("Up", "Up"))
+        assertEquals(ProbePlan.Choice("Down", null), ProbePlan.choose("Down", ""))
+        assertEquals(ProbePlan.Choice("", "нет линии"), ProbePlan.choose("", "Up"))
+        assertEquals(ProbePlan.Choice("", "тренды спорят"), ProbePlan.choose("Up", "Down"))
+    }
+
+    /**
+     * A wick our way is the move having gone there and been sent straight
+     * back inside the same candle — the last five minutes asked the question
+     * this window is about to ask and were answered no.
+     */
+    @Test
+    fun `a wick our way stops the entry`() {
+        // Opens at 100, reaches 140, closes back at 110: forty of the sixty
+        // above the body is wick, two thirds of the range.
+        assertTrue(ProbePlan.wicked("Up", open = 100.0, high = 140.0, low = 95.0, close = 110.0))
+        assertEquals(
+            "хвост вверх",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.50,
+                cashUsd = 100.0,
+                settings = on.copy(roundBand = 0.0),
+                price = 77_240.0,
+                candleOpen = 100.0,
+                candleHigh = 140.0,
+                candleLow = 95.0,
+                candleClose = 110.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `a candle that closed where it reached is bought at once`() {
+        // Opens at 100, closes at 138, high 140: the hair on top is a
+        // twentieth of the range, which is every candle ever drawn.
+        assertTrue(!ProbePlan.wicked("Up", open = 100.0, high = 140.0, low = 99.0, close = 138.0))
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.50,
+                cashUsd = 100.0,
+                settings = on.copy(roundBand = 0.0),
+                price = 77_240.0,
+                candleOpen = 100.0,
+                candleHigh = 140.0,
+                candleLow = 99.0,
+                candleClose = 138.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `a wick the other way is a reason for the trade, not against it`() {
+        // The same candle bought downwards: the long tail is above, which is
+        // the other direction having been refused.
+        assertTrue(!ProbePlan.wicked("Down", open = 100.0, high = 140.0, low = 95.0, close = 110.0))
+    }
+
+    @Test
+    fun `the round five hundreds are the levels that are left`() {
+        assertEquals(
+            "круглый 88500",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.50,
+                cashUsd = 100.0,
+                settings = on,
+                price = 88_470.0,
+            ),
+        )
+        // And a price in open ground between two of them is open ground.
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.50,
+                cashUsd = 100.0,
+                settings = on,
+                price = 88_240.0,
+            ),
+        )
     }
 
 }

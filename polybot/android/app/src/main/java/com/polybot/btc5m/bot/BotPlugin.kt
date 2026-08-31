@@ -767,6 +767,62 @@ class BotPlugin : Plugin() {
     }
 
     /**
+     * The day's support and resistance, as the rule holds them.
+     *
+     * Read from memory: the levels are merged into a kept set once a minute
+     * and asked for as often as the screen draws. They come out as the rule
+     * has them rather than being recomputed here, so the line a window was
+     * refused at is the line under the candle.
+     */
+    @PluginMethod
+    fun dayLevels(call: PluginCall) {
+        val here = call.getDouble("price")
+            ?: BinanceCandles.oneMinute.list().lastOrNull()?.close
+            ?: 0.0
+        DayLevels.refresh(Clock.nowSec())
+        val out = JSArray()
+        DayLevels.all(here).forEach {
+            out.put(
+                JSObject()
+                    .put("price", it.price)
+                    .put("touches", it.touches)
+                    .put("kind", it.kind)
+                    .put("low", it.low)
+                    .put("high", it.high),
+            )
+        }
+        call.resolve(JSObject().put("levels", out).put("price", here))
+    }
+
+    /**
+     * How the five-minute windows settled, by Polymarket's own reckoning.
+     *
+     * Not which way the Binance candle closed: Polymarket settles against its
+     * own sixty-second average read at the boundary and again at the close, so
+     * a candle that finishes green can settle Down. Over a candle, only the
+     * one that paid out is worth an arrow.
+     *
+     * Answers with what is already known and fetches the rest in the
+     * background, so the panel fills in over a few seconds rather than
+     * blocking on a request per candle.
+     */
+    @PluginMethod
+    fun windowResults(call: PluginCall) {
+        val wanted = call.getArray("windows")
+        val windows = ArrayList<Long>()
+        if (wanted != null) {
+            for (i in 0 until wanted.length()) {
+                val at = wanted.optLong(i)
+                if (at > 0L) windows.add(at)
+            }
+        }
+        val known = WindowResults.want(windows, Clock.nowSec())
+        val out = JSObject()
+        known.forEach { (at, side) -> out.put(at.toString(), side) }
+        call.resolve(JSObject().put("results", out))
+    }
+
+    /**
      * Binance's book for BTC/USDT, as a depth curve.
      *
      * The book is kept locally off the hundred-millisecond diff stream, so

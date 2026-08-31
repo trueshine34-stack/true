@@ -178,6 +178,30 @@ export interface PolyBotPlugin {
     candles: GmxCandle[];
     ticker?: { mid: number; at: number };
   }>;
+  /**
+   * The day's support and resistance as the rule holds them — merged once a
+   * minute over twenty-four hours rather than recomputed from what is on
+   * screen, so the lines do not move and the one a window was refused at is
+   * still under the candle.
+   */
+  dayLevels(args?: { price?: number }): Promise<{
+    levels: {
+      price: number;
+      touches: number;
+      kind: 'support' | 'resistance';
+      low: number;
+      high: number;
+    }[];
+    price: number;
+  }>;
+  /**
+   * How each five-minute window settled, by Polymarket's own reckoning — not
+   * which way the Binance candle closed. Keyed by window start; a window still
+   * missing is one the answer has not arrived for yet.
+   */
+  windowResults(args: { windows: number[] }): Promise<{
+    results: Record<string, 'Up' | 'Down'>;
+  }>;
   /** Binance's candles for one interval: open time in seconds, then o/h/l/c. */
   binanceCandles(args?: {
     interval?: string;
@@ -690,6 +714,8 @@ const webStub: PolyBotPlugin = {
     throw new Error('График доступен только в приложении Android');
   },
   binanceCandles: async () => ({ candles: [] }),
+  dayLevels: async () => ({ levels: [], price: 0 }),
+  windowResults: async () => ({ results: {} }),
   binanceDepth: async () => ({ ready: false }),
   getBookLevels: async () => ({ bids: [], asks: [] }),
   getPositions: async () => ({ positions: [] }),

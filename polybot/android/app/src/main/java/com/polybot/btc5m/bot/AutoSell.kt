@@ -517,6 +517,12 @@ class AutoSell(
                 // may be somewhere this window never reaches. In profit only,
                 // and it can only ever sell sooner than the ladder would.
                 atWall(position, meta, paid) -> sellNow(position, open, meta, mine, lotAt)
+                // And the minute turning against us on a position already up
+                // by a sixth. While the minutes keep closing our way there is
+                // nothing to decide and the ladder is the ceiling; the first
+                // one the other way is the move pausing at best.
+                turnedAgainst(position, meta, paid) ->
+                    sellNow(position, open, meta, mine, lotAt)
                 // Too small for the venue to take an order for. Named rather
                 // than skipped: a position dropped out of the sweep for being
                 // awkward is a position that never gets an exit.
@@ -1008,8 +1014,7 @@ class AutoSell(
         val minutes = BinanceCandles.oneMinute.list()
         val btc = minutes.lastOrNull()?.close ?: 0.0
         if (btc <= 0.0) return false
-        val walls = Levels.tested(minutes, btc) +
-            Levels.tested(BinanceCandles.fiveMinute.list(), btc)
+        val walls = DayLevels.all(btc) + Levels.tested(minutes, btc)
         val bid = try {
             ClobApi.bestBid(position.asset)
         } catch (e: Exception) {
@@ -1023,6 +1028,32 @@ class AutoSell(
             bid = bid,
             cost = paid,
         )
+    }
+
+    /**
+     * Whether the last completed minute closed against this side.
+     *
+     * The forming minute is left out: a minute two seconds old is red or
+     * green by accident, and an exit that reads it sells on the first tick
+     * that goes the wrong way.
+     */
+    private fun turnedAgainst(
+        position: Position,
+        meta: ClobApi.MarketMeta,
+        paid: Double,
+    ): Boolean {
+        val side = meta.outcomes[position.asset].orEmpty()
+        if (side != "Up" && side != "Down") return false
+        val minutes = BinanceCandles.oneMinute.list()
+        if (minutes.size < 2) return false
+        val done = minutes[minutes.size - 2]
+        if (done.open <= 0.0 || done.close <= 0.0) return false
+        val bid = try {
+            ClobApi.bestBid(position.asset)
+        } catch (e: Exception) {
+            return false
+        }
+        return ProbePlan.turnedAgainst(side, done.close - done.open, bid, paid)
     }
 
     /** Crossing the book now, because the reason to wait has just gone. */

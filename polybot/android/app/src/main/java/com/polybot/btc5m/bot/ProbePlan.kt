@@ -89,7 +89,7 @@ object ProbePlan {
      * coming back to us it will come back to [REST_PRICE], and if it is not,
      * the window was not ours.
      */
-    const val MAX_TAKE = 0.54
+    const val MAX_TAKE = 0.56
 
     /**
      * Where the bid waits when the offer is dearer than that.
@@ -165,6 +165,46 @@ object ProbePlan {
      * anyway. And only ever earlier than the ladder — reaching the wall can
      * bring the sale forward, never hold it back.
      */
+    /**
+     * The least a turn against us has to be worth before it is taken.
+     *
+     * Fifteen per cent on what the side cost, after the fee. A minute closing
+     * the other way is not always the end of the move — a green run has red
+     * minutes in it — so the turn only ends the trade when the trade is
+     * already worth ending. Below that, holding costs nothing that the ladder
+     * was not already risking.
+     */
+    const val TURN_GAIN = 0.15
+
+    /**
+     * Whether to take the profit now because the minute has turned against us.
+     *
+     * While the minute candles keep closing our way the move is still
+     * happening and there is nothing to decide: the ladder is the ceiling and
+     * the position rides. The first one that closes the other way is the move
+     * pausing at best and over at worst, and by then the side has been repriced
+     * for a run that has stopped — so a position already up by [least] is
+     * taken there rather than handed back on the way to a rung it may not
+     * reach.
+     *
+     * [minuteBody] is the last *completed* minute, close minus open: positive
+     * is green. The forming minute is not read, because a minute two seconds
+     * old is red or green by accident.
+     */
+    fun turnedAgainst(
+        side: String,
+        minuteBody: Double,
+        bid: Double?,
+        cost: Double,
+        least: Double = TURN_GAIN,
+    ): Boolean {
+        if (bid == null || bid <= 0.0 || cost <= 0.0) return false
+        if (minuteBody == 0.0) return false
+        val against = if (side == "Up") minuteBody < 0.0 else if (side == "Down") minuteBody > 0.0 else return false
+        if (!against) return false
+        return SellPercent.netSell(bid) >= cost * (1.0 + least)
+    }
+
     fun atWall(
         side: String,
         btc: Double,
@@ -281,84 +321,26 @@ object ProbePlan {
      *    ended, and there is no edge either way. Take neither.
      */
     fun choose(
-        /** The minute chart's line. */
+        /** The minute chart's line, as the fit itself calls it. */
         way: String,
         /** And the five-minute chart's call, which objects only when it makes one. */
         wide: String,
-        /** The five-minute candle closing with the window, and its scale. */
-        candleBody: Double,
-        typical: Double,
-        /** Its reach, which is how a level is known to have been touched. */
-        candleHigh: Double = 0.0,
-        candleLow: Double = 0.0,
-        candleClose: Double = 0.0,
-        /** And the minute candle closing with it, against a minute's scale. */
-        minuteBody: Double = 0.0,
-        minuteTypical: Double = 0.0,
-        /** The nearest price the market has stopped at, either side of here. */
-        above: Wall? = null,
-        below: Wall? = null,
-        /**
-         * Which side of each of those walls the market has been living on,
-         * from [homeSide]. Empty when neither side is lopsided enough to say.
-         */
-        homeAbove: String = "",
-        homeBelow: String = "",
-        touch: Double = TOUCH,
     ): Choice {
-        // The bounce comes first, and it comes before the lines.
+        // The line, and that is the whole of it.
         //
-        // Price spends most of its time walking between the prices that stop
-        // it rather than along a trend, and when it is thrown back from one of
-        // them the direction has already changed while the fitted line — an
-        // average over the last half hour — still points the old way, and will
-        // go on pointing it for another twenty minutes. What actually happened
-        // is on the screen: a wick into the level, a close back off it, and
-        // the minute that ends the window already leaving.
-        val near = typical * touch
-        val reach = typical > 0.0 && candleHigh > 0.0 && candleLow > 0.0 && candleClose > 0.0
-        val hitTop = reach && above != null &&
-            candleHigh >= above.price - near && candleClose < above.price
-        val hitFloor = reach && below != null &&
-            candleLow <= below.price + near && candleClose > below.price
-
-        // Both at once is a candle that spanned the whole shelf: it touched
-        // everything and settled nothing.
-        if (hitTop && hitFloor) return Choice("", "зажато между уровнями")
-
-        // The wick says the level was reached and refused; the minute that
-        // ends the window says whether price is actually leaving. Without that
-        // second half it is a level being tested, not turned — the lines carry
-        // the window instead, and buying into the tested level is refused
-        // separately by `rejectedAt`.
-        if (hitTop && minuteBody < 0.0) {
-            // A level the market has spent the hour above is not resistance
-            // met from below; it is the floor of the range, and being under it
-            // is the exception. Selling away from it sells the exception.
-            if (homeAbove == "Up") {
-                return Choice("", "под " + Math.round(above?.price ?: 0.0) + ", живём выше")
-            }
-            return Choice("Down", "отбой от " + Math.round(above?.price ?: 0.0))
-        }
-        if (hitFloor && minuteBody > 0.0) {
-            if (homeBelow == "Down") {
-                return Choice("", "над " + Math.round(below?.price ?: 0.0) + ", живём ниже")
-            }
-            return Choice("Up", "отбой от " + Math.round(below?.price ?: 0.0))
-        }
-
-        // Nothing was touched, so the question is the ordinary one: is there
-        // a direction at all.
+        // The levels used to choose sides here — a wick into one, a close
+        // back off it and a minute already leaving was a bounce, and the side
+        // was taken away from the level whatever the line said. It made the
+        // rule an argument between two readings of the same chart, and the
+        // levels lost more entries than they saved. What is left of them is
+        // the round five hundreds, which are a fact about where the book sits
+        // rather than a reading of anything, and they only ever refuse.
         if (way.isEmpty()) return Choice("", "нет линии")
 
         // A flat five minutes is not an opposite direction, it is silence, and
         // silence should not veto a minute chart that is perfectly clear.
         if (wide.isNotEmpty() && wide != way) return Choice("", "тренды спорят")
 
-        // The candle that is closing no longer votes. It vetoed more windows
-        // than anything else here and had no say in which of them were worth
-        // vetoing: a red five minutes under a line pointing up is as often
-        // the last of the move as the first of the next one.
         return Choice(way, null)
     }
 
@@ -787,6 +769,47 @@ object ProbePlan {
         return edgeOn(fair, ask) >= least
     }
 
+    /**
+     * How much of the closing candle's range may be a wick on our side.
+     *
+     * A third. Every candle has a hair at each end and calling that a wick
+     * would refuse every window; a third of the range spent reaching one way
+     * and coming back is the thing a person means by "there's a wick on it".
+     */
+    const val WICK_AT = 1.0 / 3.0
+
+    /**
+     * Whether the five minutes closing with the window left a wick our way.
+     *
+     * A wick our way is the move having gone there and been sent straight
+     * back inside the same candle — the last five minutes asked the question
+     * this window is about to ask and were answered no. A candle with none
+     * closed where it reached, and there is nothing overhead that has already
+     * turned it back.
+     *
+     * Only our side is looked at. A long wick the other way is the *other*
+     * direction having been refused, which is a reason for this trade rather
+     * than against it.
+     */
+    fun wicked(
+        way: String,
+        open: Double,
+        high: Double,
+        low: Double,
+        close: Double,
+        share: Double = WICK_AT,
+    ): Boolean {
+        if (open <= 0.0 || high <= 0.0 || low <= 0.0 || close <= 0.0) return false
+        val range = high - low
+        if (range <= 0.0) return false
+        val wick = when (way) {
+            "Up" -> high - maxOf(open, close)
+            "Down" -> minOf(open, close) - low
+            else -> return false
+        }
+        return wick >= range * share
+    }
+
     /** Whether this quote is taken now or waited for. */
     fun waits(ask: Double): Boolean = ask > MAX_TAKE + 1e-9
 
@@ -987,48 +1010,22 @@ object ProbePlan {
         // The line is read off the minute candles, so an empty answer means
         // the stream has not arrived rather than that the market is quiet.
         if (way.isEmpty()) return "нет свечей"
-        if (rejectedAt(way, candleHigh, candleLow, candleClose, level, typical)) {
-            return "отбой от " + Math.round(level ?: 0.0)
+
+        // The five minutes closing with the window, and whether it left a
+        // wick on our side. A wick our way is the move having gone there and
+        // been sent back inside the same candle, which is the last thing to
+        // buy into; a candle with none is one that closed where it reached.
+        if (wicked(way, candleOpen, candleHigh, candleLow, candleClose)) {
+            return "хвост " + (if (way == "Up") "вверх" else "вниз")
         }
-        // A minute far bigger than the minutes around it has made its move,
-        // and by the time the window opens that side is the dear one. Going
-        // with it is paying up for something that has already happened.
-        if (spent(way, minuteRange, minuteBody, minuteTypical)) {
-            return "минутка выстрелила " +
-                (if (minuteBody > 0.0) "вверх" else "вниз")
-        }
-        // And a five minutes that reached our way and was pushed back is the
-        // move having tried and failed from this very place.
-        if (refused(way, candleOpen, candleHigh, candleLow, candleClose, typical)) {
-            return "свеча с хвостом " + (if (way == "Up") "вверх" else "вниз")
-        }
-        // The room ahead is checked for every entry, whatever chose the side.
-        // [level] is where the zone starts rather than where its middle is —
-        // see [Wall.facing].
-        // A level beats a line: the trend can say what it likes, but a trade
-        // with a wall a few dollars in front of it has nowhere to go, and
-        // standing on the level is the worst place of all to buy through it.
-        // The exemption a bounce gets is for the level behind it — the one it
-        // just came off — and [level] is never that one.
-        // The edge of the range asks for half again as much room: it is the
-        // strongest line on the chart, and a window started within reach of
-        // it is a window with nowhere to go.
-        val room = roomNeeded(settings.roomShare, levelEdge)
-        if (tooClose(price, level, typical, room)) {
-            return (if (levelEdge) "край диапазона " else "у уровня ") +
-                Math.round(level ?: 0.0)
-        }
-        // Sitting on a round number is only a reason to trade when the trade
-        // is away from it, which is what a bounce is — so the exemption is
-        // for the round number a bounce has just come off, not for one it is
-        // heading into. A bounce off 77 680 that runs straight at 78 000 is
-        // standing in front of the wall, whatever it turned off behind it.
+
+        // And the round five hundreds — 88 000, 88 500, 89 000. The book
+        // stands on them whatever the chart says, and unlike a pivot they are
+        // not a reading of anything: they are simply where the orders are.
         nearRound(price, settings.roundBand)?.let {
-            // Standing exactly on it counts as behind: that is the bounce
-            // the exemption is for. A number still overhead is not.
-            val behind = if (way == "Up") it <= price else it >= price
-            if (byLine || !behind) return "круглый " + Math.round(it)
+            return "круглый " + Math.round(it)
         }
+
         if (ask == null || ask <= 0.0) return "нет цены"
         if (cashUsd < (stake ?: settings.stakeUsd)) {
             return if (settings.demo) "тестовый счёт пуст" else "на счету пусто"
