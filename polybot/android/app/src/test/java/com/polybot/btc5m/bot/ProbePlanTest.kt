@@ -171,7 +171,6 @@ class ProbePlanTest {
                 ask = 0.5,
                 cashUsd = 100.0,
                 settings = on,
-                price = 80_240.0,
             ),
         )
     }
@@ -349,25 +348,6 @@ class ProbePlanTest {
     fun `an account that has lost money still stakes its base`() {
         assertEquals(0, ProbePlan.doublings(won = -40.0, start = 100.0))
         assertEquals(5.0, ProbePlan.stakeFor(5.0, won = -40.0, start = 100.0, streak = 0.0), 1e-9)
-    }
-
-    @Test
-    fun `an ordinary minute is followed as before`() {
-        assertNull(
-            ProbePlan.blockedBecause(
-                way = "Down",
-                ask = 0.54,
-                cashUsd = 100.0,
-                settings = on,
-                price = 78_150.0,
-                level = 77_500.0,
-                typical = 60.0,
-                // Twice the usual is large; two and a half is anomalous.
-                minuteRange = 40.0,
-                minuteBody = -30.0,
-                minuteTypical = 20.0,
-            ),
-        )
     }
 
     @Test
@@ -562,7 +542,6 @@ class ProbePlanTest {
                 ask = 0.50,
                 cashUsd = 100.0,
                 settings = on.copy(roundBand = 0.0),
-                price = 77_240.0,
                 candleOpen = 100.0,
                 candleHigh = 140.0,
                 candleLow = 99.0,
@@ -680,7 +659,6 @@ class ProbePlanTest {
                 ask = 0.49,
                 cashUsd = 100.0,
                 settings = on,
-                price = 78_520.0,
                 candleOpen = 78_300.0,
                 candleHigh = 78_540.0,
                 candleLow = 78_300.0,
@@ -722,45 +700,22 @@ class ProbePlanTest {
     }
 
     /**
-     * And the level the candle reached and was thrown back from. The levels
-     * do not pick sides any more; this is one direction being refused by the
-     * market in the five minutes immediately before the one being bet on.
+     * And the level the candle reached and closed back off, which used to stop
+     * the entry and no longer does. A wick into a price and a close back off
+     * it is what a move looks like on its way through; refusing the side over
+     * it cost windows the line had called right.
      */
     @Test
-    fun `a candle thrown back from the level ahead stops the entry`() {
-        assertEquals(
-            "отбились от 78735",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.49,
-                cashUsd = 100.0,
-                settings = on,
-                price = 78_520.0,
-                level = 78_735.0,
-                typical = 160.0,
-                // Reaches 78 730, a hair under the level, and closes well back.
-                candleOpen = 78_400.0,
-                candleHigh = 78_730.0,
-                candleLow = 78_390.0,
-                candleClose = 78_520.0,
-                hourRange = 160.0,
-            ),
-        )
-    }
-
-    @Test
-    fun `a candle that never got near the level is not a rejection`() {
+    fun `a candle thrown back from the level ahead is followed anyway`() {
         assertNull(
             ProbePlan.blockedBecause(
                 way = "Up",
                 ask = 0.49,
                 cashUsd = 100.0,
                 settings = on,
-                price = 78_520.0,
-                level = 78_735.0,
-                typical = 160.0,
+                // Reaches 78 730, a hair under 78 735, and closes well back.
                 candleOpen = 78_400.0,
-                candleHigh = 78_530.0,
+                candleHigh = 78_730.0,
                 candleLow = 78_390.0,
                 candleClose = 78_520.0,
                 hourRange = 160.0,

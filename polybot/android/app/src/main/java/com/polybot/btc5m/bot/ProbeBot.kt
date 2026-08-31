@@ -1192,25 +1192,14 @@ class ProbeBot(
             ask = ask,
             cashUsd = staking,
             settings = mine,
-            price = here,
-            level = ahead,
             candleOpen = closing?.open ?: 0.0,
             candleHigh = closing?.high ?: 0.0,
             candleLow = closing?.low ?: 0.0,
             candleClose = closing?.close ?: 0.0,
-            // Levels come off the minute chart, with the line; how far a bet
-            // can travel is a question about five minutes, so the scale is
-            // still the five-minute candle's own range.
-            typical = typical,
-            minuteRange = minuteRange,
-            minuteBody = body(lastMinute),
-            minuteTypical = minuteTypical,
             // The hour before the closing candle, with the candle left out of
             // its own comparison: counting it raises the bar it has to clear
             // by a twelfth of itself.
             hourRange = Levels.typicalRange(fives.dropLast(1)),
-            levelEdge = aheadWall?.edge == true,
-            byLine = pick.byLine,
             stake = staking,
         )
         if (cheap != null) {
@@ -1244,25 +1233,14 @@ class ProbeBot(
             ask = ask,
             cashUsd = cash,
             settings = mine,
-            price = here,
-            level = ahead,
             candleOpen = closing?.open ?: 0.0,
             candleHigh = closing?.high ?: 0.0,
             candleLow = closing?.low ?: 0.0,
             candleClose = closing?.close ?: 0.0,
-            // Levels come off the minute chart, with the line; how far a bet
-            // can travel is a question about five minutes, so the scale is
-            // still the five-minute candle's own range.
-            typical = typical,
-            minuteRange = minuteRange,
-            minuteBody = body(lastMinute),
-            minuteTypical = minuteTypical,
             // The hour before the closing candle, with the candle left out of
             // its own comparison: counting it raises the bar it has to clear
             // by a twelfth of itself.
             hourRange = Levels.typicalRange(fives.dropLast(1)),
-            levelEdge = aheadWall?.edge == true,
-            byLine = pick.byLine,
             stake = stake,
         )
         if (blocked != null) {

@@ -207,14 +207,6 @@ object ProbePlan {
     const val DEFAULT_ROUND_BAND = 50.0
 
     /**
-     * How close a wick has to come to a level to have touched it.
-     *
-     * Against what a five-minute candle usually travels, so it is a fraction
-     * of the day's own movement rather than a number of dollars that means
-     * something different every week.
-     */
-    const val TOUCH = 0.35
-    /**
      * A price the market stops at, and how much weight it carries.
      *
      * The round five hundreds always carry it — the book is stacked there
@@ -331,34 +323,6 @@ object ProbePlan {
         if (wide.isNotEmpty() && wide != way) return Choice("", "тренды спорят")
 
         return Choice(way, null)
-    }
-
-    /**
-     * Whether the closing candle was thrown back from the level the entry
-     * would be buying into.
-     *
-     * The bounce above turns that into a trade the other way when the minute
-     * confirms it. When it does not — the wick is there but the last minute is
-     * still pushing — the level has at least been shown to hold, and buying
-     * into it anyway is buying from the people who were just refused.
-     */
-    fun rejectedAt(
-        way: String,
-        high: Double,
-        low: Double,
-        close: Double,
-        level: Double?,
-        typical: Double,
-        touch: Double = TOUCH,
-    ): Boolean {
-        if (way.isEmpty() || level == null || typical <= 0.0) return false
-        if (high <= 0.0 || low <= 0.0 || close <= 0.0) return false
-        val near = typical * touch
-        return if (way == "Up") {
-            high >= level - near && close < level
-        } else {
-            low <= level + near && close > level
-        }
     }
 
     /**
@@ -1050,31 +1014,13 @@ object ProbePlan {
         ask: Double?,
         cashUsd: Double,
         settings: Settings,
-        /** Where BTC is, and the level the line is heading into. */
-        price: Double = 0.0,
-        level: Double? = null,
-        typical: Double = 0.0,
-        /**
-         * Whether this side came from the line.
-         *
-         * A side taken *against* the line is the correction off a level or the
-         * turn itself — so the structure that would have stopped the line is
-         * the reason for the trade and cannot also be the reason against it.
-         */
-        /** Whether that level is the high or low of the whole visible range. */
-        levelEdge: Boolean = false,
-        byLine: Boolean = true,
         /** What this window is actually staking, when it is not the base. */
         stake: Double? = null,
-        /** The closing candle's reach, for a level it may have been refused at. */
+        /** The closing candle, which is the only chart this rule still reads. */
         candleOpen: Double = 0.0,
         candleHigh: Double = 0.0,
         candleLow: Double = 0.0,
         candleClose: Double = 0.0,
-        /** And the minute that just closed, against a minute's usual size. */
-        minuteRange: Double = 0.0,
-        minuteBody: Double = 0.0,
-        minuteTypical: Double = 0.0,
         /**
          * The average range of the hour before the closing candle, which is
          * what says whether that candle is an ordinary one or an event.
@@ -1092,16 +1038,6 @@ object ProbePlan {
         if (huge(way, candleOpen, candleHigh, candleLow, candleClose, hourRange)) {
             return "свеча ×" + String.format("%.1f", (candleHigh - candleLow) / hourRange) +
                 " от часовой"
-        }
-
-        // And a candle that reached the level ahead and closed back off it.
-        // The levels do not pick sides any more, and this does not ask them
-        // to: it is one direction being refused, by the market, in the five
-        // minutes immediately before the one being bet on. Buying that
-        // direction anyway is asking the next five minutes to do what the
-        // last five just failed at, from the same place.
-        if (rejectedAt(way, candleHigh, candleLow, candleClose, level, typical)) {
-            return "отбились от " + Math.round(level ?: 0.0)
         }
 
         if (ask == null || ask <= 0.0) return "нет цены"
