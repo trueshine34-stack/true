@@ -2135,7 +2135,35 @@ class ProbeBot(
                 highWater = high,
                 rung = maxOf(open.rung, step),
             )
-            if (SellLadder.reached(bid, want)) {
+            // Price has arrived at the wall the trade was bought to travel
+            // to, and the room is spent. A price the market has turned at
+            // before usually turns again, so the side that has just been
+            // carried up to it is about to be carried back — and the rung
+            // the ladder is waiting at may be somewhere this window never
+            // reaches. Only ever in profit, and only ever sooner than the
+            // rung: reaching the wall brings the sale forward, never later.
+            val wall = ProbePlan.atWall(
+                side = open.side,
+                btc = here(),
+                wall = open.target.takeIf { it > 0.0 },
+                typical = Levels.typicalRange(BinanceCandles.fiveMinute.list()),
+                bid = bid,
+                cost = open.price,
+            )
+            if (wall) {
+                val left = open.shares - open.sold
+                moved = moved.copy(
+                    sold = open.shares,
+                    proceeds = open.proceeds + left * SellPercent.netSell(bid),
+                    note = "уровень " + Math.round(open.target),
+                )
+                engine.log(
+                    "trade",
+                    "Проба (демо): дошли до " + Math.round(open.target) + " — забрала " +
+                        String.format("%.1f", left) + " ${open.side} по " +
+                        "${(bid * 100).toInt()}¢, не дожидаясь лесенки",
+                )
+            } else if (SellLadder.reached(bid, want)) {
                 // Up to the last minute the rung is a price to wait for, not
                 // one to sit at: nothing is on the book, and the shares go
                 // into the bid the moment it reaches up — so the rung is a
@@ -2233,10 +2261,15 @@ class ProbeBot(
      */
     private fun walls(here: Double): List<Levels.Level> {
         if (here <= 0.0) return emptyList()
-        return (
-            Levels.find(BinanceCandles.oneMinute.list(), here) +
-                Levels.find(BinanceCandles.fiveMinute.list(), here)
-            ).filter { it.touches >= 2 }
+        // Every price either chart has actually turned at more than once,
+        // and not the three the chart chose to draw. Those three seat the
+        // nearest turn either side whether or not anything bounced there, so
+        // the filter below used to throw away two of the three and leave the
+        // rule with one wall — which is how a support the five-minute chart
+        // had plainly bounced off twice was not a support as far as the gate
+        // was concerned.
+        return Levels.tested(BinanceCandles.oneMinute.list(), here) +
+            Levels.tested(BinanceCandles.fiveMinute.list(), here)
     }
 
     private fun readLevel() {

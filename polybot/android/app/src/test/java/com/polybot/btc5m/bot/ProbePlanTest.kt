@@ -1420,4 +1420,67 @@ class ProbePlanTest {
         )
     }
 
+    /**
+     * Reaching the wall the trade was bought to travel to is a reason to be
+     * out. The room is spent, and a price the market has turned at before
+     * usually turns again — so the side just carried up to it is about to be
+     * carried back, and the rung may be somewhere this window never reaches.
+     */
+    @Test
+    fun `arriving at the wall in profit closes the position`() {
+        // Bought Up at 50c, now bid 62c — net of the sell fee that is a
+        // profit — with BTC at 77 990 and the wall at 78 000.
+        assertTrue(
+            ProbePlan.atWall(
+                side = "Up",
+                btc = 77_990.0,
+                wall = 78_000.0,
+                typical = 157.0,
+                bid = 0.62,
+                cost = 0.50,
+            ),
+        )
+        // And the mirror, downwards.
+        assertTrue(
+            ProbePlan.atWall(
+                side = "Down",
+                btc = 77_690.0,
+                wall = 77_680.0,
+                typical = 157.0,
+                bid = 0.62,
+                cost = 0.50,
+            ),
+        )
+    }
+
+    @Test
+    fun `a tenth of a move short of the wall is near enough`() {
+        // The orders sit in a band around the level and the turn starts at
+        // the edge of it, so the exact price is not waited for.
+        assertTrue(
+            ProbePlan.atWall("Up", 77_985.0, 78_000.0, 157.0, 0.62, 0.50),
+        )
+        // Two tenths away is still the middle of the room.
+        assertTrue(
+            !ProbePlan.atWall("Up", 77_965.0, 78_000.0, 157.0, 0.62, 0.50),
+        )
+    }
+
+    @Test
+    fun `a position underwater at the wall is not sold there`() {
+        // Bid 50c on a side that cost 50c is a loss once the fee is paid: the
+        // read was wrong about the direction, and paying the spread here only
+        // locks the mistake in a few minutes before settlement decides it.
+        assertTrue(!ProbePlan.atWall("Up", 77_995.0, 78_000.0, 157.0, 0.50, 0.50))
+        assertTrue(!ProbePlan.atWall("Up", 77_995.0, 78_000.0, 157.0, 0.30, 0.50))
+    }
+
+    @Test
+    fun `no wall, no scale and no quote say nothing`() {
+        assertTrue(!ProbePlan.atWall("Up", 77_995.0, null, 157.0, 0.62, 0.50))
+        assertTrue(!ProbePlan.atWall("Up", 77_995.0, 78_000.0, 0.0, 0.62, 0.50))
+        assertTrue(!ProbePlan.atWall("Up", 77_995.0, 78_000.0, 157.0, null, 0.50))
+        assertTrue(!ProbePlan.atWall("", 77_995.0, 78_000.0, 157.0, 0.62, 0.50))
+    }
+
 }

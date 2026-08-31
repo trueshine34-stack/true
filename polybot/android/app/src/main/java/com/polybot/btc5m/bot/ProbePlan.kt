@@ -140,6 +140,52 @@ object ProbePlan {
     const val TOUCH = 0.35
 
     /**
+     * How near the wall counts as having reached it, for getting out.
+     *
+     * A tenth of a typical five-minute move. Waiting for the exact price is
+     * waiting for a number the tape rarely prints: the orders sit in a band
+     * around the level, and the turn starts at the edge of the band rather
+     * than at its middle.
+     */
+    const val WALL_TOUCH = 0.10
+
+    /**
+     * Whether the position should be closed now because price has arrived at
+     * the wall it was bought to travel to.
+     *
+     * The trade was taken for the room between here and that level, and the
+     * room is now spent. What happens at a price the market has turned at
+     * before is usually that it turns again — so the side that has just been
+     * carried there is about to be carried back, and the rung the ladder is
+     * waiting at may be somewhere it never reaches.
+     *
+     * Only ever in profit. A position underwater at the wall is a read that
+     * was wrong about the direction, and selling it here is paying the spread
+     * to lock in the mistake a few minutes before the settlement decides it
+     * anyway. And only ever earlier than the ladder — reaching the wall can
+     * bring the sale forward, never hold it back.
+     */
+    fun atWall(
+        side: String,
+        btc: Double,
+        wall: Double?,
+        typical: Double,
+        bid: Double?,
+        cost: Double,
+        share: Double = WALL_TOUCH,
+    ): Boolean {
+        if (wall == null || wall <= 0.0 || btc <= 0.0 || typical <= 0.0) return false
+        if (bid == null || bid <= 0.0 || cost <= 0.0) return false
+        val slack = typical * share
+        val arrived = when (side) {
+            "Up" -> btc >= wall - slack
+            "Down" -> btc <= wall + slack
+            else -> return false
+        }
+        return arrived && SellPercent.netSell(bid) > cost + 1e-9
+    }
+
+    /**
      * A price the market stops at, and how much weight it carries.
      *
      * The round five hundreds always carry it — the book is stacked there

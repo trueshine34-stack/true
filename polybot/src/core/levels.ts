@@ -29,7 +29,7 @@ const REACH = 2;
 const TOLERANCE = 0.02;
 
 /** Levels are worth reading up to about this many; past that it is a grid. */
-const KEEP = 3;
+const KEEP = 5;
 
 /**
  * How much being recent is worth against being tested.
@@ -133,11 +133,14 @@ export function findLevels(
     if (first && room(first)) chosen.push(first);
   }
 
-  // Then the strongest of the rest — but a line for a price that turned only
-  // once, somewhere in the middle, is noise.
+  // Then the tested prices, nearest first — but a line for a price that
+  // turned only once, somewhere in the middle, is noise. Nearest rather than
+  // strongest: strength counts being recent, so it would draw a fresh double
+  // four hundred dollars away and leave out an old triple forty away, and it
+  // is the near one price is about to reach.
   const rest = clusters
     .filter((c) => c.touches >= 2 && !chosen.includes(c))
-    .sort((a, b) => b.strength - a.strength);
+    .sort((a, b) => Math.abs(a.price - last) - Math.abs(b.price - last));
   for (const level of rest) {
     if (chosen.length >= keep) break;
     if (room(level)) chosen.push(level);

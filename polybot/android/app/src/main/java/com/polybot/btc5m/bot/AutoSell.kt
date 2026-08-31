@@ -510,6 +510,13 @@ class AutoSell(
             val status = when {
                 meta == null -> "нет данных рынка"
                 meta.closed || !meta.acceptingOrders -> "рынок закрыт"
+                // Price has arrived at the wall this side was bought to
+                // travel to, and the room is spent. A price the market has
+                // turned at before usually turns again, so the side just
+                // carried up to it is about to be carried back — and the rung
+                // may be somewhere this window never reaches. In profit only,
+                // and it can only ever sell sooner than the ladder would.
+                atWall(position, meta, paid) -> sellNow(position, open, meta, mine, lotAt)
                 // Too small for the venue to take an order for. Named rather
                 // than skipped: a position dropped out of the sweep for being
                 // awkward is a position that never gets an exit.
@@ -983,6 +990,75 @@ class AutoSell(
      * would fill at its own price and defeat the whole point. A price the user
      * pinned by hand is theirs and is left alone.
      */
+    /**
+     * Whether BTC has reached the level this side needed to travel to.
+     *
+     * The walls come off the same two candle series the rule and the chart
+     * read, so the price this sells at is a line the person can see. The side
+     * comes from the market's own outcome names rather than being guessed
+     * from the token id.
+     */
+    private fun atWall(
+        position: Position,
+        meta: ClobApi.MarketMeta,
+        paid: Double,
+    ): Boolean {
+        val side = meta.outcomes[position.asset].orEmpty()
+        if (side != "Up" && side != "Down") return false
+        val minutes = BinanceCandles.oneMinute.list()
+        val btc = minutes.lastOrNull()?.close ?: 0.0
+        if (btc <= 0.0) return false
+        val walls = Levels.tested(minutes, btc) +
+            Levels.tested(BinanceCandles.fiveMinute.list(), btc)
+        val bid = try {
+            ClobApi.bestBid(position.asset)
+        } catch (e: Exception) {
+            return false
+        }
+        return ProbePlan.atWall(
+            side = side,
+            btc = btc,
+            wall = Levels.ahead(walls, btc, side),
+            typical = Levels.typicalRange(BinanceCandles.fiveMinute.list()),
+            bid = bid,
+            cost = paid,
+        )
+    }
+
+    /** Crossing the book now, because the reason to wait has just gone. */
+    private fun sellNow(
+        position: Position,
+        open: List<ClobApi.OpenOrder>,
+        meta: ClobApi.MarketMeta,
+        mine: Double,
+        lotAt: Long,
+    ): String {
+        val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
+        val (pinned, ours) = sells.partition { held(it) }
+        // A rung offer resting above the market is in the way of a sale that
+        // is meant to happen at once.
+        if (ours.isNotEmpty()) {
+            val session = engine.session() ?: return "нет сессии"
+            for (order in ours) {
+                try {
+                    ClobApi.cancelOrder(session.creds, session.account.signerAddress, order.id)
+                } catch (e: Exception) {
+                    return e.message ?: "не снять старый ордер"
+                }
+            }
+        }
+        val free = mine - pinned.sumOf { it.remaining }
+        if (free < meta.minimumOrderSize - 1e-6) return "покрыто"
+        val bid = try {
+            ClobApi.bestBid(position.asset)
+        } catch (e: Exception) {
+            return "цена недоступна"
+        } ?: return "цена недоступна"
+        val limit = maxOf(meta.tickSize, snapToTick(bid - meta.tickSize, meta.tickSize))
+        tryPlace(position, free, limit, lotAt)
+        return "уровень — забираю"
+    }
+
     private fun watchRung(
         position: Position,
         open: List<ClobApi.OpenOrder>,

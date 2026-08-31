@@ -23,8 +23,12 @@ object Levels {
     /** Two turns are one level if they are this close, against the range. */
     const val TOLERANCE = 0.02
 
-    /** Past about this many, lines stop being levels and become a grid. */
-    const val KEEP = 3
+    /**
+     * How many lines the chart draws. Past about this many they stop being
+     * levels and become a grid; below it the tested ones fall off the screen
+     * while the two untested seats stay, which is the wrong three.
+     */
+    const val KEEP = 5
 
     /**
      * How much being recent is worth against being tested. At one and a half,
@@ -73,20 +77,30 @@ object Levels {
         return out
     }
 
-    fun find(
+    /**
+     * How many tested prices the gate is told about.
+     *
+     * Six rather than the chart's three. The chart is drawing a picture and
+     * three lines is all a picture wants; the gate is asking "is there
+     * anything between me and where I am going", and a level dropped for
+     * being the fourth-strongest is a wall the rule cannot see.
+     */
+    const val TESTED_KEEP = 6
+
+    /** The clustered turns of a series, or null when there are too few. */
+    private fun clustersOf(
         candles: List<BinanceCandles.Candle>,
         last: Double,
-        keep: Int = KEEP,
-    ): List<Level> {
+    ): Pair<List<Cluster>, Double>? {
         val clean = candles.filter {
             it.open > 0 && it.high > 0 && it.low > 0 && it.close > 0
         }
-        if (clean.size < REACH * 2 + 1 || last <= 0.0) return emptyList()
+        if (clean.size < REACH * 2 + 1 || last <= 0.0) return null
 
         val low = clean.minOf { it.low }
         val high = clean.maxOf { it.high }
         val range = high - low
-        if (range <= 0.0) return emptyList()
+        if (range <= 0.0) return null
         val near = range * TOLERANCE
 
         // Sorted by price, so a level is a run of neighbours rather than a
@@ -100,13 +114,60 @@ object Levels {
         }
 
         val span = maxOf(1, clean.size - 1)
-        val clusters = groups.map { g ->
+        return groups.map { g ->
             Cluster(
                 price = g.sumOf { it.price } / g.size,
                 touches = g.size,
                 strength = g.size + FRESHNESS * (g.maxOf { it.at }.toDouble() / span),
             )
+        } to near
+    }
+
+    /**
+     * Every price this series has actually turned at more than once, nearest
+     * first — which is a different question from the one the chart asks.
+     *
+     * [find] is picking three lines to draw, so it seats the nearest turn
+     * either side whether or not anything ever bounced there, and fills what
+     * is left by strength — which counts being recent. A gate wants neither:
+     * a single turn is not a wall however close it is, an old price the
+     * market turned at four times is a wall however long ago, and of two
+     * walls the near one is this window's problem. Feeding the gate the
+     * chart's three meant the two untested seats used up two of them, the
+     * filter for tested levels then threw both away, and one line was all
+     * that ever reached the rule.
+     */
+    fun tested(
+        candles: List<BinanceCandles.Candle>,
+        last: Double,
+        least: Int = 2,
+        keep: Int = TESTED_KEEP,
+    ): List<Level> {
+        val (clusters, near) = clustersOf(candles, last) ?: return emptyList()
+
+        val chosen = ArrayList<Cluster>()
+        for (level in clusters.filter { it.touches >= least }.sortedBy { abs(it.price - last) }) {
+            if (chosen.size >= keep) break
+            // Two prices a hair apart are one wall counted twice.
+            if (chosen.none { abs(it.price - level.price) < near * 3 }) chosen.add(level)
         }
+        return chosen
+            .map {
+                Level(
+                    price = it.price,
+                    touches = it.touches,
+                    kind = if (it.price > last) "resistance" else "support",
+                )
+            }
+            .sortedByDescending { it.price }
+    }
+
+    fun find(
+        candles: List<BinanceCandles.Candle>,
+        last: Double,
+        keep: Int = KEEP,
+    ): List<Level> {
+        val (clusters, near) = clustersOf(candles, last) ?: return emptyList()
 
         fun nearest(side: List<Cluster>) = side.sortedWith(
             compareBy<Cluster> { abs(it.price - last) }.thenByDescending { it.strength },
@@ -125,11 +186,14 @@ object Levels {
             if (room(it)) chosen.add(it)
         }
 
-        // Then the strongest of the rest — but a line for a price that turned
-        // once, somewhere in the middle, is noise.
+        // Then the tested prices, nearest first — but a line for a price that
+        // turned once, somewhere in the middle, is noise. Nearest rather than
+        // strongest: strength counts being recent, so it would draw a fresh
+        // double four hundred dollars away and leave out an old triple forty
+        // dollars away, and it is the near one price is about to reach.
         val rest = clusters
             .filter { it.touches >= 2 && chosen.none { c -> c === it } }
-            .sortedByDescending { it.strength }
+            .sortedBy { abs(it.price - last) }
         for (level in rest) {
             if (chosen.size >= keep) break
             if (room(level)) chosen.add(level)

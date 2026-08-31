@@ -94,4 +94,52 @@ class LevelsTest {
         assertEquals(10.0, Levels.typicalRange(candles), 1e-9)
         assertEquals(0.0, Levels.typicalRange(emptyList()), 1e-9)
     }
+    /**
+     * The chart's three lines are the wrong three for a gate.
+     *
+     * [Levels.find] seats the nearest turn either side whether or not
+     * anything ever bounced there, and the rule then keeps only the tested
+     * ones — so two of the three seats were spent on turns the filter threw
+     * away, and one wall was all that ever reached it. This is the support
+     * the five-minute chart had plainly bounced off, missing from the gate.
+     */
+    @Test
+    fun `every tested price reaches the gate, not just the chart's three`() {
+        // A shelf at 60 the market turned off four times, a ceiling at 100 it
+        // turned under four times, and price now sitting just above the shelf
+        // with a fresh single turn a hair above it.
+        val path = saw(top = 100.0, bottom = 60.0, legs = 8, step = 8.0) +
+            listOf(66.0, 71.0, 66.0)
+        val candles = walk(path)
+        val last = 66.0
+
+        val tested = Levels.tested(candles, last)
+        // Both walls are there, and both were tested.
+        assertTrue(tested.any { Math.abs(it.price - 55.0) <= 8.0 && it.touches >= 2 })
+        assertTrue(tested.any { Math.abs(it.price - 105.0) <= 8.0 && it.touches >= 2 })
+        // Nothing untested gets in.
+        assertTrue(tested.all { it.touches >= 2 })
+    }
+
+    @Test
+    fun `a single turn is not a wall however close it is`() {
+        // One pivot and nothing else: a line for the chart, not for the gate.
+        val candles = walk(listOf(60.0, 61.0, 62.0, 70.0, 62.0, 61.0, 60.0, 59.0, 58.0))
+        assertTrue(Levels.tested(candles, 60.0).isEmpty())
+    }
+
+    @Test
+    fun `the nearest wall comes first, whatever it is worth`() {
+        val path = saw(top = 100.0, bottom = 60.0, legs = 8, step = 8.0)
+        val candles = walk(path)
+        val last = 96.0
+        val tested = Levels.tested(candles, last)
+        // Sorted by price for drawing, so proximity is checked by asking for
+        // the one ahead — which is the question the gate actually asks.
+        assertEquals(
+            tested.filter { it.price > last }.minByOrNull { it.price }?.price,
+            Levels.ahead(tested, last, "Up"),
+        )
+    }
+
 }
