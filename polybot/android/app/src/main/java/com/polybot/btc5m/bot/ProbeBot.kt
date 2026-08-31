@@ -538,6 +538,17 @@ class ProbeBot(
     private fun recentCloses(): List<Double> =
         BinanceCandles.oneMinute.list().takeLast(HOME_OVER).map { it.close }
 
+    /**
+     * The half hour the mean is taken over, when the line has nothing to say.
+     *
+     * Twice the span the line is fitted through, on purpose: a mean over
+     * exactly that stretch is the middle of the line itself, and asking the
+     * line's own middle where price stands answers a question the line has
+     * just refused to answer.
+     */
+    private fun meanCloses(): List<Double> =
+        BinanceCandles.oneMinute.list().takeLast(ProbePlan.MEAN_OVER).map { it.close }
+
     private fun here(): Double =
         engine.feed.twap60?.value
             ?: engine.feed.twap?.value
@@ -1087,7 +1098,7 @@ class ProbeBot(
         // has just finished, and the line's opinion of the last quarter hour
         // is neither evidence for it nor against it.
         val fives = BinanceCandles.fiveMinute.list().filter { it.time < windowStart }
-        val pick = if (mine.fade) {
+        var pick = if (mine.fade) {
             val fadeSide = FadePlan.side(fives)
             if (fadeSide.isEmpty()) {
                 ProbePlan.Choice("", FadePlan.why(fives))
@@ -1096,6 +1107,27 @@ class ProbeBot(
             }
         } else {
             seen.pick
+        }
+
+        // A line that will not name a direction is not the end of the window.
+        // The market has spent the last stretch going nowhere in particular,
+        // and a market going nowhere comes back to its own middle more often
+        // than it leaves it — so price under the half-hour mean is bought
+        // upwards and price over it downwards.
+        //
+        // Read fifteen seconds out rather than fifty. This is where price
+        // happens to be sitting, not a direction it has been holding, so it
+        // is worth reading as late as it can be.
+        if (!mine.fade && pick.side.isEmpty() && pick.note == "нет линии") {
+            val out = windowStart - Clock.nowSec()
+            if (out > ProbePlan.MEAN_LEAD_SEC) {
+                note = "нет линии — читаю среднюю за " + out + " с"
+                return
+            }
+            val fromMean = ProbePlan.awayFromMean(here, meanCloses())
+            if (fromMean.isNotEmpty()) {
+                pick = ProbePlan.Choice(fromMean, "от средней 30м")
+            }
         }
 
         val way = pick.side
@@ -1476,6 +1508,17 @@ class ProbeBot(
                 }
                 ),
             "цена BTC: " + Math.round(here),
+            "средняя 30м: " + (
+                ProbePlan.meanOf(meanCloses()).let {
+                    if (it <= 0.0) {
+                        "нечем мерить"
+                    } else {
+                        Math.round(it).toString() + " (" +
+                            (if (here >= it) "+" else "−") +
+                            Math.round(abs(here - it)) + "$)"
+                    }
+                }
+                ),
             "стена сверху: " + wall(above),
             "стена снизу: " + wall(below),
             "цель: " + (if (aim > 0.0) Math.round(aim).toString() +

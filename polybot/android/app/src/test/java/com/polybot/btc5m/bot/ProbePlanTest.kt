@@ -608,4 +608,49 @@ class ProbePlanTest {
         assertTrue(!ProbePlan.losingAt("", opened = 78_000.0, here = 77_940.0))
     }
 
+    /**
+     * A line that will not name a direction is not the end of the window.
+     * The market has been going nowhere in particular, and a market going
+     * nowhere comes back to its own middle more often than it leaves it.
+     */
+    @Test
+    fun `with no line, price is bought back towards its mean`() {
+        val half = (0 until 30).map { 78_000.0 }
+        // Under the mean: bought upwards.
+        assertEquals("Up", ProbePlan.awayFromMean(77_940.0, half))
+        // Over it: bought downwards.
+        assertEquals("Down", ProbePlan.awayFromMean(78_060.0, half))
+    }
+
+    @Test
+    fun `the mean is the mean of what it was given`() {
+        val closes = listOf(100.0, 110.0, 120.0, 130.0)
+        assertEquals(115.0, ProbePlan.meanOf(closes), 1e-9)
+        assertEquals(0.0, ProbePlan.meanOf(emptyList()), 1e-9)
+        // Gaps in the feed are left out rather than counted as zero.
+        assertEquals(115.0, ProbePlan.meanOf(closes + listOf(0.0)), 1e-9)
+    }
+
+    @Test
+    fun `too little history is no read at all`() {
+        // Eleven minutes of closes is not half an hour.
+        assertEquals("", ProbePlan.awayFromMean(77_940.0, (0 until 11).map { 78_000.0 }))
+        assertEquals("", ProbePlan.awayFromMean(0.0, (0 until 30).map { 78_000.0 }))
+    }
+
+    @Test
+    fun `sitting exactly on the mean is the one case with no side`() {
+        assertEquals("", ProbePlan.awayFromMean(78_000.0, (0 until 30).map { 78_000.0 }))
+    }
+
+    @Test
+    fun `the mean is read later than the line and over twice its span`() {
+        // The line is fitted over fifteen minutes and read fifty seconds out;
+        // this is read over thirty and fifteen seconds out.
+        assertEquals(30, ProbePlan.MEAN_OVER)
+        assertEquals(15L, ProbePlan.MEAN_LEAD_SEC)
+        assertEquals(TrendFit.NEAR_MINUTES * 2, ProbePlan.MEAN_OVER)
+        assertTrue(ProbePlan.MEAN_LEAD_SEC < ProbePlan.DEFAULT_LEAD_SEC)
+    }
+
 }

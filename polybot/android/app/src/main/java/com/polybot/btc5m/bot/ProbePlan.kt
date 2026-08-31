@@ -35,6 +35,56 @@ object ProbePlan {
     const val DEFAULT_LEAD_SEC = 50L
 
     /**
+     * How far back the mean is taken when the line has nothing to say.
+     *
+     * Half an hour of minutes, which is twice the span the line is fitted
+     * over. Deliberately not the same fifteen: a mean over exactly the stretch
+     * the line was drawn through is the middle of that line, and asking the
+     * line's own middle where price is relative to it answers a question the
+     * line has already refused to answer.
+     */
+    const val MEAN_OVER = 30
+
+    /**
+     * And how long before the open that read is taken.
+     *
+     * Fifteen seconds rather than the line's fifty. This is not a direction
+     * the market has been holding for a quarter of an hour — it is where
+     * price happens to be sitting relative to where it has been — so it is
+     * worth reading as late as it can be read.
+     */
+    const val MEAN_LEAD_SEC = 15L
+
+    /**
+     * Which way to buy when the line will not name a direction.
+     *
+     * Away from where price has been. A flat line means the market has spent
+     * the last stretch going nowhere in particular, and a market going
+     * nowhere in particular comes back to its own middle more often than it
+     * leaves it — so under the mean is bought upwards and over it downwards.
+     *
+     * There is no dead band in the middle. Price sitting exactly on its own
+     * mean is a coin either way, and refusing those windows would mean the
+     * rule still had no answer for the case this exists to answer.
+     */
+    fun awayFromMean(price: Double, closes: List<Double>, least: Int = 12): String {
+        val used = closes.filter { it > 0.0 }
+        if (price <= 0.0 || used.size < least) return ""
+        val mean = used.sum() / used.size
+        return when {
+            price < mean -> "Up"
+            price > mean -> "Down"
+            else -> ""
+        }
+    }
+
+    /** The mean itself, for the record to show what the side was read off. */
+    fun meanOf(closes: List<Double>): Double {
+        val used = closes.filter { it > 0.0 }
+        return if (used.isEmpty()) 0.0 else used.sum() / used.size
+    }
+
+    /**
      * And the lead the candle entry wants, which is shorter.
      *
      * Fifteen seconds. That entry reads the five-minute candle that closes as
