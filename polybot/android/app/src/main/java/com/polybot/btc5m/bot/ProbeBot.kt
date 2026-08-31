@@ -1205,6 +1205,10 @@ class ProbeBot(
             minuteRange = minuteRange,
             minuteBody = body(lastMinute),
             minuteTypical = minuteTypical,
+            // The hour before the closing candle, with the candle left out of
+            // its own comparison: counting it raises the bar it has to clear
+            // by a twelfth of itself.
+            hourRange = Levels.typicalRange(fives.dropLast(1)),
             levelEdge = aheadWall?.edge == true,
             byLine = pick.byLine,
             stake = staking,
@@ -1253,6 +1257,10 @@ class ProbeBot(
             minuteRange = minuteRange,
             minuteBody = body(lastMinute),
             minuteTypical = minuteTypical,
+            // The hour before the closing candle, with the candle left out of
+            // its own comparison: counting it raises the bar it has to clear
+            // by a twelfth of itself.
+            hourRange = Levels.typicalRange(fives.dropLast(1)),
             levelEdge = aheadWall?.edge == true,
             byLine = pick.byLine,
             stake = stake,

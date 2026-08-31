@@ -825,6 +825,52 @@ object ProbePlan {
         }
     }
 
+    /**
+     * How many times the hour's usual candle is too big to follow.
+     *
+     * Three. A five-minute candle that size is not the market trending, it is
+     * the market reacting — a print, a liquidation, a headline — and by the
+     * time it has closed, the side it went to has been repriced for it. What
+     * is bought there is the move that has already happened, at the price it
+     * happened at, and the next five minutes is as likely to give it back as
+     * to add to it.
+     */
+    const val HUGE = 3.0
+
+    /**
+     * Whether the candle closing with the window is too big to follow.
+     *
+     * Its whole range against the hour's average range, and only when it went
+     * our way: an enormous candle *against* the side is the other direction
+     * having just spent itself, which is a reason for this trade rather than
+     * against it.
+     *
+     * The average deliberately leaves the candle out of its own comparison.
+     * Counting it raises the bar it has to clear by a twelfth of itself, so
+     * the bigger the candle the more it excuses itself.
+     */
+    fun huge(
+        way: String,
+        open: Double,
+        high: Double,
+        low: Double,
+        close: Double,
+        hourRange: Double,
+        times: Double = HUGE,
+    ): Boolean {
+        if (hourRange <= 0.0 || times <= 0.0) return false
+        if (open <= 0.0 || high <= 0.0 || low <= 0.0 || close <= 0.0) return false
+        val range = high - low
+        if (range < hourRange * times) return false
+        // A candle that closed where it opened went nowhere, however tall.
+        val ourWay = when (way) {
+            "Up" -> close > open
+            "Down" -> close < open
+            else -> false
+        }
+        return ourWay
+    }
+
     /** Whether this quote is taken now or waited for. */
     fun waits(ask: Double): Boolean = ask > MAX_TAKE + 1e-9
 
@@ -1029,11 +1075,34 @@ object ProbePlan {
         minuteRange: Double = 0.0,
         minuteBody: Double = 0.0,
         minuteTypical: Double = 0.0,
+        /**
+         * The average range of the hour before the closing candle, which is
+         * what says whether that candle is an ordinary one or an event.
+         */
+        hourRange: Double = 0.0,
     ): String? {
         if (!settings.enabled) return "выключен"
         // The line is read off the minute candles, so an empty answer means
         // the stream has not arrived rather than that the market is quiet.
         if (way.isEmpty()) return "нет свечей"
+
+        // A candle three times the hour's usual size, going our way, is the
+        // market reacting rather than trending — and the side has already
+        // been repriced for it.
+        if (huge(way, candleOpen, candleHigh, candleLow, candleClose, hourRange)) {
+            return "свеча ×" + String.format("%.1f", (candleHigh - candleLow) / hourRange) +
+                " от часовой"
+        }
+
+        // And a candle that reached the level ahead and closed back off it.
+        // The levels do not pick sides any more, and this does not ask them
+        // to: it is one direction being refused, by the market, in the five
+        // minutes immediately before the one being bet on. Buying that
+        // direction anyway is asking the next five minutes to do what the
+        // last five just failed at, from the same place.
+        if (rejectedAt(way, candleHigh, candleLow, candleClose, level, typical)) {
+            return "отбились от " + Math.round(level ?: 0.0)
+        }
 
         if (ask == null || ask <= 0.0) return "нет цены"
         if (cashUsd < (stake ?: settings.stakeUsd)) {

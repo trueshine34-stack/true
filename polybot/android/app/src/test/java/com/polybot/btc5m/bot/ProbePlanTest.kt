@@ -653,4 +653,119 @@ class ProbePlanTest {
         assertTrue(ProbePlan.MEAN_LEAD_SEC < ProbePlan.DEFAULT_LEAD_SEC)
     }
 
+    /**
+     * The 21:35 window: a five-minute candle four times the hour's usual size
+     * spiked into the resistance at the top of the chart, and the rule bought
+     * Up at forty-nine cents behind it. Two separate reasons not to.
+     */
+    @Test
+    fun `a candle three times the hour is not followed`() {
+        assertEquals(3.0, ProbePlan.HUGE, 1e-9)
+        // The hour averages sixty dollars a candle; this one covered two
+        // hundred and forty and closed near its top.
+        assertTrue(
+            ProbePlan.huge(
+                way = "Up",
+                open = 78_300.0,
+                high = 78_540.0,
+                low = 78_300.0,
+                close = 78_520.0,
+                hourRange = 60.0,
+            ),
+        )
+        assertEquals(
+            "свеча ×4.0 от часовой",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.49,
+                cashUsd = 100.0,
+                settings = on,
+                price = 78_520.0,
+                candleOpen = 78_300.0,
+                candleHigh = 78_540.0,
+                candleLow = 78_300.0,
+                candleClose = 78_520.0,
+                hourRange = 60.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `an enormous candle the other way is a reason to trade, not to stop`() {
+        // The same candle bought downwards: the up move has just spent itself.
+        assertTrue(
+            !ProbePlan.huge(
+                way = "Down",
+                open = 78_300.0,
+                high = 78_540.0,
+                low = 78_300.0,
+                close = 78_520.0,
+                hourRange = 60.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `an ordinary candle is followed as before`() {
+        // Twice the hour's size is not three times it.
+        assertTrue(
+            !ProbePlan.huge("Up", 78_300.0, 78_420.0, 78_300.0, 78_400.0, hourRange = 60.0),
+        )
+        // And a tall candle that closed where it opened went nowhere.
+        assertTrue(
+            !ProbePlan.huge("Up", 78_400.0, 78_540.0, 78_300.0, 78_400.0, hourRange = 60.0),
+        )
+        // Nothing to compare against is not a reason either.
+        assertTrue(
+            !ProbePlan.huge("Up", 78_300.0, 78_540.0, 78_300.0, 78_520.0, hourRange = 0.0),
+        )
+    }
+
+    /**
+     * And the level the candle reached and was thrown back from. The levels
+     * do not pick sides any more; this is one direction being refused by the
+     * market in the five minutes immediately before the one being bet on.
+     */
+    @Test
+    fun `a candle thrown back from the level ahead stops the entry`() {
+        assertEquals(
+            "отбились от 78735",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.49,
+                cashUsd = 100.0,
+                settings = on,
+                price = 78_520.0,
+                level = 78_735.0,
+                typical = 160.0,
+                // Reaches 78 730, a hair under the level, and closes well back.
+                candleOpen = 78_400.0,
+                candleHigh = 78_730.0,
+                candleLow = 78_390.0,
+                candleClose = 78_520.0,
+                hourRange = 160.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `a candle that never got near the level is not a rejection`() {
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.49,
+                cashUsd = 100.0,
+                settings = on,
+                price = 78_520.0,
+                level = 78_735.0,
+                typical = 160.0,
+                candleOpen = 78_400.0,
+                candleHigh = 78_530.0,
+                candleLow = 78_390.0,
+                candleClose = 78_520.0,
+                hourRange = 160.0,
+            ),
+        )
+    }
+
 }
