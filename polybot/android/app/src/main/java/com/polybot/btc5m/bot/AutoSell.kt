@@ -56,12 +56,6 @@ class AutoSell(
          * them, and holds the top one for the rest of the window.
          */
         val ladderStepSec: Long = 30L,
-        /** Buy the same size back if the price falls far enough after a sale. */
-        val rebuyEnabled: Boolean = false,
-        /** How far below the sale price the buy-back triggers, as a fraction. */
-        val rebuyDropPct: Double = 0.20,
-        /** Pause between buy-back slices, so a deeper dip can still be caught. */
-        val rebuySlicePauseSec: Int = 3,
         /** Price off what the position cost instead of off the clock. */
         val percentMode: Boolean = false,
         /** The margin to hold out for, net of the fee. */
@@ -235,7 +229,7 @@ class AutoSell(
         // The buy-back needs the loop as much as the sell ladder does — it is
         // how a filled sell gets noticed at all. Tying the loop to the ladder
         // alone left "buy-back on, ladder off" as a switch that did nothing.
-        val shouldRun = next.enabled || next.rebuyEnabled
+        val shouldRun = next.enabled
         when {
             shouldRun && !running -> start()
             !shouldRun && running -> stop()
@@ -596,42 +590,37 @@ class AutoSell(
                 if (settings.enabled) watch(trade.asset)
                 continue
             }
-            if (!settings.rebuyEnabled) continue
-
-            val drop = settings.rebuyDropPct.coerceIn(0.0, 0.95)
-            val lot = OrderLog.buyLotFor(trade.asset)?.coerceAtMost(trade.size) ?: trade.size
-            rebuys.add(
-                Rebuy(
-                    asset = trade.asset,
-                    conditionId = trade.conditionId,
-                    shares = trade.size,
-                    soldAt = trade.price,
-                    trigger = trade.price * (1.0 - drop),
-                    // The market's own window, not whichever one the sweep is
-                    // in: a sale in a market bought ahead of time belongs to
-                    // that market's five minutes, and expiring it against the
-                    // clock's window would end it before it began.
-                    windowStart = metaFor(trade.conditionId)?.windowStart ?: windowStart,
-                    lot = lot,
-                    remaining = trade.size,
-                ),
-            )
+            // A sale is the end of the trade, not the start of the next one.
+            //
+            // Every sale used to queue a buy-back of the same side at a fifth
+            // under what it sold for, and it fired on the rule's own sales as
+            // well as on anything sold by hand — so a window the trend rule
+            // had bought once, sold at seventy-five and finished with was
+            // bought again at fifty-one three minutes later, by this. The
+            // rule's own top-ups and its own buy-back are already gone; this
+            // was the same thing under a different roof, and it is the reason
+            // a window kept getting a second entry after both of those had
+            // been removed.
             engine.log(
                 "trade",
                 "Продано " + String.format("%.1f", trade.size) + " по " +
-                    "${(trade.price * 100).toInt()}¢ · докуп при " +
-                    "${(trade.price * (1.0 - drop) * 100).toInt()}¢",
+                    "${(trade.price * 100).toInt()}¢",
             )
         }
         onStateChanged()
     }
 
+    /**
+     * Nothing queues a buy-back any more, so this only ever clears up.
+     *
+     * The queue and the machinery under it are left where they are rather
+     * than picked out of a file this size in one go; with nothing adding to
+     * [rebuys] none of it runs. It goes on the next pass through here.
+     */
     private fun runRebuys() {
         if (rebuys.isEmpty()) return
-        if (!settings.rebuyEnabled) {
-            rebuys.clear()
-            return
-        }
+        rebuys.clear()
+        if (true) return
 
         val now = System.currentTimeMillis()
         val done = ArrayList<Rebuy>()
@@ -741,7 +730,7 @@ class AutoSell(
             rebuy.remaining -= slice
             // A pause before the next slice, so a dip that is still falling is
             // not all bought at its first price.
-            rebuy.nextAtMs = now + settings.rebuySlicePauseSec.coerceAtLeast(1) * 1000L
+            rebuy.nextAtMs = now + 3_000L
             rebuy.note = null
 
             engine.log(

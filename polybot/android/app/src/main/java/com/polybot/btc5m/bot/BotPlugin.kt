@@ -1115,11 +1115,7 @@ class BotPlugin : Plugin() {
             enabled = call.getBoolean("enabled") ?: defaults.enabled,
             ladder = parseSellLadder(call.getArray("ladder")) ?: defaults.ladder,
             retryEverySec = call.getInt("retryEverySec") ?: defaults.retryEverySec,
-            rebuyEnabled = call.getBoolean("rebuyEnabled") ?: defaults.rebuyEnabled,
-            rebuyDropPct = call.getDouble("rebuyDropPct") ?: defaults.rebuyDropPct,
             watchSec = call.getInt("watchSec") ?: defaults.watchSec,
-            rebuySlicePauseSec = call.getInt("rebuySlicePauseSec")
-                ?: defaults.rebuySlicePauseSec,
             ladderLeadSec = call.getInt("ladderLeadSec") ?: defaults.ladderLeadSec,
             ladderStepSec = call.getInt("ladderStepSec")?.toLong() ?: defaults.ladderStepSec,
             percentMode = call.getBoolean("percentMode") ?: defaults.percentMode,
@@ -1135,9 +1131,8 @@ class BotPlugin : Plugin() {
             return
         }
         autoSell.update(next)
-        // The service keeps it alive while the app is backgrounded. Either rule
-        // on is reason enough: the buy-back runs in the same loop.
-        if (next.enabled || next.rebuyEnabled) {
+        // The service keeps it alive while the app is backgrounded.
+        if (next.enabled) {
             BotService.startAutoSell(context)
         } else {
             BotService.stopAutoSell(context)
@@ -1196,8 +1191,6 @@ class BotPlugin : Plugin() {
                 .put("lastFault", bot.lastFault)
                 .put("watching", bot.watchingCount)
                 .put("watchSec", bot.settings.watchSec)
-                .put("rebuyEnabled", bot.settings.rebuyEnabled)
-                .put("rebuyDropPct", bot.settings.rebuyDropPct)
                 .put("percentMode", bot.settings.percentMode)
                 .put("profitPct", bot.settings.profitPct)
                 .put("sliceGapSec", bot.settings.sliceGapSec)

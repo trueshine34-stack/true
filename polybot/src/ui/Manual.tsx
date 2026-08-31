@@ -96,8 +96,6 @@ const IDLE_AUTOSELL: AutoSellState = {
   ladder: [0.77, 0.84, 0.89, 0.93, 0.97],
   retryEverySec: 7,
   lastSweepAt: 0,
-  rebuyEnabled: false,
-  rebuyDropPct: 0.2,
   rebuys: [],
   rebuysDone: [],
   rows: [],
@@ -231,15 +229,12 @@ export function Manual({
       // The rules live in the native service, which starts every process with
       // them off. Without this the switch would read as on from the store while
       // nothing was actually sweeping — the toggle looked armed and was not.
-      if (stored.autoSellEnabled || stored.autoRebuyEnabled) {
+      if (stored.autoSellEnabled) {
         void PolyBot.autoSellUpdate({
           enabled: stored.autoSellEnabled,
           ladder: stored.autoSellLadder,
           retryEverySec: stored.autoSellRetrySec,
-          rebuyEnabled: stored.autoRebuyEnabled,
-          rebuyDropPct: stored.autoRebuyDropPct,
           watchSec: stored.autoSellWatchSec,
-          rebuySlicePauseSec: stored.autoRebuySlicePauseSec,
           ladderLeadSec: stored.autoSellLeadSec,
           ladderStepSec: stored.autoSellStepSec,
           percentMode: stored.autoSellPercentMode,
@@ -527,21 +522,17 @@ export function Manual({
           // Either rule running is reason for the loop to be up, so both are
           // compared — otherwise a buy-back-only setup would never be re-armed.
           const wanted =
-            settingsRef.current.autoSellEnabled || settingsRef.current.autoRebuyEnabled;
+            settingsRef.current.autoSellEnabled;
           if (
             loadedRef.current &&
             (s.enabled !== settingsRef.current.autoSellEnabled ||
-              s.rebuyEnabled !== settingsRef.current.autoRebuyEnabled ||
               (wanted && !s.running))
           ) {
             void PolyBot.autoSellUpdate({
               enabled: settingsRef.current.autoSellEnabled,
               ladder: settingsRef.current.autoSellLadder,
               retryEverySec: settingsRef.current.autoSellRetrySec,
-              rebuyEnabled: settingsRef.current.autoRebuyEnabled,
-              rebuyDropPct: settingsRef.current.autoRebuyDropPct,
               watchSec: settingsRef.current.autoSellWatchSec,
-              rebuySlicePauseSec: settingsRef.current.autoRebuySlicePauseSec,
               ladderLeadSec: settingsRef.current.autoSellLeadSec,
               ladderStepSec: settingsRef.current.autoSellStepSec,
               percentMode: settingsRef.current.autoSellPercentMode,
@@ -3378,10 +3369,7 @@ function RuleBar({
         enabled: next.autoSellEnabled,
         ladder: next.autoSellLadder,
         retryEverySec: next.autoSellRetrySec,
-        rebuyEnabled: next.autoRebuyEnabled,
-        rebuyDropPct: next.autoRebuyDropPct,
         watchSec: next.autoSellWatchSec,
-        rebuySlicePauseSec: next.autoRebuySlicePauseSec,
         ladderLeadSec: next.autoSellLeadSec,
         ladderStepSec: next.autoSellStepSec,
         percentMode: next.autoSellPercentMode,
@@ -3439,21 +3427,6 @@ function RuleBar({
             {settings.autoSellPercentMode
               ? `+${Math.round(settings.autoSellProfitPct * 100)}%`
               : 'лесенкой'}
-          </i>
-        </button>
-
-        <button
-          className={`ruletile${settings.autoRebuyEnabled ? ' on' : ''}`}
-          onClick={() =>
-            push({ ...settings, autoRebuyEnabled: !settings.autoRebuyEnabled })
-          }
-        >
-          <span className={`switch mini ${settings.autoRebuyEnabled ? 'on' : ''}`} />
-          <b>докуп</b>
-          <i>
-            {state.rebuys.length > 0
-              ? `ждёт ${state.rebuys.length}`
-              : `−${Math.round(settings.autoRebuyDropPct * 100)}%`}
           </i>
         </button>
 
@@ -3847,10 +3820,7 @@ function ManualSettingsForm({
       enabled: next.autoSellEnabled,
       ladder: next.autoSellLadder,
       retryEverySec: next.autoSellRetrySec,
-      rebuyEnabled: next.autoRebuyEnabled,
-      rebuyDropPct: next.autoRebuyDropPct,
       watchSec: next.autoSellWatchSec,
-      rebuySlicePauseSec: next.autoRebuySlicePauseSec,
       ladderLeadSec: next.autoSellLeadSec,
       ladderStepSec: next.autoSellStepSec,
       percentMode: next.autoSellPercentMode,

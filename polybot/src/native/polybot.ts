@@ -229,10 +229,7 @@ export interface PolyBotPlugin {
     enabled?: boolean;
     ladder?: number[];
     retryEverySec?: number;
-    rebuyEnabled?: boolean;
-    rebuyDropPct?: number;
     watchSec?: number;
-    rebuySlicePauseSec?: number;
     ladderLeadSec?: number;
     ladderStepSec?: number;
     percentMode?: boolean;
@@ -661,8 +658,6 @@ export type AutoSellState = {
   /** Purchases still being chased, and how long each is chased for. */
   watching?: number;
   watchSec?: number;
-  rebuyEnabled: boolean;
-  rebuyDropPct: number;
   rebuys: AutoSellRebuy[];
   rebuysDone?: AutoSellRebuyDone[];
   timings?: Timings;
@@ -736,8 +731,6 @@ const webStub: PolyBotPlugin = {
     ladder: [0.77, 0.84, 0.89, 0.93, 0.97],
     retryEverySec: 7,
     lastSweepAt: 0,
-    rebuyEnabled: false,
-    rebuyDropPct: 0.2,
     rebuys: [],
     timings: {},
     rows: [],
