@@ -265,6 +265,55 @@ export function stakeShares(
 }
 
 /**
+ * Under this a side is a long shot rather than a position.
+ *
+ * A dime is where the market stops pricing an outcome and starts pricing a
+ * lottery ticket: nine times in ten it settles at nothing, and the tenth pays
+ * for the other nine. That is a fine thing to buy and a terrible thing to buy
+ * with everything free — which is what a tap used to fill in, because at 4c
+ * the whole balance is a number of shares that looks like a typo.
+ */
+export const LONGSHOT_PRICE = 0.1;
+
+/** And what one tap on a long shot opens with. */
+export const LONGSHOT_STAKE_USD = 1;
+
+/**
+ * The size a tap on a side fills in, and the share of the budget it is.
+ *
+ * Everything free at an ordinary price — that is the whole point of tapping a
+ * side rather than typing a number. Under a dime, a dollar of it: the size row
+ * already offers 1$, 2$ and 3$ down there, because that is the unit a cheap
+ * side is actually bought in, and opening with the same unit saves the tap.
+ *
+ * A null share means the size is a sum of money, not a fraction of anything,
+ * and must not be re-answered when the price moves.
+ */
+export function openingSize(
+  price: number,
+  budgetUsd: number,
+  minimumOrderSize = 5,
+  stakeUsd = LONGSHOT_STAKE_USD,
+): { shares: number | null; pct: number | null } {
+  const everything = stakeShares(price, budgetUsd, 1, minimumOrderSize);
+  if (!Number.isFinite(price) || price <= 0 || price >= LONGSHOT_PRICE) {
+    return { shares: everything, pct: 100 };
+  }
+
+  // A dollar of it, never under the venue's floor, to the same tenth the
+  // dollar buttons under the field use.
+  const wanted = Math.max(stakeUsd / price, minShares(price, minimumOrderSize));
+  const shares = Math.round(wanted * 10) / 10;
+  // Except where a dollar is more than there is — or where there is not even
+  // enough for the venue's smallest order, which is what a null means. Neither
+  // is a smaller default; both are the budget's own answer, as everywhere else.
+  if (everything == null || shares > everything) {
+    return { shares: everything, pct: 100 };
+  }
+  return { shares, pct: null };
+}
+
+/**
  * How much of the deposit is at risk, and how much more may be.
  *
  * A five-minute window is one bet, however many orders it is made of, and the

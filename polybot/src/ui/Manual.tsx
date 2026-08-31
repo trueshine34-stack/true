@@ -18,6 +18,7 @@ import {
   bigPrice,
   openMark,
   stakeShares,
+  openingSize,
   minShares,
   type Exposure,
   type ManualSettings,
@@ -1819,16 +1820,16 @@ export function Manual({
                 }
                 setSide(which);
                 setLimitPrice(String(Math.round(price * 100)));
-                // And the size the field is about to spend: all of it. The
-                // shares wanted at this price are what the window still has
-                // room for, and typing that out was the last thing here that
-                // was typed by hand.
-                setSizePct(100);
-                const full =
-                sizeBudget > 0
-                  ? stakeShares(price, sizeBudget, 1, minSize)
-                  : null;
-                if (full != null) setLimitSize(String(full));
+                // And the size the field is about to spend: all of it at an
+                // ordinary price, a dollar of it under a dime. The shares
+                // wanted here are what the window still has room for, and
+                // typing that out was the last thing that was typed by hand.
+                const opening =
+                  sizeBudget > 0
+                    ? openingSize(price, sizeBudget, minSize)
+                    : { shares: null, pct: 100 };
+                setSizePct(opening.pct);
+                if (opening.shares != null) setLimitSize(String(opening.shares));
               }}
               onSell={sellPosition}
             />

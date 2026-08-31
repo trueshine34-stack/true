@@ -13,6 +13,7 @@ import {
   orderCost,
   sellableShares,
   spendableBalance,
+  openingSize,
   stakeShares,
   windowCapPct,
   stretchLadder,
@@ -459,5 +460,51 @@ describe('stretchLadder', () => {
   it('has nothing to stretch from one rung or none', () => {
     expect(stretchLadder([0.8], 10)).toEqual([0.8]);
     expect(stretchLadder([], 10)).toEqual([]);
+  });
+});
+
+/**
+ * What a tap on a side fills the size field with. Everything free at an
+ * ordinary price; a dollar of it where the side is a long shot.
+ */
+describe('openingSize', () => {
+  it('spends the whole budget at an ordinary price', () => {
+    const opening = openingSize(0.44, 100);
+
+    expect(opening.pct).toBe(100);
+    expect(opening.shares).toBe(stakeShares(0.44, 100, 1));
+  });
+
+  it('opens a long shot with a dollar of it', () => {
+    const opening = openingSize(0.04, 100);
+
+    // A dollar at four cents is twenty-five shares — not the two thousand the
+    // whole balance would have asked for.
+    expect(opening.shares).toBe(25);
+    // And it is a sum of money, so a moving price must not re-answer it.
+    expect(opening.pct).toBeNull();
+  });
+
+  it('treats a dime itself as an ordinary price', () => {
+    expect(openingSize(0.1, 100).pct).toBe(100);
+    expect(openingSize(0.09, 100).pct).toBeNull();
+  });
+
+  it('never asks for less than the venue takes', () => {
+    // A dollar at nine cents is 11.1 shares, over the five-share floor.
+    expect(openingSize(0.09, 100).shares).toBeCloseTo(11.1, 9);
+    // And where a dollar buys fewer than the venue's own floor, the floor wins.
+    expect(openingSize(0.09, 100, 20).shares).toBe(20);
+  });
+
+  it('falls back to the budget when a dollar is more than there is', () => {
+    const opening = openingSize(0.05, 0.5);
+
+    expect(opening.pct).toBe(100);
+    expect(opening.shares).toBe(stakeShares(0.05, 0.5, 1));
+  });
+
+  it('has nothing to offer without a price', () => {
+    expect(openingSize(0, 100).shares).toBeNull();
   });
 });
