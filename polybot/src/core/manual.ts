@@ -24,6 +24,15 @@ export type ManualSettings = {
    * looking, which is the whole point.
    */
   chime: boolean;
+  /**
+   * Hold the ladder at its first rung for a side the book once wrote off.
+   *
+   * A side that traded under a third has been given up on, and if it comes
+   * back it comes back late — while the ladder has walked up with the clock
+   * and is asking ninety-six by the fourth minute, so the price the recovery
+   * actually reaches is one nothing is offered at.
+   */
+  autoSellDipRescue: boolean;
   autoSellEnabled: boolean;
   /**
    * Sell price by step of the window, cheapest rung first.
@@ -127,6 +136,7 @@ export function stretchLadder(ladder: number[], count: number): number[] {
 
 export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   chime: true,
+  autoSellDipRescue: true,
   autoSellEnabled: false,
   autoSellLadder: [
     0.77, 0.8, 0.83, 0.86, 0.88, 0.9, 0.92, 0.94, 0.96, 0.97,

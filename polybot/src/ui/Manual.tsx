@@ -236,6 +236,7 @@ export function Manual({
           retryEverySec: stored.autoSellRetrySec,
           watchSec: stored.autoSellWatchSec,
           chime: stored.chime,
+          dipRescue: stored.autoSellDipRescue,
           ladderLeadSec: stored.autoSellLeadSec,
           ladderStepSec: stored.autoSellStepSec,
           percentMode: stored.autoSellPercentMode,
@@ -535,6 +536,7 @@ export function Manual({
               retryEverySec: settingsRef.current.autoSellRetrySec,
               watchSec: settingsRef.current.autoSellWatchSec,
               chime: settingsRef.current.chime,
+              dipRescue: settingsRef.current.autoSellDipRescue,
               ladderLeadSec: settingsRef.current.autoSellLeadSec,
               ladderStepSec: settingsRef.current.autoSellStepSec,
               percentMode: settingsRef.current.autoSellPercentMode,
@@ -2452,7 +2454,16 @@ function ProbeCard({
           только лесенкой, и лесенкой в чистом виде. Ступени стоят
           лимитками на книге всё окно, а не сторожатся: цена дошла до ступени
           — заявка исполнилась по ней. Ступень выбирается по часам и по
-          максимуму цены за окно, вниз не откатывается. Больше выйти не по
+          максимуму цены за окно, вниз не откатывается. Одна поправка на
+          испуг: если нашу сторону в этом окне отдавали дешевле 33¢, окно
+          признаётся спасательным — лесенка целиком складывается в первую
+          ступень и стоит там всё время, а на 93¢ переставляется только в
+          последние 30 секунд. Сторона, за которую просили треть доллара,
+          прошла мимо расчёта и вернулась; ждать от неё верхних ступеней —
+          это ждать второй раз то, что уже один раз не случилось, а первая
+          ступень выше цены входа и закрывает окно в плюс. Правило одно на
+          всех — обоих ботов и руками поставленные позиции — и снимается
+          плиткой «спасение». Больше выйти не по
           чему: ни удвоения входа, ни продажи у уровня, ни фиксации на
           развернувшейся минутке — каждое из них продавало по своей цене и по
           своему поводу, и вместе они дотягивали до ступени в меньшинстве
@@ -3448,6 +3459,7 @@ function RuleBar({
         retryEverySec: next.autoSellRetrySec,
         watchSec: next.autoSellWatchSec,
         chime: next.chime,
+        dipRescue: next.autoSellDipRescue,
         ladderLeadSec: next.autoSellLeadSec,
         ladderStepSec: next.autoSellStepSec,
         percentMode: next.autoSellPercentMode,
@@ -3506,6 +3518,17 @@ function RuleBar({
               ? `+${Math.round(settings.autoSellProfitPct * 100)}%`
               : 'лесенкой'}
           </i>
+        </button>
+
+        <button
+          className={`ruletile${settings.autoSellDipRescue ? ' on' : ''}`}
+          onClick={() =>
+            push({ ...settings, autoSellDipRescue: !settings.autoSellDipRescue })
+          }
+        >
+          <span className={`switch mini ${settings.autoSellDipRescue ? 'on' : ''}`} />
+          <b>спасение</b>
+          <i>было &lt;33¢ → 1-я ступень</i>
         </button>
 
         <button
@@ -3909,6 +3932,7 @@ function ManualSettingsForm({
       retryEverySec: next.autoSellRetrySec,
       watchSec: next.autoSellWatchSec,
       chime: next.chime,
+      dipRescue: next.autoSellDipRescue,
       ladderLeadSec: next.autoSellLeadSec,
       ladderStepSec: next.autoSellStepSec,
       percentMode: next.autoSellPercentMode,

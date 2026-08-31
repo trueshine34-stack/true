@@ -106,6 +106,54 @@ object SellLadder {
     }
 
     /**
+     * How cheap the side has to have been for the ladder to stop climbing.
+     *
+     * A third. A side the book has marked down to there has been written off
+     * — the market is saying this window is lost — and if it comes back at
+     * all it comes back late and briefly. Meanwhile the ladder has spent the
+     * window walking up: by the fourth minute it is asking ninety-six, so the
+     * one price the recovery actually reaches is a price nothing is offered
+     * at, and a side that clawed its way from a third back to eighty settles
+     * at nothing.
+     */
+    const val DIP_MARK = 0.33
+
+    /** And the last stretch, where a side that has come back is worth more. */
+    const val DIP_LAST_SEC = 30L
+
+    /**
+     * What such a position asks for in that last stretch.
+     *
+     * Ninety-three. A side that has been to a third and is still bid this
+     * near the close has not merely recovered, it has won — and the ladder's
+     * own top rungs are the right price for that.
+     */
+    const val DIP_LAST = 0.93
+
+    /**
+     * The price to ask for a position the book once wrote off.
+     *
+     * The first rung for the whole window, and then ninety-three inside the
+     * last stretch. Not the clock's rung: the clock's rung is built for a
+     * side that is winning steadily, and this one is not — it is a side
+     * getting a second chance, and the only useful thing to do with a second
+     * chance is take it at the first price that is worth taking.
+     */
+    fun afterDip(
+        ladder: List<Double>,
+        secondsLeft: Long,
+        lastSec: Long = DIP_LAST_SEC,
+        last: Double = DIP_LAST,
+    ): Double {
+        if (ladder.isEmpty()) return last
+        return if (secondsLeft in 0..lastSec) last else ladder.first()
+    }
+
+    /** Whether the side has been cheap enough this window to arm that. */
+    fun dipped(lowWater: Double, mark: Double = DIP_MARK): Boolean =
+        lowWater > 0.0 && lowWater < mark
+
+    /**
      * How long before the close the ladder stops watching and starts resting.
      *
      * The last minute. Up to then the rung is a price to *wait for*: nothing

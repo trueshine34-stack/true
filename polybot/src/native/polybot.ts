@@ -232,6 +232,11 @@ export interface PolyBotPlugin {
     watchSec?: number;
     /** Whether a fill makes a sound in the headphones. */
     chime?: boolean;
+    /**
+     * Hold the ladder at its first rung for a side that traded under a third,
+     * and ask ninety-three in the last half minute.
+     */
+    dipRescue?: boolean;
     ladderLeadSec?: number;
     ladderStepSec?: number;
     percentMode?: boolean;
@@ -670,6 +675,8 @@ export type AutoSellState = {
   watchSec?: number;
   /** Whether a fill makes a sound in the headphones. */
   chime?: boolean;
+  /** Whether the ladder stops climbing over a side that was written off. */
+  dipRescue?: boolean;
   rebuys: AutoSellRebuy[];
   rebuysDone?: AutoSellRebuyDone[];
   timings?: Timings;

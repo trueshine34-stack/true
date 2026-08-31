@@ -1605,6 +1605,7 @@ class ProbeBot(
                             elapsedSec = elapsed,
                             secondsLeft = open.windowStart + WINDOW_SEC - nowSec,
                             highWater = open.highWater,
+                            lowWater = open.lowWater,
                             rung = open.rung,
                             bestBid = null,
                             exit = rule,
@@ -2287,15 +2288,21 @@ class ProbeBot(
                 elapsedSec = elapsed,
                 secondsLeft = secondsLeft,
                 highWater = open.highWater,
+                lowWater = open.lowWater,
                 rung = open.rung,
                 bestBid = bid,
                 exit = rule,
             )
 
             val high = maxOf(open.highWater, bid)
+            // And the worst it has been bid, which is what arms the rescue.
+            // Nought means nothing has been seen yet, so the first bid sets it
+            // rather than the position starting out at its cheapest possible.
+            val low = if (open.lowWater <= 0.0) bid else minOf(open.lowWater, bid)
             val step = ProbePlan.exitStep(elapsed, high, open.rung, rule)
             var moved = open.copy(
                 highWater = high,
+                lowWater = low,
                 rung = maxOf(open.rung, step),
             )
             if (SellLadder.reached(bid, want)) {

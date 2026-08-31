@@ -397,3 +397,102 @@ class LadderIsTheOnlyExitTest {
         assertTrue(want > 0.68)
     }
 }
+/**
+ * A side the book once wrote off does not climb with the clock.
+ *
+ * The ladder is built for a position that is winning steadily: by the fourth
+ * minute it is asking ninety-six. A side that traded down at a third and then
+ * clawed its way back to eighty never meets that price, so it settles at
+ * nothing — the recovery was real and the offer was somewhere else.
+ */
+class DipRescueTest {
+
+    private val rule = AutoSell.Settings(ladder = SellLadder.HALF_MINUTE)
+
+    @Test
+    fun `a side that went under a third arms it`() {
+        assertEquals(0.33, SellLadder.DIP_MARK, 1e-9)
+        assertTrue(SellLadder.dipped(0.32))
+        assertTrue(!SellLadder.dipped(0.33))
+        assertTrue(!SellLadder.dipped(0.45))
+        // Nothing seen yet is not the same as having been cheap.
+        assertTrue(!SellLadder.dipped(0.0))
+    }
+
+    @Test
+    fun `it asks the first rung for the whole window`() {
+        // Four minutes in, where the clock's rung is near the top.
+        val want = ProbePlan.exitPrice(
+            cost = 0.50,
+            elapsedSec = 240,
+            secondsLeft = 60,
+            highWater = 0.80,
+            lowWater = 0.28,
+            rung = 0,
+            bestBid = 0.80,
+            exit = rule,
+        )
+        assertEquals(SellLadder.HALF_MINUTE.first(), want, 1e-9)
+        // Which is a price a recovery to eighty actually reaches, unlike the
+        // rung the clock had walked to.
+        assertTrue(want < SellLadder.HALF_MINUTE.last())
+    }
+
+    @Test
+    fun `and ninety-three in the last half minute`() {
+        assertEquals(30L, SellLadder.DIP_LAST_SEC)
+        assertEquals(
+            0.93,
+            ProbePlan.exitPrice(
+                cost = 0.50,
+                elapsedSec = 275,
+                secondsLeft = 25,
+                highWater = 0.95,
+                lowWater = 0.28,
+                rung = 0,
+                bestBid = 0.95,
+                exit = rule,
+            ),
+            1e-9,
+        )
+    }
+
+    @Test
+    fun `a position that never went that cheap is untouched`() {
+        val plain = ProbePlan.exitPrice(
+            cost = 0.50,
+            elapsedSec = 240,
+            secondsLeft = 60,
+            highWater = 0.80,
+            lowWater = 0.45,
+            rung = 0,
+            bestBid = 0.80,
+            exit = rule,
+        )
+        assertEquals(
+            SellLadder.HALF_MINUTE[ProbePlan.exitStep(240, 0.80, 0, rule)],
+            plain,
+            1e-9,
+        )
+    }
+
+    @Test
+    fun `and the setting turns it off`() {
+        val off = rule.copy(dipRescue = false)
+        val want = ProbePlan.exitPrice(
+            cost = 0.50,
+            elapsedSec = 240,
+            secondsLeft = 60,
+            highWater = 0.80,
+            lowWater = 0.28,
+            rung = 0,
+            bestBid = 0.80,
+            exit = off,
+        )
+        assertEquals(
+            SellLadder.HALF_MINUTE[ProbePlan.exitStep(240, 0.80, 0, off)],
+            want,
+            1e-9,
+        )
+    }
+}

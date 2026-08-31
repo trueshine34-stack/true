@@ -1153,6 +1153,8 @@ object ProbePlan {
         elapsedSec: Long,
         secondsLeft: Long,
         highWater: Double,
+        /** The worst it has been bid, which is what arms the rescue. */
+        lowWater: Double = 0.0,
         rung: Int,
         bestBid: Double?,
         exit: AutoSell.Settings,
@@ -1185,10 +1187,18 @@ object ProbePlan {
             leadSec = exit.ladderLeadSec,
             stepSec = exit.ladderStepSec,
         )
-        // The rung, and nothing else. Every rule that used to move it — the
-        // doubling, the level ahead, the minute that turned against us — sold
-        // at its own price and on its own reasoning, and between them the
-        // ladder was reached in a minority of windows. The ladder is the exit.
+        // A side the book once wrote off does not climb with the clock: it
+        // asks the first rung all window and ninety-three at the end, because
+        // the price its recovery reaches is not the price a steady winner
+        // would have walked up to by now.
+        if (exit.dipRescue && SellLadder.dipped(lowWater)) {
+            return SellLadder.afterDip(rungs, secondsLeft)
+        }
+
+        // Otherwise the rung, and nothing else. Every rule that used to move
+        // it — the doubling, the level ahead, the minute that turned against
+        // us — sold at its own price and on its own reasoning, and between
+        // them the ladder was reached in a minority of windows.
         return rungs[step.coerceIn(0, rungs.size - 1)]
     }
 

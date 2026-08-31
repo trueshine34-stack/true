@@ -47,6 +47,17 @@ class AutoSell(
         /** How long to keep trying on one purchase before giving up. */
         val watchSec: Int = 60,
         /**
+         * Stop the ladder climbing over a side the book once wrote off.
+         *
+         * A side that traded under a third has been given up on by the
+         * market, and if it comes back it comes back late. The ladder mean-
+         * while has walked up with the clock and is asking ninety-six by the
+         * fourth minute, so the price the recovery actually reaches is one
+         * nothing is offered at. With this on, such a position asks the first
+         * rung for the whole window and ninety-three in the last half minute.
+         */
+        val dipRescue: Boolean = true,
+        /**
          * Whether a fill makes a sound.
          *
          * The window is decided while the phone is in a pocket, so a cue in
@@ -131,6 +142,8 @@ class AutoSell(
     private data class Rung(
         val windowStart: Long,
         var highWater: Double,
+        /** And the worst it has been bid, which is what arms the rescue. */
+        var lowWater: Double,
         var step: Int,
         /**
          * Whether the bid has ever given back six cents of its best. Until it
@@ -471,7 +484,10 @@ class AutoSell(
             // before it opens used to read the current window's elapsed time
             // and start four rungs up.
             val rung = trackRung(position, meta?.windowStart ?: windowStart, now)
-            val ladderTarget = settings.ladder.getOrElse(rung.step) { settings.ladder.last() }
+            // A side the book once wrote off does not climb with the clock:
+            // it asks the first rung all window and ninety-three at the end,
+            // because the price its recovery reaches is not the price a
+            // steady winner would have walked up to by now.
 
             // The venue locks freshly bought shares, and how long for is
             // something the app has measured rather than something the
@@ -481,6 +497,12 @@ class AutoSell(
             // been measured — being refused is how the measurement is taken.
             val lotAt = OrderLog.uncoveredLots(position.asset).firstOrNull()?.at ?: 0L
             val closesAt = (meta?.windowStart?.takeIf { it > 0 } ?: windowStart) + WINDOW_SECONDS
+            val ladderTarget =
+                if (settings.dipRescue && SellLadder.dipped(rung.lowWater)) {
+                    SellLadder.afterDip(settings.ladder, closesAt - now)
+                } else {
+                    settings.ladder.getOrElse(rung.step) { settings.ladder.last() }
+                }
             val hold = if (meta == null || closesAt - now <= settings.panicSec) {
                 // Near the close there is no time to be patient with.
                 0L
@@ -762,11 +784,15 @@ class AutoSell(
     private fun trackRung(position: Position, windowStart: Long, now: Long): Rung {
         val existing = rungs[position.asset]
         val rung = if (existing == null || existing.windowStart != windowStart) {
-            Rung(windowStart, position.curPrice, 0).also { rungs[position.asset] = it }
+            Rung(windowStart, position.curPrice, position.curPrice, 0)
+                .also { rungs[position.asset] = it }
         } else {
             existing
         }
         if (position.curPrice > rung.highWater) rung.highWater = position.curPrice
+        if (position.curPrice > 0.0 && position.curPrice < rung.lowWater) {
+            rung.lowWater = position.curPrice
+        }
         rung.step = SellLadder.stepFor(
             // Negative before the window opens: the first rung, not the last.
             elapsedSec = (now - windowStart).coerceAtLeast(0L),

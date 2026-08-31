@@ -1117,6 +1117,7 @@ class BotPlugin : Plugin() {
             retryEverySec = call.getInt("retryEverySec") ?: defaults.retryEverySec,
             watchSec = call.getInt("watchSec") ?: defaults.watchSec,
             chime = call.getBoolean("chime") ?: defaults.chime,
+            dipRescue = call.getBoolean("dipRescue") ?: defaults.dipRescue,
             ladderLeadSec = call.getInt("ladderLeadSec") ?: defaults.ladderLeadSec,
             ladderStepSec = call.getInt("ladderStepSec")?.toLong() ?: defaults.ladderStepSec,
             percentMode = call.getBoolean("percentMode") ?: defaults.percentMode,
@@ -1193,6 +1194,7 @@ class BotPlugin : Plugin() {
                 .put("watching", bot.watchingCount)
                 .put("watchSec", bot.settings.watchSec)
                 .put("chime", bot.settings.chime)
+                .put("dipRescue", bot.settings.dipRescue)
                 .put("percentMode", bot.settings.percentMode)
                 .put("profitPct", bot.settings.profitPct)
                 .put("sliceGapSec", bot.settings.sliceGapSec)
