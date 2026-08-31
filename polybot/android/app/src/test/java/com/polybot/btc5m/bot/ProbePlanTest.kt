@@ -430,15 +430,15 @@ class ProbePlanTest {
     @Test
     fun `the market takes it, and only a dear side is waited for`() {
         assertEquals(0.58, ProbePlan.MAX_TAKE, 1e-9)
-        assertEquals(0.54, ProbePlan.REST_PRICE, 1e-9)
-        assertTrue(ProbePlan.REST_PRICE < ProbePlan.MAX_TAKE)
+        // The bid waits at the most the rule would have paid, not under it.
+        assertEquals(ProbePlan.MAX_TAKE, ProbePlan.REST_PRICE, 1e-9)
         // Fifty-eight is taken at the market; a cent over it is waited for.
         assertTrue(!ProbePlan.waits(0.58))
         assertTrue(ProbePlan.waits(0.59))
         // And what it pays: the offer itself up to the cap, the limit above.
         assertEquals(0.50, ProbePlan.entryPrice(0.50), 1e-9)
         assertEquals(0.58, ProbePlan.entryPrice(0.58), 1e-9)
-        assertEquals(0.54, ProbePlan.entryPrice(0.70), 1e-9)
+        assertEquals(0.58, ProbePlan.entryPrice(0.70), 1e-9)
     }
 
     /**

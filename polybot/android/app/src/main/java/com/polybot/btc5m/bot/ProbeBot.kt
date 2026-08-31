@@ -558,6 +558,9 @@ class ProbeBot(
             // And the real equivalent: a bid the venue filled while nothing
             // here was looking is a position, not a pending order.
             catchFills()
+            // A bid left on the book while the ask walks down is a chance
+            // being watched rather than taken.
+            chase(nowSec)
             // And a bid the market never came back to is taken back, so the
             // money is free for the next window.
             dropStale(nowSec)
@@ -1029,9 +1032,16 @@ class ProbeBot(
         if (windowStart - Clock.nowSec() > mine.leadSec) return
         val line = trend
 
+        // Gamma publishes the next window's market shortly before it opens,
+        // and "shortly" is not a promise. The note says how much of the lead
+        // has already gone waiting for it, because an entry that lands two
+        // seconds after the open rather than fifty before it is nearly always
+        // this and not a rule refusing.
         val market = engine.marketForWindow(windowStart)
         if (market == null) {
-            note = "рынок ещё не открыт"
+            val out = windowStart - Clock.nowSec()
+            note = if (out > 0) "рынок ещё не опубликован — $out с до открытия"
+            else "рынок ещё не опубликован"
             return
         }
 
@@ -1674,6 +1684,57 @@ class ProbeBot(
      * number. Taking it back frees the money for the next window and files the
      * one it was for with that as the reason.
      */
+    /**
+     * Watches the price for the whole lead, not only at the first look.
+     *
+     * The entry reads the book once, fifty seconds out. A side asking more
+     * than the rule will pay gets a bid at the take price — and that used to
+     * be the end of it: the bid sat there for the rest of the lead while the
+     * ask walked down through the take price and out the other side, and the
+     * window was entered at whatever the bid happened to catch, or not at
+     * all. Fifty seconds is a long time in a book that reprices every tick.
+     *
+     * So while the window has not opened and the bid has not filled, the ask
+     * is read again every tick. The moment it is worth taking, the bid comes
+     * off the book and the side is bought at the market — which is what the
+     * rule wanted in the first place and only refused because of the price at
+     * one particular second.
+     */
+    private fun chase(nowSec: Long) {
+        val waiting = working.filter {
+            it.resting > 0.0 && it.shares <= 0.0 && nowSec < it.windowStart
+        }
+        if (waiting.isEmpty()) return
+
+        for (open in waiting) {
+            val ask = try {
+                ClobApi.bestAsk(open.asset)
+            } catch (e: Exception) {
+                null
+            } ?: continue
+            // Still dearer than the rule will pay: the bid keeps waiting.
+            if (ProbePlan.waits(ask)) continue
+
+            // Cancel first, then ask what happened: cancelling closes the book
+            // to any further fill, so the answer afterwards is final rather
+            // than a race — and a bid that filled on the way is a position,
+            // not an order to replace.
+            if (!open.demo) cancelBuys(open.asset)
+            if (adopt(open)) continue
+
+            working = working.filterNot {
+                it.windowStart == open.windowStart && it.leg == open.leg
+            }
+            note = "подешевело до ${(ask * 100).toInt()}¢ — беру по рынку"
+            engine.log(
+                "info",
+                "Проба: ${open.side} подешевела до ${(ask * 100).toInt()}¢ — " +
+                    "сняла заявку по ${(open.resting * 100).toInt()}¢ и беру по рынку",
+            )
+            onStateChanged()
+        }
+    }
+
     private fun dropStale(nowSec: Long) {
         val waiting = working.filter { it.resting > 0.0 && it.shares <= 0.0 }
         if (waiting.isEmpty()) return
