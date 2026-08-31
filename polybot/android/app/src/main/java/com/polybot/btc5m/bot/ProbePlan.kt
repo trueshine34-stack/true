@@ -89,7 +89,7 @@ object ProbePlan {
      * coming back to us it will come back to [REST_PRICE], and if it is not,
      * the window was not ours.
      */
-    const val MAX_TAKE = 0.52
+    const val MAX_TAKE = 0.54
 
     /**
      * Where the bid waits when the offer is dearer than that.

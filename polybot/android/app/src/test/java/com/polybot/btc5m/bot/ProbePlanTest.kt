@@ -907,10 +907,10 @@ class ProbePlanTest {
     @Test
     fun `the resting bid waits at the price it would have paid`() {
         assertEquals(ProbePlan.MAX_TAKE, ProbePlan.REST_PRICE, 1e-9)
-        assertEquals(0.52, ProbePlan.MAX_TAKE, 1e-9)
-        // Fifty-two is taken; a cent over it waits.
-        assertTrue(!ProbePlan.waits(0.52))
-        assertTrue(ProbePlan.waits(0.53))
+        assertEquals(0.54, ProbePlan.MAX_TAKE, 1e-9)
+        // Fifty-four is taken; a cent over it waits.
+        assertTrue(!ProbePlan.waits(0.54))
+        assertTrue(ProbePlan.waits(0.55))
     }
 
     /**
