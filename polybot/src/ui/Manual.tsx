@@ -384,8 +384,10 @@ export function Manual({
           if (!cancelled) setMarket(m);
         })
         .catch(() => {
-          // The next window is published shortly before it opens; until then
-          // there is nothing to show and the desk says so.
+          // Measured: Polymarket publishes a window's market minutes before
+          // it opens, so a look-ahead that finds nothing is a fetch that has
+          // not landed rather than a window that does not exist. The desk
+          // says so and the poll below tries again.
           if (!cancelled && lookAhead) setMarket(null);
         });
     };

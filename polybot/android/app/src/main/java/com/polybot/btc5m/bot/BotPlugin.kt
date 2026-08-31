@@ -1060,6 +1060,11 @@ class BotPlugin : Plugin() {
         }
         Thread {
             val market = engine.marketForWindow(windowStart)
+            // And the one after it, off this thread. The desk asks for the
+            // window it is pointed at every twenty seconds, so warming the
+            // next one here means tapping the timer to look ahead finds it
+            // already in memory instead of waiting on Gamma.
+            engine.warmMarket(windowStart + WINDOW_SECONDS)
             if (market == null) {
                 call.reject("Окно ещё не открыто")
                 return@Thread

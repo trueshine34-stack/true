@@ -547,41 +547,6 @@ class ProbeBot(
     private fun tick() {
         val nowSec = Clock.nowSec()
 
-        // Scoring first: a round whose window has settled is finished business
-        // and should be off the books before the next entry is considered.
-        settleDue(nowSec)
-        // And the paper orders are worked, since no rule on the desk can see
-        // them: first the bids that are waiting, then the ladder over anything
-        // that has been bought.
-        if (settings.enabled) {
-            fillResting(nowSec)
-            // And the real equivalent: a bid the venue filled while nothing
-            // here was looking is a position, not a pending order.
-            catchFills()
-            // A bid left on the book while the ask walks down is a chance
-            // being watched rather than taken.
-            chase(nowSec)
-            // And a bid the market never came back to is taken back, so the
-            // money is free for the next window.
-            dropStale(nowSec)
-            readSales()
-            // The read is taken again ten seconds before the open, and a bid
-            // still waiting on a picture that is no longer there is pulled.
-            recheck(nowSec)
-            // Nothing else buys. The entry is placed before the window opens
-            // and that is the only buy there is: the top-ups at forty-two and
-            // thirty-three, and the buy-back after a rung sold, both put more
-            // money into a window that was already running — which is how a
-            // window with one entry at 19:09 got a second buy at 19:12.
-            workPaper(nowSec)
-            // A sale booked this tick is filed this tick, so the run's next
-            // stake is right before the next window opens.
-            fileSold()
-            // And what is still open is marked to the book, because the window
-            // about to close decides whether the run survives it.
-            readRun()
-        }
-
         // Paper money needs no wallet: it reads the same public book, and
         // nothing it does is ever signed. Only real orders need a session, so
         // an unconnected wallet stops the real half and leaves the paper one
@@ -593,6 +558,7 @@ class ProbeBot(
             // So the window this costs is filed with the reason rather than
             // as a silent gap.
             aimNote = lastFault
+            keepBooks(nowSec)
             onStateChanged()
             return
         }
@@ -601,6 +567,13 @@ class ProbeBot(
         val elapsed = SellLadder.elapsedInWindow(nowSec)
         val secondsLeft = WINDOW_SEC - elapsed
         val windowStart = nowSec - elapsed
+
+        // The next window's market, fetched off the tick and well before the
+        // entry wants it. Polymarket publishes it minutes ahead, and the
+        // lookup was being made on the one tick that has a deadline — fifty
+        // seconds of lead spent on a round trip, and the order posted after
+        // the window had opened.
+        engine.warmMarket(windowStart + WINDOW_SEC)
 
         trend = TrendFit.onScreen()
         wide = TrendFit.wide()
@@ -612,9 +585,17 @@ class ProbeBot(
 
         if (!settings.enabled) {
             note = "выключен"
+            keepBooks(nowSec)
             onStateChanged()
             return
         }
+
+        // The three things that are due at a particular second, before
+        // anything that merely wants doing: a bid to pull because the ask has
+        // come down to where the rule would buy, and the ten-second re-read
+        // that cancels or sells when the picture has changed.
+        chase(nowSec)
+        recheck(nowSec)
 
         // Which entry each account is running. They need not agree — trying
         // the price entry on paper while the wallet keeps to the line is most
@@ -635,6 +616,7 @@ class ProbeBot(
             inside(nowSec, insiders)
             if (liners.isEmpty()) {
                 aimNote = note
+                keepBooks(nowSec)
                 onStateChanged()
                 return
             }
@@ -642,6 +624,7 @@ class ProbeBot(
 
         if (liners.isEmpty()) {
             note = if (modesOn().isEmpty()) "счета выключены" else note
+            keepBooks(nowSec)
             onStateChanged()
             return
         }
@@ -659,18 +642,58 @@ class ProbeBot(
         }
         if (target == null) {
             note = "жду открытия: " + (secondsLeft - aim.leadSec) + " с"
+            keepBooks(nowSec)
             onStateChanged()
             return
         }
         if (liners.all { traded(target, it) }) {
             note = "окно уже отыграно"
+            keepBooks(nowSec)
             onStateChanged()
             return
         }
 
         enter(target, liners)
         aimNote = note
+        keepBooks(nowSec)
         onStateChanged()
+    }
+
+    /**
+     * Everything that has no deadline, after everything that has one.
+     *
+     * All of this used to run first, and all of it talks to the network: the
+     * settlement of the last window, the wallet, the order log, the book over
+     * every open position. One tick is one pass, so on the tick where the
+     * entry was due, the fifty seconds of lead went on that queue and the
+     * order was posted after the window had opened — every time, which is
+     * exactly what it looked like from outside.
+     *
+     * None of it is urgent to the second. The ladder's offers are already
+     * resting on the book, so a sale does not wait on this; what waits is only
+     * the record catching up, and a second later is soon enough.
+     */
+    private fun keepBooks(nowSec: Long) {
+        // A round whose window has settled is finished business.
+        settleDue(nowSec)
+        if (!settings.enabled) return
+        // The paper bids that are waiting, then the paper ladder over
+        // anything bought — nothing on the desk can see either.
+        fillResting(nowSec)
+        // And the real equivalent: a bid the venue filled while nothing here
+        // was looking is a position, not a pending order.
+        catchFills()
+        // A bid the market never came back to is taken back, so the money is
+        // free for the next window.
+        dropStale(nowSec)
+        readSales()
+        workPaper(nowSec)
+        // A sale booked this tick is filed this tick, so the run's next stake
+        // is right before the next window opens.
+        fileSold()
+        // And what is still open is marked to the book, because the window
+        // about to close decides whether the run survives it.
+        readRun()
     }
 
     /**
@@ -1143,10 +1166,15 @@ class ProbeBot(
 
         // On paper the purse is the paper purse, and asking the venue what the
         // wallet holds would be asking the wrong question of the wrong money.
+        //
+        // A reading a few seconds old is used where there is one. The balance
+        // only moves when this app spends it, and the round trip to confirm
+        // that sits on the path between deciding to buy and buying — which is
+        // the path with a deadline on it.
         val cash = if (demo) {
             bank
         } else {
-            try {
+            engine.usdcRecent() ?: try {
                 engine.usdcBalance()
             } catch (e: Exception) {
                 note = e.message ?: "не прочитать баланс"

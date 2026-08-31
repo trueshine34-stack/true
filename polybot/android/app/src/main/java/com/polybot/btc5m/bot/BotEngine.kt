@@ -190,14 +190,70 @@ class BotEngine(
      * Gamma publishes the next window shortly before it opens, so this returns
      * null until then rather than inventing something.
      */
+    /**
+     * Markets already looked up, by the window they belong to.
+     *
+     * Everything an order needs from one — the two token ids, the condition,
+     * the tick — is fixed the moment the market is created, so a lookup is
+     * worth doing once. It was being done on every tick, and on the one tick
+     * that matters that round trip sits directly between the decision and the
+     * order: the entry has fifty seconds, spends them on Gamma, and posts
+     * after the window has opened.
+     */
+    private val markets = java.util.concurrent.ConcurrentHashMap<Long, Market>()
+
     fun marketForWindow(windowStart: Long): Market? {
         currentMarket()?.let { if (it.windowStart == windowStart) return it }
+        markets[windowStart]?.let { return it }
         return try {
-            GammaApi.marketForWindow(windowStart)
+            GammaApi.marketForWindow(windowStart)?.also {
+                markets[windowStart] = it
+                // A market a window old is never asked for again.
+                markets.keys.removeAll { at -> at < windowStart - 3600 }
+            }
         } catch (e: Exception) {
             null
         }
     }
+
+    /**
+     * Looks the next window's market up before it is needed, off the tick.
+     *
+     * Polymarket publishes it minutes ahead — measured, not assumed — so by
+     * the time the entry wants it, it can be in memory rather than over the
+     * network. Returns at once and does nothing if it is already known.
+     */
+    fun warmMarket(windowStart: Long) {
+        if (windowStart <= 0L || markets.containsKey(windowStart)) return
+        if (!warming.add(windowStart)) return
+        Thread {
+            try {
+                GammaApi.marketForWindow(windowStart)?.let { markets[windowStart] = it }
+            } catch (e: Exception) {
+                // The next pass tries again; nothing waits on this.
+            } finally {
+                warming.remove(windowStart)
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    private val warming = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<Long, Boolean>(),
+    )
+
+    private val metas = java.util.concurrent.ConcurrentHashMap<String, ClobApi.MarketMeta>()
+
+    /**
+     * A market's tick, minimum and outcomes, looked up once.
+     *
+     * Static for the life of the market, and on the order path — so asking
+     * the venue for it again on every order spent a round trip to be told the
+     * same thing. The two flags that do change, `acceptingOrders` and
+     * `closed`, are not read here: the venue refuses the order itself if the
+     * market has gone, which is the answer that counts.
+     */
+    private fun metaFor(conditionId: String): ClobApi.MarketMeta =
+        metas.getOrPut(conditionId) { ClobApi.marketMeta(conditionId) }
 
     fun openOrders(market: String? = null): List<ClobApi.OpenOrder> {
         val acct = account ?: error("кошелёк не подключён")
@@ -241,7 +297,7 @@ class BotEngine(
         val creds = this.creds ?: error("нет ключей CLOB")
         val keys = keyPair ?: error("ключ не загружен")
 
-        val meta = ClobApi.marketMeta(conditionId)
+        val meta = metaFor(conditionId)
 
         // The early ceiling, on the one path every order takes. A tap, a
         // ladder rung and a rebuy are all buys, and the rule is about what is
@@ -349,7 +405,27 @@ class BotEngine(
     fun usdcBalance(): Double {
         val acct = account ?: error("кошелёк не подключён")
         val creds = this.creds ?: error("нет ключей CLOB")
-        return ClobApi.usdcBalance(creds, acct.signerAddress, acct.signatureType)
+        return ClobApi.usdcBalance(creds, acct.signerAddress, acct.signatureType).also {
+            cashAt = System.currentTimeMillis()
+            cash = it
+        }
     }
+
+    @Volatile
+    private var cash: Double = 0.0
+
+    @Volatile
+    private var cashAt: Long = 0L
+
+    /**
+     * The wallet as it was lately, without asking again.
+     *
+     * The balance moves when this app spends it and otherwise sits still, so
+     * a reading a few seconds old is the same reading — and asking for a
+     * fresh one costs a round trip on the path between deciding to buy and
+     * buying, which is the path with a deadline on it.
+     */
+    fun usdcRecent(freshMs: Long = 20_000L): Double? =
+        cash.takeIf { cashAt > 0L && System.currentTimeMillis() - cashAt < freshMs }
 
 }
