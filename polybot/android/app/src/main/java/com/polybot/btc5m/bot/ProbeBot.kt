@@ -596,6 +596,9 @@ class ProbeBot(
         // that cancels or sells when the picture has changed.
         chase(nowSec)
         recheck(nowSec)
+        // And the window that is about to close against us, which the ladder
+        // has nothing to say about because its rungs are all above the cost.
+        cutLoss(nowSec)
 
         // Which entry each account is running. They need not agree — trying
         // the price entry on paper while the wallet keeps to the line is most
@@ -1910,6 +1913,39 @@ class ProbeBot(
     }
 
     /** Takes back whatever this rule has resting on a side. */
+    /**
+     * Takes what is left of a window that is closing the wrong way.
+     *
+     * The ladder is an exit for a side that is winning: its rungs are above
+     * what the side cost, and a side that is losing never reaches one. So a
+     * lost window simply rode to the settlement and paid nothing — the rule
+     * had no answer to being wrong at all, which is most of what it does.
+     *
+     * Ten seconds out it does. Polymarket settles against a sixty-second
+     * average read at the close, so five sixths of that average is already
+     * history and the side that is behind is not coming back; what the book
+     * still pays for it is the last of the money rather than a chance. Six
+     * shares at eight cents is forty-eight cents that would otherwise have
+     * been nothing, every losing window.
+     */
+    private fun cutLoss(nowSec: Long) {
+        val held = working.filter { it.shares > it.sold + 1e-9 }
+        if (held.isEmpty()) return
+
+        val here = here()
+        if (here <= 0.0) return
+
+        for (open in held) {
+            val left = open.windowStart + WINDOW_SEC - nowSec
+            if (left < 0 || left > ProbePlan.CUT_SEC) continue
+            // The price the window is settled against, which is not the one
+            // on the chart.
+            val opened = WindowOpen.of(open.windowStart, engine.feed) ?: continue
+            if (!ProbePlan.losingAt(open.side, opened, here)) continue
+            sellOut(open, "закрывается против — забрала остаток")
+        }
+    }
+
     /**
      * Sells everything still held of one round, now, at the market.
      *

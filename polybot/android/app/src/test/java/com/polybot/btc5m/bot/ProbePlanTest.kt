@@ -578,4 +578,34 @@ class ProbePlanTest {
         assertTrue(!ProbePlan.wicked("Down", open = 100.0, high = 140.0, low = 95.0, close = 110.0))
     }
 
+    /**
+     * The ladder is an exit for a side that is winning — its rungs are all
+     * above what the side cost — so a losing window never reaches one and rode
+     * to the settlement paying nothing. Ten seconds out, what the book still
+     * pays is the last of the money rather than a chance.
+     */
+    @Test
+    fun `a window closing the wrong way is a loss to be taken`() {
+        assertEquals(10L, ProbePlan.CUT_SEC)
+        // Bought Up on a window that opened at 78 000, and price is under it.
+        assertTrue(ProbePlan.losingAt("Up", opened = 78_000.0, here = 77_940.0))
+        // And the mirror.
+        assertTrue(ProbePlan.losingAt("Down", opened = 78_000.0, here = 78_060.0))
+    }
+
+    @Test
+    fun `a window closing our way is left to settle`() {
+        assertTrue(!ProbePlan.losingAt("Up", opened = 78_000.0, here = 78_060.0))
+        assertTrue(!ProbePlan.losingAt("Down", opened = 78_000.0, here = 77_940.0))
+        // Exactly level is not yet against us; the settlement decides it.
+        assertTrue(!ProbePlan.losingAt("Up", opened = 78_000.0, here = 78_000.0))
+    }
+
+    @Test
+    fun `without an opening price there is nothing to be behind`() {
+        assertTrue(!ProbePlan.losingAt("Up", opened = 0.0, here = 77_940.0))
+        assertTrue(!ProbePlan.losingAt("Up", opened = 78_000.0, here = 0.0))
+        assertTrue(!ProbePlan.losingAt("", opened = 78_000.0, here = 77_940.0))
+    }
+
 }

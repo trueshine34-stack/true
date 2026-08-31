@@ -739,6 +739,32 @@ object ProbePlan {
         return wick >= range * share
     }
 
+    /**
+     * How long before the close a lost window is given up on.
+     *
+     * Ten seconds. Polymarket settles a window against a sixty-second average
+     * read at its close, so with ten seconds left five sixths of that average
+     * is already history and the answer is all but written. What is left is
+     * not a chance, it is the last of the money.
+     */
+    const val CUT_SEC = 10L
+
+    /**
+     * Whether the window is closing against this side.
+     *
+     * Measured the way the venue measures it — the settlement series against
+     * the price the window opened on — and not against the chart, because it
+     * is the venue that decides who is paid.
+     */
+    fun losingAt(side: String, opened: Double, here: Double): Boolean {
+        if (opened <= 0.0 || here <= 0.0) return false
+        return when (side) {
+            "Up" -> here < opened
+            "Down" -> here > opened
+            else -> false
+        }
+    }
+
     /** Whether this quote is taken now or waited for. */
     fun waits(ask: Double): Boolean = ask > MAX_TAKE + 1e-9
 
