@@ -45,8 +45,15 @@ const MIN_TRAVEL = 0.3;
  */
 export const WIDE_MINUTES = 60;
 
-/** And the close view, which is meant to be the last half hour. */
-export const NEAR_MINUTES = 30;
+/**
+ * And the close view: a quarter of an hour.
+ *
+ * It was half an hour, and half an hour is three windows of history deciding
+ * one window's bet — by the time a turn shows up in a thirty-minute fit, five
+ * minutes of it have already happened. Fifteen points is still enough to fit
+ * a line through, and few enough that the line is about now.
+ */
+export const NEAR_MINUTES = 15;
 
 export function trendOf(candles: Candle[], overMinutes: number): Trend | null {
   const clean = candles.filter(([t, o, h, l, c]) => t > 0 && o > 0 && h > 0 && l > 0 && c > 0);

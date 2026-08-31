@@ -268,7 +268,7 @@ object ProbePlan {
     /**
      * The side to buy, once the closing candle has had its say.
      *
-     * The line is an average over half an hour; the candle is the last five
+     * The line is an average over a quarter of an hour; the candle is the last five
      * minutes. When they disagree the question is which one the next five
      * minutes will resemble, and there are three answers:
      *

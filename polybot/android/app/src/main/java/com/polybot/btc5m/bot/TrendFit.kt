@@ -81,15 +81,26 @@ object TrendFit {
     }
 
     /**
+     * How long the near line looks back, in minutes.
+     *
+     * A quarter of an hour. It was half an hour, and half an hour is three
+     * windows of history deciding one window's bet: by the time a turn shows
+     * up in a thirty-minute fit, five minutes of it have already happened.
+     * Fifteen minutes is still fifteen points, which is enough to fit a line
+     * through and few enough that the line is about now.
+     */
+    const val NEAR_MINUTES = 15
+
+    /**
      * The line the one-minute chart is drawing, which is the one on screen.
      *
-     * Half an hour of one-minute candles: the same span that panel fits, so a
-     * rule that follows this follows what the user is looking at rather than a
-     * second opinion computed elsewhere. The closer chart is the one that
-     * matters for a five-minute bet — an hour of five-minute candles describes
-     * the afternoon, and the next five minutes are decided by the last thirty.
+     * The same span that panel fits, so a rule that follows this follows what
+     * the user is looking at rather than a second opinion computed elsewhere.
+     * The closer chart is the one that matters for a five-minute bet — an
+     * hour of five-minute candles describes the session, and the next five
+     * minutes are decided by the last few.
      */
-    fun onScreen(): Trend? = of(BinanceCandles.oneMinute.list(), 30)
+    fun onScreen(): Trend? = of(BinanceCandles.oneMinute.list(), NEAR_MINUTES)
 
     /**
      * How long the wider line looks back, in minutes.

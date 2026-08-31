@@ -109,12 +109,12 @@ export function CandleFace({
   /*
     Where the last half hour has been going, fitted rather than eyeballed —
     and the level it is heading into, which is the one worth watching out of
-    the three. The close chart looks at thirty minutes, the wide one at an
-    hour: each about a screen's worth of its own candles.
+    the three. The close chart looks at a quarter of an hour, the wide one at
+    a whole one.
   */
   // The same windows the rules fit their lines over, so the line on the
   // screen is the line the bot is reading — an hour on the five-minute
-  // chart, half an hour on the minute one.
+  // chart, a quarter of an hour on the minute one.
   const trend = trendOf(candles, interval === '5m' ? WIDE_MINUTES : NEAR_MINUTES);
   const ahead = shape && trend ? levelAhead(levels, shape.last, trend.way) : null;
 
@@ -123,7 +123,7 @@ export function CandleFace({
 
     Windows open on multiples of three hundred seconds, so on the minute chart
     the newest candle whose open time is one of those is the one this bet
-    started from — and on a chart of thirty minutes there are six of them, of
+    started from — and on half an hour of minutes there are six of them, of
     which only the last is the window being traded.
   */
   const opened =

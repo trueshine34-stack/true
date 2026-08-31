@@ -106,4 +106,26 @@ class TrendFitTest {
         assertTrue(session.perHour < hour.perHour)
     }
 
+    /**
+     * The near line is fitted over a quarter of an hour. Half an hour is
+     * three windows of history deciding one window's bet, and by the time a
+     * turn shows up in a thirty-minute fit five minutes of it have happened.
+     */
+    @Test
+    fun `the near line looks back a quarter of an hour`() {
+        assertEquals(15, TrendFit.NEAR_MINUTES)
+
+        // Half an hour of minutes: climbing for the first fifteen, falling
+        // through the last fifteen. The short fit sees the fall.
+        val up = (0 until 15).map { 100.0 + it }
+        val down = (1..15).map { 114.0 - it }
+        val near = TrendFit.of(walk(up + down), TrendFit.NEAR_MINUTES)!!
+        assertEquals("Down", near.way)
+
+        // Over the whole half hour the two legs cancel and there is no
+        // direction to name at all — which is what the rule used to trade.
+        val long = TrendFit.of(walk(up + down), 30)!!
+        assertEquals("", long.way)
+    }
+
 }
