@@ -16,6 +16,8 @@ export function SettingsScreen({
 }) {
   const [balance, setBalance] = useState<string | null>(null);
   const [balanceError, setBalanceError] = useState<string | null>(null);
+  /** How much of that balance is held back from every order. */
+  const [lockedUsd, setLockedUsd] = useState(0);
   const [checking, setChecking] = useState(false);
   const [batteryExempt, setBatteryExempt] = useState<boolean | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
@@ -31,7 +33,10 @@ export function SettingsScreen({
     setBalanceError(null);
     try {
       const r = await PolyBot.getBalance();
-      setBalance(r.usdc.toFixed(2));
+      // The wallet, since this row is a connection check — it answers "does
+      // the venue see my money", not "what may this order be".
+      setBalance((r.wallet ?? r.usdc).toFixed(2));
+      setLockedUsd(r.locked ?? 0);
     } catch (err) {
       setBalanceError(err instanceof Error ? err.message : String(err));
       setShowDiagnostics(true);
@@ -95,7 +100,12 @@ export function SettingsScreen({
         {balance !== null && (
           <div className="row">
             <span className="label">Баланс USDC</span>
-            <span className="value">{balance} $</span>
+            <span className="value">
+              {balance} $
+              {lockedUsd > 0 && (
+                <span className="muted"> · 🔒{lockedUsd.toFixed(2)}</span>
+              )}
+            </span>
           </div>
         )}
         {balanceError && <div className="banner error">{balanceError}</div>}

@@ -218,15 +218,43 @@ class BotPlugin : Plugin() {
     fun getBalance(call: PluginCall) {
         Thread {
             try {
-                val usdc = engine.usdcBalance()
+                val wallet = engine.usdcWallet()
+                // What may be spent is what the desk sizes from, so that is
+                // what "usdc" means everywhere above this line. The wallet
+                // itself comes with it, for the sheet that is about the
+                // wallet rather than about the next order.
+                val usdc = Reserve.free(wallet, engine.lockedUsd)
                 // Every reading is also the baseline the next sale is timed
-                // against, so the desk's own poll feeds the checker too.
+                // against, so the desk's own poll feeds the checker too. The
+                // reserve does not move, so either figure tracks a sale.
                 Timings.balanceRead(usdc, System.currentTimeMillis())
-                call.resolve(JSObject().put("usdc", usdc))
+                call.resolve(
+                    JSObject()
+                        .put("usdc", usdc)
+                        .put("wallet", wallet)
+                        .put("locked", engine.lockedUsd),
+                )
             } catch (e: Exception) {
                 call.reject(e.message ?: "не удалось прочитать баланс")
             }
         }.start()
+    }
+
+    /**
+     * Sets money aside that no order may reach.
+     *
+     * Kept on the engine, where every buy reads the balance, and written
+     * through to disk in the same breath: a reserve that a restart forgot
+     * would be spent by the first window after it.
+     */
+    @PluginMethod
+    fun setLocked(call: PluginCall) {
+        val usd = call.getDouble("usd") ?: 0.0
+        val safe = if (usd.isFinite()) maxOf(0.0, usd) else 0.0
+        engine.lockedUsd = safe
+        LockStore(context).save(safe)
+        call.resolve(JSObject().put("locked", safe))
+        notifyState()
     }
 
     @PluginMethod

@@ -156,7 +156,16 @@ export interface PolyBotPlugin {
   stop(): Promise<void>;
   getState(): Promise<NativeState>;
   getLogs(): Promise<{ entries: NativeLog[] }>;
-  getBalance(): Promise<{ usdc: number }>;
+  /**
+   * What may be spent, what the wallet holds, and what is locked away.
+   *
+   * `usdc` is already net of the reserve — it is the number every order is
+   * sized from — and `wallet` is the venue's own figure, for the balance
+   * sheet, which is about the money rather than about the next trade.
+   */
+  getBalance(): Promise<{ usdc: number; wallet?: number; locked?: number }>;
+  /** Sets money aside that no order, by hand or by bot, may reach. */
+  setLocked(args: { usd: number }): Promise<{ locked: number }>;
   exportJournal(): Promise<{ file: string; bytes: number }>;
   clearJournal(): Promise<void>;
   getJournalSize(): Promise<{ bytes: number }>;
@@ -702,6 +711,7 @@ const webStub: PolyBotPlugin = {
   getBalance: async () => {
     throw new Error('Баланс доступен только в приложении Android');
   },
+  setLocked: async () => ({ locked: 0 }),
   exportJournal: async () => {
     throw new Error('Экспорт доступен только в приложении Android');
   },

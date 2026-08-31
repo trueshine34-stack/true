@@ -192,6 +192,11 @@ export function Manual({
   /** A position opened to be closed, with the price still to be chosen. */
   const [closing, setClosing] = useState<NativePosition | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
+  /**
+   * Money set aside on the balance sheet, shown so the rail's figure is not a
+   * mystery. It is already out of [balance]; this is only the label for why.
+   */
+  const [reserve, setReserve] = useState(0);
 
   // Read inside pollers that must not re-subscribe every time a setting changes.
   const settingsRef = useRef(settings);
@@ -465,13 +470,17 @@ export function Manual({
   }, []);
 
   // Sizing off the wallet needs the wallet. It only moves when an order fills,
-  // so a slow poll is enough.
+  // so a slow poll is enough. What comes back is already net of the reserve —
+  // the native side takes it out where the balance is read — so every number
+  // below this line is money that may actually be spent.
   useEffect(() => {
     let cancelled = false;
     const read = () => {
       void PolyBot.getBalance()
         .then((r) => {
-          if (!cancelled) setBalance(r.usdc);
+          if (cancelled) return;
+          setBalance(r.usdc);
+          setReserve(r.locked ?? 0);
         })
         .catch(() => {});
     };
@@ -1063,6 +1072,9 @@ export function Manual({
           {savings > 0 && balance !== null && (
             <i className="railall">Σ{(balance + savings).toFixed(2)}</i>
           )}
+          {/* And what is being held back, so a balance smaller than the
+              wallet reads as a decision rather than as a missing sum. */}
+          {reserve > 0 && <i className="raillock">🔒{Math.round(reserve)}</i>}
         </button>
 
         {/*

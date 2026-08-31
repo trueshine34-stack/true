@@ -48,6 +48,9 @@ object EngineHolder {
                 onLog = { entry -> onLogEntry?.invoke(entry) },
             ).also {
                 engine = it
+                // Before anything can spend: a reserve the app forgot on a
+                // restart is money it would quietly go and trade with.
+                it.lockedUsd = LockStore(context).load()
                 // Quotes, positions and the price feed are screen data: they
                 // must flow from the moment the app opens.
                 it.startFeed()

@@ -2678,6 +2678,23 @@ button.step.big {
 }
 
 /*
+ * What is held back from the balance beside it. Small and muted: it is the
+ * reason the figure is what it is, not a figure competing with it.
+ */
+.raillock {
+  font-size: 11px;
+  font-style: normal;
+  color: var(--muted);
+}
+
+/* What the reserve field means, under the reserve field. */
+.balhint {
+  margin: 6px 2px 2px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+/*
  * A mark, not a figure. Both of these open a panel that carries their numbers;
  * on the rail those numbers only competed with the balance, which is the one
  * here always worth reading.

@@ -401,8 +401,23 @@ class BotEngine(
         }
     }
 
-    /** Reads the funder's USDC balance using the credentials held here. */
-    fun usdcBalance(): Double {
+    /**
+     * Money in the wallet that this app may not spend.
+     *
+     * Set by hand and held here rather than in any one rule's settings,
+     * because it is a fact about the wallet: every buy in the app, by every
+     * bot and by hand, sizes itself off what [usdcBalance] returns, and that
+     * is the balance with this already taken out. Nothing has to remember to
+     * subtract it, which is the only way a reserve stays a reserve.
+     */
+    @Volatile
+    var lockedUsd: Double = 0.0
+        set(value) {
+            field = maxOf(0.0, value)
+        }
+
+    /** The wallet itself, which is what the balance sheet is about. */
+    fun usdcWallet(): Double {
         val acct = account ?: error("кошелёк не подключён")
         val creds = this.creds ?: error("нет ключей CLOB")
         return ClobApi.usdcBalance(creds, acct.signerAddress, acct.signatureType).also {
@@ -410,6 +425,11 @@ class BotEngine(
             cash = it
         }
     }
+
+    /** And the same reading with the locked money taken out of it. */
+    fun usdcBalance(): Double = free(usdcWallet())
+
+    private fun free(wallet: Double): Double = Reserve.free(wallet, lockedUsd)
 
     @Volatile
     private var cash: Double = 0.0
@@ -425,7 +445,10 @@ class BotEngine(
      * fresh one costs a round trip on the path between deciding to buy and
      * buying, which is the path with a deadline on it.
      */
-    fun usdcRecent(freshMs: Long = 20_000L): Double? =
+    fun usdcRecent(freshMs: Long = 20_000L): Double? = walletRecent(freshMs)?.let { free(it) }
+
+    /** The same cached reading, before the reserve is taken out. */
+    fun walletRecent(freshMs: Long = 20_000L): Double? =
         cash.takeIf { cashAt > 0L && System.currentTimeMillis() - cashAt < freshMs }
 
 }

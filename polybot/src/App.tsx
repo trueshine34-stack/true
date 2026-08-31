@@ -71,6 +71,15 @@ export function App() {
   // Read inside the balance poller, which must not restart on every reading.
   const savingsRef = useRef(0);
   const [savingsAddress, setSavingsAddress] = useState('');
+  /**
+   * Money in the wallet that nothing may spend.
+   *
+   * Set on the balance sheet and enforced natively, so [balance] here is
+   * already what is left after it. Kept in state only to be shown and edited.
+   */
+  const [reserve, setReserve] = useState(0);
+  /** The wallet before the reserve, which is what the balance line is of. */
+  const [wallet, setWallet] = useState<number | null>(null);
 
   /**
    * What the run is worth: the collateral on the venue plus what has been
@@ -190,6 +199,8 @@ export function App() {
         .then(async (r) => {
           if (cancelled) return;
           setBalance(r.usdc);
+          setWallet(r.wallet ?? r.usdc);
+          setReserve(r.locked ?? 0);
 
           // Whether any of the money is currently shares rather than cash.
           // A reading taken while it is would put the cost of the position on
@@ -207,7 +218,13 @@ export function App() {
 
           setBalanceHistory((current) => {
             if (!shouldRecord(current, Date.now(), holding)) return current;
-            const next = appendBalance(current, r.usdc + savingsRef.current);
+            // The line is the run's own money, all of it: locking part of it
+            // away is a decision about what may be traded, not a withdrawal,
+            // and a line that stepped down by it would read as a loss.
+            const next = appendBalance(
+              current,
+              (r.wallet ?? r.usdc) + savingsRef.current,
+            );
             if (next !== current) void saveBalanceHistory(next);
             return next;
           });
@@ -349,7 +366,21 @@ export function App() {
         <BalanceSheet
           history={balanceHistory}
           adjustments={adjustments}
-          balance={balance}
+          balance={wallet ?? balance}
+          free={balance}
+          locked={reserve}
+          onLocked={(next) => {
+            const safe = Number.isFinite(next) && next > 0 ? next : 0;
+            setReserve(safe);
+            void PolyBot.setLocked({ usd: safe })
+              .then(() => PolyBot.getBalance())
+              .then((r) => {
+                setBalance(r.usdc);
+                setWallet(r.wallet ?? r.usdc);
+                setReserve(r.locked ?? 0);
+              })
+              .catch(() => {});
+          }}
           savings={savings}
           savingsAddress={savingsAddress}
           onSavingsAddress={(next) => {

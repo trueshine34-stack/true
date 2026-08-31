@@ -28,6 +28,9 @@ export function BalanceSheet({
   history,
   adjustments,
   balance,
+  free,
+  locked,
+  onLocked,
   savings,
   savingsAddress,
   onSavingsAddress,
@@ -35,7 +38,13 @@ export function BalanceSheet({
 }: {
   history: BalancePoint[];
   adjustments: Adjustment[];
+  /** The wallet on the venue, reserve and all. */
   balance: number | null;
+  /** And what is left of it to trade with. */
+  free: number | null;
+  /** Money set aside, which no order may reach. */
+  locked: number;
+  onLocked: (usd: number) => void;
   /** USDT held off the venue, where profit is withdrawn to. */
   savings: number;
   savingsAddress: string;
@@ -80,20 +89,57 @@ export function BalanceSheet({
         {/*
           What that total is made of. Only the collateral can be traded; the
           rest has been taken off the venue and is counted so that withdrawing
-          it does not read as losing it.
+          it does not read as losing it. And of the collateral, only what is
+          not locked away — that part is on the venue and untouchable at once,
+          which is two different things and so two different figures.
         */}
-        {savings > 0 && (
+        {(savings > 0 || locked > 0) && (
           <div className="balparts">
             <div>
               <span className="muted">на бирже</span>
               <b>{balance === null ? '—' : usd(balance)}</b>
             </div>
-            <div>
-              <span className="muted">USDT BEP-20</span>
-              <b>{usd(savings)}</b>
-            </div>
+            {locked > 0 && (
+              <div>
+                <span className="muted">в торговле</span>
+                <b>{free === null ? '—' : usd(free)}</b>
+              </div>
+            )}
+            {savings > 0 && (
+              <div>
+                <span className="muted">USDT BEP-20</span>
+                <b>{usd(savings)}</b>
+              </div>
+            )}
           </div>
         )}
+
+        {/*
+          Money the app is not allowed to reach.
+
+          Enforced where the balance is read rather than where each order is
+          sized: every buy in the app — both bots, both accounts and every tap
+          — asks for the balance and gets this number already taken out of it,
+          so there is no path that could forget. Above the wallet it simply
+          means nothing may be bought.
+        */}
+        <label className="field ballock">
+          <span>заблокировано, $</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="1"
+            placeholder="0"
+            defaultValue={locked > 0 ? String(locked) : ''}
+            onBlur={(e) => onLocked(Number(e.target.value))}
+          />
+        </label>
+        <div className="muted balhint">
+          Эти деньги не участвуют в покупках вообще: и боты, и ручные ордера
+          считают размер от остатка, а не от баланса. Уже открытые позиции и
+          продажи это не трогает.
+        </div>
 
         {/*
           The address money is taken out to, and the button that takes it.
