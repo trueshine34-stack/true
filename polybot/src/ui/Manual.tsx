@@ -22,7 +22,12 @@ import {
   type Exposure,
   type ManualSettings,
 } from '../core/manual';
-import { pairOrders, realised, type TradeRow } from '../core/trades';
+import {
+  pairOrders,
+  realised,
+  withLiveOrders,
+  type TradeRow,
+} from '../core/trades';
 import {
   breakEvenPrice,
   limitLadder,
@@ -332,6 +337,28 @@ export function Manual({
   const trades = useMemo(() => pairOrders(logged), [logged]);
 
   /**
+   * Which side of the desk's own market a token id is, or null for one that is
+   * not on it at all — a leftover order from a window that has closed.
+   *
+   * Moving an order means pulling it and signing a new one, and the new one is
+   * signed against a token id. Taking that id from the row's printed side —
+   * "Up" or "Down" — silently re-placed a foreign order on this window's
+   * market. So the id comes from the live order itself, and an order this
+   * market does not own cannot be moved at all. It can still be cancelled:
+   * that goes by order id and is right whatever market it belongs to.
+   */
+  const sideOfToken = useCallback(
+    (assetId: string): 'Up' | 'Down' | null =>
+      assetId === market?.upTokenId
+        ? 'Up'
+        : assetId === market?.downTokenId
+          ? 'Down'
+          : null,
+    [market],
+  );
+
+
+  /**
    * Only what is still working.
    *
    * A limit that has filled is no longer something to watch or cancel; it is a
@@ -362,10 +389,21 @@ export function Manual({
     return { Up: avg('Up'), Down: avg('Down') };
   }, [trades]);
 
-  const working = useMemo(
-    () => trades.filter((t) => t.status === 'buying' || t.status === 'pending'),
-    [trades],
-  );
+  /**
+   * What is still working — from the log, and from the venue over the top.
+   *
+   * The log pairs a buy with its sell and is what these rows are made of, but
+   * it can be behind or wrong about whether an order is still on the book, and
+   * an order missing from this list cannot be cancelled or moved. So the
+   * venue's own listing is laid over it: anything the exchange says is working
+   * appears here, whatever the log believes.
+   */
+  const working = useMemo(() => {
+    const rows = trades.filter(
+      (t) => t.status === 'buying' || t.status === 'pending',
+    );
+    return withLiveOrders(rows, orders, (assetId) => sideOfToken(assetId) ?? '');
+  }, [trades, orders, sideOfToken]);
   const realisedPnl = useMemo(() => realised(trades), [trades]);
 
   /** The window the desk is trading: this one, or the one after it. */
@@ -813,6 +851,12 @@ export function Manual({
    * the book gives a price that clears the size, and anything that does not
    * fill rests harmlessly at the bottom of it.
    */
+
+  /** The ids the exchange itself is still listing, for anything that asks. */
+  const liveIds = useMemo(
+    () => new Set(orders.filter((o) => o.remaining > 1e-9).map((o) => o.id)),
+    [orders],
+  );
 
   /** Every limit buy still on the book, which is what "лимитки" means here. */
   const restingLimits = useMemo(
@@ -1400,7 +1444,9 @@ export function Manual({
                     : undefined;
                   // A resting sell is as much a price you might want to move
                   // as a resting buy — and it is the one you move in a hurry.
-                  const editable = live != null;
+                  // Only on this market, though: a new price is a new order,
+                  // signed against a token this market has to own.
+                  const editable = live != null && sideOfToken(live.assetId) != null;
                   const price = (t.status === 'buying' ? t.buyPrice : t.sellPrice) ?? 0;
                   return (
                     <div
@@ -1487,7 +1533,11 @@ export function Manual({
             much as a past one. A filled limit lands here the moment it fills,
             which is the only list it still belongs in.
           */}
-          <OrderHistory orders={logged} realised={realisedPnl} />
+          <OrderHistory
+            orders={logged}
+            live={liveIds}
+            realised={realisedPnl}
+          />
 
         </>
       )}
@@ -1536,24 +1586,35 @@ export function Manual({
             The price that would trade now: a resting buy meets the offer, a
             resting sell meets the bid. That is what "current" means to an
             order you are moving because you want it done.
+
+            The side comes from the live order's own token, not from the row's
+            printed label — those agree on this market and only on this one.
           */
           marketPrice={(() => {
-            const side = editing.outcome === 'Up' ? 'Up' : 'Down';
+            const live = orders.find((x) => x.id === editing.orderId);
+            const side = live ? sideOfToken(live.assetId) : null;
+            if (side == null) return null;
             const level =
               editing.status === 'buying'
                 ? books[side].asks[0]?.price
                 : books[side].bids[0]?.price;
             return level != null ? Math.round(level * 100) : null;
           })()}
-          onSave={(price, shares) =>
+          onSave={(price, shares) => {
+            const live = orders.find((x) => x.id === editing.orderId);
+            const side = live ? sideOfToken(live.assetId) : null;
+            if (side == null) {
+              setNote('Этот ордер не с этого события — его можно только снять');
+              return;
+            }
             void editOrder(
               editing.orderId as string,
-              editing.outcome === 'Up' ? 'Up' : 'Down',
+              side,
               editing.status === 'buying' ? 'BUY' : 'SELL',
               price,
               shares,
-            )
-          }
+            );
+          }}
           onCancelOrder={() => {
             void cancel(editing.orderId as string);
             setEditing(null);
@@ -3268,9 +3329,19 @@ function PulseCard({
  */
 function OrderHistory({
   orders,
+  live,
   realised,
 }: {
   orders: LoggedOrder[];
+  /**
+   * Ids the venue says are still on the book.
+   *
+   * The record's own word for an order can be behind the exchange's, and the
+   * one direction that matters is this one: an order called "снят" while it is
+   * resting and filling is the record saying the opposite of the truth. Where
+   * the exchange still lists it, the exchange wins.
+   */
+  live: Set<string>;
   realised: number;
 }) {
   const [open, setOpen] = useState(false);
@@ -3312,14 +3383,27 @@ function OrderHistory({
                 second: '2-digit',
               })}
             </span>
-            <span className={`histstate ${statusTone(o.status)}`}>
-              {statusWord(o.status)}
+            <span className={`histstate ${statusTone(stateOf(o, live))}`}>
+              {statusWord(stateOf(o, live))}
             </span>
           </div>
         ))}
     </div>
   );
 }
+
+/**
+ * The order's state, with the exchange's listing on top of the record.
+ *
+ * Only ever upgrades a settled row back to working: everything else the record
+ * knows better, because it also knows what filled at what price.
+ */
+const stateOf = (o: LoggedOrder, live: Set<string>) =>
+  o.orderId && live.has(o.orderId) && o.status === 'cancelled'
+    ? o.matched > 1e-9
+      ? 'partial'
+      : 'resting'
+    : o.status;
 
 const statusWord = (status: string) =>
   status === 'filled'

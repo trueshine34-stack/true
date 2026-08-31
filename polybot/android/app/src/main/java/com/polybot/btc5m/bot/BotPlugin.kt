@@ -1039,17 +1039,27 @@ class BotPlugin : Plugin() {
             ?: GammaApi.windowStartFor()
         Thread {
             try {
-                engine.session()?.let { session ->
-                    val open = ClobApi.openOrders(session.creds, session.account.signerAddress)
-                    OrderLog.reconcile(open) { id ->
-                        ClobApi.order(session.creds, session.account.signerAddress, id)
+                // Bringing the log up to date is worth doing and not worth
+                // failing over: a rate-limited listing used to take the whole
+                // answer down with it, so the desk got nothing back and drew
+                // the last thing it had. The log it already holds is always
+                // better than no log.
+                try {
+                    engine.session()?.let { session ->
+                        val open =
+                            ClobApi.openOrders(session.creds, session.account.signerAddress)
+                        OrderLog.reconcile(open) { id ->
+                            ClobApi.order(session.creds, session.account.signerAddress, id)
+                        }
+                        // The listing says what is still working; only the trade
+                        // feed says what actually changed hands. Asking it here as
+                        // well as in the sell rule is what makes the panel right
+                        // when the rule is off — twice a minute is enough for a
+                        // five-minute market and gentle on the data API.
+                        TradeSync.poll(session.account.funderAddress, minGapMs = 30_000L)
                     }
-                    // The listing says what is still working; only the trade
-                    // feed says what actually changed hands. Asking it here as
-                    // well as in the sell rule is what makes the panel right
-                    // when the rule is off — twice a minute is enough for a
-                    // five-minute market and gentle on the data API.
-                    TradeSync.poll(session.account.funderAddress, minGapMs = 30_000L)
+                } catch (e: Exception) {
+                    // Reported on the next sweep; the rows still come back.
                 }
                 val out = JSArray()
                 OrderLog.forWindow(windowStart).forEach {

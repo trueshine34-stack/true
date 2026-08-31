@@ -215,6 +215,66 @@ export function pairOrders(orders: LoggedOrder[]): TradeRow[] {
   return rows.sort((a, b) => b.movedAt - a.movedAt);
 }
 
+/**
+ * Every order the venue says is working, whether or not the log knows it.
+ *
+ * The rows above are built from this app's own record of what it sent, which
+ * is the only thing that can pair a buy with its sell. But the record can be
+ * wrong about what is still working — an order the listing had not indexed
+ * yet used to be filed as cancelled — and being wrong there is expensive in a
+ * way being wrong in the history is not: a row that is not on this list has no
+ * ✕ and cannot be tapped to move its price, so a live order becomes one that
+ * cannot be reached from the screen that exists to reach it.
+ *
+ * The venue's open-order listing does not have that problem. It is the
+ * exchange answering "what of mine is on the book", so anything in it belongs
+ * on the list, and anything in it that the rows missed is added here. Matching
+ * is by order id, which is the venue's own and cannot collide.
+ */
+export function withLiveOrders(
+  rows: TradeRow[],
+  live: { id: string; side: 'BUY' | 'SELL'; price: number; remaining: number;
+          outcome?: string | null; assetId?: string }[],
+  outcomeFor?: (assetId: string) => string,
+): TradeRow[] {
+  const known = new Set(
+    rows.map((r) => r.orderId).filter((id): id is string => !!id),
+  );
+  const extra: TradeRow[] = [];
+  for (const order of live) {
+    if (!order.id || known.has(order.id)) continue;
+    if (!(order.remaining > 1e-9)) continue;
+    // The venue names the side where it knows it; the desk can name it for
+    // its own market's tokens. An order on some other market — a leftover from
+    // a window that has closed — is nameless here, and shown anyway: an order
+    // nobody can name is exactly the one nobody remembers to cancel.
+    const outcome =
+      order.outcome ||
+      (order.assetId && outcomeFor ? outcomeFor(order.assetId) : '') ||
+      '—';
+    const buying = order.side === 'BUY';
+    extra.push({
+      key: `live-${order.id}`,
+      outcome,
+      shares: order.remaining,
+      buyPrice: buying ? order.price : null,
+      sellPrice: buying ? null : order.price,
+      status: buying ? 'buying' : 'pending',
+      orderId: order.id,
+      pnl: null,
+      pct: null,
+      auto: false,
+      // Nothing here knows when it was placed — the log is what remembers
+      // that — so it sorts as the newest thing on the list, which is where an
+      // order the app had lost track of should be looked for.
+      at: Date.now(),
+      movedAt: Date.now(),
+    });
+  }
+  if (extra.length === 0) return rows;
+  return [...rows, ...extra].sort((a, b) => b.movedAt - a.movedAt);
+}
+
 /** What the paired rows come to — the same figure the window's score shows. */
 export function realised(rows: TradeRow[]): number {
   return rows

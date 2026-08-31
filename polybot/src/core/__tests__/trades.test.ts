@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pairOrders, realised } from '../trades';
+import { pairOrders, realised, withLiveOrders } from '../trades';
 import type { LoggedOrder } from '../../native/polybot';
 
 let id = 0;
@@ -273,5 +273,67 @@ describe('what an order actually went at', () => {
     expect(rows[0].status).toBe('pending');
     expect(rows[0].sellPrice).toBeCloseTo(0.9, 6);
     expect(rows[0].buyPrice).toBeCloseTo(0.48, 6);
+  });
+});
+
+/**
+ * The venue's own listing, laid over rows built from this app's record.
+ *
+ * An order the record lost track of still has to be reachable: the ✕ and the
+ * tap-to-move both hang off this list, so an order missing from it is a live
+ * order the screen cannot cancel.
+ */
+describe('withLiveOrders', () => {
+  const live = (
+    id: string,
+    side: 'BUY' | 'SELL',
+    price: number,
+    remaining: number,
+    assetId = 'token-up',
+  ) => ({ id, side, price, remaining, assetId });
+
+  it('adds an order the rows never heard of', () => {
+    const rows = withLiveOrders([], [live('a', 'BUY', 0.44, 7)], () => 'Down');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe('buying');
+    expect(rows[0].orderId).toBe('a');
+    expect(rows[0].buyPrice).toBe(0.44);
+    expect(rows[0].shares).toBe(7);
+    expect(rows[0].outcome).toBe('Down');
+  });
+
+  it('names an order it cannot place rather than leaving it blank', () => {
+    const rows = withLiveOrders([], [live('a', 'BUY', 0.44, 7, 'other-token')]);
+
+    expect(rows[0].outcome).toBe('—');
+  });
+
+  it('files a live sell as an offer standing over the position', () => {
+    const rows = withLiveOrders([], [live('s', 'SELL', 0.88, 7)]);
+
+    expect(rows[0].status).toBe('pending');
+    expect(rows[0].sellPrice).toBe(0.88);
+    expect(rows[0].buyPrice).toBeNull();
+  });
+
+  it('does not duplicate an order the rows already carry', () => {
+    const rows = pairOrders([
+      order('BUY', 0.44, 7, { matched: 0, status: 'resting' }),
+    ]);
+    const id = rows[0].orderId as string;
+
+    const merged = withLiveOrders(rows, [live(id, 'BUY', 0.44, 7)]);
+
+    expect(merged).toHaveLength(rows.length);
+  });
+
+  it('ignores an order with nothing left on the book', () => {
+    expect(withLiveOrders([], [live('a', 'BUY', 0.44, 0)])).toHaveLength(0);
+  });
+
+  it('leaves the rows untouched when the venue lists nothing', () => {
+    const rows = pairOrders([order('BUY', 0.44, 7)]);
+    expect(withLiveOrders(rows, [])).toBe(rows);
   });
 });

@@ -125,12 +125,39 @@ object OrderLog {
     }
 
     /**
-     * Bring the still-working entries in line with the exchange.
+     * Whether the venue's own word for an order means it is still on the book.
+     *
+     * The CLOB says LIVE for an order working, DELAYED for one held back by
+     * the matching delay and UNMATCHED for one that went to the book after a
+     * failed match — all three are orders that can still fill and can still be
+     * cancelled. Only CANCELED is gone.
+     */
+    private fun stillOnBook(status: String): Boolean {
+        val word = status.trim().lowercase()
+        return word.startsWith("live") ||
+            word.startsWith("delay") ||
+            word.startsWith("unmatched")
+    }
+
+    private fun pulled(status: String): Boolean =
+        status.trim().lowercase().startsWith("cancel")
+
+    /**
+     * Bring the entries in line with the exchange.
+     *
+     * The listing is the venue's own answer to "what is still working", so an
+     * order in it is working — including one this log had already given up on.
+     * Reviving those is the point: an entry wrongly filed as cancelled did not
+     * merely read wrong in the history, it dropped out of the working list and
+     * took its own ✕ with it, so a live order could not be cancelled or moved
+     * from the one screen that is for cancelling and moving orders.
      *
      * An entry missing from the listing has either filled or been pulled, and
-     * only the venue knows which — so it is asked, once, per entry. There are a
-     * handful of these per window, and guessing "filled" would paint a cancel
-     * green.
+     * only the venue knows which — so it is asked, once, per entry, and its
+     * answer is *read* rather than inferred. Inferring was the bug: an order
+     * the listing had not indexed yet came back from the single-order endpoint
+     * alive and untouched, and "not in the listing, nothing matched" was filed
+     * as a cancel. The venue tells us what it is; the word costs nothing.
      */
     fun reconcile(
         open: List<ClobApi.OpenOrder>,
@@ -138,15 +165,21 @@ object OrderLog {
     ) {
         val byId = open.associateBy { it.id }
         for (entry in entries) {
-            if (entry.status != "resting" && entry.status != "partial") continue
             val id = entry.orderId ?: continue
 
             val remote = byId[id]
             if (remote != null) {
-                entry.matched = remote.sizeMatched
+                // Matched never goes backwards: a stale page of the listing
+                // must not un-fill shares the trade feed has already priced.
+                entry.matched = maxOf(entry.matched, remote.sizeMatched)
                 entry.status = statusFor(entry.matched, entry.size, resting = true)
                 continue
             }
+
+            // Everything below asks the venue about one order, which is a
+            // round trip; a settled entry has nothing left to learn.
+            if (entry.status != "resting" && entry.status != "partial") continue
+
             val resolved = try {
                 lookup(id)
             } catch (e: Exception) {
@@ -158,8 +191,19 @@ object OrderLog {
             // so an unresolved order is left alone and settled by the trade
             // feed instead.
             if (resolved == null) continue
-            entry.matched = resolved.sizeMatched
-            entry.status = statusFor(entry.matched, entry.size, resting = false)
+            entry.matched = maxOf(entry.matched, resolved.sizeMatched)
+            entry.status = when {
+                // Still on the book, whatever the listing did or did not say.
+                stillOnBook(resolved.status) ->
+                    statusFor(entry.matched, entry.size, resting = true)
+                pulled(resolved.status) ->
+                    statusFor(entry.matched, entry.size, resting = false)
+                // Matched, or a word this app has not seen before. Either way
+                // the shares decide: what has filled is filled, and what has
+                // not is left working until something says otherwise. Guessing
+                // "cancelled" here is what put live orders in the history.
+                else -> statusFor(entry.matched, entry.size, resting = true)
+            }
         }
     }
 

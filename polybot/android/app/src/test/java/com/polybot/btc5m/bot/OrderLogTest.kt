@@ -141,6 +141,102 @@ class OrderLogTest {
         assertEquals("filled", entry.status)
     }
 
+    /**
+     * The one that put live orders in the history.
+     *
+     * The listing lags a placement by a second or two; the single-order
+     * endpoint does not, and it answers "LIVE". Reading that word instead of
+     * inferring from the order's absence is the whole fix — inferring filed a
+     * resting limit as cancelled, which took it off the working list and with
+     * it the only ✕ that could have cancelled it.
+     */
+    @Test
+    fun anOrderTheVenueCallsLiveStaysWorking() {
+        val entry = record("BUY", 0.44, 7.0, orderId = "fresh")
+        OrderLog.reconcile(emptyList()) { venue("fresh", "LIVE", "BUY", 0.44, 7.0, 0.0) }
+
+        assertEquals("resting", entry.status)
+    }
+
+    @Test
+    fun theDelayedAndUnmatchedWordsAreAlsoOnTheBook() {
+        val delayed = record("BUY", 0.44, 7.0, orderId = "d")
+        val unmatched = record("SELL", 0.88, 7.0, orderId = "u")
+        OrderLog.reconcile(emptyList()) { id ->
+            when (id) {
+                "d" -> venue("d", "DELAYED", "BUY", 0.44, 7.0, 0.0)
+                else -> venue("u", "UNMATCHED", "SELL", 0.88, 7.0, 0.0)
+            }
+        }
+
+        assertEquals("resting", delayed.status)
+        assertEquals("resting", unmatched.status)
+    }
+
+    @Test
+    fun anOrderTheVenueSaysWasPulledIsCancelled() {
+        val entry = record("BUY", 0.44, 7.0, orderId = "x")
+        OrderLog.reconcile(emptyList()) { venue("x", "CANCELED", "BUY", 0.44, 7.0, 0.0) }
+
+        assertEquals("cancelled", entry.status)
+    }
+
+    /** A cancel that got some of its size still keeps what it got. */
+    @Test
+    fun aPartlyFilledCancelKeepsItsShares() {
+        val entry = record("BUY", 0.44, 7.0, orderId = "x")
+        OrderLog.reconcile(emptyList()) { venue("x", "CANCELED", "BUY", 0.44, 7.0, 3.0) }
+
+        assertEquals("filled", entry.status)
+        assertEquals(3.0, entry.matched, 1e-9)
+    }
+
+    /**
+     * And the listing brings back what was wrongly written off. Without this
+     * an entry filed as cancelled was never looked at again, so the mistake
+     * outlived the condition that caused it.
+     */
+    @Test
+    fun anOrderBackInTheListingIsWorkingAgain() {
+        val entry = record("BUY", 0.44, 7.0, orderId = "back")
+        entry.status = "cancelled"
+
+        OrderLog.reconcile(listOf(venue("back", "LIVE", "BUY", 0.44, 7.0, 0.0))) { null }
+
+        assertEquals("resting", entry.status)
+    }
+
+    /** A stale page of the listing must not un-fill what already filled. */
+    @Test
+    fun matchedVolumeNeverGoesBackwards() {
+        val entry = record("SELL", 0.88, 7.0, orderId = "s")
+        OrderLog.applyTrade("token-a", "SELL", 0.88, 7.0, tick = 0.01)
+        assertEquals(7.0, entry.matched, 1e-9)
+
+        OrderLog.reconcile(listOf(venue("s", "LIVE", "SELL", 0.88, 7.0, 0.0))) { null }
+
+        assertEquals(7.0, entry.matched, 1e-9)
+    }
+
+    private fun venue(
+        id: String,
+        status: String,
+        side: String,
+        price: Double,
+        size: Double,
+        matched: Double,
+    ) = ClobApi.OpenOrder(
+        id = id,
+        status = status,
+        market = "cond-a",
+        assetId = "token-a",
+        side = side,
+        price = price,
+        originalSize = size,
+        sizeMatched = matched,
+        outcome = "Up",
+    )
+
     @Test
     fun aRestingSellKeepsTheRuleAwake() {
         val window = System.currentTimeMillis() / 1000 - (System.currentTimeMillis() / 1000) % WINDOW_SECONDS
