@@ -139,3 +139,65 @@ small-sample artifact — this search produces those from shuffled data on deman
 * `tpsl.py` — the same targets on unconditional entries, as the baseline
 * `candles240.json.gz` — 8 months of 5m candles
 * `report_search.txt`, `report_signal_tpsl.txt` — raw output
+
+## Question 5 — does the fade signal pay over several candles?
+
+Answer: gross yes, net no. The edge is real but it is worth 0.01–0.05% per trade
+and a taker round trip costs 0.10%.
+
+`horizon.py` measures every signal from the next candle's open to the close h
+candles later, and subtracts the unconditional return over the same horizon and
+side, so the market's own uptrend over this sample does not flatter the longs.
+
+| horizon | train edge/trade | train t | test edge/trade | test t |
+|---|---|---|---|---|
+| 3 candles (15 min) | +0.019% | 3.83 | −0.001% | −0.15 |
+| 8 candles (40 min) | +0.024% | 3.14 | +0.004% | 0.47 |
+| 20 candles (100 min) | +0.045% | 3.88 | −0.003% | −0.14 |
+| 60 candles (5 h) | +0.055% | 2.97 | −0.009% | −0.23 |
+
+Statistically solid in-sample (t ≈ 3–4), gone out-of-sample (t ≈ 0). Splitting the
+test set by side shows longs at t ≈ 2–2.9 for 40–150 min and shorts negative
+throughout — that is the bull leg, not the signal.
+
+### Month by month (`stability.py`)
+
+Gross % per trade, holding 20 candles: Jan +0.025, Feb +0.038, Mar +0.076,
+Apr +0.039, May +0.013, Jun +0.049, Jul +0.043, Aug −0.040. Seven months of eight
+are positive, so the effect is not imaginary — but the **break-even round-trip fee
+is 0.030%**, i.e. 0.015% per side. Standard OKX taker is 0.05% per side and maker
+0.02%; only maker fills at a VIP tier clear that bar, and a fade signal filled by a
+resting limit order is adversely selected, so maker assumptions flatter it further.
+
+### Making the signal stricter (`variants.py`)
+
+Fewer, better trades is the only route past the fee. Holding 20 candles:
+
+| variant | trades | trades/month | win% | gross/trade | break-even fee |
+|---|---|---|---|---|---|
+| base: 20-extreme, close in far 25% | 6076 | 760 | 55.5% | 0.0298% | 0.030% |
+| 50-candle extreme | 3125 | 391 | 56.8% | 0.0413% | 0.041% |
+| **50-extreme + close in far 15%** | 2190 | 274 | 57.3% | **0.0460%** | 0.046% |
+| 50-extreme + range > 2× avg10 | 1038 | 130 | 55.1% | 0.0500% | 0.050% |
+| 100-extreme + range>1.5 + run≥3 | 488 | 61 | 53.9% | 0.0123% | 0.012% |
+
+The best variant doubles the edge per trade. Then check it honestly: train
+(Jan–19 Jun) n=1496, win 58.1%, gross +0.0758%, t=3.31; test (19 Jun–30 Aug) n=694,
+win 55.5%, gross **−0.0183%**, t=−0.74. Month by month it is positive in seven
+months and −0.099% in August, which erases the rest.
+
+**Conclusion.** Fading an exhausted extreme is a genuine statistical effect on 5m
+BTC — 55–58% hit rate, positive in most months, well clear of the shuffled-label
+noise floor. It is not a tradeable edge: it earns about a third of a taker round
+trip, it needs sub-0.02%-per-side costs plus zero slippage to break even, and it
+turns negative for months at a time. Anything found on 5m candles alone lands in
+this same band; a profitable 5m system needs an input candles do not contain —
+order-flow, funding, cross-venue basis — or a slower timeframe where the moves are
+large relative to costs.
+
+### Files added
+
+* `horizon.py` — forward returns at 1…60 candles, drift-adjusted, train vs test
+* `stability.py` — month-by-month edge and the break-even fee
+* `variants.py` — stricter signal definitions ranked by gross per trade
+* `report_horizon.txt` — raw output
