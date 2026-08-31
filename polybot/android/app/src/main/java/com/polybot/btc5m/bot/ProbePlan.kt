@@ -35,6 +35,16 @@ object ProbePlan {
     const val DEFAULT_LEAD_SEC = 50L
 
     /**
+     * And the lead the candle entry wants, which is shorter.
+     *
+     * Fifteen seconds. That entry reads the five-minute candle that closes as
+     * the window opens, so the later it looks the more of that candle it has
+     * actually seen — the opposite trade-off from the line, which is an
+     * average over a quarter of an hour and settled long before.
+     */
+    const val FADE_LEAD_SEC = 15L
+
+    /**
      * Leads that were once the default, and so are not a choice.
      *
      * A setting saved while one of these was the default carries it forever,
@@ -833,6 +843,15 @@ object ProbePlan {
          * side is worth, and buys only where the book is asking less.
          */
         val inside: Boolean = false,
+        /**
+         * Buy against a five-minute candle that has just run out of breath.
+         *
+         * A third entry, and the only one here whose numbers come from a
+         * search that was checked on data it had not seen: a new twenty-candle
+         * extreme closing in the far quarter of its own range, bought the
+         * other way. See [FadePlan] for what it scores and what that is worth.
+         */
+        val fade: Boolean = false,
         /** How underpriced a side has to be, in cents a share. */
         val edgeUsd: Double = DEFAULT_EDGE,
     )

@@ -294,6 +294,8 @@ export interface PolyBotPlugin {
     live?: boolean;
     bankUsd?: number;
     inside?: boolean;
+    /** Buy against a five-minute candle that has just run out of breath. */
+    fade?: boolean;
     edgeUsd?: number;
   }): Promise<void>;
   probeReset(): Promise<void>;
@@ -585,6 +587,11 @@ export type ProbeState = {
    * rather than guessed before it opens on a read of the chart.
    */
   inside: boolean;
+  /**
+   * Buy against a five-minute candle that made a twenty-candle extreme and
+   * closed in the far quarter of its own range.
+   */
+  fade: boolean;
   /** How far under fair value the ask has to be, in dollars a share. */
   edgeUsd: number;
   /** The same six dials as the account trading real money has them. */
@@ -593,6 +600,7 @@ export type ProbeState = {
   realRoomShare?: number;
   realRoundBand?: number;
   realInside?: boolean;
+  realFade?: boolean;
   realEdgeUsd?: number;
   /**
    * What the next window will actually stake — the base grown by every
@@ -774,6 +782,7 @@ const webStub: PolyBotPlugin = {
     bankUsd: 100,
     bank: 100,
     inside: false,
+    fade: false,
     edgeUsd: 0.05,
     realStakeUsd: 5,
     realLeadSec: 45,

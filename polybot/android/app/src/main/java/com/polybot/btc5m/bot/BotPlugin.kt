@@ -1518,6 +1518,7 @@ class BotPlugin : Plugin() {
                 live = call.getBoolean("live") ?: d.live,
                 bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
                 inside = call.getBoolean("inside") ?: d.inside,
+                fade = call.getBoolean("fade") ?: d.fade,
                 edgeUsd = call.getDouble("edgeUsd") ?: d.edgeUsd,
             ),
         )
@@ -1611,6 +1612,7 @@ class BotPlugin : Plugin() {
                 .put("realRoomShare", bot.realRules.roomShare)
                 .put("realRoundBand", bot.realRules.roundBand)
                 .put("realInside", bot.realRules.inside)
+                .put("realFade", bot.realRules.fade)
                 .put("realEdgeUsd", bot.realRules.edgeUsd)
                 .put("candleBody", bot.candleBody)
                 .put("minuteBody", bot.minuteBody)
@@ -1621,6 +1623,7 @@ class BotPlugin : Plugin() {
                 .put("live", bot.settings.live)
                 .put("bankUsd", bot.settings.bankUsd)
                 .put("inside", bot.settings.inside)
+                .put("fade", bot.settings.fade)
                 .put("edgeUsd", bot.settings.edgeUsd)
                 // Both accounts, always — the card shows whichever the person
                 // is looking at, and neither is the other's fallback.

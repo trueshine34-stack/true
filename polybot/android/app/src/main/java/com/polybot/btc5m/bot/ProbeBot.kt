@@ -1081,7 +1081,22 @@ class ProbeBot(
         val minuteTypical = seen.minuteTypical
         val above = seen.above
         val below = seen.below
-        val pick = seen.pick
+
+        // Which reading chose the side. The candle entry does not consult the
+        // line at all: it is a statement about one five-minute candle that
+        // has just finished, and the line's opinion of the last quarter hour
+        // is neither evidence for it nor against it.
+        val fives = BinanceCandles.fiveMinute.list().filter { it.time < windowStart }
+        val pick = if (mine.fade) {
+            val fadeSide = FadePlan.side(fives)
+            if (fadeSide.isEmpty()) {
+                ProbePlan.Choice("", FadePlan.why(fives))
+            } else {
+                ProbePlan.Choice(fadeSide, "против выдохшейся свечи")
+            }
+        } else {
+            seen.pick
+        }
 
         val way = pick.side
         aimSide = way
@@ -1425,6 +1440,14 @@ class ProbeBot(
                 " " + Math.round(line?.perHour ?: 0.0) + "$/ч" +
                 " R² " + String.format("%.2f", line?.fit ?: 0.0),
             "тренд 5м: " + (wide?.way.orEmpty().ifEmpty { "вбок" }),
+            // What the candle entry reads, whether or not it is the one
+            // running: an extreme over twenty candles, and where in its own
+            // range the candle finished.
+            "закрытие свечи: " + (
+                FadePlan.closedAt(closing).let {
+                    if (it < 0.0) "нечем мерить" else Math.round(it * 100).toString() + "% размаха"
+                }
+                ),
             "свеча 5м: " + dollars(body) + " · минутка: " + dollars(minute),
             "обычный ход 5м: " + Math.round(typical) + "$",
             // The wick on our side, and the third of the range that stops

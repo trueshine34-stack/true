@@ -48,6 +48,7 @@ class ProbeStore(context: Context) {
         live = prefs.getBoolean("live", !prefs.getBoolean("demo", true)),
         bankUsd = prefs.getFloat("bankUsd", ProbePlan.DEFAULT_BANK.toFloat()).toDouble(),
         inside = prefs.getBoolean(key("inside", real), prefs.getBoolean("inside", false)),
+        fade = prefs.getBoolean(key("fade", real), false),
         edgeUsd = dial("edgeUsd", real, ProbePlan.DEFAULT_EDGE),
     )
 
@@ -62,6 +63,7 @@ class ProbeStore(context: Context) {
             .putFloat(key("roomShare", real), s.roomShare.toFloat())
             .putFloat(key("roundBand", real), s.roundBand.toFloat())
             .putBoolean(key("inside", real), s.inside)
+            .putBoolean(key("fade", real), s.fade)
             .putFloat(key("edgeUsd", real), s.edgeUsd.toFloat())
         // Everything that is the desk's answer rather than an account's is
         // written once, by whichever account was being edited.

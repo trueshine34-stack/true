@@ -3679,6 +3679,17 @@ button.wide {
   padding-top: 0;
 }
 
+/* Three entries, one at a time: equal widths so it reads as a choice. */
+.botbar.modes {
+  gap: 5px;
+  padding-bottom: 0;
+}
+
+.botbar.modes .demoflag {
+  flex: 1;
+  padding: 3px 4px;
+}
+
 /* The reset, pushed to the end of the bar it shares. */
 .botbar .pushright {
   margin-left: auto;

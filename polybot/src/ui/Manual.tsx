@@ -1276,8 +1276,16 @@ export function Manual({
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
-          onInside={(inside, real) => {
-            void PolyBot.probeUpdate({ inside, real })
+          onMode={(mode, real) => {
+            // The lead moves with the mode: the candle entry reads the five
+            // minutes closing as the window opens, so it looks late; the line
+            // is settled long before and buys early, where the side is cheap.
+            void PolyBot.probeUpdate({
+              inside: mode === 'inside',
+              fade: mode === 'fade',
+              leadSec: mode === 'fade' ? 15 : 50,
+              real,
+            })
               .then(() => PolyBot.probeState())
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
@@ -2298,7 +2306,7 @@ function ProbeCard({
   onDemo,
   onLive,
   onBank,
-  onInside,
+  onMode,
   onEdge,
   onReset,
 }: {
@@ -2311,7 +2319,7 @@ function ProbeCard({
   onDemo: (demo: boolean) => void;
   onLive: (live: boolean) => void;
   onBank: (usd: number) => void;
-  onInside: (inside: boolean, real: boolean) => void;
+  onMode: (mode: 'line' | 'fade' | 'inside', real: boolean) => void;
   onEdge: (usd: number, real: boolean) => void;
   onReset: () => void;
 }) {
@@ -2334,6 +2342,7 @@ function ProbeCard({
     roomShare: seen ? (state.realRoomShare ?? state.roomShare) : state.roomShare,
     roundBand: seen ? (state.realRoundBand ?? state.roundBand) : state.roundBand,
     inside: seen ? (state.realInside ?? false) : state.inside,
+    fade: seen ? (state.realFade ?? false) : state.fade,
     edgeUsd: seen ? (state.realEdgeUsd ?? state.edgeUsd) : state.edgeUsd,
   };
   const all = summarise(shown);
@@ -2458,7 +2467,21 @@ function ProbeCard({
           история — то, что ещё дают за сторону, это последние деньги, а не
           шанс. Что лесенка не продала и что не успели забрать — заберёт
           расчёт.{' '}
-          Сторону задаёт только линия, и больше ничто: если минутная линия
+          Это описание входа «по линии». «По свече» — другой вход, и
+          единственный здесь, чьи числа проверялись на данных, которых поиск
+          не видел: свеча делает экстремум за 20 свечей и закрывается в
+          дальней четверти собственного размаха, то есть импульс выдохся —
+          берётся противоположная сторона. На 8 месяцах пятиминуток: 59.2%
+          на обучении и 56.4% на отложенных для новых максимумов, 58.2% и
+          57.6% для минимумов. Тот же перебор по перемешанным меткам выдаёт
+          «паттерны» на 57–58% там, где он их искал, и они рассыпаются до 51%
+          на новых данных; эти два не рассыпаются. Считать это готовым
+          заработком нельзя: на 58¢ комиссия поднимает безубыток примерно до
+          60%, а тут 57% — эдж живёт только в дешёвом конце стакана. Вход по
+          свече идёт за 15 секунд до открытия, а не за 50: он читает
+          пятиминутку, которая закрывается вместе с открытием окна, и чем
+          позже смотрит, тем больше её видел.{' '}
+          Сторону во входе «по линии» задаёт только линия, и больше ничто: если минутная линия
           говорит «вбок» — направления нет, окно пропускается с «нет линии»;
           пятиминутная возражает лишь тогда, когда сама называет направление.
           Ни уровни, ни круглые числа, ни хвост свечи вход не останавливают —
@@ -2612,17 +2635,40 @@ function ProbeCard({
         once the window is under way. Nearly every field below belongs to one
         of them, so the switch comes before the fields.
       */}
-      <div className="botbar">
+      {/*
+        Three entries, one at a time. They read different things and want
+        different leads, so the switch sets the lead with the mode — the
+        candle entry reads the five minutes closing as the window opens, so
+        the later it looks the more of that candle it has seen, while the line
+        is an average over a quarter of an hour and settled long before.
+      */}
+      <div className="botbar modes">
+        <button
+          className={`demoflag${!dial.inside && !dial.fade ? ' on' : ''}`}
+          onClick={() => onMode('line', seen)}
+        >
+          линия
+        </button>
+        <button
+          className={`demoflag${dial.fade ? ' on' : ''}`}
+          onClick={() => onMode('fade', seen)}
+        >
+          свеча
+        </button>
         <button
           className={`demoflag${dial.inside ? ' on' : ''}`}
-          onClick={() => onInside(!dial.inside, seen)}
+          onClick={() => onMode('inside', seen)}
         >
-          {dial.inside ? 'по цене' : 'по линии'}
+          цена
         </button>
+      </div>
+      <div className="botbar">
         <b className="muted small">
           {dial.inside
             ? 'ждёт внутри окна и берёт недооценённую сторону'
-            : 'выбирает сторону до открытия по графику'}
+            : dial.fade
+              ? 'против свечи, сделавшей экстремум за 20 и закрывшейся в дальней четверти'
+              : 'выбирает сторону до открытия по графику'}
         </b>
       </div>
 
