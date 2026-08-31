@@ -413,8 +413,22 @@ class BotEngine(
     @Volatile
     var lockedUsd: Double = 0.0
         set(value) {
-            field = maxOf(0.0, value)
+            field = if (value.isFinite()) maxOf(0.0, value) else 0.0
         }
+
+    /**
+     * The same reserve said as a share of the wallet, where that is how it is
+     * set. A share, when there is one, is what counts — see [Reserve.lockedOf].
+     */
+    @Volatile
+    var lockedPct: Double = 0.0
+        set(value) {
+            field = if (value.isFinite()) value.coerceIn(0.0, 1.0) else 0.0
+        }
+
+    /** What that comes to in dollars against a given wallet. */
+    fun lockedAgainst(wallet: Double): Double =
+        Reserve.lockedOf(wallet, lockedUsd, lockedPct)
 
     /** The wallet itself, which is what the balance sheet is about. */
     fun usdcWallet(): Double {
@@ -429,7 +443,7 @@ class BotEngine(
     /** And the same reading with the locked money taken out of it. */
     fun usdcBalance(): Double = free(usdcWallet())
 
-    private fun free(wallet: Double): Double = Reserve.free(wallet, lockedUsd)
+    private fun free(wallet: Double): Double = Reserve.free(wallet, lockedAgainst(wallet))
 
     @Volatile
     private var cash: Double = 0.0

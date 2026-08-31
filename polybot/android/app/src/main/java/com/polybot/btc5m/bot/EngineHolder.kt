@@ -50,7 +50,9 @@ object EngineHolder {
                 engine = it
                 // Before anything can spend: a reserve the app forgot on a
                 // restart is money it would quietly go and trade with.
-                it.lockedUsd = LockStore(context).load()
+                val (lockedUsd, lockedPct) = LockStore(context).load()
+                it.lockedUsd = lockedUsd
+                it.lockedPct = lockedPct
                 // Quotes, positions and the price feed are screen data: they
                 // must flow from the moment the app opens.
                 it.startFeed()

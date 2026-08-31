@@ -2687,6 +2687,50 @@ button.step.big {
   color: var(--muted);
 }
 
+/*
+ * What the total is made of: two or three cells, each a quiet label over its
+ * figure. It only ever appeared alongside an off-venue balance before, which
+ * almost nobody has — so it was never styled, and it read as a run-on line.
+ */
+.balparts {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 10px;
+  margin: 10px 0 2px;
+}
+
+.balparts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.balparts span {
+  font-size: 10px;
+}
+
+.balparts b {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The reserve: its number, and which of the two things that number is. */
+.lockrow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.lockmode {
+  display: grid;
+  grid-template-columns: repeat(2, 44px);
+  gap: 6px;
+  margin: 0;
+}
+
 /* What the reserve field means, under the reserve field. */
 .balhint {
   margin: 6px 2px 2px;

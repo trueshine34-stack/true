@@ -78,8 +78,24 @@ export function App() {
    * already what is left after it. Kept in state only to be shown and edited.
    */
   const [reserve, setReserve] = useState(0);
+  /** How that reserve is set: a fixed sum, or a share of the wallet. */
+  const [reserveUsd, setReserveUsd] = useState(0);
+  const [reservePct, setReservePct] = useState(0);
   /** The wallet before the reserve, which is what the balance line is of. */
   const [wallet, setWallet] = useState<number | null>(null);
+
+  /** One reading of the wallet, unpacked into the four things it says. */
+  const readBalance = useCallback(
+    (r: { usdc: number; wallet?: number; locked?: number;
+          lockedUsd?: number; lockedPct?: number }) => {
+      setBalance(r.usdc);
+      setWallet(r.wallet ?? r.usdc);
+      setReserve(r.locked ?? 0);
+      setReserveUsd(r.lockedUsd ?? 0);
+      setReservePct(r.lockedPct ?? 0);
+    },
+    [],
+  );
 
   /**
    * What the run is worth: the collateral on the venue plus what has been
@@ -198,9 +214,7 @@ export function App() {
       void PolyBot.getBalance()
         .then(async (r) => {
           if (cancelled) return;
-          setBalance(r.usdc);
-          setWallet(r.wallet ?? r.usdc);
-          setReserve(r.locked ?? 0);
+          readBalance(r);
 
           // Whether any of the money is currently shares rather than cash.
           // A reading taken while it is would put the cost of the position on
@@ -240,7 +254,7 @@ export function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [phase]);
+  }, [phase, readBalance]);
 
   /**
    * And the pocket the profit goes to.
@@ -369,16 +383,16 @@ export function App() {
           balance={wallet ?? balance}
           free={balance}
           locked={reserve}
-          onLocked={(next) => {
-            const safe = Number.isFinite(next) && next > 0 ? next : 0;
-            setReserve(safe);
-            void PolyBot.setLocked({ usd: safe })
+          lockedUsd={reserveUsd}
+          lockedPct={reservePct}
+          onLocked={(usd, pct) => {
+            const safeUsd = Number.isFinite(usd) && usd > 0 ? usd : 0;
+            const safePct = Number.isFinite(pct) && pct > 0 ? Math.min(1, pct) : 0;
+            setReserveUsd(safeUsd);
+            setReservePct(safePct);
+            void PolyBot.setLocked({ usd: safeUsd, pct: safePct })
               .then(() => PolyBot.getBalance())
-              .then((r) => {
-                setBalance(r.usdc);
-                setWallet(r.wallet ?? r.usdc);
-                setReserve(r.locked ?? 0);
-              })
+              .then(readBalance)
               .catch(() => {});
           }}
           savings={savings}

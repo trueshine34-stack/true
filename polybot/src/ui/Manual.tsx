@@ -89,6 +89,10 @@ const NOTE_MS = 5_000;
  * position has room to work, red in the last minute — where the rule stops
  * holding out for a margin and the only thing left to do is get out.
  */
+/** Seconds as a clock reads them. */
+const clock = (secondsLeft: number): string =>
+  `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
+
 const clockTone = (secondsLeft: number, lookAhead: boolean): string => {
   if (lookAhead) return 'muted';
   if (secondsLeft <= 60) return 'down';
@@ -3902,11 +3906,16 @@ function PositionPair({
           className={`pairclock ${clockTone(secondsLeft, lookAhead)}`}
           onClick={onLookAhead}
         >
-          {lookAhead
-            ? '5:00'
-            : `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}
+          {/*
+            Looking ahead, the number is how long until that event opens —
+            which is this window's own remainder, since one starts where the
+            other ends. It used to read a flat 5:00, the next window's length,
+            which is true of every window and answers nothing: the question
+            you press this button to ask is "when can I trade it".
+          */}
+          {clock(secondsLeft)}
         </button>
-        {lookAhead && <span className="pairnext">следующее</span>}
+        {lookAhead && <span className="pairnext">до начала</span>}
       </div>
 
       {side('Down', down)}

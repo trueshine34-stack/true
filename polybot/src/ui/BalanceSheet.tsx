@@ -30,6 +30,8 @@ export function BalanceSheet({
   balance,
   free,
   locked,
+  lockedUsd,
+  lockedPct,
   onLocked,
   savings,
   savingsAddress,
@@ -42,9 +44,12 @@ export function BalanceSheet({
   balance: number | null;
   /** And what is left of it to trade with. */
   free: number | null;
-  /** Money set aside, which no order may reach. */
+  /** Money set aside right now, in dollars, which no order may reach. */
   locked: number;
-  onLocked: (usd: number) => void;
+  /** How it is set: a fixed sum, or a share of the wallet. One or the other. */
+  lockedUsd: number;
+  lockedPct: number;
+  onLocked: (usd: number, pct: number) => void;
   /** USDT held off the venue, where profit is withdrawn to. */
   savings: number;
   savingsAddress: string;
@@ -52,6 +57,16 @@ export function BalanceSheet({
   onClose: () => void;
 }) {
   const [span, setSpan] = useState(2);
+
+  /**
+   * Whether the reserve is being said as a share rather than as a sum.
+   *
+   * Seeded from what is actually set — a share, where there is one, is what
+   * the engine goes by — but held here afterwards, because switching to the
+   * empty one has to show its empty field. The sheet is mounted fresh each
+   * time it is opened, so the seed is never stale.
+   */
+  const [inPct, setInPct] = useState(lockedPct > 0);
 
   // Carry withdrawals back into the line: taking profit out is not a loss, and
   // a chart that reads it as one says the run gave back everything it made.
@@ -123,22 +138,67 @@ export function BalanceSheet({
           so there is no path that could forget. Above the wallet it simply
           means nothing may be bought.
         */}
-        <label className="field ballock">
-          <span>заблокировано, $</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step="1"
-            placeholder="0"
-            defaultValue={locked > 0 ? String(locked) : ''}
-            onBlur={(e) => onLocked(Number(e.target.value))}
-          />
-        </label>
+        <div className="lockrow">
+          <label className="field ballock">
+            <span>заблокировано</span>
+            <input
+              key={inPct ? 'pct' : 'usd'}
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={inPct ? 100 : undefined}
+              step={inPct ? '5' : '1'}
+              placeholder="0"
+              defaultValue={
+                inPct
+                  ? lockedPct > 0
+                    ? String(Math.round(lockedPct * 100))
+                    : ''
+                  : lockedUsd > 0
+                    ? String(lockedUsd)
+                    : ''
+              }
+              onBlur={(e) => {
+                const value = Number(e.target.value);
+                if (inPct) onLocked(0, value / 100);
+                else onLocked(value, 0);
+              }}
+            />
+          </label>
+          {/*
+            Which of the two the number is. Switching does not carry the value
+            across — 20 dollars and 20 percent are different amounts, and
+            quietly reinterpreting one as the other is how a reserve becomes
+            the whole account.
+          */}
+          <div className="pcts lockmode">
+            <button
+              className={!inPct ? 'on' : undefined}
+              onClick={() => {
+                setInPct(false);
+                onLocked(lockedUsd, 0);
+              }}
+            >
+              $
+            </button>
+            <button
+              className={inPct ? 'on' : undefined}
+              onClick={() => {
+                setInPct(true);
+                onLocked(0, lockedPct);
+              }}
+            >
+              %
+            </button>
+          </div>
+        </div>
         <div className="muted balhint">
           Эти деньги не участвуют в покупках вообще: и боты, и ручные ордера
           считают размер от остатка, а не от баланса. Уже открытые позиции и
           продажи это не трогает.
+          {inPct &&
+            ` Доля считается от баланса на бирже, так что блок растёт вместе` +
+              ` со счётом: сейчас это ${usd(locked)}.`}
         </div>
 
         {/*

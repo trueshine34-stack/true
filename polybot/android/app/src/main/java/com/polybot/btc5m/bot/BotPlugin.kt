@@ -223,7 +223,8 @@ class BotPlugin : Plugin() {
                 // what "usdc" means everywhere above this line. The wallet
                 // itself comes with it, for the sheet that is about the
                 // wallet rather than about the next order.
-                val usdc = Reserve.free(wallet, engine.lockedUsd)
+                val locked = engine.lockedAgainst(wallet)
+                val usdc = Reserve.free(wallet, locked)
                 // Every reading is also the baseline the next sale is timed
                 // against, so the desk's own poll feeds the checker too. The
                 // reserve does not move, so either figure tracks a sale.
@@ -232,7 +233,9 @@ class BotPlugin : Plugin() {
                     JSObject()
                         .put("usdc", usdc)
                         .put("wallet", wallet)
-                        .put("locked", engine.lockedUsd),
+                        .put("locked", locked)
+                        .put("lockedUsd", engine.lockedUsd)
+                        .put("lockedPct", engine.lockedPct),
                 )
             } catch (e: Exception) {
                 call.reject(e.message ?: "не удалось прочитать баланс")
@@ -250,10 +253,16 @@ class BotPlugin : Plugin() {
     @PluginMethod
     fun setLocked(call: PluginCall) {
         val usd = call.getDouble("usd") ?: 0.0
-        val safe = if (usd.isFinite()) maxOf(0.0, usd) else 0.0
-        engine.lockedUsd = safe
-        LockStore(context).save(safe)
-        call.resolve(JSObject().put("locked", safe))
+        val pct = call.getDouble("pct") ?: 0.0
+        engine.lockedUsd = usd
+        engine.lockedPct = pct
+        // Read back off the engine, which has already clamped both.
+        LockStore(context).save(engine.lockedUsd, engine.lockedPct)
+        call.resolve(
+            JSObject()
+                .put("lockedUsd", engine.lockedUsd)
+                .put("lockedPct", engine.lockedPct),
+        )
         notifyState()
     }
 
