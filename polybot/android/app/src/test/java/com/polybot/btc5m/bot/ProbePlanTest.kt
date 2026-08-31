@@ -1325,4 +1325,99 @@ class ProbePlanTest {
         assertTrue(ProbePlan.Wall(78_311.0, touches = 3, round = false).important)
         assertTrue(!ProbePlan.Wall(78_311.0, touches = 2, round = false).important)
     }
+    /**
+     * The 09:15 entry: a bounce off 77 680 bought Up at 77 953 with the round
+     * 78 000 forty-seven dollars overhead and a typical five-minute move of a
+     * hundred and fifty-seven. Three quarters of the window's travel was wall.
+     *
+     * Two things let it through. The room setting had been turned down to
+     * fifteen per cent, so the gate asked for twenty-four dollars and got
+     * forty-seven; and the round-number check exempts a bounce, on the
+     * reasoning that a bounce trades away from the number it just came off —
+     * which this one did not, it ran straight at a different one.
+     */
+    @Test
+    fun `a bounce running into a round number is refused`() {
+        assertEquals(
+            "круглый 78000",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.51,
+                cashUsd = 100.0,
+                settings = on.copy(roomShare = 0.15),
+                price = 77_953.0,
+                // The wall the bounce is heading into is the round number
+                // itself; pass it far away so this is the round check alone.
+                level = 79_000.0,
+                typical = 157.0,
+                byLine = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `a bounce off a round number may still trade away from it`() {
+        // The same distance, the other way: 78 000 is behind a Down trade,
+        // which is exactly the case the exemption exists for.
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Down",
+                ask = 0.51,
+                cashUsd = 100.0,
+                settings = on.copy(roomShare = 0.15),
+                price = 77_953.0,
+                level = 77_000.0,
+                typical = 157.0,
+                byLine = false,
+            ),
+        )
+    }
+
+    /**
+     * And the room in front is floored. The setting may ask for more than
+     * half a typical move; it may not ask for less, because a wall reached
+     * before the window is half over is not a matter of preference.
+     */
+    @Test
+    fun `the room setting cannot be turned below half a move`() {
+        assertEquals(0.5, ProbePlan.roomNeeded(0.15, levelEdge = false), 1e-9)
+        assertEquals(0.5, ProbePlan.roomNeeded(0.0, levelEdge = false), 1e-9)
+        // A setting above the floor is honoured as it stands.
+        assertEquals(1.0, ProbePlan.roomNeeded(1.0, levelEdge = false), 1e-9)
+        // And the edge of the range still asks half again on top of whichever.
+        assertEquals(0.75, ProbePlan.roomNeeded(0.15, levelEdge = true), 1e-9)
+        assertEquals(1.5, ProbePlan.roomNeeded(1.0, levelEdge = true), 1e-9)
+    }
+
+    @Test
+    fun `forty-seven dollars of room is refused on a hundred and fifty-seven`() {
+        // The floor is seventy-eight, and the wall is at forty-seven.
+        assertEquals(
+            "у уровня 78000",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.51,
+                cashUsd = 100.0,
+                settings = on.copy(roomShare = 0.15, roundBand = 0.0),
+                price = 77_953.0,
+                level = 78_000.0,
+                typical = 157.0,
+                byLine = false,
+            ),
+        )
+        // Twice as far away and the same window is open ground.
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.51,
+                cashUsd = 100.0,
+                settings = on.copy(roomShare = 0.15, roundBand = 0.0),
+                price = 77_860.0,
+                level = 78_000.0,
+                typical = 157.0,
+                byLine = false,
+            ),
+        )
+    }
+
 }

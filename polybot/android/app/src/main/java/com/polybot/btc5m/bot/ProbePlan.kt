@@ -793,6 +793,34 @@ object ProbePlan {
     const val EDGE_ROOM = 1.5
 
     /**
+     * The least room in front of a trade, whatever the setting says.
+     *
+     * Half a typical five-minute move. The setting is a preference and may
+     * ask for more; it may not ask for less, because this is not a matter of
+     * taste. A wall closer than half a window's travel is reached before the
+     * window is half over, and the rest of it is spent watching the position
+     * fail to get through — the 09:15 entry bought Up at 77 953 with 78 000
+     * forty-seven dollars away and a typical move of a hundred and fifty-seven,
+     * which is a third of a window's room, and the setting had been turned
+     * down to fifteen per cent so nothing stopped it.
+     *
+     * There is deliberately no way to switch it off. Every level the rule has
+     * ever been wrong about was one it could see and had been told to ignore.
+     */
+    const val LEAST_ROOM = 0.5
+
+    /**
+     * How much room this entry actually has to have, as a share of a typical
+     * move: the setting or the floor, whichever asks for more, and half again
+     * on top when the level ahead is the edge of the range.
+     */
+    fun roomNeeded(
+        share: Double,
+        levelEdge: Boolean,
+        least: Double = LEAST_ROOM,
+    ): Double = maxOf(share, least) * (if (levelEdge) EDGE_ROOM else 1.0)
+
+    /**
      * Whether the level ahead is close enough to be this window's problem.
      *
      * Distances are meaningless bare: forty dollars from resistance is nothing
@@ -905,17 +933,21 @@ object ProbePlan {
         // The edge of the range asks for half again as much room: it is the
         // strongest line on the chart, and a window started within reach of
         // it is a window with nowhere to go.
-        val room = settings.roomShare * (if (levelEdge) EDGE_ROOM else 1.0)
+        val room = roomNeeded(settings.roomShare, levelEdge)
         if (tooClose(price, level, typical, room)) {
             return (if (levelEdge) "край диапазона " else "у уровня ") +
                 Math.round(level ?: 0.0)
         }
         // Sitting on a round number is only a reason to trade when the trade
-        // is away from it, which is what a bounce is.
-        if (byLine) {
-            nearRound(price, settings.roundBand)?.let {
-                return "круглый " + Math.round(it)
-            }
+        // is away from it, which is what a bounce is — so the exemption is
+        // for the round number a bounce has just come off, not for one it is
+        // heading into. A bounce off 77 680 that runs straight at 78 000 is
+        // standing in front of the wall, whatever it turned off behind it.
+        nearRound(price, settings.roundBand)?.let {
+            // Standing exactly on it counts as behind: that is the bounce
+            // the exemption is for. A number still overhead is not.
+            val behind = if (way == "Up") it <= price else it >= price
+            if (byLine || !behind) return "круглый " + Math.round(it)
         }
         if (ask == null || ask <= 0.0) return "нет цены"
         if (cashUsd < (stake ?: settings.stakeUsd)) {

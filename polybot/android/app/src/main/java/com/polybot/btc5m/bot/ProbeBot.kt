@@ -1190,6 +1190,11 @@ class ProbeBot(
         }
         val minute = body(lastMinute)
         val room = if (aim > 0.0 && here > 0.0) abs(aim - here) else 0.0
+        // What this entry actually has to have in front of it, which is the
+        // setting or the floor under it — and half again when the wall ahead
+        // is the edge of the range.
+        val aheadWall = if (pick.side == "Up") above else below
+        val need = ProbePlan.roomNeeded(settings.roomShare, aheadWall?.edge == true)
 
         // The side comes first, because every line under it is evidence for
         // or against that one word — and a window that was skipped keeps this
@@ -1209,8 +1214,9 @@ class ProbeBot(
             "тренд 5м: " + (wide?.way.orEmpty().ifEmpty { "вбок" }),
             "свеча 5м: " + dollars(body) + " · минутка: " + dollars(minute),
             "обычный ход 5м: " + Math.round(typical) + "$",
-            "нужен запас: " + Math.round(typical * settings.roomShare) + "$" +
-                " (" + Math.round(settings.roomShare * 100) + "% хода)",
+            "нужен запас: " + Math.round(typical * need) + "$" +
+                " (" + Math.round(need * 100) + "% хода" +
+                (if (need > settings.roomShare + 1e-9) ", минимум" else "") + ")",
             "хвост свечи: " + (
                 closing?.let {
                     val range = it.high - it.low
@@ -2169,7 +2175,12 @@ class ProbeBot(
         roomToLevel = level?.let { abs(it - here) }
         roomNeed = Levels.typicalRange(BinanceCandles.fiveMinute.list())
             .takeIf { it > 0.0 }
-            ?.let { it * settings.roomShare }
+            // The setting or the floor under it, whichever asks for more —
+            // showing the setting alone said "нужен запас 24$" on a window
+            // that in fact needed seventy-eight. The tile does not know
+            // whether the wall ahead is the edge of the range, so it quotes
+            // the ordinary requirement; an edge asks for half again more.
+            ?.let { it * ProbePlan.roomNeeded(settings.roomShare, levelEdge = false) }
 
     }
 
