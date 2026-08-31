@@ -1589,19 +1589,39 @@ class ProbeBot(
      * nothing bought yet, and letting it fill would buy a side the rule has
      * stopped believing in.
      *
-     * A position already bought is left alone. Everything held leaves by the
-     * ladder and by nothing else, and a changed read is not a price.
+     * A position that is already bought is sold, at the market, there and
+     * then. The ladder is the exit for a trade the rule still believes in;
+     * this is a trade it has stopped believing in before the window has even
+     * begun, and holding it to a rung would be riding a side chosen on a
+     * picture that is no longer on the screen. If the read has not changed,
+     * nothing happens and the position rides.
      */
     private fun recheck(nowSec: Long) {
-        val waiting = working.filter {
-            ProbePlan.rechecks(it.windowStart - nowSec) &&
-                it.resting > 0.0 && it.shares <= 0.0
+        // Everything this window has going: a position that is held, or a bid
+        // that is still waiting. Both are answers to the same read, and the
+        // read is about to be taken again.
+        val due = working.filter { open ->
+            if (!ProbePlan.rechecks(open.windowStart - nowSec)) return@filter false
+            val held = open.shares > open.sold + 1e-9
+            val waiting = open.resting > 0.0 && open.shares <= 0.0
+            held || waiting
         }
-        if (waiting.isEmpty()) return
+        if (due.isEmpty()) return
 
-        // Read for the window the bid was placed for, not for whatever window
+        // Read for the window the entry was made for, not for whatever window
         // the clock is in.
-        val fresh = look(waiting.first().windowStart).pick.side
+        val fresh = look(due.first().windowStart).pick.side
+
+        // What is already bought and no longer believed in goes back at the
+        // market. The five-minute candle the side was chosen on had not
+        // finished when the entry went in; with ten seconds left it has, and
+        // if it now points the other way the entry was simply wrong.
+        for (open in due.filter { it.shares > it.sold + 1e-9 }) {
+            if (ProbePlan.stillOn(open.side, fresh)) continue
+            sellOut(open, "прогноз сменился")
+        }
+
+        val waiting = due.filter { it.resting > 0.0 && it.shares <= 0.0 }
 
         // A bid still waiting for a window whose read has changed is simply
         // taken back: there is nothing to sell, and letting it fill would buy
@@ -1801,6 +1821,99 @@ class ProbeBot(
     }
 
     /** Takes back whatever this rule has resting on a side. */
+    /**
+     * Sells everything still held of one round, now, at the market.
+     *
+     * The one exit that is not a rung. It fires before the window has opened,
+     * on a side the rule has stopped believing in — so it is not a view about
+     * price at all, it is undoing an entry, and the ladder has nothing to say
+     * about a trade that should not have been made.
+     *
+     * On paper the sale is booked at the bid, less the fee. For real money the
+     * ladder's own offer is pulled first, because an offer resting above the
+     * market is in the way of a sale meant to happen at once.
+     */
+    private fun sellOut(open: Round, why: String) {
+        val left = open.shares - open.sold
+        if (left <= 1e-9) return
+
+        val bid = try {
+            ClobApi.bestBid(open.asset)
+        } catch (e: Exception) {
+            null
+        } ?: return
+
+        if (open.demo) {
+            working = working.map {
+                if (it.windowStart == open.windowStart && it.leg == open.leg) {
+                    it.copy(
+                        sold = open.shares,
+                        proceeds = open.proceeds + left * SellPercent.netSell(bid),
+                        note = why,
+                    )
+                } else {
+                    it
+                }
+            }
+            engine.log(
+                "trade",
+                "Проба (демо): $why — продала " + String.format("%.1f", left) +
+                    " ${open.side} по ${(bid * 100).toInt()}¢",
+            )
+            onStateChanged()
+            return
+        }
+
+        val market = engine.marketForWindow(open.windowStart) ?: return
+        cancelSells(open.asset)
+        val limit = maxOf(
+            market.tickSize,
+            ProbePlan.snapDown(bid - market.tickSize, market.tickSize),
+        )
+        val result = try {
+            engine.placeManualOrder(
+                tokenId = open.asset,
+                conditionId = market.conditionId,
+                side = "SELL",
+                price = limit,
+                size = left,
+                orderType = "GTC",
+                auto = true,
+            )
+        } catch (e: Exception) {
+            note = e.message ?: "ошибка сети"
+            return
+        }
+        if (!result.success) {
+            note = result.error ?: "отказ CLOB"
+            return
+        }
+        engine.log(
+            "trade",
+            "Проба: $why — продала " + String.format("%.1f", left) +
+                " ${open.side} по ${(limit * 100).toInt()}¢",
+        )
+        onStateChanged()
+    }
+
+    /** The ladder's own offer, out of the way of a sale meant to happen now. */
+    private fun cancelSells(asset: String) {
+        val session = engine.session() ?: return
+        try {
+            ClobApi.openOrders(session.creds, session.account.signerAddress)
+                .filter { it.assetId == asset && it.side == "SELL" }
+                .forEach {
+                    try {
+                        ClobApi.cancelOrder(session.creds, session.account.signerAddress, it.id)
+                    } catch (e: Exception) {
+                        // It may have filled in between, which the log will show.
+                    }
+                }
+        } catch (e: Exception) {
+            // Nothing to be done; the next pass tries again.
+        }
+    }
+
     private fun cancelBuys(asset: String) {
         val session = engine.session() ?: return
         try {

@@ -26,12 +26,13 @@ object ProbePlan {
     /**
      * How long before the window opens the entry goes in.
      *
-     * Three quarters of a minute. Early enough to be filled before the book
-     * starts pricing the open, which is where the cheap side is; the risk of
-     * being that early — that the picture changes in the meantime — is what
-     * [RECHECK_SEC] answers.
+     * Fifty seconds. Early enough to be filled before the book starts pricing
+     * the open, which is where the cheap side is; the risk of being that
+     * early — that the picture changes in the meantime — is what
+     * [RECHECK_SEC] answers, and it now answers it for a position as well as
+     * for a bid.
      */
-    const val DEFAULT_LEAD_SEC = 45L
+    const val DEFAULT_LEAD_SEC = 50L
 
     /**
      * Leads that were once the default, and so are not a choice.
@@ -41,7 +42,7 @@ object ProbePlan {
      * an old default is the old default rather than something the user typed,
      * and it moves when the default does.
      */
-    val OLD_LEADS = setOf(10L, 20L)
+    val OLD_LEADS = setOf(10L, 20L, 45L)
 
     /**
      * How late after an open the entry may still be taken.
@@ -89,7 +90,7 @@ object ProbePlan {
      * coming back to us it will come back to [REST_PRICE], and if it is not,
      * the window was not ours.
      */
-    const val MAX_TAKE = 0.56
+    const val MAX_TAKE = 0.58
 
     /**
      * Where the bid waits when the offer is dearer than that.
@@ -937,14 +938,6 @@ object ProbePlan {
         // the stream has not arrived rather than that the market is quiet.
         if (way.isEmpty()) return "нет свечей"
 
-        // The five minutes closing with the window, and whether it left a
-        // wick on our side. A wick our way is the move having gone there and
-        // been sent back inside the same candle, which is the last thing to
-        // buy into; a candle with none is one that closed where it reached.
-        if (wicked(way, candleOpen, candleHigh, candleLow, candleClose)) {
-            return "хвост " + (if (way == "Up") "вверх" else "вниз")
-        }
-
         if (ask == null || ask <= 0.0) return "нет цены"
         if (cashUsd < (stake ?: settings.stakeUsd)) {
             return if (settings.demo) "тестовый счёт пуст" else "на счету пусто"
@@ -1049,6 +1042,17 @@ object ProbePlan {
         leadSec = exit.ladderLeadSec,
         stepSec = exit.ladderStepSec,
     )
+
+    /**
+     * A price rounded down onto the tick grid.
+     *
+     * Downward for a sale: rounding up would ask a cent more than the book is
+     * paying, and an offer a cent over the bid is an offer that waits.
+     */
+    fun snapDown(price: Double, tick: Double): Double {
+        if (tick <= 0.0) return price
+        return Math.floor(price / tick + 1e-9) * tick
+    }
 
     /** Crossing the spread by a tick: this is meant to be taken now. */
     fun crossPrice(ask: Double, tick: Double): Double {

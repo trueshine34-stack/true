@@ -30,16 +30,16 @@ class ProbePlanTest {
     fun `aims at nothing through the middle of a window`() {
         assertNull(ProbePlan.targetWindow(W, 21, on))
         assertNull(ProbePlan.targetWindow(W, 150, on))
-        // The default lead is forty-five, so the entry opens at 255.
-        assertNull(ProbePlan.targetWindow(W, 254, on))
-        assertEquals(W + 300, ProbePlan.targetWindow(W, 255, on))
+        // The default lead is fifty, so the entry opens at 250.
+        assertNull(ProbePlan.targetWindow(W, 249, on))
+        assertEquals(W + 300, ProbePlan.targetWindow(W, 250, on))
     }
 
     /**
      * The lead has two uses and they are not the same length. Being early is
-     * worth three quarters of a minute; being late is worth twenty seconds,
-     * because a bet placed forty-five seconds into a five-minute window is
-     * missing a sixth of what it is betting on.
+     * worth fifty seconds; being late is worth twenty, because a bet placed
+     * fifty seconds into a five-minute window is missing a sixth of what it
+     * is betting on.
      */
     @Test
     fun `a longer lead widens only the early chance`() {
@@ -70,7 +70,7 @@ class ProbePlanTest {
     fun `takes a side at the market only while it is cheap enough`() {
         assertTrue(!ProbePlan.waits(0.42))
         assertTrue(!ProbePlan.waits(ProbePlan.MAX_TAKE))
-        assertTrue(ProbePlan.waits(0.58))
+        assertTrue(ProbePlan.waits(0.60))
         assertTrue(ProbePlan.waits(0.90))
     }
 
@@ -429,15 +429,15 @@ class ProbePlanTest {
      */
     @Test
     fun `the market takes it, and only a dear side is waited for`() {
-        assertEquals(0.56, ProbePlan.MAX_TAKE, 1e-9)
+        assertEquals(0.58, ProbePlan.MAX_TAKE, 1e-9)
         assertEquals(0.54, ProbePlan.REST_PRICE, 1e-9)
         assertTrue(ProbePlan.REST_PRICE < ProbePlan.MAX_TAKE)
-        // Fifty-six is taken at the market; a cent over it is waited for.
-        assertTrue(!ProbePlan.waits(0.56))
-        assertTrue(ProbePlan.waits(0.57))
+        // Fifty-eight is taken at the market; a cent over it is waited for.
+        assertTrue(!ProbePlan.waits(0.58))
+        assertTrue(ProbePlan.waits(0.59))
         // And what it pays: the offer itself up to the cap, the limit above.
         assertEquals(0.50, ProbePlan.entryPrice(0.50), 1e-9)
-        assertEquals(0.56, ProbePlan.entryPrice(0.56), 1e-9)
+        assertEquals(0.58, ProbePlan.entryPrice(0.58), 1e-9)
         assertEquals(0.54, ProbePlan.entryPrice(0.70), 1e-9)
     }
 
@@ -549,32 +549,6 @@ class ProbePlanTest {
         assertEquals(ProbePlan.Choice("Down", null), ProbePlan.choose("Down", ""))
         assertEquals(ProbePlan.Choice("", "нет линии"), ProbePlan.choose("", "Up"))
         assertEquals(ProbePlan.Choice("", "тренды спорят"), ProbePlan.choose("Up", "Down"))
-    }
-
-    /**
-     * A wick our way is the move having gone there and been sent straight
-     * back inside the same candle — the last five minutes asked the question
-     * this window is about to ask and were answered no.
-     */
-    @Test
-    fun `a wick our way stops the entry`() {
-        // Opens at 100, reaches 140, closes back at 110: forty of the sixty
-        // above the body is wick, two thirds of the range.
-        assertTrue(ProbePlan.wicked("Up", open = 100.0, high = 140.0, low = 95.0, close = 110.0))
-        assertEquals(
-            "хвост вверх",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.50,
-                cashUsd = 100.0,
-                settings = on.copy(roundBand = 0.0),
-                price = 77_240.0,
-                candleOpen = 100.0,
-                candleHigh = 140.0,
-                candleLow = 95.0,
-                candleClose = 110.0,
-            ),
-        )
     }
 
     @Test
