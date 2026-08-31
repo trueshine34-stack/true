@@ -565,12 +565,11 @@ class ProbeBot(
             // The read is taken again ten seconds before the open, and a bid
             // still waiting on a picture that is no longer there is pulled.
             recheck(nowSec)
-            // A side that has fallen far enough is bought again, once, while
-            // the window still has time to turn.
-            addUp(nowSec)
-            // And a side the ladder has already let go of is taken back when
-            // the market hands it over cheaper than it sold.
-            buyBack(nowSec)
+            // Nothing else buys. The entry is placed before the window opens
+            // and that is the only buy there is: the top-ups at forty-two and
+            // thirty-three, and the buy-back after a rung sold, both put more
+            // money into a window that was already running — which is how a
+            // window with one entry at 19:09 got a second buy at 19:12.
             workPaper(nowSec)
             // A sale booked this tick is filed this tick, so the run's next
             // stake is right before the next window opens.
@@ -1564,111 +1563,6 @@ class ProbeBot(
     }
 
     /**
-     * Puts the same money into the same side again, cheaply.
-     *
-     * The entry was taken on a read that has not been withdrawn, and the same
-     * read at forty cents is the same bet at better odds. It happens at two
-     * prices — forty-two and then thirty-three — so a window holds three buys
-     * and never a fourth, and only while there is still time for the move:
-     * past two minutes a cheap side is not cheap, it is late.
-     *
-     * And not into a shock. A minute several times the size of the minutes
-     * around it is the news that moved the price rather than noise on top of
-     * it, and averaging into that pays twice for one wrong read.
-     */
-    private fun addUp(nowSec: Long) {
-        val held = working.filter { it.shares > it.sold + 1e-9 }
-        if (held.isEmpty()) return
-
-        for (open in held) {
-            val elapsed = nowSec - open.windowStart
-            val ask = try {
-                ClobApi.bestAsk(open.asset)
-            } catch (e: Exception) {
-                null
-            }
-            if (!ProbePlan.addsUp(elapsed, ask, open.adds)) continue
-            if (ask == null) continue
-            // A minute several times the usual size is the news that moved
-            // the price, not a dip in it, and it is still moving.
-            if (shockNow(open.side)) {
-                note = "аномальная свеча — без докупа"
-                continue
-            }
-
-            // The same amount as went in the first time — the position has
-            // grown with every add, so what it cost is divided back down.
-            val usd = open.shares * open.price / (open.adds + 1)
-            if (open.demo && bank < usd) continue
-            // And the ceiling is on the window, not on its first buy: three
-            // buys of a quarter each is three quarters of the account riding
-            // on five minutes, which is the thing the ceiling exists to stop.
-            if (overCap(open.windowStart, open.demo, usd)) {
-                note = "потолок окна"
-                continue
-            }
-
-            val market = engine.marketForWindow(open.windowStart) ?: continue
-            val size = ProbePlan.shares(usd, ask, market.minimumOrderSize)
-            val paid: Double
-            val more: Double
-
-            if (open.demo) {
-                paid = ProbePlan.takenPrice(ask)
-                more = size
-            } else {
-                val limit = minOf(
-                    ProbePlan.crossPrice(ask, market.tickSize),
-                    BuyCap.ceiling(BuyCap.elapsedFor(market.windowStart)),
-                )
-                val result = try {
-                    engine.placeManualOrder(
-                        tokenId = open.asset,
-                        conditionId = market.conditionId,
-                        side = "BUY",
-                        price = limit,
-                        size = size,
-                        orderType = "GTC",
-                        auto = true,
-                    )
-                } catch (e: Exception) {
-                    note = e.message ?: "ошибка сети"
-                    continue
-                }
-                if (!result.success) {
-                    note = result.error ?: "отказ CLOB"
-                    continue
-                }
-                val fill = Orders.filled("BUY", result.makingAmount, result.takingAmount)
-                if (fill.shares <= 1e-6) {
-                    result.orderId?.let { cancel(it) }
-                    continue
-                }
-                paid = if (fill.usd > 0.0) fill.usd / fill.shares else limit
-                // What the venue actually gave, which is rarely all of it.
-                more = fill.shares
-            }
-
-            val shares = open.shares + more
-            val price = (open.shares * open.price + more * paid) / shares
-            working = working.map {
-                if (it.windowStart == open.windowStart && it.leg == open.leg) {
-                    it.copy(shares = shares, price = price, adds = it.adds + 1)
-                } else {
-                    it
-                }
-            }
-            engine.log(
-                "trade",
-                "Проба" + (if (open.demo) " (демо)" else "") + ": докупила " +
-                    String.format("%.1f", more) + " ${open.side} по " +
-                    "${(paid * 100).toInt()}¢ — средняя ${(price * 100).toInt()}¢",
-            )
-            onStateChanged()
-        }
-    }
-
-    /**
      * Whether one more buy would put the window over its ceiling.
      *
      * Everything this window has spent already counts — the entry, its
@@ -1749,129 +1643,6 @@ class ProbeBot(
         val now = minutes.lastOrNull() ?: return false
         val typical = Levels.typicalRange(minutes.dropLast(1), 12)
         return ProbePlan.shocked(ProbePlan.againstBy(side, now.open, now.close), typical)
-    }
-
-    /**
-     * Buys back a side the ladder has just sold, when the price comes back.
-     *
-     * The rung filled because the market came to it, and a fifth off that
-     * price afterwards is the same side handed back cheaper than it was let
-     * go of — with the window still running and the read unchanged. It stops
-     * at forty-four cents, under which the side is no longer the favourite
-     * and this is a different trade rather than the same one repeated; it
-     * happens once per sale; and, like every top-up, never into a shock.
-     */
-    private fun buyBack(nowSec: Long) {
-        val elapsed = SellLadder.elapsedInWindow(nowSec)
-        val windowStart = nowSec - elapsed
-        val sold = rounds.lastOrNull {
-            it.windowStart == windowStart && modesOn().contains(it.demo) &&
-                !it.back && it.soldAt > 0.0 && it.shares > 0.0
-        } ?: return
-
-        // Only when that account's window is empty: a leg still open is the
-        // position, and adding to it is [addUp]'s business, not this one's.
-        // Per account, because the other one holding something says nothing
-        // about this one.
-        if (working.any { it.windowStart == windowStart && it.demo == sold.demo }) return
-
-        val ask = try {
-            ClobApi.bestAsk(sold.asset)
-        } catch (e: Exception) {
-            null
-        }
-        if (!ProbePlan.buysBack(elapsed, ask, sold.soldAt, sold.back)) return
-        if (ask == null) return
-        if (shockNow(sold.side)) {
-            note = "аномальная свеча — без откупа"
-            return
-        }
-
-        // The same money as the entry, once more.
-        val usd = sold.shares * sold.price / (sold.adds + 1)
-        if (sold.demo && bank < usd) return
-        if (overCap(windowStart, sold.demo, usd)) {
-            note = "потолок окна"
-            return
-        }
-
-        val market = engine.marketForWindow(windowStart) ?: return
-        val size = ProbePlan.shares(usd, ask, market.minimumOrderSize)
-        val paid: Double
-        val got: Double
-
-        if (sold.demo) {
-            paid = ProbePlan.takenPrice(ask)
-            got = size
-        } else {
-            val limit = minOf(
-                ProbePlan.crossPrice(ask, market.tickSize),
-                BuyCap.ceiling(BuyCap.elapsedFor(windowStart)),
-            )
-            val result = try {
-                engine.placeManualOrder(
-                    tokenId = sold.asset,
-                    conditionId = market.conditionId,
-                    side = "BUY",
-                    price = limit,
-                    size = size,
-                    orderType = "GTC",
-                    auto = true,
-                )
-            } catch (e: Exception) {
-                note = e.message ?: "ошибка сети"
-                return
-            }
-            if (!result.success) {
-                note = result.error ?: "отказ CLOB"
-                return
-            }
-            val fill = Orders.filled("BUY", result.makingAmount, result.takingAmount)
-            if (fill.shares <= 1e-6) {
-                result.orderId?.let { cancel(it) }
-                return
-            }
-            paid = if (fill.usd > 0.0) fill.usd / fill.shares else limit
-            got = fill.shares
-        }
-
-        // The sale is marked so the same rung cannot be bought back twice.
-        rounds = rounds.map {
-            if (it.windowStart == sold.windowStart && it.leg == sold.leg) {
-                it.copy(back = true)
-            } else {
-                it
-            }
-        }
-        store.saveRounds(rounds)
-
-        // A fresh leg: its own ladder, its own result, its own line in the
-        // history beside the sale it followed.
-        working = working + sold.copy(
-            leg = sold.leg + 1,
-            shares = got,
-            price = paid,
-            sold = 0.0,
-            proceeds = 0.0,
-            settled = 0.0,
-            winner = "",
-            note = null,
-            resting = 0.0,
-            adds = 0,
-            soldAt = 0.0,
-            back = false,
-            highWater = 0.0,
-            lowWater = 0.0,
-            rung = 0,
-        )
-        engine.log(
-            "trade",
-            "Проба" + (if (sold.demo) " (демо)" else "") + ": откупила " +
-                String.format("%.1f", got) + " ${sold.side} по " +
-                "${(paid * 100).toInt()}¢ — продавала по " +
-                "${(sold.soldAt * 100).toInt()}¢",
-        )
-        onStateChanged()
     }
 
     /**

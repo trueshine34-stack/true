@@ -132,7 +132,15 @@ object ProbePlan {
      */
     const val ROUND_STEP = 500.0
 
-    /** How close to one of them is too close, in dollars. Zero switches off. */
+    /**
+     * How close to one of them the card calls "on it", in dollars.
+     *
+     * It was a gate: a window opening within this of a round five hundred was
+     * refused. Nothing about the entry reads it now — the side is the line's
+     * and the only thing that stops it is a wick — so what is left is the
+     * tile on the card, which turns red when price is sitting on one. Zero
+     * switches the highlight off.
+     */
     const val DEFAULT_ROUND_BAND = 50.0
 
     /**
@@ -935,13 +943,6 @@ object ProbePlan {
         // buy into; a candle with none is one that closed where it reached.
         if (wicked(way, candleOpen, candleHigh, candleLow, candleClose)) {
             return "хвост " + (if (way == "Up") "вверх" else "вниз")
-        }
-
-        // And the round five hundreds — 88 000, 88 500, 89 000. The book
-        // stands on them whatever the chart says, and unlike a pivot they are
-        // not a reading of anything: they are simply where the orders are.
-        nearRound(price, settings.roundBand)?.let {
-            return "круглый " + Math.round(it)
         }
 
         if (ask == null || ask <= 0.0) return "нет цены"

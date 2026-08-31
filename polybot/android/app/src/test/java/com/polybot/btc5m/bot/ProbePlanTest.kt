@@ -164,20 +164,6 @@ class ProbePlanTest {
     }
 
     @Test
-    fun `the gate names the number it is standing off`() {
-        assertEquals(
-            "круглый 80500",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.5,
-                cashUsd = 100.0,
-                settings = on,
-                price = 80_480.0,
-            ),
-        )
-    }
-
-    @Test
     fun `away from the round numbers nothing is in the way`() {
         assertNull(
             ProbePlan.blockedBecause(
@@ -363,75 +349,6 @@ class ProbePlanTest {
     fun `an account that has lost money still stakes its base`() {
         assertEquals(0, ProbePlan.doublings(won = -40.0, start = 100.0))
         assertEquals(5.0, ProbePlan.stakeFor(5.0, won = -40.0, start = 100.0, streak = 0.0), 1e-9)
-    }
-
-    @Test
-    fun `a side that fell under forty-two is bought again`() {
-        assertTrue(ProbePlan.addsUp(elapsedSec = 30, ask = 0.41, adds = 0))
-        assertTrue(ProbePlan.addsUp(elapsedSec = 55, ask = 0.35, adds = 0))
-    }
-
-    @Test
-    fun `the second buy waits for thirty-three`() {
-        // Forty-one is the first rung's price, not the second's.
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.41, adds = 1))
-        assertTrue(ProbePlan.addsUp(elapsedSec = 30, ask = 0.32, adds = 1))
-    }
-
-    @Test
-    fun `a side that has not fallen that far is left alone`() {
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.42, adds = 0))
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.45, adds = 0))
-    }
-
-    @Test
-    fun `past the first minute a cheap side is late rather than cheap`() {
-        assertTrue(ProbePlan.addsUp(elapsedSec = 59, ask = 0.20, adds = 0))
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 61, ask = 0.20, adds = 0))
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 280, ask = 0.05, adds = 0))
-    }
-
-    @Test
-    fun `a window holds three buys and never a fourth`() {
-        // A rule that keeps doubling into a falling side loses the account on
-        // the day the read is simply wrong.
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.05, adds = 2))
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.05, adds = 9))
-    }
-
-    @Test
-    fun `without a price there is nothing to buy`() {
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = null, adds = 0))
-        assertTrue(!ProbePlan.addsUp(elapsedSec = 30, ask = 0.0, adds = 0))
-    }
-
-    /**
-     * The ladder sold at eighty; the market handed the same side back at
-     * sixty-four, which is a fifth off what it went for.
-     */
-    @Test
-    fun `a side is bought back a fifth under its own sale`() {
-        assertTrue(ProbePlan.buysBack(60, ask = 0.64, soldAt = 0.80, alreadyBack = false))
-        assertTrue(ProbePlan.buysBack(60, ask = 0.60, soldAt = 0.80, alreadyBack = false))
-        // A cent short of the drop is not the drop.
-        assertTrue(!ProbePlan.buysBack(60, ask = 0.65, soldAt = 0.80, alreadyBack = false))
-    }
-
-    @Test
-    fun `the buy-back stops at forty-four cents`() {
-        // Sold at ninety, so a fifth off is seventy-two — but by the time the
-        // price is here the side is no longer the favourite.
-        assertTrue(!ProbePlan.buysBack(60, ask = 0.43, soldAt = 0.90, alreadyBack = false))
-        assertTrue(ProbePlan.buysBack(60, ask = 0.44, soldAt = 0.90, alreadyBack = false))
-    }
-
-    @Test
-    fun `a sale is bought back once, and only while there is time`() {
-        assertTrue(!ProbePlan.buysBack(60, ask = 0.60, soldAt = 0.80, alreadyBack = true))
-        assertTrue(ProbePlan.buysBack(200, ask = 0.60, soldAt = 0.80, alreadyBack = false))
-        assertTrue(!ProbePlan.buysBack(250, ask = 0.60, soldAt = 0.80, alreadyBack = false))
-        // And a sale that never happened has no price to measure under.
-        assertTrue(!ProbePlan.buysBack(60, ask = 0.60, soldAt = 0.0, alreadyBack = false))
     }
 
     @Test
@@ -685,30 +602,6 @@ class ProbePlanTest {
         // The same candle bought downwards: the long tail is above, which is
         // the other direction having been refused.
         assertTrue(!ProbePlan.wicked("Down", open = 100.0, high = 140.0, low = 95.0, close = 110.0))
-    }
-
-    @Test
-    fun `the round five hundreds are the levels that are left`() {
-        assertEquals(
-            "круглый 88500",
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.50,
-                cashUsd = 100.0,
-                settings = on,
-                price = 88_470.0,
-            ),
-        )
-        // And a price in open ground between two of them is open ground.
-        assertNull(
-            ProbePlan.blockedBecause(
-                way = "Up",
-                ask = 0.50,
-                cashUsd = 100.0,
-                settings = on,
-                price = 88_240.0,
-            ),
-        )
     }
 
 }

@@ -365,9 +365,7 @@ class LadderIsTheOnlyExitTest {
             exit = rule,
         )
         assertEquals(
-            SellLadder.HALF_MINUTE[
-                SellLadder.stepFor(60, 0.88, SellLadder.HALF_MINUTE, stepSec = 60L),
-            ],
+            SellLadder.HALF_MINUTE[ProbePlan.exitStep(60, 0.88, 0, rule)],
             want,
             1e-9,
         )
@@ -391,9 +389,7 @@ class LadderIsTheOnlyExitTest {
             exit = rule,
         )
         assertEquals(
-            SellLadder.HALF_MINUTE[
-                SellLadder.stepFor(30, null, SellLadder.HALF_MINUTE, stepSec = 60L),
-            ],
+            SellLadder.HALF_MINUTE[ProbePlan.exitStep(30, 0.0, 0, rule)],
             want,
             1e-9,
         )
