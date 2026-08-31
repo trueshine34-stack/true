@@ -3088,6 +3088,32 @@ button.wide {
   stroke-width: 2.5px;
 }
 
+/*
+  The zone under the line: the prices the market actually turned at. Faint
+  enough to read as ground rather than as a candle, because it is behind
+  everything — but it is the edge of this band, not the line through its
+  middle, that the entry is measured to.
+*/
+.sband {
+  stroke: none;
+}
+
+.sband.resistance {
+  fill: rgba(255, 90, 106, 0.13);
+}
+
+.sband.support {
+  fill: rgba(35, 192, 123, 0.13);
+}
+
+.sband.ahead {
+  fill: rgba(255, 90, 106, 0.2);
+}
+
+.sband.support.ahead {
+  fill: rgba(35, 192, 123, 0.2);
+}
+
 .slevel.resistance {
   stroke: rgba(255, 90, 106, 0.5);
 }
@@ -3508,14 +3534,14 @@ button.wide {
 
 /* The dials, at two thirds the height. */
 /*
-  Four settings, one row. Three columns wrapped the fourth onto a line of its
-  own and left two thirds of it empty, which reads as a mistake rather than a
-  layout; four narrower boxes hold the numbers these fields actually take —
-  none of them is wider than three digits.
+  Every setting on one row. A column that wraps onto a line of its own and
+  leaves the rest of it empty reads as a mistake rather than as a layout, and
+  none of these numbers is wider than three or four digits — so the boxes get
+  narrow and the labels get short rather than the row getting taller.
 */
 .botfields {
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px 4px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px 3px;
   align-items: end;
   margin: 6px 0 4px;
 }
@@ -3529,8 +3555,8 @@ button.wide {
 }
 
 .botfields input {
-  padding: 6px 2px;
-  font-size: 13px;
+  padding: 6px 1px;
+  font-size: 12px;
   border-radius: 8px;
 }
 

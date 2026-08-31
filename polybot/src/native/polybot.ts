@@ -255,6 +255,13 @@ export interface PolyBotPlugin {
   takeUpdate(args: { enabled?: boolean; gain?: number }): Promise<void>;
   takeState(): Promise<TakeState>;
   probeUpdate(args: {
+    /**
+     * Whose dials these are. The two accounts keep their own stake, lead,
+     * room, round band and entry mode; the shared answers — whether the rule
+     * runs, which accounts are on, what the paper one started with — are
+     * written from either page.
+     */
+    real?: boolean;
     enabled?: boolean;
     stakeUsd?: number;
     leadSec?: number;
@@ -557,6 +564,13 @@ export type ProbeState = {
   inside: boolean;
   /** How far under fair value the ask has to be, in dollars a share. */
   edgeUsd: number;
+  /** The same six dials as the account trading real money has them. */
+  realStakeUsd?: number;
+  realLeadSec?: number;
+  realRoomShare?: number;
+  realRoundBand?: number;
+  realInside?: boolean;
+  realEdgeUsd?: number;
   /**
    * What the next window will actually stake — the base grown by every
    * doubling, plus what the winning run has added — and that addition alone.
@@ -738,6 +752,12 @@ const webStub: PolyBotPlugin = {
     bank: 100,
     inside: false,
     edgeUsd: 0.05,
+    realStakeUsd: 5,
+    realLeadSec: 45,
+    realRoomShare: 1,
+    realRoundBand: 50,
+    realInside: false,
+    realEdgeUsd: 0.05,
     stakeNow: 5,
     streak: 0,
     losing: false,

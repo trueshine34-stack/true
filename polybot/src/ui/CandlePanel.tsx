@@ -211,16 +211,38 @@ export function CandleFace({
           />
         )}
 
-        {levels.map((level) => (
-          <line
-            key={level.price}
-            className={`slevel ${level.kind}${level.price === ahead ? ' ahead' : ''}`}
-            x1="0"
-            x2={W}
-            y1={y(level.price).toFixed(1)}
-            y2={y(level.price).toFixed(1)}
-          />
-        ))}
+        {/*
+          A level is a zone rather than a line: the orders sit across the
+          prices the market actually turned at, and the rule measures the room
+          in front of an entry to the near edge of that band. So the band is
+          drawn, faintly, under its own line — a refusal at a price nobody can
+          see is a refusal nobody can check.
+        */}
+        {levels.map((level) => {
+          const top = y(Math.max(level.high, level.price));
+          const foot = y(Math.min(level.low, level.price));
+          const tall = Math.abs(foot - top);
+          return (
+            <g key={level.price}>
+              {tall >= 1.5 && (
+                <rect
+                  className={`sband ${level.kind}${level.price === ahead ? ' ahead' : ''}`}
+                  x="0"
+                  width={W}
+                  y={Math.min(top, foot).toFixed(1)}
+                  height={tall.toFixed(1)}
+                />
+              )}
+              <line
+                className={`slevel ${level.kind}${level.price === ahead ? ' ahead' : ''}`}
+                x1="0"
+                x2={W}
+                y1={y(level.price).toFixed(1)}
+                y2={y(level.price).toFixed(1)}
+              />
+            </g>
+          );
+        })}
 
         {/*
           A small mark over the candle the window opened on. It sits just above

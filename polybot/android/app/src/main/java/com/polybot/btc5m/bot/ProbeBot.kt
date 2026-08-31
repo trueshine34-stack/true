@@ -136,6 +136,36 @@ class ProbeBot(
     var settings: ProbePlan.Settings = store.loadSettings()
         private set
 
+    /**
+     * And the real account's own dial settings.
+     *
+     * The two accounts trade the same rule, but not necessarily on the same
+     * terms: the point of running paper alongside real money is to try
+     * something on the paper one — a longer lead, more room, a bigger stake —
+     * while the wallet keeps doing what already works. Only the tunables are
+     * split. Whether the rule runs at all, which accounts are on, and what
+     * the paper account started with are one answer for the desk, not two.
+     */
+    @Volatile
+    var realRules: ProbePlan.Settings = store.loadSettings(real = true)
+        private set
+
+    /**
+     * The settings one account trades by: its own dials, and the desk's
+     * answer for everything that is not a dial.
+     */
+    fun rules(demo: Boolean): ProbePlan.Settings =
+        if (demo) {
+            settings
+        } else {
+            realRules.copy(
+                enabled = settings.enabled,
+                demo = settings.demo,
+                live = settings.live,
+                bankUsd = settings.bankUsd,
+            )
+        }
+
     @Volatile
     var running: Boolean = false
         private set
@@ -270,7 +300,7 @@ class ProbeBot(
      * account has doubled, plus whatever the winning run has added.
      */
     fun stakeNow(demo: Boolean): Double =
-        ProbePlan.stakeFor(settings.stakeUsd, won(demo), settings.bankUsd, streakOf(demo), held(demo))
+        ProbePlan.stakeFor(rules(demo).stakeUsd, won(demo), settings.bankUsd, streakOf(demo), held(demo))
 
     /** Set while the window still running is already showing a loss. */
     @Volatile
@@ -305,7 +335,7 @@ class ProbeBot(
 
     /** What the next window will stake, the open window's state included. */
     fun stakeLive(demo: Boolean): Double =
-        ProbePlan.stakeFor(settings.stakeUsd, won(demo), settings.bankUsd, ridingOf(demo), held(demo))
+        ProbePlan.stakeFor(rules(demo).stakeUsd, won(demo), settings.bankUsd, ridingOf(demo), held(demo))
 
     /** The account the run is a quarter of: the paper purse, or the wallet. */
     private fun held(demo: Boolean): Double = if (demo) bank else wallet
@@ -424,7 +454,13 @@ class ProbeBot(
 
     }
 
-    fun update(next: ProbePlan.Settings) {
+    fun update(next: ProbePlan.Settings, real: Boolean = false) {
+        if (real) {
+            realRules = next
+            store.saveSettings(next, real = true)
+            onStateChanged()
+            return
+        }
         settings = next
         store.saveSettings(next)
         when {
@@ -574,23 +610,40 @@ class ProbeBot(
             return
         }
 
+        // Which entry each account is running. They need not agree — trying
+        // the price entry on paper while the wallet keeps to the line is most
+        // of the reason the two have separate dials at all.
+        val insiders = modesOn().filter { rules(it).inside }
+        val liners = modesOn().filter { !rules(it).inside }
+
         // Watching from inside replaces the guess made before the open. The
         // side is not picked ahead of time at all: the window is left to show
         // its hand, and whichever side the book is then asking too little for
         // is the one that gets bought.
-        if (settings.inside) {
+        if (insiders.isNotEmpty()) {
             if (windowStart != aiming) {
                 giveUp(nowSec)
                 aiming = windowStart
                 aimSide = ""
             }
-            inside(nowSec)
-            aimNote = note
+            inside(nowSec, insiders)
+            if (liners.isEmpty()) {
+                aimNote = note
+                onStateChanged()
+                return
+            }
+        }
+
+        if (liners.isEmpty()) {
+            note = if (modesOn().isEmpty()) "счета выключены" else note
             onStateChanged()
             return
         }
 
-        val target = ProbePlan.targetWindow(windowStart, elapsed, settings, WINDOW_SEC)
+        // The window is aimed at from the longest lead any of them wants, and
+        // each account then waits for its own before it buys.
+        val aim = settings.copy(leadSec = liners.maxOf { rules(it).leadSec })
+        val target = ProbePlan.targetWindow(windowStart, elapsed, aim, WINDOW_SEC)
         // A chance that has come and gone is filed with the reason it did, so
         // "why did it not trade that one" is a question the report answers.
         if (target != aiming) {
@@ -599,17 +652,17 @@ class ProbeBot(
             aimSide = ""
         }
         if (target == null) {
-            note = "жду открытия: " + (secondsLeft - settings.leadSec) + " с"
+            note = "жду открытия: " + (secondsLeft - aim.leadSec) + " с"
             onStateChanged()
             return
         }
-        if (modesOn().all { traded(target, it) }) {
+        if (liners.all { traded(target, it) }) {
             note = "окно уже отыграно"
             onStateChanged()
             return
         }
 
-        enter(target)
+        enter(target, liners)
         aimNote = note
         onStateChanged()
     }
@@ -733,7 +786,9 @@ class ProbeBot(
         val bottom = fives.filter { it.low > 0.0 }.minOfOrNull { it.low }
 
         val shelf = merge(
-            walls(here).map { ProbePlan.Wall(it.price, it.touches, round = false) } +
+            walls(here).map {
+                ProbePlan.Wall(it.price, it.touches, round = false, low = it.low, high = it.high)
+            } +
                 listOfNotNull(
                     roundAbove(here)?.let { ProbePlan.Wall(it, 0, round = true) },
                     roundBelow(here)?.let { ProbePlan.Wall(it, 0, round = true) },
@@ -797,8 +852,8 @@ class ProbeBot(
      * particular window happens to end, which is the whole difference between
      * an edge and a hunch.
      */
-    private fun inside(nowSec: Long) {
-        if (!settings.inside) return
+    private fun inside(nowSec: Long, accounts: List<Boolean>) {
+        if (accounts.isEmpty()) return
 
         val elapsed = SellLadder.elapsedInWindow(nowSec)
         val windowStart = nowSec - elapsed
@@ -833,7 +888,7 @@ class ProbeBot(
                 null
             } ?: continue
             val edge = ProbePlan.edgeOn(fair, ask)
-            if (!ProbePlan.worthTaking(fair, ask, elapsed, left, settings.edgeUsd)) continue
+            if (!ProbePlan.worthTaking(fair, ask, elapsed, left, accounts.minOf { rules(it).edgeUsd })) continue
             if (best == null || edge > best.third) best = Triple(way, ask, edge)
         }
 
@@ -843,8 +898,9 @@ class ProbeBot(
         }
 
         val fair = FairValue.chance(way, moved, typical, left, WINDOW_SEC)
-        for (demo in modesOn()) {
+        for (demo in accounts) {
             if (traded(windowStart, demo)) continue
+            if (!ProbePlan.worthTaking(fair, ask, elapsed, left, rules(demo).edgeUsd)) continue
             takeUnderpriced(windowStart, demo, market, way, ask, edge, fair, moved, typical, opened, here, elapsed, left)
         }
     }
@@ -956,13 +1012,22 @@ class ProbeBot(
         // whose money it is, what that account can afford, and — for the real
         // one — whether the venue fills the order at all. That last one is
         // why the two histories are worth having side by side.
-        for (demo in modesOn()) {
+        enter(windowStart, modesOn())
+    }
+
+    private fun enter(windowStart: Long, accounts: List<Boolean>) {
+        for (demo in accounts) {
             if (traded(windowStart, demo)) continue
             enter(windowStart, demo)
         }
     }
 
     private fun enter(windowStart: Long, demo: Boolean) {
+        // Each account waits for its own lead. The window was aimed at from
+        // the longest one any of them wanted, so the shorter lead simply has
+        // not come round yet.
+        val mine = rules(demo)
+        if (windowStart - Clock.nowSec() > mine.leadSec) return
         val line = trend
 
         val market = engine.marketForWindow(windowStart)
@@ -993,8 +1058,14 @@ class ProbeBot(
 
         // And the wall this side is heading into, which for a bounce is the
         // one across the room rather than the one just left behind.
+        //
+        // Its near edge, not its middle. A level is a zone — the prices the
+        // market actually turned at — and resistance begins at the first of
+        // them. Measuring to the middle counted half the zone as clear air,
+        // which is how a side got bought into a shelf it had been failing at
+        // for two hours.
         val aheadWall = if (way == "Up") above else below
-        val ahead = aheadWall?.price
+        val ahead = aheadWall?.facing(way)
 
         val token = if (way == "Up") market.up.tokenId else market.down.tokenId
         val ask = try {
@@ -1038,7 +1109,7 @@ class ProbeBot(
             way = way,
             ask = ask,
             cashUsd = staking,
-            settings = settings,
+            settings = mine,
             price = here,
             level = ahead,
             candleOpen = closing?.open ?: 0.0,
@@ -1076,12 +1147,12 @@ class ProbeBot(
         // Now the account is known, so the run's ceiling is too — and it is
         // this window's, not the last one's.
         if (!demo) wallet = cash
-        val stake = ProbePlan.capped(staking, settings.stakeUsd, cash)
+        val stake = ProbePlan.capped(staking, mine.stakeUsd, cash)
         val blocked = ProbePlan.blockedBecause(
             way = way,
             ask = ask,
             cashUsd = cash,
-            settings = settings,
+            settings = mine,
             price = here,
             level = ahead,
             candleOpen = closing?.open ?: 0.0,
@@ -1269,6 +1340,15 @@ class ProbeBot(
         val wall = { w: ProbePlan.Wall? ->
             w?.let {
                 Math.round(it.price).toString() +
+                    // The band, when the turns that made it actually cover
+                    // one: the room in front is measured to its near edge.
+                    (
+                        if (it.high - it.low >= 1.0) {
+                            " (" + Math.round(it.low) + "–" + Math.round(it.high) + ")"
+                        } else {
+                            ""
+                        }
+                        ) +
                     (
                         when {
                             it.round -> " (круглый)"
@@ -1293,7 +1373,7 @@ class ProbeBot(
         // setting or the floor under it — and half again when the wall ahead
         // is the edge of the range.
         val aheadWall = if (pick.side == "Up") above else below
-        val need = ProbePlan.roomNeeded(settings.roomShare, aheadWall?.edge == true)
+        val need = ProbePlan.roomNeeded(rules(demo).roomShare, aheadWall?.edge == true)
 
         // The side comes first, because every line under it is evidence for
         // or against that one word — and a window that was skipped keeps this
@@ -1315,7 +1395,7 @@ class ProbeBot(
             "обычный ход 5м: " + Math.round(typical) + "$",
             "нужен запас: " + Math.round(typical * need) + "$" +
                 " (" + Math.round(need * 100) + "% хода" +
-                (if (need > settings.roomShare + 1e-9) ", минимум" else "") + ")",
+                (if (need > rules(demo).roomShare + 1e-9) ", минимум" else "") + ")",
             "хвост свечи: " + (
                 closing?.let {
                     val range = it.high - it.low
@@ -1598,7 +1678,7 @@ class ProbeBot(
      * a limit on what rides on five minutes, not on any single order.
      */
     private fun overCap(windowStart: Long, demo: Boolean, more: Double): Boolean {
-        val cap = ProbePlan.windowCap(settings.stakeUsd, held(demo))
+        val cap = ProbePlan.windowCap(rules(demo).stakeUsd, held(demo))
         val already =
             working.filter { it.windowStart == windowStart && it.demo == demo }.sumOf { it.cost } +
                 rounds.filter { it.windowStart == windowStart && it.demo == demo }.sumOf { it.cost }
@@ -2241,6 +2321,11 @@ class ProbeBot(
                     touches = maxOf(last.touches, wall.touches),
                     round = last.round || wall.round,
                     edge = last.edge || wall.edge,
+                    // Two walls near enough to be one are one zone, and it
+                    // spans both of them — otherwise merging quietly threw
+                    // away the half of the band that was further out.
+                    low = minOf(last.low, wall.low),
+                    high = maxOf(last.high, wall.high),
                 )
             } else {
                 out.add(wall)
@@ -2315,7 +2400,15 @@ class ProbeBot(
             // that in fact needed seventy-eight. The tile does not know
             // whether the wall ahead is the edge of the range, so it quotes
             // the ordinary requirement; an edge asks for half again more.
-            ?.let { it * ProbePlan.roomNeeded(settings.roomShare, levelEdge = false) }
+            // One tile, two accounts: it quotes the strictest requirement in
+            // play, so the number on the card never claims an entry has room
+            // that one of them will refuse.
+            ?.let { typical ->
+                val need = modesOn()
+                    .maxOfOrNull { ProbePlan.roomNeeded(rules(it).roomShare, levelEdge = false) }
+                    ?: ProbePlan.roomNeeded(settings.roomShare, levelEdge = false)
+                typical * need
+            }
 
     }
 

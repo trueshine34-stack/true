@@ -1379,19 +1379,19 @@ class ProbePlanTest {
      * before the window is half over is not a matter of preference.
      */
     @Test
-    fun `the room setting cannot be turned below half a move`() {
-        assertEquals(0.5, ProbePlan.roomNeeded(0.15, levelEdge = false), 1e-9)
-        assertEquals(0.5, ProbePlan.roomNeeded(0.0, levelEdge = false), 1e-9)
+    fun `the room setting cannot be turned below a whole move`() {
+        assertEquals(1.0, ProbePlan.roomNeeded(0.15, levelEdge = false), 1e-9)
+        assertEquals(1.0, ProbePlan.roomNeeded(0.0, levelEdge = false), 1e-9)
         // A setting above the floor is honoured as it stands.
-        assertEquals(1.0, ProbePlan.roomNeeded(1.0, levelEdge = false), 1e-9)
+        assertEquals(2.0, ProbePlan.roomNeeded(2.0, levelEdge = false), 1e-9)
         // And the edge of the range still asks half again on top of whichever.
-        assertEquals(0.75, ProbePlan.roomNeeded(0.15, levelEdge = true), 1e-9)
-        assertEquals(1.5, ProbePlan.roomNeeded(1.0, levelEdge = true), 1e-9)
+        assertEquals(1.5, ProbePlan.roomNeeded(0.15, levelEdge = true), 1e-9)
+        assertEquals(3.0, ProbePlan.roomNeeded(2.0, levelEdge = true), 1e-9)
     }
 
     @Test
     fun `forty-seven dollars of room is refused on a hundred and fifty-seven`() {
-        // The floor is seventy-eight, and the wall is at forty-seven.
+        // The floor is a whole typical move, and the wall is at forty-seven.
         assertEquals(
             "у уровня 78000",
             ProbePlan.blockedBecause(
@@ -1405,14 +1405,14 @@ class ProbePlanTest {
                 byLine = false,
             ),
         )
-        // Twice as far away and the same window is open ground.
+        // A whole typical move away and the same window is open ground.
         assertNull(
             ProbePlan.blockedBecause(
                 way = "Up",
                 ask = 0.51,
                 cashUsd = 100.0,
                 settings = on.copy(roomShare = 0.15, roundBand = 0.0),
-                price = 77_860.0,
+                price = 77_840.0,
                 level = 78_000.0,
                 typical = 157.0,
                 byLine = false,
@@ -1481,6 +1481,63 @@ class ProbePlanTest {
         assertTrue(!ProbePlan.atWall("Up", 77_995.0, 78_000.0, 0.0, 0.62, 0.50))
         assertTrue(!ProbePlan.atWall("Up", 77_995.0, 78_000.0, 157.0, null, 0.50))
         assertTrue(!ProbePlan.atWall("", 77_995.0, 78_000.0, 157.0, 0.62, 0.50))
+    }
+
+    /**
+     * The 10:30 entry bought Up into a shelf the market had been failing at
+     * for two hours. The room was measured to the middle of that shelf, so
+     * half the zone counted as clear air.
+     */
+    @Test
+    fun `the room in front is measured to where the zone starts`() {
+        // Turns at 77 740, 77 757 and 77 774: one wall, seventeen dollars
+        // wide, whose middle is 77 757 and whose near side is 77 740.
+        val wall = ProbePlan.Wall(
+            price = 77_757.0,
+            touches = 3,
+            round = false,
+            low = 77_740.0,
+            high = 77_774.0,
+        )
+        assertEquals(77_740.0, wall.facing("Up"), 1e-9)
+        assertEquals(77_774.0, wall.facing("Down"), 1e-9)
+
+        // Price at 77 690 with a typical move of sixty. To the middle it is
+        // sixty-seven dollars, which clears a floor of sixty; to the near
+        // edge it is fifty, which does not.
+        assertNull(
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.47,
+                cashUsd = 100.0,
+                settings = on.copy(roundBand = 0.0),
+                price = 77_690.0,
+                level = wall.price,
+                typical = 60.0,
+                byLine = true,
+            ),
+        )
+        assertEquals(
+            "у уровня 77740",
+            ProbePlan.blockedBecause(
+                way = "Up",
+                ask = 0.47,
+                cashUsd = 100.0,
+                settings = on.copy(roundBand = 0.0),
+                price = 77_690.0,
+                level = wall.facing("Up"),
+                typical = 60.0,
+                byLine = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `a wall with no band behaves exactly as a line`() {
+        // A round number and a range edge have no turns to span.
+        val round = ProbePlan.Wall(78_000.0, 0, round = true)
+        assertEquals(78_000.0, round.facing("Up"), 1e-9)
+        assertEquals(78_000.0, round.facing("Down"), 1e-9)
     }
 
 }

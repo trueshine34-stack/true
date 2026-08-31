@@ -1234,30 +1234,30 @@ export function Manual({
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
-          onStake={(usdAmount) => {
+          onStake={(usdAmount, real) => {
             if (!Number.isFinite(usdAmount) || usdAmount <= 0) return;
-            void PolyBot.probeUpdate({ stakeUsd: usdAmount })
+            void PolyBot.probeUpdate({ stakeUsd: usdAmount, real })
               .then(() => PolyBot.probeState())
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
-          onLead={(sec) => {
+          onLead={(sec, real) => {
             if (!Number.isFinite(sec) || sec <= 0) return;
-            void PolyBot.probeUpdate({ leadSec: Math.round(sec) })
+            void PolyBot.probeUpdate({ leadSec: Math.round(sec), real })
               .then(() => PolyBot.probeState())
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
-          onRoom={(share) => {
+          onRoom={(share, real) => {
             if (!Number.isFinite(share) || share < 0) return;
-            void PolyBot.probeUpdate({ roomShare: share })
+            void PolyBot.probeUpdate({ roomShare: share, real })
               .then(() => PolyBot.probeState())
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
-          onRound={(band) => {
+          onRound={(band, real) => {
             if (!Number.isFinite(band) || band < 0) return;
-            void PolyBot.probeUpdate({ roundBand: band })
+            void PolyBot.probeUpdate({ roundBand: band, real })
               .then(() => PolyBot.probeState())
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
@@ -1281,15 +1281,15 @@ export function Manual({
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
-          onInside={(inside) => {
-            void PolyBot.probeUpdate({ inside })
+          onInside={(inside, real) => {
+            void PolyBot.probeUpdate({ inside, real })
               .then(() => PolyBot.probeState())
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
-          onEdge={(edgeUsd) => {
+          onEdge={(edgeUsd, real) => {
             if (!Number.isFinite(edgeUsd) || edgeUsd <= 0) return;
-            void PolyBot.probeUpdate({ edgeUsd })
+            void PolyBot.probeUpdate({ edgeUsd, real })
               .then(() => PolyBot.probeState())
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
@@ -2309,15 +2309,15 @@ function ProbeCard({
 }: {
   state: ProbeState;
   onEnable: (enabled: boolean) => void;
-  onStake: (usd: number) => void;
-  onLead: (sec: number) => void;
-  onRoom: (share: number) => void;
-  onRound: (band: number) => void;
+  onStake: (usd: number, real: boolean) => void;
+  onLead: (sec: number, real: boolean) => void;
+  onRoom: (share: number, real: boolean) => void;
+  onRound: (band: number, real: boolean) => void;
   onDemo: (demo: boolean) => void;
   onLive: (live: boolean) => void;
   onBank: (usd: number) => void;
-  onInside: (inside: boolean) => void;
-  onEdge: (usd: number) => void;
+  onInside: (inside: boolean, real: boolean) => void;
+  onEdge: (usd: number, real: boolean) => void;
   onReset: () => void;
 }) {
   const [why, setWhy] = useState(false);
@@ -2325,12 +2325,22 @@ function ProbeCard({
   // opens on the one that is actually trading, and falls back to paper.
   const [showLive, setShowLive] = useState(state.live && !state.demo);
   const both = state.demo && state.live;
-  // With one account on there is nothing to choose, and the picker would be
-  // a control that does nothing.
-  const seen = both ? showLive : state.live;
+  // The picker chooses whose settings are on screen as well as whose record,
+  // and the two accounts keep their own dials — so it is worth having even
+  // when only one of them is trading.
+  const seen = showLive;
   const shown = both
     ? state.rounds.filter((r) => r.demo !== seen)
     : state.rounds;
+  // Every dial belongs to the account being looked at.
+  const dial = {
+    stakeUsd: seen ? (state.realStakeUsd ?? state.stakeUsd) : state.stakeUsd,
+    leadSec: seen ? (state.realLeadSec ?? state.leadSec) : state.leadSec,
+    roomShare: seen ? (state.realRoomShare ?? state.roomShare) : state.roomShare,
+    roundBand: seen ? (state.realRoundBand ?? state.roundBand) : state.roundBand,
+    inside: seen ? (state.realInside ?? false) : state.inside,
+    edgeUsd: seen ? (state.realEdgeUsd ?? state.edgeUsd) : state.edgeUsd,
+  };
   const all = summarise(shown);
   const sides = bySide(shown);
   const purse = seen ? (state.wallet ?? 0) : state.bank;
@@ -2384,7 +2394,9 @@ function ProbeCard({
           ? 'Оба счёта сразу. Одно и то же правило, те же окна и тот же стакан, ' +
             'но деньги разные: бумажный счёт берёт предложение всегда, а на ' +
             'реальном ещё должна налиться заявка — вся разница между двумя ' +
-            'историями в этом. Переключатель выше выбирает, чья история ниже. '
+            'историями в этом. Настройки у счетов свои: переключатель выше ' +
+            'выбирает, чьи ставка, запас и режим входа показаны, и чья ' +
+            'история ниже. '
           : state.demo
             ? 'На бумаге: читает тот же живой стакан, берёт те же предложения по тем же ценам, платит ту же комиссию и выходит по тем же ступеням — только деньги ненастоящие и на биржу ничего не уходит. '
             : state.live
@@ -2420,7 +2432,7 @@ function ProbeCard({
             'Если сторона в первую минуту упала ниже 42¢, а потом ниже 33¢, ' +
               'докупает её на ту же сумму — три покупки на окно и не больше; ' +
               'в аномально большую свечу не докупает вовсе. '}
-          За {state.leadSec} с до начала пятиминутки берёт {usd(state.stakeUsd)}{' '}
+          За {dial.leadSec} с до начала пятиминутки берёт {usd(dial.stakeUsd)}{' '}
           той стороны, куда показывает линия тренда на минутном графике — по
           рынку, если сторона не дороже 54¢, иначе оставляет заявку по 54¢ и
           ждёт минуту; не налили — снимает её, чтобы деньги не висели до конца
@@ -2438,13 +2450,14 @@ function ProbeCard({
           теле, почти не сдвинувшемся: следующие пять минут просят повторить
           то, на чём предыдущие только что споткнулись. Не входит, если до
           стены впереди осталось меньше{' '}
-          {Math.round(Math.max(state.roomShare, 0.5) * 100)}% обычного хода
-          пятиминутки — тренд, упирающийся в стену, кончается на ней. Половину
-          хода требует всегда, даже если настройка стоит ниже: стена ближе
-          половины окна берётся раньше, чем окно проходит половину, и остаток
-          позиция стоит в неё. У края диапазона просит ещё в полтора раза
-          больше. Не входит, когда окно открывается ближе{' '}
-          {Math.round(state.roundBand)}$ к круглым пятистам — 80 000, 80 500,
+          {Math.round(Math.max(dial.roomShare, 1) * 100)}% обычного хода
+          пятиминутки — тренд, упирающийся в стену, кончается на ней. Уровень
+          при этом считается зоной, а не линией: запас меряется до её ближнего
+          края — до первой цены, на которой разворачивались, а не до середины
+          полосы. Целый ход требует всегда, даже если настройка стоит ниже; у
+          края диапазона просит ещё в полтора раза больше. Не входит, когда
+          окно открывается ближе{' '}
+          {Math.round(dial.roundBand)}$ к круглым пятистам — 80 000, 80 500,
           81 000: стакан там стоит всегда, что бы ни говорил график. Отбою это
           прощается только для того круглого, от которого он оттолкнулся; если
           круглый впереди по ходу сделки — не входит и отбой.{' '}
@@ -2570,22 +2583,20 @@ function ProbeCard({
         the run, the totals and every window in the list. With one account
         running there is nothing to pick and the tabs stay out of the way.
       */}
-      {both && (
-        <div className="botbar accounts">
-          <button
-            className={`demoflag${!seen ? ' on' : ''}`}
-            onClick={() => setShowLive(false)}
-          >
-            счёт: демо
-          </button>
-          <button
-            className={`demoflag real${seen ? ' on' : ''}`}
-            onClick={() => setShowLive(true)}
-          >
-            счёт: реально
-          </button>
-        </div>
-      )}
+      <div className="botbar accounts">
+        <button
+          className={`demoflag${!seen ? ' on' : ''}`}
+          onClick={() => setShowLive(false)}
+        >
+          счёт: демо
+        </button>
+        <button
+          className={`demoflag real${seen ? ' on' : ''}`}
+          onClick={() => setShowLive(true)}
+        >
+          счёт: реально
+        </button>
+      </div>
 
       <div className="botbar">
         {seen ? (
@@ -2618,13 +2629,13 @@ function ProbeCard({
       */}
       <div className="botbar">
         <button
-          className={`demoflag${state.inside ? ' on' : ''}`}
-          onClick={() => onInside(!state.inside)}
+          className={`demoflag${dial.inside ? ' on' : ''}`}
+          onClick={() => onInside(!dial.inside, seen)}
         >
-          {state.inside ? 'по цене' : 'по линии'}
+          {dial.inside ? 'по цене' : 'по линии'}
         </button>
         <b className="muted small">
-          {state.inside
+          {dial.inside
             ? 'ждёт внутри окна и берёт недооценённую сторону'
             : 'выбирает сторону до открытия по графику'}
         </b>
@@ -2632,38 +2643,40 @@ function ProbeCard({
 
       <div className="fields botfields">
         <NumField
-          label="ставка, $"
-          value={state.stakeUsd}
-          onCommit={(n) => onStake(n)}
+          label="ставка $"
+          value={dial.stakeUsd}
+          onCommit={(n) => onStake(n, seen)}
         />
-        {state.inside ? (
+        {dial.inside ? (
           <NumField
-            label="запас к справедливой, ¢"
-            value={Math.round(state.edgeUsd * 100)}
-            onCommit={(n) => onEdge(n / 100)}
+            label="запас ¢"
+            value={Math.round(dial.edgeUsd * 100)}
+            onCommit={(n) => onEdge(n / 100, seen)}
           />
         ) : (
           <>
             <NumField
-              label="за сколько, с"
-              value={state.leadSec}
-              onCommit={(n) => onLead(n)}
+              label="за скол. с"
+              value={dial.leadSec}
+              onCommit={(n) => onLead(n, seen)}
             />
             <NumField
-              label="запас до уровня, %"
-              value={Math.round(state.roomShare * 100)}
-              onCommit={(n) => onRoom(n / 100)}
+              label="запас %"
+              value={Math.round(dial.roomShare * 100)}
+              onCommit={(n) => onRoom(n / 100, seen)}
             />
             <NumField
-              label="у круглых, $"
-              value={Math.round(state.roundBand)}
-              onCommit={(n) => onRound(n)}
+              label="круглые $"
+              value={Math.round(dial.roundBand)}
+              onCommit={(n) => onRound(n, seen)}
             />
           </>
         )}
-        {state.demo && (
+        {/* The paper account's opening balance is the desk's one answer, not
+            a dial, so it shows on the paper page only. */}
+        {state.demo && !seen && (
           <NumField
-            label="тестовый счёт, $"
+            label="счёт $"
             value={state.bankUsd}
             onCommit={(n) => onBank(n)}
           />

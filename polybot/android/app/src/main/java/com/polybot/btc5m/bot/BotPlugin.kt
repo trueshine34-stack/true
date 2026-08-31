@@ -1445,9 +1445,14 @@ class BotPlugin : Plugin() {
 
     @PluginMethod
     fun probeUpdate(call: PluginCall) {
-        val d = probeBot.settings
+        // Which account's dials are being turned. The desk's own answers —
+        // whether the rule runs, which accounts are on, what the paper one
+        // started with — are written from either, since they are shared.
+        val real = call.getBoolean("real") ?: false
+        val d = if (real) probeBot.realRules else probeBot.settings
         probeBot.update(
-            d.copy(
+            real = real,
+            next = d.copy(
                 enabled = call.getBoolean("enabled") ?: d.enabled,
                 stakeUsd = call.getDouble("stakeUsd") ?: d.stakeUsd,
                 leadSec = call.getInt("leadSec")?.toLong() ?: d.leadSec,
@@ -1460,6 +1465,18 @@ class BotPlugin : Plugin() {
                 edgeUsd = call.getDouble("edgeUsd") ?: d.edgeUsd,
             ),
         )
+        // A shared flag typed on the real account's page still belongs to the
+        // desk, so it is written through to where the desk keeps it.
+        if (real) {
+            probeBot.update(
+                probeBot.settings.copy(
+                    enabled = call.getBoolean("enabled") ?: probeBot.settings.enabled,
+                    demo = call.getBoolean("demo") ?: probeBot.settings.demo,
+                    live = call.getBoolean("live") ?: probeBot.settings.live,
+                    bankUsd = call.getDouble("bankUsd") ?: probeBot.settings.bankUsd,
+                ),
+            )
+        }
         // The entry lands ten seconds before a window opens, which is usually
         // with the screen off. Without the service there is nothing awake to
         // place it.
@@ -1532,6 +1549,13 @@ class BotPlugin : Plugin() {
                 .put("leadSec", bot.settings.leadSec)
                 .put("roomShare", bot.settings.roomShare)
                 .put("roundBand", bot.settings.roundBand)
+                // And the real account's own set, which need not match.
+                .put("realStakeUsd", bot.realRules.stakeUsd)
+                .put("realLeadSec", bot.realRules.leadSec)
+                .put("realRoomShare", bot.realRules.roomShare)
+                .put("realRoundBand", bot.realRules.roundBand)
+                .put("realInside", bot.realRules.inside)
+                .put("realEdgeUsd", bot.realRules.edgeUsd)
                 .put("candleBody", bot.candleBody)
                 .put("minuteBody", bot.minuteBody)
                 .put("chose", bot.chose)

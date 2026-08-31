@@ -20,6 +20,17 @@ export interface Level {
   /** How many turns happened here. Two is a level; five is a wall. */
   touches: number;
   kind: 'support' | 'resistance';
+  /**
+   * The band the turns actually cover — a level is a zone, not a line.
+   *
+   * The orders that made it are spread over the prices the market turned at,
+   * and it begins at the first of them rather than at their average. The rule
+   * measures the room in front of an entry to the near edge, so the chart
+   * shades the whole band: refusing at a price nobody can see is a refusal
+   * nobody can check.
+   */
+  low: number;
+  high: number;
 }
 
 /** A turn is the extreme of this many candles either side of it. */
@@ -74,6 +85,8 @@ interface Cluster {
   price: number;
   touches: number;
   strength: number;
+  low: number;
+  high: number;
 }
 
 export function findLevels(
@@ -109,6 +122,8 @@ export function findLevels(
     touches: g.length,
     strength:
       g.length + (FRESHNESS * Math.max(...g.map((t) => t.at))) / span,
+    low: Math.min(...g.map((t) => t.price)),
+    high: Math.max(...g.map((t) => t.price)),
   }));
 
   const nearest = (side: Cluster[]) =>
@@ -147,9 +162,11 @@ export function findLevels(
   }
 
   return chosen
-    .map(({ price, touches }) => ({
+    .map(({ price, touches, low, high }) => ({
       price,
       touches,
+      low,
+      high,
       kind: (price > last ? 'resistance' : 'support') as Level['kind'],
     }))
     .sort((a, b) => b.price - a.price);

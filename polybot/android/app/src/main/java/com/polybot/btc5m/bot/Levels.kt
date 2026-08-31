@@ -43,7 +43,27 @@ object Levels {
         val touches: Int,
         /** Named by where price is now, not by which kind of turn made it. */
         val kind: String,
-    )
+        /**
+         * The band the turns actually cover — a level is a zone, not a line.
+         *
+         * The orders that made it are spread over the prices the market
+         * turned at, and resistance begins at the first of them rather than
+         * at their average. Measuring room to the average lets a trade start
+         * inside the zone and call it clear air, which is how a side was
+         * bought with the shelf it had failed at all morning a few dollars
+         * overhead. Both default to [price], so a single-price level is a
+         * band of zero width and behaves exactly as a line.
+         */
+        val low: Double = price,
+        val high: Double = price,
+    ) {
+        /**
+         * Where this zone starts for a trade going [way] — the edge it will
+         * reach first, which is the bottom of the band for a rally and the
+         * top of it for a fall.
+         */
+        fun facing(way: String): Double = if (way == "Up") low else high
+    }
 
     private data class Turn(val price: Double, val at: Int)
 
@@ -51,6 +71,8 @@ object Levels {
         val price: Double,
         val touches: Int,
         val strength: Double,
+        val low: Double,
+        val high: Double,
     )
 
     private fun pivots(candles: List<BinanceCandles.Candle>): List<Turn> {
@@ -119,6 +141,8 @@ object Levels {
                 price = g.sumOf { it.price } / g.size,
                 touches = g.size,
                 strength = g.size + FRESHNESS * (g.maxOf { it.at }.toDouble() / span),
+                low = g.minOf { it.price },
+                high = g.maxOf { it.price },
             )
         } to near
     }
@@ -157,6 +181,8 @@ object Levels {
                     price = it.price,
                     touches = it.touches,
                     kind = if (it.price > last) "resistance" else "support",
+                    low = it.low,
+                    high = it.high,
                 )
             }
             .sortedByDescending { it.price }
@@ -205,6 +231,8 @@ object Levels {
                     price = it.price,
                     touches = it.touches,
                     kind = if (it.price > last) "resistance" else "support",
+                    low = it.low,
+                    high = it.high,
                 )
             }
             .sortedByDescending { it.price }

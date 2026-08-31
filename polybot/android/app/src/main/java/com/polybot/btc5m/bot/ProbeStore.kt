@@ -20,40 +20,59 @@ class ProbeStore(context: Context) {
         const val MAX_ROUNDS = 200
     }
 
-    fun loadSettings(): ProbePlan.Settings = ProbePlan.Settings(
+    /**
+     * The dials, per account.
+     *
+     * The paper account keeps the original keys, so a desk that has been
+     * running keeps its settings; the real one is stored beside it under its
+     * own prefix and starts as a copy, so splitting the two changes nothing
+     * about how the wallet was already trading.
+     */
+    private fun key(name: String, real: Boolean) = if (real) "real.$name" else name
+
+    fun loadSettings(real: Boolean = false): ProbePlan.Settings = ProbePlan.Settings(
         enabled = prefs.getBoolean("enabled", false),
-        stakeUsd = prefs.getFloat("stakeUsd", ProbePlan.DEFAULT_STAKE.toFloat()).toDouble(),
+        stakeUsd = dial("stakeUsd", real, ProbePlan.DEFAULT_STAKE),
         // The lead has been ten seconds, then twenty, and is now forty-five.
         // A setting still sitting on either of the old defaults is an old
         // default rather than a choice, so it moves with them; a lead the
         // user has actually typed is theirs and is left alone.
-        leadSec = prefs.getLong("leadSec", ProbePlan.DEFAULT_LEAD_SEC)
+        leadSec = prefs.getLong(key("leadSec", real), prefs.getLong("leadSec", ProbePlan.DEFAULT_LEAD_SEC))
             .let { if (it in ProbePlan.OLD_LEADS) ProbePlan.DEFAULT_LEAD_SEC else it },
-        roomShare = prefs.getFloat("roomShare", ProbePlan.DEFAULT_ROOM.toFloat()).toDouble(),
-        roundBand = prefs.getFloat("roundBand", ProbePlan.DEFAULT_ROUND_BAND.toFloat()).toDouble(),
+        roomShare = dial("roomShare", real, ProbePlan.DEFAULT_ROOM),
+        roundBand = dial("roundBand", real, ProbePlan.DEFAULT_ROUND_BAND),
         demo = prefs.getBoolean("demo", true),
         // The two were one switch, so "not demo" meant "real". A setting
         // saved before they were separated says which of the two was on, and
         // that is what it keeps until the person says otherwise.
         live = prefs.getBoolean("live", !prefs.getBoolean("demo", true)),
         bankUsd = prefs.getFloat("bankUsd", ProbePlan.DEFAULT_BANK.toFloat()).toDouble(),
-        inside = prefs.getBoolean("inside", false),
-        edgeUsd = prefs.getFloat("edgeUsd", ProbePlan.DEFAULT_EDGE.toFloat()).toDouble(),
+        inside = prefs.getBoolean(key("inside", real), prefs.getBoolean("inside", false)),
+        edgeUsd = dial("edgeUsd", real, ProbePlan.DEFAULT_EDGE),
     )
 
-    fun saveSettings(s: ProbePlan.Settings) {
-        prefs.edit()
-            .putBoolean("enabled", s.enabled)
-            .putFloat("stakeUsd", s.stakeUsd.toFloat())
-            .putLong("leadSec", s.leadSec)
-            .putFloat("roomShare", s.roomShare.toFloat())
-            .putFloat("roundBand", s.roundBand.toFloat())
-            .putBoolean("demo", s.demo)
-            .putBoolean("live", s.live)
-            .putFloat("bankUsd", s.bankUsd.toFloat())
-            .putBoolean("inside", s.inside)
-            .putFloat("edgeUsd", s.edgeUsd.toFloat())
-            .apply()
+    /** One dial: the account's own value, or what the desk had before the split. */
+    private fun dial(name: String, real: Boolean, fallback: Double): Double =
+        prefs.getFloat(key(name, real), prefs.getFloat(name, fallback.toFloat())).toDouble()
+
+    fun saveSettings(s: ProbePlan.Settings, real: Boolean = false) {
+        val edit = prefs.edit()
+            .putFloat(key("stakeUsd", real), s.stakeUsd.toFloat())
+            .putLong(key("leadSec", real), s.leadSec)
+            .putFloat(key("roomShare", real), s.roomShare.toFloat())
+            .putFloat(key("roundBand", real), s.roundBand.toFloat())
+            .putBoolean(key("inside", real), s.inside)
+            .putFloat(key("edgeUsd", real), s.edgeUsd.toFloat())
+        // Everything that is the desk's answer rather than an account's is
+        // written once, by whichever account was being edited.
+        if (!real) {
+            edit
+                .putBoolean("enabled", s.enabled)
+                .putBoolean("demo", s.demo)
+                .putBoolean("live", s.live)
+                .putFloat("bankUsd", s.bankUsd.toFloat())
+        }
+        edit.apply()
     }
 
     fun loadRounds(): List<ProbeBot.Round> {

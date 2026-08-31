@@ -206,9 +206,30 @@ object ProbePlan {
          * testing a level on can never be one.
          */
         val edge: Boolean = false,
+        /**
+         * The band the turns that made this wall actually cover.
+         *
+         * A level is a zone, not a line: the orders sit across the prices the
+         * market turned at, and the wall starts at the first of them. Both
+         * default to [price], so a round number or a range edge — neither of
+         * which has a band — behaves exactly as a line.
+         */
+        val low: Double = price,
+        val high: Double = price,
     ) {
         /** Enough to trade against the candle that is closing. */
         val important: Boolean get() = round || edge || touches >= 3
+
+        /**
+         * Where the zone starts for a trade going [way]: the edge it reaches
+         * first, which is the bottom of the band for a rally and the top of
+         * it for a fall.
+         *
+         * This is the price the room in front of an entry is measured to.
+         * Measuring to the middle of the band let a trade begin inside the
+         * zone and count the half of it still ahead as clear air.
+         */
+        fun facing(way: String): Double = if (way == "Up") low else high
     }
 
     /** Which side the rule ends up on, and why it is not simply the line. */
@@ -853,19 +874,18 @@ object ProbePlan {
     /**
      * The least room in front of a trade, whatever the setting says.
      *
-     * Half a typical five-minute move. The setting is a preference and may
-     * ask for more; it may not ask for less, because this is not a matter of
-     * taste. A wall closer than half a window's travel is reached before the
-     * window is half over, and the rest of it is spent watching the position
-     * fail to get through — the 09:15 entry bought Up at 77 953 with 78 000
-     * forty-seven dollars away and a typical move of a hundred and fifty-seven,
-     * which is a third of a window's room, and the setting had been turned
-     * down to fifteen per cent so nothing stopped it.
+     * A whole typical five-minute move of clear air, measured to where the
+     * zone ahead begins rather than to its middle. It was half a move, and
+     * half was not enough: the 10:30 entry bought Up into a shelf the market
+     * had been failing at for two hours, with the room to the middle of that
+     * shelf passing the check and the near edge of it much closer.
      *
-     * There is deliberately no way to switch it off. Every level the rule has
-     * ever been wrong about was one it could see and had been told to ignore.
+     * The setting is a preference and may ask for more; it may not ask for
+     * less, and there is deliberately no way to switch it off. Every level
+     * this rule has ever been wrong about was one it could see and had been
+     * told to ignore.
      */
-    const val LEAST_ROOM = 0.5
+    const val LEAST_ROOM = 1.0
 
     /**
      * How much room this entry actually has to have, as a share of a typical
@@ -983,6 +1003,8 @@ object ProbePlan {
             return "свеча с хвостом " + (if (way == "Up") "вверх" else "вниз")
         }
         // The room ahead is checked for every entry, whatever chose the side.
+        // [level] is where the zone starts rather than where its middle is —
+        // see [Wall.facing].
         // A level beats a line: the trend can say what it likes, but a trade
         // with a wall a few dollars in front of it has nowhere to go, and
         // standing on the level is the worst place of all to buy through it.
