@@ -32,6 +32,10 @@ class ProbeStore(context: Context) {
         roomShare = prefs.getFloat("roomShare", ProbePlan.DEFAULT_ROOM.toFloat()).toDouble(),
         roundBand = prefs.getFloat("roundBand", ProbePlan.DEFAULT_ROUND_BAND.toFloat()).toDouble(),
         demo = prefs.getBoolean("demo", true),
+        // The two were one switch, so "not demo" meant "real". A setting
+        // saved before they were separated says which of the two was on, and
+        // that is what it keeps until the person says otherwise.
+        live = prefs.getBoolean("live", !prefs.getBoolean("demo", true)),
         bankUsd = prefs.getFloat("bankUsd", ProbePlan.DEFAULT_BANK.toFloat()).toDouble(),
         inside = prefs.getBoolean("inside", false),
         edgeUsd = prefs.getFloat("edgeUsd", ProbePlan.DEFAULT_EDGE.toFloat()).toDouble(),
@@ -45,6 +49,7 @@ class ProbeStore(context: Context) {
             .putFloat("roomShare", s.roomShare.toFloat())
             .putFloat("roundBand", s.roundBand.toFloat())
             .putBoolean("demo", s.demo)
+            .putBoolean("live", s.live)
             .putFloat("bankUsd", s.bankUsd.toFloat())
             .putBoolean("inside", s.inside)
             .putFloat("edgeUsd", s.edgeUsd.toFloat())
@@ -114,11 +119,24 @@ class ProbeStore(context: Context) {
         prefs.edit().putString("rounds", array.toString()).apply()
     }
 
-    fun clearRounds() = prefs.edit().remove("rounds").remove("streak").apply()
+    fun clearRounds() =
+        prefs.edit().remove("rounds").remove("streak").remove("streakLive").apply()
 
-    /** What the winning run has added to the stake, kept across restarts. */
-    fun loadStreak(): Double = prefs.getFloat("streak", 0f).toDouble()
+    /**
+     * What the winning run has added to the stake, kept across restarts.
+     *
+     * One for each account. They run the same rule over the same windows and
+     * still diverge — a bid the venue never filled is a window the wallet sat
+     * out and the paper account traded — so a run is a property of an account
+     * and not of the rule.
+     */
+    fun loadStreak(demo: Boolean): Double =
+        prefs.getFloat(streakKey(demo), 0f).toDouble()
 
-    fun saveStreak(streak: Double) =
-        prefs.edit().putFloat("streak", streak.toFloat()).apply()
+    fun saveStreak(demo: Boolean, streak: Double) =
+        prefs.edit().putFloat(streakKey(demo), streak.toFloat()).apply()
+
+    // The paper run keeps the old key, so a run in progress survives the
+    // update rather than being quietly reset by a rename.
+    private fun streakKey(demo: Boolean) = if (demo) "streak" else "streakLive"
 }

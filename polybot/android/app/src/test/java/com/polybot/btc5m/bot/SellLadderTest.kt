@@ -343,41 +343,47 @@ class SellLadderDoubleTest {
 }
 
 /**
- * A run that keeps making new highs is not finished, and the rung it happens
- * to be passing is an accident of the clock. The seconds between eighty and
- * ninety are most of the profit and are not to be spent deciding.
+ * Nothing holds a position past its rung. The hold-out that asked ninety of a
+ * clean run is gone: the ladder is the exit, and the only thing allowed to
+ * move it is a doubling, which brings it forward.
  */
-class SellLadderRunTest {
+class LadderIsTheOnlyExitTest {
 
     @Test
-    fun `a clean run asks for ninety instead of its rung`() {
-        assertEquals(0.90, SellLadder.holdOut(0.84, dipped = false, elapsedSec = 60), 1e-9)
-        assertEquals(0.90, SellLadder.holdOut(0.77, dipped = false, elapsedSec = 0), 1e-9)
+    fun `the rung is what the ladder asks, whatever the run has done`() {
+        val rule = AutoSell.Settings(ladder = SellLadder.HALF_MINUTE)
+        // A minute in, on a side bought at eighty, with the bid making new
+        // highs all the way. What comes back is the rung and not ninety.
+        val want = ProbePlan.exitPrice(
+            cost = 0.80,
+            elapsedSec = 60,
+            secondsLeft = 240,
+            highWater = 0.88,
+            rung = 0,
+            bestBid = 0.88,
+            exit = rule,
+        )
+        assertTrue(want < 0.90)
+        assertEquals(SellLadder.HALF_MINUTE[SellLadder.stepFor(60, 0.88, SellLadder.HALF_MINUTE)], want, 1e-9)
     }
 
     @Test
-    fun `it never asks for less than the rung`() {
-        // Past ninety the ladder is already asking for more.
-        assertEquals(0.97, SellLadder.holdOut(0.97, dipped = false, elapsedSec = 60), 1e-9)
-    }
-
-    @Test
-    fun `a run that gave six cents back is over`() {
-        assertEquals(0.84, SellLadder.holdOut(0.84, dipped = true, elapsedSec = 60), 1e-9)
-    }
-
-    @Test
-    fun `past four minutes the window decides, not the run`() {
-        assertEquals(0.90, SellLadder.holdOut(0.84, dipped = false, elapsedSec = 240), 1e-9)
-        assertEquals(0.84, SellLadder.holdOut(0.84, dipped = false, elapsedSec = 241), 1e-9)
-    }
-
-    @Test
-    fun `six cents given back ends the run, seven or more`() {
-        assertTrue(!SellLadder.dipping(highWater = 0.80, bid = 0.74))
-        assertTrue(SellLadder.dipping(highWater = 0.80, bid = 0.73))
-        // Nothing to give back yet.
-        assertTrue(!SellLadder.dipping(highWater = 0.0, bid = 0.73))
-        assertTrue(!SellLadder.dipping(highWater = 0.80, bid = 0.0))
+    fun `a doubling still comes forward, because it only ever sells sooner`() {
+        // Bought at a third, and two thirds is twice the money — taken there
+        // rather than at a rung the clock has not reached.
+        val rule = AutoSell.Settings(ladder = SellLadder.HALF_MINUTE)
+        assertEquals(
+            0.68,
+            ProbePlan.exitPrice(
+                cost = 0.34,
+                elapsedSec = 30,
+                secondsLeft = 270,
+                highWater = 0.0,
+                rung = 0,
+                bestBid = 0.60,
+                exit = rule,
+            ),
+            1e-9,
+        )
     }
 }

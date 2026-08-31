@@ -1268,6 +1268,12 @@ export function Manual({
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
+          onLive={(live) => {
+            void PolyBot.probeUpdate({ live })
+              .then(() => PolyBot.probeState())
+              .then(setProbeBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
           onBank={(bankUsd) => {
             if (!Number.isFinite(bankUsd) || bankUsd <= 0) return;
             void PolyBot.probeUpdate({ bankUsd })
@@ -2295,6 +2301,7 @@ function ProbeCard({
   onRoom,
   onRound,
   onDemo,
+  onLive,
   onBank,
   onInside,
   onEdge,
@@ -2307,14 +2314,29 @@ function ProbeCard({
   onRoom: (share: number) => void;
   onRound: (band: number) => void;
   onDemo: (demo: boolean) => void;
+  onLive: (live: boolean) => void;
   onBank: (usd: number) => void;
   onInside: (inside: boolean) => void;
   onEdge: (usd: number) => void;
   onReset: () => void;
 }) {
   const [why, setWhy] = useState(false);
-  const all = summarise(state.rounds);
-  const sides = bySide(state.rounds);
+  // Both accounts can be running, so the report has to say whose it is. It
+  // opens on the one that is actually trading, and falls back to paper.
+  const [showLive, setShowLive] = useState(state.live && !state.demo);
+  const both = state.demo && state.live;
+  // With one account on there is nothing to choose, and the picker would be
+  // a control that does nothing.
+  const seen = both ? showLive : state.live;
+  const shown = both
+    ? state.rounds.filter((r) => r.demo !== seen)
+    : state.rounds;
+  const all = summarise(shown);
+  const sides = bySide(shown);
+  const purse = seen ? (state.wallet ?? 0) : state.bank;
+  const staking = seen ? (state.stakeNowLive ?? state.stakeNow) : state.stakeNow;
+  const run = seen ? (state.streakLive ?? 0) : state.streak;
+  const sinking = seen ? (state.losingLive ?? false) : (state.losing ?? false);
   const line = state.trend;
   const way = line?.way ?? '';
   // Both charts have to point the same way before anything is bought, so both
@@ -2358,9 +2380,16 @@ function ProbeCard({
 
       {why && (
       <div className="counterrule muted">
-        {state.demo
-          ? 'На бумаге: читает тот же живой стакан, берёт те же предложения по тем же ценам, платит ту же комиссию и выходит по тем же ступеням — только деньги ненастоящие и на биржу ничего не уходит. '
-          : 'На реальные деньги. '}
+        {state.demo && state.live
+          ? 'Оба счёта сразу. Одно и то же правило, те же окна и тот же стакан, ' +
+            'но деньги разные: бумажный счёт берёт предложение всегда, а на ' +
+            'реальном ещё должна налиться заявка — вся разница между двумя ' +
+            'историями в этом. Переключатель выше выбирает, чья история ниже. '
+          : state.demo
+            ? 'На бумаге: читает тот же живой стакан, берёт те же предложения по тем же ценам, платит ту же комиссию и выходит по тем же ступеням — только деньги ненастоящие и на биржу ничего не уходит. '
+            : state.live
+              ? 'На реальные деньги. '
+              : 'Оба счёта выключены — правило считает и пишет, но не покупает. '}
         {state.inside ? (
           <>
             {'Сторона не угадывается заранее. Первые полминуты окно оставлено ' +
@@ -2399,10 +2428,11 @@ function ProbeCard({
           этому моменту почти закрыта, и если она больше не показывает ту же
           сторону — снимает ещё не налившуюся заявку. Уже купленное продаётся
           только лесенкой. Выходит только лесенкой продаж — той, на
-          которую настроен стол. Пока цена идёт в нашу сторону и ни разу не
-          отдала 6¢ от своего максимума, держит до 90¢ — первые четыре минуты;
-          после отката продаёт по лесенке сразу, как только цена до неё дошла.
-          И забирает удвоение цены входа, не дожидаясь ступеньки. Не входит и
+          которую настроен стол, и больше ничем: как только цена дошла до
+          ступени, продаёт там, а не ждёт, что дадут дороже. Единственное, что
+          сдвигает выход, — удвоение цены входа, и оно только приближает его:
+          сторона, купленная за треть, продаётся на двух третях, не дожидаясь
+          ступеньки. Не входит и
           тогда, когда пятиминутка потянулась
           в нашу сторону и была отбита — большой хвост на нашей стороне при
           теле, почти не сдвинувшемся: следующие пять минут просят повторить
@@ -2502,28 +2532,73 @@ function ProbeCard({
         first thing on the card after the name because it is the thing that
         decides what every number under it means.
       */}
+      {/*
+        Two accounts, two switches. They used to be one — watching the rule on
+        paper meant not running it, and running it meant losing the record
+        that says whether it is worth running. Now either, both or neither.
+      */}
       <div className="botbar">
         <button
           className={`demoflag${state.demo ? ' on' : ''}`}
           onClick={() => onDemo(!state.demo)}
         >
-          {state.demo ? 'демо' : 'реально'}
+          демо
         </button>
-        {state.demo ? (
+        <button
+          className={`demoflag real${state.live ? ' on' : ''}`}
+          onClick={() => onLive(!state.live)}
+        >
+          реально
+        </button>
+        {!state.demo && !state.live && (
+          <b className="down">оба счёта выключены</b>
+        )}
+        {state.live && state.walletOut && (
+          <b className="down">кошелёк не подключён</b>
+        )}
+      </div>
+
+      {/*
+        And whose numbers everything under here is: the balance, the stake,
+        the run, the totals and every window in the list. With one account
+        running there is nothing to pick and the tabs stay out of the way.
+      */}
+      {both && (
+        <div className="botbar accounts">
+          <button
+            className={`demoflag${!seen ? ' on' : ''}`}
+            onClick={() => setShowLive(false)}
+          >
+            счёт: демо
+          </button>
+          <button
+            className={`demoflag real${seen ? ' on' : ''}`}
+            onClick={() => setShowLive(true)}
+          >
+            счёт: реально
+          </button>
+        </div>
+      )}
+
+      <div className="botbar">
+        {seen ? (
+          <b className="muted">
+            кошелёк
+            {purse > 0 && <em> {usd(purse)}</em>}
+          </b>
+        ) : (
           <b className={state.bank >= state.bankUsd ? 'up' : 'down'}>
             {usd(state.bank)}
             <em> / {usd(state.bankUsd)}</em>
           </b>
-        ) : (
-          <b className="muted">кошелёк</b>
         )}
         {/* What the next window will actually stake, when it is not the base. */}
-        <b className={state.streak > 0 && !state.losing ? 'up pushright' : 'pushright'}>
-          {usd(state.stakeNow)}
+        <b className={run > 0 && !sinking ? 'up pushright' : 'pushright'}>
+          {usd(staking)}
           {/* A run riding on a window that is already losing is over: the
               stake falls back to base before the next entry, not after. */}
-          {state.streak > 0 && !state.losing && <em> серия +{usd(state.streak)}</em>}
-          {state.streak > 0 && state.losing && <em className="down"> серия сброшена</em>}
+          {run > 0 && !sinking && <em> серия +{usd(run)}</em>}
+          {run > 0 && sinking && <em className="down"> серия сброшена</em>}
         </b>
       </div>
 
@@ -2588,13 +2663,13 @@ function ProbeCard({
         )}
       </div>
 
-      {state.rounds.length > 0 ? (
+      {shown.length > 0 ? (
         <>
           <div className="listhead second">
             <span>
               Итог за {all.rounds} окон
-              {state.rounds.length > all.rounds
-                ? ` · пропущено ${state.rounds.length - all.rounds}`
+              {shown.length > all.rounds
+                ? ` · пропущено ${shown.length - all.rounds}`
                 : ''}
             </span>
             <button className="linkbtn" onClick={onReset}>
@@ -2693,7 +2768,7 @@ function ProbeCard({
                 offer={offerFor(state.offers, r)}
               />
             ))}
-            {state.rounds.map((r) => (
+            {shown.map((r) => (
               <ProbeRow key={`${r.windowStart}-${r.leg}`} round={r} />
             ))}
           </div>

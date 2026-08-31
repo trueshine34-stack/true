@@ -1454,6 +1454,7 @@ class BotPlugin : Plugin() {
                 roomShare = call.getDouble("roomShare") ?: d.roomShare,
                 roundBand = call.getDouble("roundBand") ?: d.roundBand,
                 demo = call.getBoolean("demo") ?: d.demo,
+                live = call.getBoolean("live") ?: d.live,
                 bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
                 inside = call.getBoolean("inside") ?: d.inside,
                 edgeUsd = call.getDouble("edgeUsd") ?: d.edgeUsd,
@@ -1537,13 +1538,21 @@ class BotPlugin : Plugin() {
                 .put("roundNear", bot.roundNear)
                 .put("roomToRound", bot.roomToRound)
                 .put("demo", bot.settings.demo)
+                .put("live", bot.settings.live)
                 .put("bankUsd", bot.settings.bankUsd)
                 .put("inside", bot.settings.inside)
                 .put("edgeUsd", bot.settings.edgeUsd)
+                // Both accounts, always — the card shows whichever the person
+                // is looking at, and neither is the other's fallback.
                 .put("bank", bot.bank)
-                .put("stakeNow", bot.stakeLive)
-                .put("streak", bot.streak)
-                .put("losing", bot.losing)
+                .put("wallet", bot.wallet)
+                .put("walletOut", bot.walletOut)
+                .put("stakeNow", bot.stakeLive(true))
+                .put("stakeNowLive", bot.stakeLive(false))
+                .put("streak", bot.streakPaper)
+                .put("streakLive", bot.streakReal)
+                .put("losing", bot.losingPaper)
+                .put("losingLive", bot.losingReal)
                 .put("levelAhead", bot.levelAhead)
                 .put("roomToLevel", bot.roomToLevel)
                 .put("roomNeed", bot.roomNeed)

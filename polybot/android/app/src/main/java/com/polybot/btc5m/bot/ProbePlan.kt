@@ -765,6 +765,18 @@ object ProbePlan {
          * by the same ladder — only the money is imaginary.
          */
         val demo: Boolean = true,
+        /**
+         * And whether real money is trading, which is a separate question.
+         *
+         * The two used to be one switch, so watching the rule on paper meant
+         * not running it — and running it meant losing the record that says
+         * whether it is worth running. They are independent now: either, both
+         * or neither. Both is the useful one, because then the paper account
+         * and the wallet see the same windows and the same prices, and the
+         * difference between the two histories is only what the venue did
+         * with the orders.
+         */
+        val live: Boolean = false,
         /** What that imaginary money starts at. */
         val bankUsd: Double = DEFAULT_BANK,
         /**
@@ -1002,11 +1014,6 @@ object ProbePlan {
         bestBid: Double?,
         exit: AutoSell.Settings,
         tick: Double = 0.01,
-        /**
-         * Whether the bid has ever given back enough of its best to end the
-         * run. True by default, which is the ordinary ladder.
-         */
-        dipped: Boolean = true,
     ): Double {
         if (exit.percentMode) {
             return SellLadder.capped(
@@ -1038,14 +1045,9 @@ object ProbePlan {
         // A doubling is taken whatever rung the clock is on: the first rung
         // sits at seventy-seven cents, so a side bought at a third that comes
         // back to two thirds has doubled the money with the ladder none the
-        // wiser.
-        // A run that has not given six cents back is not finished, and the
-        // rung it is passing is an accident of the clock.
-        return SellLadder.holdOut(
-            SellLadder.capped(rungs[step.coerceIn(0, rungs.size - 1)], cost),
-            dipped,
-            elapsedSec,
-        )
+        // wiser. That is the only thing allowed to move the exit, and it only
+        // ever brings it forward — nothing may hold a position past its rung.
+        return SellLadder.capped(rungs[step.coerceIn(0, rungs.size - 1)], cost)
     }
 
     /**

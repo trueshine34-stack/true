@@ -117,15 +117,6 @@ class ProbeBot(
         /** The rung reached, so a paper exit cannot slide back down. */
         val rung: Int = 0,
         /**
-         * Whether the bid has ever given back six cents of its best.
-         *
-         * Until it has, the move is one clean run and the rung it happens to
-         * be passing is an accident of the clock; the ask is held at ninety
-         * instead. Once given back, it stays given back — a run interrupted
-         * is not the same run when it resumes.
-         */
-        val dipped: Boolean = false,
-        /**
          * Everything the rule was looking at when it chose this side.
          *
          * One line per fact, in the order a person would check them. A
@@ -153,6 +144,11 @@ class ProbeBot(
     var lastFault: String? = null
         private set
 
+    /** Whether the wallet is out, which stops the real half and nothing else. */
+    @Volatile
+    var walletOut: Boolean = false
+        private set
+
     /** Closed rounds, oldest first — the report reads this. */
     @Volatile
     var rounds: List<Round> = store.loadRounds()
@@ -161,10 +157,21 @@ class ProbeBot(
     /**
      * What the current winning run has added to the stake. Zero after a loss,
      * which is the whole of the rule: the run stakes winnings, never the base.
+     *
+     * One run per account. The two trade the same windows and still come
+     * apart — a bid the venue never filled is a window the wallet sat out and
+     * the paper account had — so neither account's run may be decided by the
+     * other's results.
      */
     @Volatile
-    var streak: Double = store.loadStreak()
+    var streakPaper: Double = store.loadStreak(demo = true)
         private set
+
+    @Volatile
+    var streakReal: Double = store.loadStreak(demo = false)
+        private set
+
+    fun streakOf(demo: Boolean) = if (demo) streakPaper else streakReal
 
     /** Bought and still riding, usually one and briefly two at a boundary. */
     @Volatile
@@ -253,23 +260,28 @@ class ProbeBot(
      * paper should not have its paper balance moved by real money, and the
      * other way round.
      */
-    /** Everything closed rounds of the current mode have made. */
-    val won: Double
-        get() = rounds
-            .filter { it.demo == settings.demo && it.shares > 0.0 }
-            .sumOf { it.pnl }
+    /** Everything one account's closed rounds have made. */
+    fun won(demo: Boolean): Double = rounds
+        .filter { it.demo == demo && it.shares > 0.0 }
+        .sumOf { it.pnl }
 
     /**
      * What the next window is worth staking: the base, grown by every time the
      * account has doubled, plus whatever the winning run has added.
      */
-    val stakeNow: Double
-        get() = ProbePlan.stakeFor(settings.stakeUsd, won, settings.bankUsd, streak, held())
+    fun stakeNow(demo: Boolean): Double =
+        ProbePlan.stakeFor(settings.stakeUsd, won(demo), settings.bankUsd, streakOf(demo), held(demo))
 
     /** Set while the window still running is already showing a loss. */
     @Volatile
-    var losing: Boolean = false
+    var losingPaper: Boolean = false
         private set
+
+    @Volatile
+    var losingReal: Boolean = false
+        private set
+
+    fun losingOf(demo: Boolean) = if (demo) losingPaper else losingReal
 
     /**
      * What the account was worth when the rule last looked.
@@ -279,18 +291,30 @@ class ProbeBot(
      * every read so the card can show the same stake the entry will use.
      */
     @Volatile
-    private var purse: Double = 0.0
+    var wallet: Double = 0.0
+        private set
 
-    /** The run's addition as the last tick found it. */
+    /** The run's addition as the last tick found it, per account. */
     @Volatile
-    private var riding: Double = streak
+    private var ridingPaper: Double = streakPaper
+
+    @Volatile
+    private var ridingReal: Double = streakReal
+
+    private fun ridingOf(demo: Boolean) = if (demo) ridingPaper else ridingReal
 
     /** What the next window will stake, the open window's state included. */
-    val stakeLive: Double
-        get() = ProbePlan.stakeFor(settings.stakeUsd, won, settings.bankUsd, riding, held())
+    fun stakeLive(demo: Boolean): Double =
+        ProbePlan.stakeFor(settings.stakeUsd, won(demo), settings.bankUsd, ridingOf(demo), held(demo))
 
     /** The account the run is a quarter of: the paper purse, or the wallet. */
-    private fun held(): Double = if (settings.demo) bank else purse
+    private fun held(demo: Boolean): Double = if (demo) bank else wallet
+
+    /** Which accounts are trading this window — either, both, or neither. */
+    private fun modesOn(): List<Boolean> = buildList {
+        if (settings.demo) add(true)
+        if (settings.live) add(false)
+    }
 
     /**
      * Reads the run against the window that is still running.
@@ -301,10 +325,16 @@ class ProbeBot(
      * sitting on a loss does not ride into the next window.
      */
     private fun readRun() {
-        val open = working.firstOrNull { it.shares > it.sold + 1e-9 }
+        for (demo in listOf(true, false)) {
+            readRun(demo)
+        }
+    }
+
+    private fun readRun(demo: Boolean) {
+        val open = working.firstOrNull { it.demo == demo && it.shares > it.sold + 1e-9 }
         if (open == null) {
-            losing = false
-            riding = streak
+            setLosing(demo, false)
+            setRiding(demo, streakOf(demo))
             return
         }
         val bid = try {
@@ -313,14 +343,22 @@ class ProbeBot(
             null
         }
         if (bid == null) {
-            riding = streak
+            setRiding(demo, streakOf(demo))
             return
         }
 
         val left = open.shares - open.sold
         val worth = open.proceeds + left * SellPercent.netSell(bid)
-        losing = worth < open.cost - 1e-9
-        riding = ProbePlan.riding(streak, worth, open.cost)
+        setLosing(demo, worth < open.cost - 1e-9)
+        setRiding(demo, ProbePlan.riding(streakOf(demo), worth, open.cost))
+    }
+
+    private fun setLosing(demo: Boolean, value: Boolean) {
+        if (demo) losingPaper = value else losingReal = value
+    }
+
+    private fun setRiding(demo: Boolean, value: Double) {
+        if (demo) ridingPaper = value else ridingReal = value
     }
 
     val bank: Double
@@ -399,7 +437,10 @@ class ProbeBot(
     /** Wipes the record. The settings, and anything riding, are left alone. */
     fun reset() {
         rounds = emptyList()
-        streak = 0.0
+        streakPaper = 0.0
+        streakReal = 0.0
+        ridingPaper = 0.0
+        ridingReal = 0.0
         store.clearRounds()
         onStateChanged()
     }
@@ -504,10 +545,12 @@ class ProbeBot(
         }
 
         // Paper money needs no wallet: it reads the same public book, and
-        // nothing it does is ever signed. Only real orders need a session, and
-        // the demo is meant to keep running whether one is connected or not.
+        // nothing it does is ever signed. Only real orders need a session, so
+        // an unconnected wallet stops the real half and leaves the paper one
+        // running — which is the whole point of the two being separate.
         val session = engine.session()
-        if (session == null && !settings.demo) {
+        walletOut = session == null
+        if (walletOut && !settings.demo) {
             lastFault = "кошелёк не подключён"
             // So the window this costs is filed with the reason rather than
             // as a silent gap.
@@ -515,7 +558,7 @@ class ProbeBot(
             onStateChanged()
             return
         }
-        lastFault = null
+        lastFault = if (walletOut && settings.live) "кошелёк не подключён" else null
 
         val elapsed = SellLadder.elapsedInWindow(nowSec)
         val secondsLeft = WINDOW_SEC - elapsed
@@ -560,7 +603,7 @@ class ProbeBot(
             onStateChanged()
             return
         }
-        if (traded(target)) {
+        if (modesOn().all { traded(target, it) }) {
             note = "окно уже отыграно"
             onStateChanged()
             return
@@ -582,25 +625,45 @@ class ProbeBot(
     private fun giveUp(nowSec: Long) {
         val missed = aiming
         aiming = 0L
-        if (missed <= 0L || traded(missed)) return
+        if (missed <= 0L) return
 
-        val skipped = Round(
-            windowStart = missed,
-            asset = "",
-            demo = settings.demo,
-            side = aimSide.ifEmpty { TrendFit.lean(trend) },
-            perHour = trend?.perHour ?: 0.0,
-            shares = 0.0,
-            price = 0.0,
-            winner = EventStats.winnerFor(missed, nowSec),
-            note = aimNote ?: "не успел",
-            why = reading,
-        )
-        rounds = rounds + skipped
+        val winner = EventStats.winnerFor(missed, nowSec)
+        var filed = rounds
+        for (demo in modesOn()) {
+            if (traded(missed, demo)) continue
+            filed = filed + Round(
+                windowStart = missed,
+                asset = "",
+                demo = demo,
+                side = aimSide.ifEmpty { TrendFit.lean(trend) },
+                perHour = trend?.perHour ?: 0.0,
+                shares = 0.0,
+                price = 0.0,
+                winner = winner,
+                note = aimNote ?: "не успел",
+                why = reading,
+            )
+        }
+        if (filed === rounds) return
+        rounds = filed
         store.saveRounds(rounds)
-        engine.log("warn", "Проба: пропустила окно " + hhmm(missed) + " — " + skipped.note)
+        engine.log(
+            "warn",
+            "Проба: пропустила окно " + hhmm(missed) + " — " + (aimNote ?: "не успел"),
+        )
     }
 
+    /**
+     * Whether this account has already had its go at this window.
+     *
+     * Per account, because both may be running: the paper one having traded
+     * a window says nothing about whether the wallet did.
+     */
+    private fun traded(windowStart: Long, demo: Boolean): Boolean =
+        working.any { it.windowStart == windowStart && it.demo == demo } ||
+            rounds.any { it.windowStart == windowStart && it.demo == demo }
+
+    /** And whether either of them did, which is what the card reports. */
     private fun traded(windowStart: Long): Boolean =
         working.any { it.windowStart == windowStart } ||
             rounds.any { it.windowStart == windowStart }
@@ -741,7 +804,6 @@ class ProbeBot(
         val windowStart = nowSec - elapsed
         val left = WINDOW_SEC - elapsed
         if (elapsed < ProbePlan.EDGE_FROM_SEC || left <= 0L) return
-        if (traded(windowStart)) return
 
         val opened = WindowOpen.of(windowStart, engine.feed)
         if (opened == null || opened <= 0.0) {
@@ -781,10 +843,32 @@ class ProbeBot(
         }
 
         val fair = FairValue.chance(way, moved, typical, left, WINDOW_SEC)
-        val staking = stakeLive
-        val cash = if (settings.demo) bank else purse
+        for (demo in modesOn()) {
+            if (traded(windowStart, demo)) continue
+            takeUnderpriced(windowStart, demo, market, way, ask, edge, fair, moved, typical, opened, here, elapsed, left)
+        }
+    }
+
+    /** One account's buy of an underpriced side, once the side is settled. */
+    private fun takeUnderpriced(
+        windowStart: Long,
+        demo: Boolean,
+        market: Market,
+        way: String,
+        ask: Double,
+        edge: Double,
+        fair: Double,
+        moved: Double,
+        typical: Double,
+        opened: Double,
+        here: Double,
+        elapsed: Long,
+        left: Long,
+    ) {
+        val staking = stakeLive(demo)
+        val cash = if (demo) bank else wallet
         if (cash > 0.0 && cash < staking) {
-            note = if (settings.demo) "тестовый счёт пуст" else "на счету пусто"
+            note = if (demo) "тестовый счёт пуст" else "на счету пусто"
             return
         }
 
@@ -806,7 +890,7 @@ class ProbeBot(
         val size = ProbePlan.shares(staking, ask, market.minimumOrderSize)
         val token = if (way == "Up") market.up.tokenId else market.down.tokenId
 
-        if (settings.demo) {
+        if (demo) {
             paperBuy(windowStart, token, way, ask, size, trend, 0.0)
             note = "взяла недооценённую (демо)"
             return
@@ -867,6 +951,18 @@ class ProbeBot(
      * ten seconds and not two minutes.
      */
     private fun enter(windowStart: Long) {
+        // Each account that is switched on gets its own go at the window.
+        // They read the same picture and buy the same side; what differs is
+        // whose money it is, what that account can afford, and — for the real
+        // one — whether the venue fills the order at all. That last one is
+        // why the two histories are worth having side by side.
+        for (demo in modesOn()) {
+            if (traded(windowStart, demo)) continue
+            enter(windowStart, demo)
+        }
+    }
+
+    private fun enter(windowStart: Long, demo: Boolean) {
         val line = trend
 
         val market = engine.marketForWindow(windowStart)
@@ -913,7 +1009,7 @@ class ProbeBot(
 
         // What this window will actually stake, which is the run's addition
         // only while the run is still alive.
-        val staking = stakeLive
+        val staking = stakeLive(demo)
 
         // Everything the decision rests on, written down before any gate has
         // had its say — so a window that is stood out of carries the same
@@ -933,6 +1029,7 @@ class ProbeBot(
             minuteTypical = minuteTypical,
             ask = ask,
             staking = staking,
+            demo = demo,
         )
 
         // The balance is a request, so it is only asked for once everything
@@ -966,7 +1063,7 @@ class ProbeBot(
 
         // On paper the purse is the paper purse, and asking the venue what the
         // wallet holds would be asking the wrong question of the wrong money.
-        val cash = if (settings.demo) {
+        val cash = if (demo) {
             bank
         } else {
             try {
@@ -978,7 +1075,7 @@ class ProbeBot(
         }
         // Now the account is known, so the run's ceiling is too — and it is
         // this window's, not the last one's.
-        purse = cash
+        if (!demo) wallet = cash
         val stake = ProbePlan.capped(staking, settings.stakeUsd, cash)
         val blocked = ProbePlan.blockedBecause(
             way = way,
@@ -1024,7 +1121,7 @@ class ProbeBot(
             )
         }
 
-        if (settings.demo) {
+        if (demo) {
             if (waits) paperRest(windowStart, token, way, line, aim)
             else paperBuy(windowStart, token, way, ask, size, line, aim)
             return
@@ -1163,6 +1260,8 @@ class ProbeBot(
         minuteTypical: Double,
         ask: Double?,
         staking: Double,
+        /** Whose money this reading is about: the stake line differs. */
+        demo: Boolean,
     ): String {
         val cents = { p: Double -> "${(p * 100).toInt()}¢" }
         val dollars = { v: Double -> (if (v >= 0) "+" else "−") + Math.round(abs(v)) + "$" }
@@ -1255,10 +1354,16 @@ class ProbeBot(
                 } ?: "нет цены"
                 ),
             "ставка: $" + String.format("%.2f", staking) +
-                (if (streak > 0.0) " (серия +$" + String.format("%.2f", streak) + ")" else "") +
                 (
-                    if (held() > 0.0) {
-                        " · потолок $" + String.format("%.2f", held() * ProbePlan.MAX_SHARE)
+                    if (streakOf(demo) > 0.0) {
+                        " (серия +$" + String.format("%.2f", streakOf(demo)) + ")"
+                    } else {
+                        ""
+                    }
+                    ) +
+                (
+                    if (held(demo) > 0.0) {
+                        " · потолок $" + String.format("%.2f", held(demo) * ProbePlan.MAX_SHARE)
                     } else {
                         ""
                     }
@@ -1311,7 +1416,6 @@ class ProbeBot(
                             rung = open.rung,
                             bestBid = null,
                             exit = rule,
-                            dipped = open.dipped,
                         ),
                         size = open.shares - open.sold,
                         rung = open.rung,
@@ -1417,11 +1521,11 @@ class ProbeBot(
             // The same amount as went in the first time — the position has
             // grown with every add, so what it cost is divided back down.
             val usd = open.shares * open.price / (open.adds + 1)
-            if (settings.demo && bank < usd) continue
+            if (open.demo && bank < usd) continue
             // And the ceiling is on the window, not on its first buy: three
             // buys of a quarter each is three quarters of the account riding
             // on five minutes, which is the thing the ceiling exists to stop.
-            if (overCap(open.windowStart, usd)) {
+            if (overCap(open.windowStart, open.demo, usd)) {
                 note = "потолок окна"
                 continue
             }
@@ -1431,7 +1535,7 @@ class ProbeBot(
             val paid: Double
             val more: Double
 
-            if (settings.demo) {
+            if (open.demo) {
                 paid = ProbePlan.takenPrice(ask)
                 more = size
             } else {
@@ -1478,7 +1582,7 @@ class ProbeBot(
             }
             engine.log(
                 "trade",
-                "Проба" + (if (settings.demo) " (демо)" else "") + ": докупила " +
+                "Проба" + (if (open.demo) " (демо)" else "") + ": докупила " +
                     String.format("%.1f", more) + " ${open.side} по " +
                     "${(paid * 100).toInt()}¢ — средняя ${(price * 100).toInt()}¢",
             )
@@ -1493,11 +1597,11 @@ class ProbeBot(
      * top-ups, and any leg bought back after a sale — because the ceiling is
      * a limit on what rides on five minutes, not on any single order.
      */
-    private fun overCap(windowStart: Long, more: Double): Boolean {
-        val cap = ProbePlan.windowCap(settings.stakeUsd, held())
-        val already = working.filter { it.windowStart == windowStart }.sumOf { it.cost } +
-            rounds.filter { it.windowStart == windowStart && it.demo == settings.demo }
-                .sumOf { it.cost }
+    private fun overCap(windowStart: Long, demo: Boolean, more: Double): Boolean {
+        val cap = ProbePlan.windowCap(settings.stakeUsd, held(demo))
+        val already =
+            working.filter { it.windowStart == windowStart && it.demo == demo }.sumOf { it.cost } +
+                rounds.filter { it.windowStart == windowStart && it.demo == demo }.sumOf { it.cost }
         return already + more > cap + 1e-9
     }
 
@@ -1582,14 +1686,16 @@ class ProbeBot(
     private fun buyBack(nowSec: Long) {
         val elapsed = SellLadder.elapsedInWindow(nowSec)
         val windowStart = nowSec - elapsed
-        // Only when the window is empty: a leg still open is the position,
-        // and adding to it is [addUp]'s business, not this one's.
-        if (working.any { it.windowStart == windowStart }) return
-
         val sold = rounds.lastOrNull {
-            it.windowStart == windowStart && it.demo == settings.demo &&
+            it.windowStart == windowStart && modesOn().contains(it.demo) &&
                 !it.back && it.soldAt > 0.0 && it.shares > 0.0
         } ?: return
+
+        // Only when that account's window is empty: a leg still open is the
+        // position, and adding to it is [addUp]'s business, not this one's.
+        // Per account, because the other one holding something says nothing
+        // about this one.
+        if (working.any { it.windowStart == windowStart && it.demo == sold.demo }) return
 
         val ask = try {
             ClobApi.bestAsk(sold.asset)
@@ -1605,8 +1711,8 @@ class ProbeBot(
 
         // The same money as the entry, once more.
         val usd = sold.shares * sold.price / (sold.adds + 1)
-        if (settings.demo && bank < usd) return
-        if (overCap(windowStart, usd)) {
+        if (sold.demo && bank < usd) return
+        if (overCap(windowStart, sold.demo, usd)) {
             note = "потолок окна"
             return
         }
@@ -1616,7 +1722,7 @@ class ProbeBot(
         val paid: Double
         val got: Double
 
-        if (settings.demo) {
+        if (sold.demo) {
             paid = ProbePlan.takenPrice(ask)
             got = size
         } else {
@@ -1682,7 +1788,7 @@ class ProbeBot(
         )
         engine.log(
             "trade",
-            "Проба" + (if (settings.demo) " (демо)" else "") + ": откупила " +
+            "Проба" + (if (sold.demo) " (демо)" else "") + ": откупила " +
                 String.format("%.1f", got) + " ${sold.side} по " +
                 "${(paid * 100).toInt()}¢ — продавала по " +
                 "${(sold.soldAt * 100).toInt()}¢",
@@ -1925,7 +2031,7 @@ class ProbeBot(
             shares = 0.0,
             price = 0.0,
             resting = ProbePlan.REST_PRICE,
-            restingSize = ProbePlan.shares(stakeLive, ProbePlan.REST_PRICE, 5.0),
+            restingSize = ProbePlan.shares(stakeLive(true), ProbePlan.REST_PRICE, 5.0),
             target = aim,
             why = reading,
         )
@@ -1959,7 +2065,7 @@ class ProbeBot(
             } ?: continue
             if (ask > open.resting + 1e-9) continue
 
-            val size = ProbePlan.shares(stakeNow, open.resting, 5.0)
+            val size = ProbePlan.shares(stakeNow(true), open.resting, 5.0)
             next = next.map {
                 if (it.windowStart == open.windowStart && it.leg == open.leg) {
                     it.copy(shares = size, price = open.resting)
@@ -2021,17 +2127,13 @@ class ProbeBot(
                 rung = open.rung,
                 bestBid = bid,
                 exit = rule,
-                dipped = open.dipped,
             )
 
             val high = maxOf(open.highWater, bid)
             val step = ProbePlan.exitStep(elapsed, high, open.rung, rule)
-            // Six cents given back ends the run, and it stays ended.
-            val dipped = open.dipped || SellLadder.dipping(open.highWater, bid)
             var moved = open.copy(
                 highWater = high,
                 rung = maxOf(open.rung, step),
-                dipped = dipped,
             )
             if (SellLadder.reached(bid, want)) {
                 // Up to the last minute the rung is a price to wait for, not
@@ -2206,7 +2308,7 @@ class ProbeBot(
             it.copy(note = it.note ?: "продано лесенкой", soldAt = at)
         }
         store.saveRounds(rounds)
-        done.forEach { run(it.pnl) }
+        done.forEach { carryRun(it.demo, it.pnl) }
         done.forEach {
             engine.log(
                 if (it.pnl >= 0) "trade" else "warn",
@@ -2226,20 +2328,21 @@ class ProbeBot(
      * window ends the run and the stake falls back to the base — so the run
      * only ever risks money the rule has already made.
      */
-    private fun run(pnl: Double) {
-        val next = ProbePlan.nextStreak(streak, pnl)
-        if (next == streak) return
-        streak = next
-        riding = next
-        store.saveStreak(next)
+    private fun carryRun(demo: Boolean, pnl: Double) {
+        val was = streakOf(demo)
+        val next = ProbePlan.nextStreak(was, pnl)
+        if (next == was) return
+        if (demo) streakPaper = next else streakReal = next
+        setRiding(demo, next)
+        store.saveStreak(demo, next)
         engine.log(
             "info",
-            if (next > 0.0) {
-                "Проба: серия — следующая ставка $" + String.format("%.2f", stakeNow)
-            } else {
-                "Проба: серия прервана — ставка снова $" +
-                    String.format("%.2f", stakeNow)
-            },
+            (if (demo) "Проба (демо): " else "Проба: ") +
+                if (next > 0.0) {
+                    "серия — следующая ставка $" + String.format("%.2f", stakeNow(demo))
+                } else {
+                    "серия прервана — ставка снова $" + String.format("%.2f", stakeNow(demo))
+                },
         )
     }
 
@@ -2289,7 +2392,7 @@ class ProbeBot(
 
             stillOpen = stillOpen.filterNot { it.windowStart == open.windowStart && it.leg == open.leg }
             closed = closed + scored
-            run(scored.pnl)
+            carryRun(scored.demo, scored.pnl)
             engine.log(
                 if (scored.pnl >= 0) "trade" else "warn",
                 "Проба: окно " + hhmm(open.windowStart) + " — " +

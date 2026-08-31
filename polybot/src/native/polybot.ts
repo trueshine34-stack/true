@@ -261,6 +261,7 @@ export interface PolyBotPlugin {
     roomShare?: number;
     roundBand?: number;
     demo?: boolean;
+    live?: boolean;
     bankUsd?: number;
     inside?: boolean;
     edgeUsd?: number;
@@ -534,11 +535,21 @@ export type ProbeState = {
   /** The round five hundred nearest the settlement price, and how far off. */
   roundNear?: number | null;
   roomToRound?: number | null;
-  /** Paper money, which is how it runs unless told otherwise. */
+  /**
+   * The two accounts, which are independent switches rather than one mode.
+   * Either, both or neither: `demo` runs the paper account, `live` trades
+   * real money, and both together put the same rule over the same windows
+   * with only the venue between them.
+   */
   demo: boolean;
+  live: boolean;
   /** What the paper account starts at, and what it is worth now. */
   bankUsd: number;
   bank: number;
+  /** And what the wallet was worth when the rule last asked. */
+  wallet?: number;
+  /** Set while no wallet is connected, which stops the real half only. */
+  walletOut?: boolean;
   /**
    * Whether the side is chosen from inside the running window on price
    * rather than guessed before it opens on a read of the chart.
@@ -552,8 +563,12 @@ export type ProbeState = {
    */
   stakeNow: number;
   streak: number;
+  /** The same two, for the account trading real money. */
+  stakeNowLive?: number;
+  streakLive?: number;
   /** Set while the window still running is already showing a loss. */
   losing?: boolean;
+  losingLive?: boolean;
   /** The price the reversal is expected at, and how far off it is. */
   levelAhead?: number | null;
   roomToLevel?: number | null;
@@ -718,6 +733,7 @@ const webStub: PolyBotPlugin = {
     candleBody: 0,
     minuteBody: 0,
     demo: true,
+    live: false,
     bankUsd: 100,
     bank: 100,
     inside: false,
