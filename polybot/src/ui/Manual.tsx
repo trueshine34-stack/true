@@ -2761,7 +2761,9 @@ function WindowRead({
             ? 'не смотрел'
             : traded(round)
               ? `${round.side} ${round.shares.toFixed(1)} · ${cents(round.price)}`
-              : round.note || 'пропуск'}
+              : round.side
+                ? `хотел ${round.side}, но ${round.note || 'без причины'}`
+                : round.note || 'пропуск'}
         </b>
       </div>
 
@@ -2896,13 +2898,20 @@ function ProbeRow({ round, offer }: { round: ProbeRound; offer?: ProbeOffer }) {
   }
 
   // A window it stood out of still gets a line, with the reason in place of
-  // the numbers — that is the whole point of writing them down.
+  // the numbers — that is the whole point of writing them down. And with the
+  // side it was about to buy: "у уровня 78700" is only half a reason until
+  // it says which way the money was going.
   if (!traded(round)) {
     return body(
       <>
         <span className="probewhen">{clockOf(round.windowStart)}</span>
-        <span className="muted">—</span>
-        <span className="muted">пропуск: {round.note || 'без причины'}</span>
+        <span className={round.side === 'Up' ? 'up' : round.side === 'Down' ? 'down' : 'muted'}>
+          {round.side || '—'}
+        </span>
+        <span className="muted">
+          {round.side ? 'хотел, но ' : 'пропуск: '}
+          {round.note || 'без причины'}
+        </span>
         <span className="probemark">·</span>
         <b className="muted">—</b>
       </>,

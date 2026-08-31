@@ -335,6 +335,17 @@ class ProbeBot(
     private var aiming = 0L
     private var aimNote: String? = null
 
+    /**
+     * And which side it was going to buy.
+     *
+     * The line's own lean is not that side: a bounce goes the other way, and
+     * a flat line still has one when a level decided it. A skipped window
+     * that says only "пропуск: у уровня 78700" leaves out the half that
+     * makes the reason mean anything — which level, and in which direction
+     * the money was about to go.
+     */
+    private var aimSide = ""
+
     private companion object {
         /** A ten-second lead needs a clock, not a poll. */
         const val TICK_MS = 1_000L
@@ -528,6 +539,7 @@ class ProbeBot(
             if (windowStart != aiming) {
                 giveUp(nowSec)
                 aiming = windowStart
+                aimSide = ""
             }
             inside(nowSec)
             aimNote = note
@@ -541,6 +553,7 @@ class ProbeBot(
         if (target != aiming) {
             giveUp(nowSec)
             aiming = target ?: 0L
+            aimSide = ""
         }
         if (target == null) {
             note = "жду открытия: " + (secondsLeft - settings.leadSec) + " с"
@@ -575,7 +588,7 @@ class ProbeBot(
             windowStart = missed,
             asset = "",
             demo = settings.demo,
-            side = TrendFit.lean(trend),
+            side = aimSide.ifEmpty { TrendFit.lean(trend) },
             perHour = trend?.perHour ?: 0.0,
             shares = 0.0,
             price = 0.0,
@@ -776,7 +789,7 @@ class ProbeBot(
         }
 
         reading = listOf(
-            "решение: недооценена",
+            "хотел: " + (if (way == "Up") "вверх" else "вниз") + " — недооценена",
             "прошло: " + elapsed + " с, осталось " + left + " с",
             "ход от открытия: " + Math.round(moved) + "$ (" +
                 String.format("%.2f", moved / typical) + "× обычного)",
@@ -875,6 +888,7 @@ class ProbeBot(
         val pick = seen.pick
 
         val way = pick.side
+        aimSide = way
         if (way.isEmpty()) {
             note = pick.note
             return
@@ -1177,8 +1191,18 @@ class ProbeBot(
         val minute = body(lastMinute)
         val room = if (aim > 0.0 && here > 0.0) abs(aim - here) else 0.0
 
+        // The side comes first, because every line under it is evidence for
+        // or against that one word — and a window that was skipped keeps this
+        // reading, where "у уровня 78700" without a direction says nothing
+        // about what was nearly bought.
+        val wanted = when (pick.side) {
+            "Up" -> "вверх"
+            "Down" -> "вниз"
+            else -> "не вошёл"
+        }
+
         return listOf(
-            "решение: " + (pick.note ?: "по тренду"),
+            "хотел: " + wanted + " — " + (pick.note ?: "по тренду"),
             "тренд 1м: " + (line?.way.orEmpty().ifEmpty { "вбок" }) +
                 " " + Math.round(line?.perHour ?: 0.0) + "$/ч" +
                 " R² " + String.format("%.2f", line?.fit ?: 0.0),
