@@ -143,93 +143,6 @@ object ProbePlan {
      * something different every week.
      */
     const val TOUCH = 0.35
-
-    /**
-     * How near the wall counts as having reached it, for getting out.
-     *
-     * A tenth of a typical five-minute move. Waiting for the exact price is
-     * waiting for a number the tape rarely prints: the orders sit in a band
-     * around the level, and the turn starts at the edge of the band rather
-     * than at its middle.
-     */
-    const val WALL_TOUCH = 0.10
-
-    /**
-     * Whether the position should be closed now because price has arrived at
-     * the wall it was bought to travel to.
-     *
-     * The trade was taken for the room between here and that level, and the
-     * room is now spent. What happens at a price the market has turned at
-     * before is usually that it turns again — so the side that has just been
-     * carried there is about to be carried back, and the rung the ladder is
-     * waiting at may be somewhere it never reaches.
-     *
-     * Only ever in profit. A position underwater at the wall is a read that
-     * was wrong about the direction, and selling it here is paying the spread
-     * to lock in the mistake a few minutes before the settlement decides it
-     * anyway. And only ever earlier than the ladder — reaching the wall can
-     * bring the sale forward, never hold it back.
-     */
-    /**
-     * The least a turn against us has to be worth before it is taken.
-     *
-     * Fifteen per cent on what the side cost, after the fee. A minute closing
-     * the other way is not always the end of the move — a green run has red
-     * minutes in it — so the turn only ends the trade when the trade is
-     * already worth ending. Below that, holding costs nothing that the ladder
-     * was not already risking.
-     */
-    const val TURN_GAIN = 0.15
-
-    /**
-     * Whether to take the profit now because the minute has turned against us.
-     *
-     * While the minute candles keep closing our way the move is still
-     * happening and there is nothing to decide: the ladder is the ceiling and
-     * the position rides. The first one that closes the other way is the move
-     * pausing at best and over at worst, and by then the side has been repriced
-     * for a run that has stopped — so a position already up by [least] is
-     * taken there rather than handed back on the way to a rung it may not
-     * reach.
-     *
-     * [minuteBody] is the last *completed* minute, close minus open: positive
-     * is green. The forming minute is not read, because a minute two seconds
-     * old is red or green by accident.
-     */
-    fun turnedAgainst(
-        side: String,
-        minuteBody: Double,
-        bid: Double?,
-        cost: Double,
-        least: Double = TURN_GAIN,
-    ): Boolean {
-        if (bid == null || bid <= 0.0 || cost <= 0.0) return false
-        if (minuteBody == 0.0) return false
-        val against = if (side == "Up") minuteBody < 0.0 else if (side == "Down") minuteBody > 0.0 else return false
-        if (!against) return false
-        return SellPercent.netSell(bid) >= cost * (1.0 + least)
-    }
-
-    fun atWall(
-        side: String,
-        btc: Double,
-        wall: Double?,
-        typical: Double,
-        bid: Double?,
-        cost: Double,
-        share: Double = WALL_TOUCH,
-    ): Boolean {
-        if (wall == null || wall <= 0.0 || btc <= 0.0 || typical <= 0.0) return false
-        if (bid == null || bid <= 0.0 || cost <= 0.0) return false
-        val slack = typical * share
-        val arrived = when (side) {
-            "Up" -> btc >= wall - slack
-            "Down" -> btc <= wall + slack
-            else -> return false
-        }
-        return arrived && SellPercent.netSell(bid) > cost + 1e-9
-    }
-
     /**
      * A price the market stops at, and how much weight it carries.
      *
@@ -1112,12 +1025,11 @@ object ProbePlan {
             leadSec = exit.ladderLeadSec,
             stepSec = exit.ladderStepSec,
         )
-        // A doubling is taken whatever rung the clock is on: the first rung
-        // sits at seventy-seven cents, so a side bought at a third that comes
-        // back to two thirds has doubled the money with the ladder none the
-        // wiser. That is the only thing allowed to move the exit, and it only
-        // ever brings it forward — nothing may hold a position past its rung.
-        return SellLadder.capped(rungs[step.coerceIn(0, rungs.size - 1)], cost)
+        // The rung, and nothing else. Every rule that used to move it — the
+        // doubling, the level ahead, the minute that turned against us — sold
+        // at its own price and on its own reasoning, and between them the
+        // ladder was reached in a minority of windows. The ladder is the exit.
+        return rungs[step.coerceIn(0, rungs.size - 1)]
     }
 
     /**

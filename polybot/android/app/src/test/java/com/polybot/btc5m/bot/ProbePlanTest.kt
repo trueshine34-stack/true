@@ -139,67 +139,6 @@ class ProbePlanTest {
     }
 
     @Test
-    fun `on the rungs, the paper exit asks what the clock asks`() {
-        val rule = AutoSell.Settings(ladder = listOf(0.77, 0.84, 0.89, 0.93, 0.97))
-        // The lead moves each rung fifteen seconds early, so the first minute
-        // is already asking the second rung by its forty-fifth second.
-        assertEquals(
-            0.77,
-            ProbePlan.exitPrice(0.5, 0, 300, 0.0, 0, 0.5, rule),
-            1e-9,
-        )
-        // Half a minute a rung, so the second one is already asking by the
-        // fifteenth second — the lead moves each boundary that much early.
-        assertEquals(
-            0.84,
-            ProbePlan.exitPrice(0.5, 20, 280, 0.0, 0, 0.5, rule),
-            1e-9,
-        )
-    }
-
-    @Test
-    fun `a rung the price has cleared is behind it`() {
-        val rule = AutoSell.Settings(ladder = listOf(0.77, 0.84, 0.89, 0.93, 0.97))
-        // The book has already bid 0.90, so resting at 0.89 would be leaving
-        // money on the table.
-        assertEquals(
-            0.93,
-            ProbePlan.exitPrice(0.5, 0, 300, 0.90, 0, 0.90, rule),
-            1e-9,
-        )
-    }
-
-    @Test
-    fun `in percent mode the paper exit prices off what the lot cost`() {
-        val rule = AutoSell.Settings(percentMode = true, profitPct = 0.2)
-        val asked = ProbePlan.exitPrice(0.50, 30, 270, 0.0, 0, 0.5, rule)
-        // A fifth over fifty cents, and then some for the fee that comes out
-        // of the sale.
-        assertTrue(asked > 0.60)
-        assertTrue(asked < 0.70)
-    }
-
-    @Test
-    fun `near the close the paper exit takes what the book is paying`() {
-        val rule = AutoSell.Settings(percentMode = true, profitPct = 0.2, panicSec = 60)
-        // Thirty seconds left and the book bidding ninety-four: the floor is
-        // met, so the price is the bid rather than the margin.
-        val asked = ProbePlan.exitPrice(0.50, 270, 30, 0.0, 0, 0.94, rule)
-        assertEquals(0.94, asked, 1e-9)
-    }
-
-    @Test
-    fun `a shorter rung reaches the higher asks sooner`() {
-        val long = AutoSell.Settings(ladderStepSec = 60)
-        val short = AutoSell.Settings(ladderStepSec = 30)
-        val at = 50L
-        assertTrue(
-            ProbePlan.exitPrice(0.5, at, 210, 0.0, 0, 0.5, short) >
-                ProbePlan.exitPrice(0.5, at, 210, 0.0, 0, 0.5, long),
-        )
-    }
-
-    @Test
     fun `a price sitting on a round five hundred is one to stay out of`() {
         // The numbers everybody else writes orders at.
         assertEquals(80_000.0, ProbePlan.nearRound(80_012.0, 50.0)!!, 1e-9)
@@ -675,68 +614,6 @@ class ProbePlanTest {
      * which this one did not, it ran straight at a different one.
      */
     @Test
-    fun `arriving at the wall in profit closes the position`() {
-        // Bought Up at 50c, now bid 62c — net of the sell fee that is a
-        // profit — with BTC at 77 990 and the wall at 78 000.
-        assertTrue(
-            ProbePlan.atWall(
-                side = "Up",
-                btc = 77_990.0,
-                wall = 78_000.0,
-                typical = 157.0,
-                bid = 0.62,
-                cost = 0.50,
-            ),
-        )
-        // And the mirror, downwards.
-        assertTrue(
-            ProbePlan.atWall(
-                side = "Down",
-                btc = 77_690.0,
-                wall = 77_680.0,
-                typical = 157.0,
-                bid = 0.62,
-                cost = 0.50,
-            ),
-        )
-    }
-
-    @Test
-    fun `a tenth of a move short of the wall is near enough`() {
-        // The orders sit in a band around the level and the turn starts at
-        // the edge of it, so the exact price is not waited for.
-        assertTrue(
-            ProbePlan.atWall("Up", 77_985.0, 78_000.0, 157.0, 0.62, 0.50),
-        )
-        // Two tenths away is still the middle of the room.
-        assertTrue(
-            !ProbePlan.atWall("Up", 77_965.0, 78_000.0, 157.0, 0.62, 0.50),
-        )
-    }
-
-    @Test
-    fun `a position underwater at the wall is not sold there`() {
-        // Bid 50c on a side that cost 50c is a loss once the fee is paid: the
-        // read was wrong about the direction, and paying the spread here only
-        // locks the mistake in a few minutes before settlement decides it.
-        assertTrue(!ProbePlan.atWall("Up", 77_995.0, 78_000.0, 157.0, 0.50, 0.50))
-        assertTrue(!ProbePlan.atWall("Up", 77_995.0, 78_000.0, 157.0, 0.30, 0.50))
-    }
-
-    @Test
-    fun `no wall, no scale and no quote say nothing`() {
-        assertTrue(!ProbePlan.atWall("Up", 77_995.0, null, 157.0, 0.62, 0.50))
-        assertTrue(!ProbePlan.atWall("Up", 77_995.0, 78_000.0, 0.0, 0.62, 0.50))
-        assertTrue(!ProbePlan.atWall("Up", 77_995.0, 78_000.0, 157.0, null, 0.50))
-        assertTrue(!ProbePlan.atWall("", 77_995.0, 78_000.0, 157.0, 0.62, 0.50))
-    }
-
-    /**
-     * The 10:30 entry bought Up into a shelf the market had been failing at
-     * for two hours. The room was measured to the middle of that shelf, so
-     * half the zone counted as clear air.
-     */
-    @Test
     fun `the tilt still has an answer when the call does not`() {
         val weak = TrendFit.Trend(perHour = 128.0, way = "", fit = 0.18)
         assertEquals("Up", TrendFit.lean(weak))
@@ -748,56 +625,6 @@ class ProbePlanTest {
      * happening; the first one that closes the other way is it pausing at
      * best, and a position already up by a sixth is taken there rather than
      * handed back on the way to a rung it may not reach.
-     */
-    @Test
-    fun `a minute against us takes the profit`() {
-        // Bought Up at 50c, bid 62c — net of the fee that is well over 15% —
-        // and the last completed minute closed red.
-        assertTrue(ProbePlan.turnedAgainst("Up", minuteBody = -18.0, bid = 0.62, cost = 0.50))
-        // And the mirror: bought Down, the minute closed green.
-        assertTrue(ProbePlan.turnedAgainst("Down", minuteBody = 18.0, bid = 0.62, cost = 0.50))
-    }
-
-    @Test
-    fun `a minute still going our way is left alone`() {
-        assertTrue(!ProbePlan.turnedAgainst("Up", minuteBody = 18.0, bid = 0.62, cost = 0.50))
-        assertTrue(!ProbePlan.turnedAgainst("Down", minuteBody = -18.0, bid = 0.62, cost = 0.50))
-        // A minute that closed exactly flat said nothing.
-        assertTrue(!ProbePlan.turnedAgainst("Up", minuteBody = 0.0, bid = 0.62, cost = 0.50))
-    }
-
-    @Test
-    fun `and a turn is only taken when there is a profit to take`() {
-        // 56c on a side that cost 50c is under a tenth after the fee: a green
-        // run has red minutes in it, and this one is not worth ending.
-        assertTrue(!ProbePlan.turnedAgainst("Up", minuteBody = -18.0, bid = 0.56, cost = 0.50))
-        // 60c is the first cent that clears fifteen per cent net.
-        assertTrue(ProbePlan.turnedAgainst("Up", minuteBody = -18.0, bid = 0.60, cost = 0.50))
-        // And a position under water is never sold on a red minute.
-        assertTrue(!ProbePlan.turnedAgainst("Up", minuteBody = -18.0, bid = 0.44, cost = 0.50))
-    }
-
-    @Test
-    fun `the gain it asks for is fifteen per cent of what the side cost`() {
-        assertEquals(0.15, ProbePlan.TURN_GAIN, 1e-9)
-        // Fifteen per cent *after* the fee, so a side bought at fifty has to
-        // be bid sixty rather than fifty-eight: the fee on the way out is
-        // real money and the gain is what is left of the sale.
-        val need = 0.50 * 1.15
-        assertTrue(SellPercent.netSell(0.60) >= need)
-        assertTrue(SellPercent.netSell(0.59) < need)
-        assertTrue(ProbePlan.turnedAgainst("Up", -18.0, 0.60, 0.50))
-        assertTrue(!ProbePlan.turnedAgainst("Up", -18.0, 0.59, 0.50))
-    }
-
-    /**
-     * The entry is the trend, the round five hundreds and the wick — and
-     * nothing else about levels.
-     *
-     * The pivot levels used to choose sides here as well as refuse them, and
-     * the rule became an argument between two readings of the same chart. The
-     * round numbers stay because they are a fact about where the book sits
-     * rather than a reading of anything, and they only ever refuse.
      */
     @Test
     fun `the side is the line and nothing else`() {

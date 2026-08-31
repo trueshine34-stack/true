@@ -42,6 +42,19 @@ object OrderLog {
          */
         var priced: Double = 0.0,
         /**
+         * Shares the trade feed has already accounted for.
+         *
+         * Separate from [priced] because an order that came back from the
+         * venue already filled arrives here knowing its own price — priced is
+         * spent the moment it is recorded — and the same fill then turns up
+         * on the trade feed a minute later with nothing left to attach it to.
+         * It was filed as a second, unrelated trade: the panel showed one buy
+         * as two rows, the bot's and "by hand", same size, same price. This
+         * counts what the feed has claimed rather than what has been priced,
+         * so a fill that needs no price still has room to be recognised.
+         */
+        var fed: Double = 0.0,
+        /**
          * The average price actually paid or received for [priced] shares.
          *
          * A marketable limit at 81c that sweeps offers at 78 and 79 is filled
@@ -364,17 +377,20 @@ object OrderLog {
         tick: Double,
     ): Double {
         var left = size
-        // How much of an order still needs a price put on it. A working order
-        // may yet fill the rest; a finished one only ever needs its matched
-        // part priced — and a cancelled order that never filled needs nothing.
-        fun room(entry: Entry): Double {
-            val ceiling = if (entry.status == "resting" || entry.status == "partial") {
-                entry.size
-            } else {
-                entry.matched
-            }
-            return ceiling - entry.priced
-        }
+        // A working order may yet fill the rest; a finished one only ever has
+        // its matched part to account for, and a cancelled order that never
+        // filled has nothing.
+        fun ceiling(entry: Entry): Double =
+            if (entry.status == "resting" || entry.status == "partial") entry.size else entry.matched
+
+        // How much of this order the feed has not spoken for yet, which is
+        // what decides whether this trade belongs to it.
+        fun room(entry: Entry): Double = ceiling(entry) - entry.fed
+
+        // And how much of it still needs a price put on it, which is a
+        // smaller thing: an order that came back already filled knows its own
+        // price and needs none.
+        fun unpriced(entry: Entry): Double = ceiling(entry) - entry.priced
 
         val candidates = entries
             .filter {
@@ -398,16 +414,21 @@ object OrderLog {
         for (entry in candidates) {
             if (left <= 1e-9) break
 
-            // Room to price, not room to fill: the listing may already have
-            // counted these shares, and the trade is still the only thing that
-            // knows what they went for.
             val take = minOf(room(entry), left)
             if (take <= 1e-9) continue
 
-            val was = entry.fillPrice ?: entry.price
-            entry.fillPrice = (was * entry.priced + price * take) / (entry.priced + take)
-            entry.priced += take
-            entry.matched = maxOf(entry.matched, entry.priced)
+            // Priced only where a price is still wanted. The listing may
+            // already have counted these shares and the order response may
+            // already have priced them; either way the trade is this order's,
+            // and saying so is what stops it being filed again as its own.
+            val toPrice = minOf(unpriced(entry), take)
+            if (toPrice > 1e-9) {
+                val was = entry.fillPrice ?: entry.price
+                entry.fillPrice = (was * entry.priced + price * toPrice) / (entry.priced + toPrice)
+                entry.priced += toPrice
+            }
+            entry.fed += take
+            entry.matched = maxOf(entry.matched, maxOf(entry.priced, entry.fed))
             entry.status = statusFor(entry.matched, entry.size, resting = true)
             left -= take
         }
@@ -456,6 +477,7 @@ object OrderLog {
             // A fill with no order behind it is the price it happened at.
             fillPrice = price,
             status = "filled",
+            fed = size,
             auto = false,
         )
         entries.add(entry)

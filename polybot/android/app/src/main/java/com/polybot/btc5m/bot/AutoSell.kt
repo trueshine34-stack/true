@@ -471,16 +471,7 @@ class AutoSell(
             // before it opens used to read the current window's elapsed time
             // and start four rungs up.
             val rung = trackRung(position, meta?.windowStart ?: windowStart, now)
-            // A doubling is taken whatever rung the clock is on. The first
-            // rung sits at seventy-seven cents, so a side bought at a third
-            // that comes back to two thirds has doubled the money with the
-            // ladder none the wiser.
-            val paid = OrderLog.uncoveredLots(position.asset).firstOrNull()?.price
-                ?: position.avgPrice
-            val ladderTarget = SellLadder.capped(
-                settings.ladder.getOrElse(rung.step) { settings.ladder.last() },
-                paid,
-            )
+            val ladderTarget = settings.ladder.getOrElse(rung.step) { settings.ladder.last() }
 
             // The venue locks freshly bought shares, and how long for is
             // something the app has measured rather than something the
@@ -510,19 +501,6 @@ class AutoSell(
             val status = when {
                 meta == null -> "нет данных рынка"
                 meta.closed || !meta.acceptingOrders -> "рынок закрыт"
-                // Price has arrived at the wall this side was bought to
-                // travel to, and the room is spent. A price the market has
-                // turned at before usually turns again, so the side just
-                // carried up to it is about to be carried back — and the rung
-                // may be somewhere this window never reaches. In profit only,
-                // and it can only ever sell sooner than the ladder would.
-                atWall(position, meta, paid) -> sellNow(position, open, meta, mine, lotAt)
-                // And the minute turning against us on a position already up
-                // by a sixth. While the minutes keep closing our way there is
-                // nothing to decide and the ladder is the ceiling; the first
-                // one the other way is the move pausing at best.
-                turnedAgainst(position, meta, paid) ->
-                    sellNow(position, open, meta, mine, lotAt)
                 // Too small for the venue to take an order for. Named rather
                 // than skipped: a position dropped out of the sweep for being
                 // awkward is a position that never gets an exit.
@@ -531,10 +509,12 @@ class AutoSell(
                 hold > 0L -> "жду ${(hold + 999) / 1000} с по замеру"
                 settings.percentMode ->
                     reconcilePercent(position, open, meta, percentPrice, mine)
-                // Up to the last minute the rung is watched rather than
-                // offered, so a bid that jumps past it pays what it jumped to.
-                !SellLadder.restsNow(closesAt - now) ->
-                    watchRung(position, open, meta, target, mine, lotAt)
+                // The rung is an offer standing on the book for the whole
+                // window rather than a price something has to be awake to
+                // take. A bid that jumps clean past it still pays the rung —
+                // that is what resting costs — and what it buys is a sale
+                // that happens whether or not anything is watching that
+                // second, which on a phone is most of them.
                 else -> reconcile(position, open, meta, target, mine, lotAt)
             }
             // Covered, settled, or the bot's: nothing left to chase here.
@@ -996,66 +976,6 @@ class AutoSell(
      * would fill at its own price and defeat the whole point. A price the user
      * pinned by hand is theirs and is left alone.
      */
-    /**
-     * Whether BTC has reached the level this side needed to travel to.
-     *
-     * The walls come off the same two candle series the rule and the chart
-     * read, so the price this sells at is a line the person can see. The side
-     * comes from the market's own outcome names rather than being guessed
-     * from the token id.
-     */
-    private fun atWall(
-        position: Position,
-        meta: ClobApi.MarketMeta,
-        paid: Double,
-    ): Boolean {
-        val side = meta.outcomes[position.asset].orEmpty()
-        if (side != "Up" && side != "Down") return false
-        val minutes = BinanceCandles.oneMinute.list()
-        val btc = minutes.lastOrNull()?.close ?: 0.0
-        if (btc <= 0.0) return false
-        val walls = DayLevels.all(btc) + Levels.tested(minutes, btc)
-        val bid = try {
-            ClobApi.bestBid(position.asset)
-        } catch (e: Exception) {
-            return false
-        }
-        return ProbePlan.atWall(
-            side = side,
-            btc = btc,
-            wall = Levels.ahead(walls, btc, side),
-            typical = Levels.typicalRange(BinanceCandles.fiveMinute.list()),
-            bid = bid,
-            cost = paid,
-        )
-    }
-
-    /**
-     * Whether the last completed minute closed against this side.
-     *
-     * The forming minute is left out: a minute two seconds old is red or
-     * green by accident, and an exit that reads it sells on the first tick
-     * that goes the wrong way.
-     */
-    private fun turnedAgainst(
-        position: Position,
-        meta: ClobApi.MarketMeta,
-        paid: Double,
-    ): Boolean {
-        val side = meta.outcomes[position.asset].orEmpty()
-        if (side != "Up" && side != "Down") return false
-        val minutes = BinanceCandles.oneMinute.list()
-        if (minutes.size < 2) return false
-        val done = minutes[minutes.size - 2]
-        if (done.open <= 0.0 || done.close <= 0.0) return false
-        val bid = try {
-            ClobApi.bestBid(position.asset)
-        } catch (e: Exception) {
-            return false
-        }
-        return ProbePlan.turnedAgainst(side, done.close - done.open, bid, paid)
-    }
-
     /** Crossing the book now, because the reason to wait has just gone. */
     private fun sellNow(
         position: Position,

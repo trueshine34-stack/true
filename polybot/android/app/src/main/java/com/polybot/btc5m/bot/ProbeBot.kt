@@ -538,21 +538,6 @@ class ProbeBot(
     private fun recentCloses(): List<Double> =
         BinanceCandles.oneMinute.list().takeLast(HOME_OVER).map { it.close }
 
-    /**
-     * The last *completed* minute's body: close less open, positive is green.
-     *
-     * The forming minute is left out. A minute two seconds old is red or green
-     * by accident, and an exit that reads it sells on the first tick that goes
-     * the wrong way.
-     */
-    private fun lastMinuteBody(): Double {
-        val minutes = BinanceCandles.oneMinute.list()
-        if (minutes.size < 2) return 0.0
-        val done = minutes[minutes.size - 2]
-        if (done.open <= 0.0 || done.close <= 0.0) return 0.0
-        return done.close - done.open
-    }
-
     private fun here(): Double =
         engine.feed.twap60?.value
             ?: engine.feed.twap?.value
@@ -1514,9 +1499,9 @@ class ProbeBot(
                         rung = open.rung,
                         demo = open.demo,
                         leg = open.leg,
-                        resting = SellLadder.restsNow(
-                            open.windowStart + WINDOW_SEC - nowSec,
-                        ),
+                        // The rung stands on the book all window: it is the
+                        // price the shares will fetch, not a price to wait for.
+                        resting = true,
                     )
                 }
         }
@@ -2228,76 +2213,23 @@ class ProbeBot(
                 highWater = high,
                 rung = maxOf(open.rung, step),
             )
-            // Price has arrived at the wall the trade was bought to travel
-            // to, and the room is spent. A price the market has turned at
-            // before usually turns again, so the side that has just been
-            // carried up to it is about to be carried back — and the rung
-            // the ladder is waiting at may be somewhere this window never
-            // reaches. Only ever in profit, and only ever sooner than the
-            // rung: reaching the wall brings the sale forward, never later.
-            val wall = ProbePlan.atWall(
-                side = open.side,
-                btc = here(),
-                wall = open.target.takeIf { it > 0.0 },
-                typical = Levels.typicalRange(BinanceCandles.fiveMinute.list()),
-                bid = bid,
-                cost = open.price,
-            )
-            // And the minute turning against us, which is the move pausing at
-            // best. While the minutes keep closing our way there is nothing
-            // to decide and the ladder is the ceiling; the first one the
-            // other way, on a position already up by a sixth, is taken there
-            // rather than handed back on the way to a rung it may not reach.
-            val turned = ProbePlan.turnedAgainst(
-                side = open.side,
-                minuteBody = lastMinuteBody(),
-                bid = bid,
-                cost = open.price,
-            )
-            if (wall || turned) {
+            if (SellLadder.reached(bid, want)) {
+                // The rung is an offer standing on the book for the whole
+                // window, so it fills at the price it asked and not at the bid
+                // that reached it. A bid that jumps clean past the rung still
+                // pays the rung — which is what resting costs, and what it
+                // buys is a sale that happens without anything having to be
+                // watching at that second.
                 val left = open.shares - open.sold
                 moved = moved.copy(
                     sold = open.shares,
-                    proceeds = open.proceeds + left * SellPercent.netSell(bid),
-                    note = if (wall) "уровень " + Math.round(open.target) else "минутка развернулась",
+                    proceeds = open.proceeds + left * SellPercent.netSell(want),
                 )
                 engine.log(
                     "trade",
-                    "Проба (демо): " +
-                        (
-                            if (wall) {
-                                "дошли до " + Math.round(open.target)
-                            } else {
-                                "минутка против"
-                            }
-                            ) +
-                        " — забрала " + String.format("%.1f", left) +
-                        " ${open.side} по ${(bid * 100).toInt()}¢, не дожидаясь лесенки",
-                )
-            } else if (SellLadder.reached(bid, want)) {
-                // Up to the last minute the rung is a price to wait for, not
-                // one to sit at: nothing is on the book, and the shares go
-                // into the bid the moment it reaches up — so the rung is a
-                // floor, and a bid that jumps past it pays what it jumped to.
-                // Inside the last minute the offer is resting at the rung, and
-                // a resting offer gets the price it asked for.
-                val resting = SellLadder.restsNow(secondsLeft)
-                val got = if (resting) want else bid
-                val left = open.shares - open.sold
-                moved = moved.copy(
-                    sold = open.shares,
-                    proceeds = open.proceeds + left * SellPercent.netSell(got),
-                )
-                engine.log(
-                    "trade",
-                    "Проба (демо): " + (if (resting) "лимитка сработала" else "забрала по рынку") +
-                        " — " + String.format("%.1f", left) +
-                        " ${open.side} по ${(got * 100).toInt()}¢" +
-                        (if (!resting && got > want + 1e-9) {
-                            " (лесенка просила ${(want * 100).toInt()}¢)"
-                        } else {
-                            ""
-                        }),
+                    "Проба (демо): лимитка сработала — " +
+                        String.format("%.1f", left) +
+                        " ${open.side} по ${(want * 100).toInt()}¢",
                 )
             }
             if (moved != open) {

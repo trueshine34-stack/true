@@ -343,17 +343,18 @@ class SellLadderDoubleTest {
 }
 
 /**
- * Nothing holds a position past its rung. The hold-out that asked ninety of a
- * clean run is gone: the ladder is the exit, and the only thing allowed to
- * move it is a doubling, which brings it forward.
+ * The ladder is the exit, and the only exit.
+ *
+ * The hold-out that asked ninety of a clean run is gone, and so are the three
+ * rules that sold before it: the doubling, the level ahead, and the minute
+ * that turned against us. Each sold at its own price on its own reasoning,
+ * and between them the rung was reached in a minority of windows.
  */
 class LadderIsTheOnlyExitTest {
 
     @Test
-    fun `the rung is what the ladder asks, whatever the run has done`() {
+    fun `the exit price is the rung the clock and the high-water mark reached`() {
         val rule = AutoSell.Settings(ladder = SellLadder.HALF_MINUTE)
-        // A minute in, on a side bought at eighty, with the bid making new
-        // highs all the way. What comes back is the rung and not ninety.
         val want = ProbePlan.exitPrice(
             cost = 0.80,
             elapsedSec = 60,
@@ -363,27 +364,40 @@ class LadderIsTheOnlyExitTest {
             bestBid = 0.88,
             exit = rule,
         )
-        assertTrue(want < 0.90)
-        assertEquals(SellLadder.HALF_MINUTE[SellLadder.stepFor(60, 0.88, SellLadder.HALF_MINUTE)], want, 1e-9)
+        assertEquals(
+            SellLadder.HALF_MINUTE[
+                SellLadder.stepFor(60, 0.88, SellLadder.HALF_MINUTE, stepSec = 60L),
+            ],
+            want,
+            1e-9,
+        )
+        // And nothing above the rung: no run holds out for more.
+        assertTrue(want <= SellLadder.HALF_MINUTE.last())
     }
 
     @Test
-    fun `a doubling still comes forward, because it only ever sells sooner`() {
-        // Bought at a third, and two thirds is twice the money — taken there
-        // rather than at a rung the clock has not reached.
+    fun `a doubling no longer brings the sale forward`() {
+        // Bought at a third. Two thirds is twice the money and the ladder does
+        // not care: the rung the clock is on is the price, and that is the
+        // whole of the rule now.
         val rule = AutoSell.Settings(ladder = SellLadder.HALF_MINUTE)
+        val want = ProbePlan.exitPrice(
+            cost = 0.34,
+            elapsedSec = 30,
+            secondsLeft = 270,
+            highWater = 0.0,
+            rung = 0,
+            bestBid = 0.60,
+            exit = rule,
+        )
         assertEquals(
-            0.68,
-            ProbePlan.exitPrice(
-                cost = 0.34,
-                elapsedSec = 30,
-                secondsLeft = 270,
-                highWater = 0.0,
-                rung = 0,
-                bestBid = 0.60,
-                exit = rule,
-            ),
+            SellLadder.HALF_MINUTE[
+                SellLadder.stepFor(30, null, SellLadder.HALF_MINUTE, stepSec = 60L),
+            ],
+            want,
             1e-9,
         )
+        // Well above the sixty-eight cents the doubling used to take.
+        assertTrue(want > 0.68)
     }
 }
