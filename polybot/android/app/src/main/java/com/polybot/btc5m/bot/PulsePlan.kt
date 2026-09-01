@@ -75,6 +75,36 @@ object PulsePlan {
     const val DEFAULT_MAX_PRICE = 0.80
 
     /**
+     * And how much dearer a side may be bought as the window runs out.
+     *
+     * The band's top is set for a window with time left in it: a side at 80c
+     * with four minutes to run is charging most of a dollar for the part of
+     * the move that has not happened yet, and four minutes is long enough for
+     * it to un-happen. With two minutes left the same price is charging for a
+     * move that is nearly finished, and with one it is charging for one that
+     * is all but over — the odds and the time left have moved together, and
+     * a ceiling that does not move with them refuses the windows this rule is
+     * most often right about.
+     *
+     * It only ever lifts. A rule already allowed to pay more late keeps what
+     * it had; this cannot narrow a band, only widen it.
+     */
+    const val LATE_SEC = 180L
+    const val LAST_SEC = 240L
+    const val LATE_MAX = 0.83
+    const val LAST_MAX = 0.86
+
+    /** The dearest this rule may pay, this many seconds into the window. */
+    fun topPrice(elapsedSec: Long, settings: Settings): Double {
+        val late = when {
+            elapsedSec >= LAST_SEC -> LAST_MAX
+            elapsedSec >= LATE_SEC -> LATE_MAX
+            else -> 0.0
+        }
+        return maxOf(settings.maxPrice, late)
+    }
+
+    /**
      * The same rule, asking less of the market before it acts.
      *
      * Four independent readings agreeing is a high bar on a five-minute
@@ -257,7 +287,10 @@ object PulsePlan {
         if (lean < settings.minLean) return "стакан против " + pct(lean)
 
         val ask = askFor(side, read) ?: return "нет цены"
-        val top = minOf(settings.maxPrice, read.ceiling)
+        // The desk's own early-window ceiling still applies over the top of
+        // this: a limit that only covers some of the ways to spend money is
+        // not a limit, and that one covers all of them.
+        val top = minOf(topPrice(read.elapsedSec, settings), read.ceiling)
         if (ask > top + 1e-9) return "дорого " + cents(ask) + " из " + cents(top)
         if (ask < settings.minPrice - 1e-9) return "рынок против " + cents(ask)
         if (read.cashUsd < ask * settings.shares) return "нет денег"
