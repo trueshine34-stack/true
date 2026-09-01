@@ -646,3 +646,68 @@ That spread is the honest answer: the plan makes 14% a month if the historical r
 holds, 3.6% a month at the pessimistic end of the confidence interval, and slowly
 bleeds if the fills are worse than 50¢/99¢. Which of the three you get is decided by
 the fill prices and by whether 57% survives out of sample — not by the sizing.
+
+## Question 12 — the user's plan: 7-run fade, double on loss, base grows with profit
+
+`mycompound.py`. First entry $50; the base stake stays a constant share of the
+bankroll, so every win raises the size of the next sequence; inside a sequence the
+stake doubles on the same side after each loss. Data extended to 330 days
+(95 040 candles, 5 Nov 2025 – 1 Sep 2026) so that a 300-day window is real data
+rather than a repeat of the 8-month sample.
+
+### How deep the account has to be able to go
+
+| losses to fund | run reaches | deposit needed at a $50 base | largest bet |
+|---|---|---|---|
+| 4 | 11 | $1 550 | $800 |
+| 5 | 12 | $3 150 | $1 600 |
+| 6 | 13 | $6 350 | $3 200 |
+| 7 | 14 | $12 750 | $6 400 |
+| **8** | **15** | **$25 550** | $12 800 |
+| 9 | 16 | $51 150 | $25 600 |
+
+### 100 days (24 May – 1 Sep 2026): 185 sequences, deepest loss streak 5
+
+| deposit | final | multiple | largest bet | max DD | ruin on this path | MC ruin |
+|---|---|---|---|---|---|---|
+| $500 | $218 | 0.44× | $291 | 100% | **RUIN** | 100% |
+| $1 000 | $482 | 0.48× | $771 | 100% | **RUIN** | 100% |
+| $2 500 | $1 240 | 0.50× | $1 044 | 100% | **RUIN** | 98.4% |
+| $5 000 | $28 349 | **5.67×** | $7 198 | 0% | no | 0% |
+| $12 750 | $25 228 | 1.98× | $2 891 | 0% | no | 0% |
+| $25 550 | $35 927 | 1.41× | $2 150 | 0% | no | 0% |
+
+### 300 days (5 Nov 2025 – 1 Sep 2026): 517 sequences, deepest loss streak **8**
+
+| deposit | final | multiple | largest bet | ruin on this path | MC ruin |
+|---|---|---|---|---|---|
+| $2 500 | $1 287 | 0.51× | $1 084 | **RUIN** | 100% |
+| $5 000 | $2 155 | 0.43× | $1 864 | **RUIN** | 99.5% |
+| $12 750 | **$0** | 0.00× | $7 545 | **RUIN** | 75.9% |
+| $25 550 | $65 018 | 2.54× | $13 897 | no | 10.7% |
+
+The 100-day window contained nothing longer than a 12-run. The 300-day window
+contains the 15-candle run down of **1 Dec 2025, 06:45 ICT (−4.03%)** — eight losses
+in a row. That single sequence takes the $12 750 account, which was up several times
+over by then, to exactly zero. $5 000 — the best-looking row over 100 days at 5.67× —
+is dead within 300.
+
+### Against the same first bet, staked flat
+
+| plan | deposit | first bet | 300-day result | max DD | ruin risk |
+|---|---|---|---|---|---|
+| flat 2%, no chasing | $2 500 | $50 | $7 100 (**2.84×**) | 20.1% | none |
+| flat 2%, no chasing | $25 550 | $511 | 2.84× → $72 600 | 20.1% | none |
+| user's martingale | $25 550 | $50 | $65 018 (2.54×) | — | 10.7% |
+
+Flat staking returns a higher multiple than the martingale, on a tenth of the
+deposit, with no path to zero. Scaled to the same $25 550 it earns more in absolute
+dollars too — $47 000 against $39 500 — because the martingale spends its capital
+funding doubles at runs 8–15 where the win rate is 50%, while the flat plan spends
+every dollar on the 57% bet.
+
+**The number to take away.** For this plan the honest minimum deposit is $25 550 at a
+$50 base — 511× the first bet — and even that carries a ~10% chance of ruin over 300
+days. Compounding the base makes it worse, not better: the base rises after wins, so
+the losing sequence, when it comes, is priced off a larger bankroll. To halve the
+requirement, cut the first entry to $25.
