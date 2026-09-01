@@ -65,8 +65,17 @@ object PulsePlan {
      */
     const val DEFAULT_STAKE_PCT = 0.0
 
-    /** The window has to have said something before it is worth trading. */
-    const val DEFAULT_FROM_SEC = 45L
+    /**
+     * The window has to have said something before it is worth trading.
+     *
+     * A minute and a half. Under that the lead is the first swing of a fresh
+     * five minutes rather than a direction: the readings all have values, and
+     * every one of them is being taken off a sample too short to mean what it
+     * says — the momentum is one minute candle, the volume is that same
+     * candle against an average, and the book has not been tested by anything
+     * yet. The four agreeing there is four ways of describing the same noise.
+     */
+    const val DEFAULT_FROM_SEC = 90L
 
     /**
      * How late a window may still be entered — the whole of it, by default.

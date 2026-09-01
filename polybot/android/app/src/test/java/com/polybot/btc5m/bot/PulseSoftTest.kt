@@ -76,19 +76,26 @@ class PulseSoftTest {
     /**
      * It does *not* look earlier. Softer gates are about how much evidence is
      * enough, not about reading a window that has not happened yet: in the
-     * first stretch the lead is a few seconds of noise and the book has not
-     * been tested, and that is the last thing to relax.
+     * first stretch every reading is taken off a sample too short to mean
+     * what it says, and four of those agreeing is four ways of describing the
+     * same noise. Both rules sit it out.
      */
     @Test
-    fun itStillWaitsOutTheStartOfAWindow() {
+    fun bothWaitOutTheStartOfAWindow() {
         val early = read(lead = 8.0, lean = 0.60, volume = 1.0, ask = 0.55, elapsed = 25L)
 
         assertEquals("рано", PulsePlan.blockedBecause(early, strict, holding = false))
         assertEquals("рано", PulsePlan.blockedBecause(early, soft, holding = false))
-        // And it waits longer than the strict one, not less.
+
         val mid = read(lead = 8.0, lean = 0.60, volume = 1.0, ask = 0.55, elapsed = 60L)
-        assertNull(PulsePlan.blockedBecause(mid, strict, holding = false))
+        assertEquals("рано", PulsePlan.blockedBecause(mid, strict, holding = false))
         assertEquals("рано", PulsePlan.blockedBecause(mid, soft, holding = false))
+
+        // The soft rule opens first, at seventy-five seconds; the strict one
+        // at ninety.
+        val later = read(lead = 8.0, lean = 0.60, volume = 1.0, ask = 0.55, elapsed = 80L)
+        assertEquals("рано", PulsePlan.blockedBecause(later, strict, holding = false))
+        assertNull(PulsePlan.blockedBecause(later, soft, holding = false))
     }
 
     /**
