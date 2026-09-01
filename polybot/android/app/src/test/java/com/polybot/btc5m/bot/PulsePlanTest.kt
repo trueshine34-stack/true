@@ -173,10 +173,10 @@ class PulsePlanTest {
 
     @Test
     fun takesProfitAtTheRungAboveWhatItPaid() {
-        // Twelve percent on sixty-two cents is 69.4, and a sell never rounds
+        // Fifteen percent on sixty-two cents is 71.3, and a sell never rounds
         // down onto a worse price than it asked for.
-        assertEquals(0.70, PulsePlan.takePrice(0.62, on, 0.01), 1e-9)
-        assertEquals(0.34, PulsePlan.takePrice(0.30, on, 0.01), 1e-9)
+        assertEquals(0.72, PulsePlan.takePrice(0.62, on, 0.01), 1e-9)
+        assertEquals(0.35, PulsePlan.takePrice(0.30, on, 0.01), 1e-9)
     }
 
     @Test

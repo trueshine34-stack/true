@@ -1379,7 +1379,9 @@ class BotPlugin : Plugin() {
                 .put("bankUsd", bot.settings.bankUsd)
                 .put("shares", bot.settings.shares)
                 .put("minEdge", bot.settings.minEdge)
-                .put("takePct", bot.settings.takePct)
+                // What is actually asked for, floor included, rather than
+                // what happens to be stored under it.
+                .put("takePct", PulsePlan.takeOf(bot.settings))
                 // Paper always runs, so what is left to say is whether the
                 // wallet runs beside it.
                 .put("live", bot.settings.live)

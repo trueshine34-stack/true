@@ -230,7 +230,7 @@ class PulseBot(
             "info",
             "Пульс включён: по " + String.format("%.0f", settings.shares) +
                 " долей, вход при перевесе от $" + String.format("%.0f", settings.minEdge) +
-                ", выход +" + Math.round(settings.takePct * 100) + "%",
+                ", выход +" + Math.round(PulsePlan.takeOf(settings) * 100) + "%",
         )
         onStateChanged()
     }
@@ -524,7 +524,6 @@ class PulseBot(
      */
     private fun workPaper(book: Book, open: Lot, current: PulsePlan.Read, market: Market) {
         val nowSec = Clock.nowSec()
-        val elapsed = nowSec - open.windowStart
         val secondsLeft = open.windowStart + 300L - nowSec
 
         val bid = try {
@@ -536,13 +535,6 @@ class PulseBot(
             open.note = "нет спроса"
             return
         }
-
-        // What the offer was asking before this tick's bid arrived. Pricing
-        // the rung off the same bid it is tested against walks it up out of
-        // reach every time the price jumps, and a resting offer does not do
-        // that — it gets hit.
-        val rule = exit()
-        val asked = open.highWater
 
         when (PulsePlan.exitFor(open.outcome, current, settings)) {
             PulsePlan.Exit.RIDE -> {
@@ -557,29 +549,25 @@ class PulseBot(
             }
 
             PulsePlan.Exit.HOLD -> {
-                // A doubling is taken whatever the take price says; the rung
-                // is already capped the same way.
-                val mine = SellLadder.capped(
+                // Its own price and nothing else. The desk's ladder used to be
+                // laid over this and the lower of the two was asked — which is
+                // what a ladder does, walk a price down over the window — and
+                // the ladder's rungs are absolute: 77¢ early, whatever the
+                // shares cost. On a side taken at 85¢ that asked 77¢, a loss
+                // sold on purpose, and on every entry it undercut the margin
+                // the rule exists to collect. What is left of the ladder here
+                // is the doubling cap, which only ever lowers an ask that has
+                // run away above twice cost.
+                val want = SellLadder.capped(
                     PulsePlan.takePrice(open.price, settings, market.tickSize),
                     open.price,
                 )
-                val rungAsk = ProbePlan.exitPrice(
-                    cost = open.price,
-                    elapsedSec = elapsed,
-                    secondsLeft = secondsLeft,
-                    highWater = asked,
-                    rung = open.rung,
-                    bestBid = bid,
-                    exit = rule,
-                    tick = market.tickSize,
-                )
-                val want = minOf(mine, rungAsk)
                 open.sellPrice = want
                 if (SellLadder.reached(bid, want)) {
-                    // Up to the last minute nothing is on the book: the rung
-                    // is a price to wait for, and a bid that jumps past it
-                    // pays what it jumped to. Inside the last minute the offer
-                    // is resting there and gets the price it asked for.
+                    // Up to the last minute nothing is on the book: the price
+                    // is one to wait for, and a bid that jumps past it pays
+                    // what it jumped to. Inside the last minute the offer is
+                    // resting there and gets the price it asked for.
                     val resting = SellLadder.restsNow(secondsLeft)
                     val got = if (resting) want else bid
                     paperSell(
@@ -590,12 +578,7 @@ class PulseBot(
                             " ${(got * 100).toInt()}¢",
                     )
                 }
-                // And only now does the mark walk on.
                 open.highWater = maxOf(open.highWater, bid)
-                open.rung = maxOf(
-                    open.rung,
-                    ProbePlan.exitStep(elapsed, open.highWater, open.rung, rule),
-                )
             }
         }
     }

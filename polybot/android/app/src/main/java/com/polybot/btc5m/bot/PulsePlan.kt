@@ -75,7 +75,18 @@ object PulsePlan {
     const val DEFAULT_MAX_PRICE = 0.80
 
     /** What one round is trying to make, on the price paid. */
-    const val DEFAULT_TAKE_PCT = 0.12
+    const val DEFAULT_TAKE_PCT = 0.15
+
+    /**
+     * And the least it may ever be, whatever the setting says.
+     *
+     * A rule that takes a side the moment four readings agree is paying for
+     * that agreement in the ask, so the margin has to be worth the crossing:
+     * under this the round is a coin toss with a fee on it. It is a floor
+     * rather than a default because a setting stored before the floor existed
+     * would otherwise keep selling under it, quietly, forever.
+     */
+    const val MIN_TAKE_PCT = 0.15
 
     /** Dollars the lead has to flip against the position before it is cut. */
     const val DEFAULT_CUT_USD = 3.0
@@ -204,9 +215,18 @@ object PulsePlan {
         return Exit.HOLD
     }
 
-    /** Where the profit is offered, snapped up to the venue's step. */
+    /**
+     * Where the profit is offered, snapped up to the venue's step.
+     *
+     * Never under [MIN_TAKE_PCT] over what the shares cost: that is the whole
+     * of "sell dearer", and it holds against a lower setting rather than
+     * trusting one.
+     */
+    fun takeOf(settings: Settings): Double =
+        maxOf(MIN_TAKE_PCT, settings.takePct)
+
     fun takePrice(paid: Double, settings: Settings, tick: Double): Double {
-        val wanted = paid * (1.0 + settings.takePct)
+        val wanted = paid * (1.0 + takeOf(settings))
         val step = if (tick > 0) tick else 0.01
         val snapped = kotlin.math.ceil(wanted / step - 1e-9) * step
         return (Math.round(snapped * 10_000.0) / 10_000.0).coerceIn(step, 1.0 - step)
