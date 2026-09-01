@@ -897,3 +897,82 @@ The only progression worth anything is ×1.5 with the base kept at 1% of the dep
 (so $5 000 behind a $50 first bet). It returns 3.73× against flat's 3.57% at the
 same drawdown — a rounding error — for two and a half times the capital and a
 $1 500 worst bet instead of $188. Not worth it.
+
+## Question 16 — the same strategy on 15m candles
+
+`make15m.py` builds an exact 15m series from the 5m file (three bars per candle,
+31 680 bars, 330 days). `tf15.py` runs the whole analysis on it.
+
+### The trigger moves from 7 to 4
+
+| run length | all hours n | fade wins | p | night n | fade wins | p |
+|---|---|---|---|---|---|---|
+| **4** | **1794** | **55.80%** | **0.0000** | 589 | 59.59% | 0.0000 |
+| 5 | 793 | 56.37% | 0.0002 | 245 | 57.96% | 0.013 |
+| 6 | 346 | 54.34% | 0.107 | 101 | 56.44% | 0.196 |
+| 7 | 158 | 58.86% | 0.026 | 44 | 63.64% | 0.070 |
+| 9 | 26 | 50.00% | 1.000 | 9 | 33.33% | 0.317 |
+
+On 5m the same run of 4 is worth only 53.50%. A 15m run of four is an hour of
+one-way movement — the extension the 5m chart only reaches at seven bars.
+
+**It holds out of sample.** 70/30 split on trigger 4, all hours: train n=1244,
+55.55% (p=0.0001); test n=549, **56.47%** (p=0.0024). Month by month, all eleven
+months are above 50%: 58.2, 53.0, 52.7, 53.6, 58.6, 59.6, 50.3, 57.4, 56.3, 56.4,
+57.2. The night filter does *not* survive here (train 61.8%, test 53.5%) — trade
+all hours.
+
+### What that does to the arithmetic
+
+1626 signals in 300 days = **163 a month** against 14 a month for the 5m trigger-7
+plan. Same edge, ten times the compounding.
+
+Flat staking, $2000 bankroll, trigger 4, 300 days:
+
+| stake | first bet | final | multiple | per month | max DD |
+|---|---|---|---|---|---|
+| 1.0% | $20 | $10 505 | 5.25× | ×1.18 | 15.5% |
+| 1.5% | $30 | $22 685 | 11.34× | ×1.27 | 22.6% |
+| 2.0% | $40 | $47 080 | 23.54× | ×1.37 | 29.2% |
+| **2.5%** | **$50** | **$93 910** | **46.96×** | **×1.47** | 35.3% |
+| 3.0% | $60 | $180 040 | 90.02× | ×1.57 | 41.0% |
+
+By trigger, at 2.5% on $2000: trigger 4 → 46.96×, trigger 5 → 7.79×,
+trigger 6 → 2.00×, trigger 7 → 1.56×. Waiting for longer runs on 15m just throws
+away signals.
+
+### Progressions are worse here, not better
+
+| plan | deposit | result | largest bet | MC ruin |
+|---|---|---|---|---|
+| flat 2.5% | $2 000 | 45.73× | $2 289 | 0.0% |
+| flat 3% | $1 667 | 87.12× | $4 363 | 0.0% |
+| ×1.5, base 1% | $5 000 | **RUIN** | $1 481 | 86.5% |
+| ×2, base 0.5% | $10 000 | **RUIN** | $4 057 | 99.1% |
+
+Trigger 4 fires so often that the deepest chain reaches **12 losses in a row** — a
+run of 16 fifteen-minute candles. No doubling scheme funds that: ×2 at a $50 base
+would need $409 550. On this timeframe the progression question is settled.
+
+### Where it breaks
+
+| buy | sell | break-even | EV @ 55.9% | EV @ 53.5% |
+|---|---|---|---|---|
+| 50¢ | 99¢ | 50.5% | +$10.68 | +$5.93 |
+| 50¢ | 95¢ | 52.6% | +$6.21 | +$1.65 |
+| 50¢ | 90¢ | 55.6% | +$0.62 | −$3.70 |
+| 51¢ | 95¢ | 53.7% | +$4.13 | −$0.34 |
+| 51¢ | 90¢ | 56.7% | −$1.35 | −$5.59 |
+
+55.9% is a thinner cushion than the 5m trigger-7's 57.4%, and it is spent over ten
+times as many bets. At 51¢ in and 90¢ out the whole thing is negative. Execution
+price matters more here than anywhere else in this repo.
+
+### The 15m plan
+
+Fade a run of exactly **4** on the 15m chart, all hours, one bet per signal, no
+progression, **2.5% of the bankroll** — $50 on a $2000 deposit. Roughly 5–6 signals
+a day. On the last 300 days that compounds to 46.96× with a 35% worst drawdown; at
+the pessimistic end of the confidence interval (53.5%) it is still about ×1.21 a
+month. Verify the fills before trusting any of it, and re-measure the hit rate every
+200 bets — at 163 signals a month that is a check every five weeks.
