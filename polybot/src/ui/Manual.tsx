@@ -89,6 +89,21 @@ const NOTE_MS = 5_000;
  * position has room to work, red in the last minute — where the rule stops
  * holding out for a margin and the only thing left to do is get out.
  */
+/**
+ * Which of the three entries the trend rule is set to, for the account that
+ * is trading. The two accounts keep their own, so a tab is lit as live only
+ * when the account actually buying is on that entry.
+ */
+const probeMode = (
+  state: { inside: boolean; fade: boolean; realInside?: boolean;
+           realFade?: boolean; live: boolean } | null,
+): 'line' | 'fade' | 'inside' => {
+  if (!state) return 'line';
+  const inside = state.live ? (state.realInside ?? false) : state.inside;
+  const fade = state.live ? (state.realFade ?? false) : state.fade;
+  return inside ? 'inside' : fade ? 'fade' : 'line';
+};
+
 /** Seconds as a clock reads them. */
 const clock = (secondsLeft: number): string =>
   `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
@@ -153,9 +168,6 @@ export function Manual({
   const [logged, setLogged] = useState<LoggedOrder[]>([]);
   const [lookAhead, setLookAhead] = useState(false);
   const [events, setEvents] = useState<EventSummary[]>([]);
-  const [sessionPnl, setSessionPnl] = useState(0);
-  /** A closed window being looked at, instead of the one being traded. */
-  const [viewWindow, setViewWindow] = useState<number | null>(null);
   const [autoSell, setAutoSell] = useState<AutoSellState>(IDLE_AUTOSELL);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -187,16 +199,26 @@ export function Manual({
    */
   const [side, setSide] = useState<'Up' | 'Down' | null>(null);
   const [pulseBot, setPulseBot] = useState<PulseState | null>(null);
-  const [pulseOpen, setPulseOpen] = useState(false);
+  /**
+   * The bot deck: whether it is open, which rule is on it, and whose money.
+   *
+   * Three questions in that order, and the order is the point. Every control
+   * under them belongs to one rule and one account, so asking anything else
+   * first — as four separate cards each with their own pickers did — meant
+   * reading a setting without knowing whose it was.
+   */
+  const [botOpen, setBotOpen] = useState(false);
+  const [botTab, setBotTab] = useState<'line' | 'fade' | 'inside' | 'pulse'>(
+    'line',
+  );
+  const [botLive, setBotLive] = useState(false);
   const [takeBot, setTakeBot] = useState<TakeState | null>(null);
   const [takeOpen, setTakeOpen] = useState(false);
   const [probeBot, setProbeBot] = useState<ProbeState | null>(null);
   /** The five-minute candle being read, and that window's own orders. */
   const [readWindow, setReadWindow] = useState<number | null>(null);
   const [readOrders, setReadOrders] = useState<LoggedOrder[]>([]);
-  const [probeOpen, setProbeOpen] = useState(false);
   /** The event strip is folded away until it is asked for. */
-  const [sessionOpen, setSessionOpen] = useState(false);
   /** A resting order opened for editing. */
   const [editing, setEditing] = useState<TradeRow | null>(null);
   /** A position opened to be closed, with the price still to be chosen. */
@@ -292,7 +314,6 @@ export function Manual({
         .then((r) => {
           if (cancelled) return;
           setEvents(r.events);
-          setSessionPnl(r.session);
         })
         .catch(() => {});
     };
@@ -304,11 +325,21 @@ export function Manual({
     };
   }, [windowStart]);
 
-  // A window that has closed is history; looking at one is not a mode to be
-  // stuck in when the next one opens.
-  useEffect(() => {
-    setViewWindow(null);
-  }, [windowStart]);
+  /**
+   * What each five-minute event made, keyed the way the chart holds a candle.
+   *
+   * A window is a candle, so its result belongs over its own candle rather
+   * than in a second list of the same windows in the same order. Only the
+   * ones that actually traded: a nought over every candle the desk sat out
+   * would bury the handful it did not.
+   */
+  const results = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const e of events) {
+      if (e.trades > 0) out[String(e.windowStart * 1000)] = e.pnl;
+    }
+    return out;
+  }, [events]);
 
   /** What the round makes if it goes our way — the header's second number. */
   const potential = useMemo(
@@ -549,7 +580,7 @@ export function Manual({
           if (!cancelled) setOrders(r.orders);
         })
         .catch(() => {});
-      void PolyBot.getOrderLog({ windowStart: viewWindow ?? deskWindow })
+      void PolyBot.getOrderLog({ windowStart: deskWindow })
         .then((r) => {
           if (!cancelled) setLogged(r.orders);
         })
@@ -561,7 +592,7 @@ export function Manual({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [deskWindow, viewWindow]);
+  }, [deskWindow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -881,10 +912,9 @@ export function Manual({
     (row: TradeRow): 'Up' | 'Down' | null => {
       const live = orders.find((x) => x.id === row.orderId);
       if (live) return sideOfToken(live.assetId);
-      if (viewWindow != null) return null;
       return row.outcome === 'Up' || row.outcome === 'Down' ? row.outcome : null;
     },
-    [orders, sideOfToken, viewWindow],
+    [orders, sideOfToken],
   );
 
   /** The ids the exchange itself is still listing, for anything that asks. */
@@ -1157,19 +1187,12 @@ export function Manual({
         </button>
 
         {/*
-          Two marks, not two figures. Both of these are read a few times an
-          hour and their numbers are inside them anyway — carried on the rail
-          they only competed with the balance, which is the one number here
-          that is always worth reading.
+          The session used to be a mark here, opening a strip of chips — one
+          per event, each with its result. The chart below is already a row of
+          five-minute events in the same order, so the strip was the same list
+          drawn twice, and the mark was a tap in the way of it. The results
+          went onto the candles instead: the window is the candle.
         */}
-        <button
-          className={`railmark${sessionOpen ? ' on' : ''}`}
-          onClick={() => setSessionOpen((v) => !v)}
-          aria-label="Сессия"
-        >
-          <span className={sessionPnl >= 0 ? 'up' : 'down'}>◷</span>
-        </button>
-
         {takeBot && (
           <button
             className={`railmark${takeOpen ? ' on' : ''}`}
@@ -1191,34 +1214,33 @@ export function Manual({
           </button>
         )}
 
-        {pulseBot && (
+        {/*
+          One mark for all four rules. They used to have one each, so the rail
+          asked "which of these four icons is the one I want" before anything
+          could be read or changed — and three of the four were always the
+          wrong answer. Now it opens a deck: pick the rule, pick the account,
+          and everything under that belongs to the one you picked.
+        */}
+        {(pulseBot || probeBot) && (
           <button
-            className={`railmark${pulseOpen ? ' on' : ''}`}
-            onClick={() => setPulseOpen((v) => !v)}
-            aria-label="Пульс"
+            className={`railmark${botOpen ? ' on' : ''}`}
+            onClick={() => {
+              // Opening lands on whatever is actually running, which is the
+              // thing you opened it to look at.
+              if (!botOpen) {
+                if (probeBot?.running) {
+                  setBotLive(probeBot.live && !probeBot.demo);
+                  setBotTab(probeMode(probeBot));
+                } else if (pulseBot?.running) {
+                  setBotLive(!pulseBot.demo);
+                  setBotTab('pulse');
+                }
+              }
+              setBotOpen((v) => !v);
+            }}
+            aria-label="Боты"
           >
-            {/* Its own mark: a heartbeat, and lit while it is running. */}
-            <svg viewBox="0 0 16 16" aria-hidden>
-              <path
-                d="M1 8h3l2-4 3 8 2-4h4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <i className={`raildot${pulseBot.running ? ' live' : ''}`} aria-hidden />
-          </button>
-        )}
-
-        {probeBot && (
-          <button
-            className={`railmark${probeOpen ? ' on' : ''}`}
-            onClick={() => setProbeOpen((v) => !v)}
-            aria-label="Проба"
-          >
-            {/* Its own mark: a flask, because this one is an experiment. */}
+            {/* A flask: all four of these are still experiments. */}
             <svg viewBox="0 0 16 16" aria-hidden>
               <path
                 d="M6.5 1.5v4L2.5 12a1.6 1.6 0 001.4 2.5h8.2A1.6 1.6 0 0013.5 12l-4-6.5v-4M5.5 1.5h5"
@@ -1229,7 +1251,12 @@ export function Manual({
                 strokeLinejoin="round"
               />
             </svg>
-            <i className={`raildot${probeBot.running ? ' live' : ''}`} aria-hidden />
+            <i
+              className={`raildot${
+                probeBot?.running || pulseBot?.running ? ' live' : ''
+              }`}
+              aria-hidden
+            />
           </button>
         )}
 
@@ -1243,18 +1270,6 @@ export function Manual({
           </button>
         </div>
       </div>
-
-      {sessionOpen && (
-        <EventStrip
-          events={events}
-          windowStart={windowStart}
-          selected={viewWindow}
-          onSelect={(w) => {
-            setViewWindow(w);
-            setSessionOpen(false);
-          }}
-        />
-      )}
 
       {takeOpen && takeBot && (
         <TakeCard
@@ -1275,9 +1290,84 @@ export function Manual({
         />
       )}
 
-      {pulseOpen && pulseBot && (
+      {botOpen && (
+        <>
+          {/*
+            Which rule, and then whose money. The three trend entries are one
+            engine with three ways of choosing a side, so exactly one of them
+            runs at a time and picking a tab moves it — the dot says which one
+            is live. The pulse is a separate rule and runs alongside any of
+            them.
+          */}
+          <div className="botbar bottabs">
+            {(
+              [
+                ['line', 'линия'],
+                ['fade', 'свеча'],
+                ['inside', 'цена'],
+                ['pulse', 'пульс'],
+              ] as const
+            ).map(([key, label]) => {
+              const live =
+                key === 'pulse'
+                  ? (pulseBot?.running ?? false)
+                  : (probeBot?.running ?? false) && probeMode(probeBot) === key;
+              return (
+                <button
+                  key={key}
+                  className={`demoflag${botTab === key ? ' on' : ''}`}
+                  onClick={() => {
+                    setBotTab(key);
+                    // Picking a trend tab is picking that entry: the engine
+                    // reads one at a time, and the lead moves with it.
+                    if (key !== 'pulse' && probeBot) {
+                      void PolyBot.probeUpdate({
+                        real: botLive,
+                        inside: key === 'inside',
+                        fade: key === 'fade',
+                        leadSec: key === 'fade' ? 15 : 50,
+                      })
+                        .then(() => PolyBot.probeState())
+                        .then(setProbeBot)
+                        .catch((e) =>
+                          setNote(e instanceof Error ? e.message : String(e)),
+                        );
+                    }
+                  }}
+                >
+                  {label}
+                  <i className={`raildot${live ? ' live' : ''}`} aria-hidden />
+                </button>
+              );
+            })}
+          </div>
+
+          {/*
+            And whose money. It decides what every number below means — the
+            balance, the stake, the run, the record — and for the trend rule
+            the settings too, since the two accounts keep their own.
+          */}
+          <div className="botbar accounts">
+            <button
+              className={`demoflag${!botLive ? ' on' : ''}`}
+              onClick={() => setBotLive(false)}
+            >
+              счёт: демо
+            </button>
+            <button
+              className={`demoflag real${botLive ? ' on' : ''}`}
+              onClick={() => setBotLive(true)}
+            >
+              счёт: реально
+            </button>
+          </div>
+        </>
+      )}
+
+      {botOpen && botTab === 'pulse' && pulseBot && (
         <PulseCard
           state={pulseBot}
+          seen={botLive}
           onEnable={(enabled) => {
             void PolyBot.pulseUpdate({ enabled })
               .then(() => PolyBot.pulseState())
@@ -1313,9 +1403,10 @@ export function Manual({
         />
       )}
 
-      {probeOpen && probeBot && (
+      {botOpen && botTab !== 'pulse' && probeBot && (
         <ProbeCard
           state={probeBot}
+          seen={botLive}
           onEnable={(enabled) => {
             void PolyBot.probeUpdate({ enabled })
               .then(() => PolyBot.probeState())
@@ -1369,20 +1460,6 @@ export function Manual({
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
-          onMode={(mode, real) => {
-            // The lead moves with the mode: the candle entry reads the five
-            // minutes closing as the window opens, so it looks late; the line
-            // is settled long before and buys early, where the side is cheap.
-            void PolyBot.probeUpdate({
-              inside: mode === 'inside',
-              fade: mode === 'fade',
-              leadSec: mode === 'fade' ? 15 : 50,
-              real,
-            })
-              .then(() => PolyBot.probeState())
-              .then(setProbeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
           onEdge={(edgeUsd, real) => {
             if (!Number.isFinite(edgeUsd) || edgeUsd <= 0) return;
             void PolyBot.probeUpdate({ edgeUsd, real })
@@ -1401,28 +1478,19 @@ export function Manual({
 
       {tab !== 'settings' && (
           <div className="card tight">
-            {viewWindow != null && (
-              <div className="listhead">
-                <span>Событие {clockOf(viewWindow)}</span>
-                <button className="linkbtn" onClick={() => setViewWindow(null)}>
-                  к текущему
-                </button>
-              </div>
-            )}
-
             {/*
               The hours before this window, as Binance's own five-minute
               candles, with the prices the market keeps turning at drawn on
-              them. Under it the book: what the next few dollars would cost.
+              them, and what each window made written over its own candle.
+              Under it the book: what the next few dollars would cost.
             */}
-            {viewWindow == null && (
-              <CandlePanel
-                interval="5m"
-                height={150}
-                picked={readWindow}
-                onPick={(t) => setReadWindow((v) => (v === t ? null : t))}
-              />
-            )}
+            <CandlePanel
+              interval="5m"
+              height={150}
+              picked={readWindow}
+              results={results}
+              onPick={(t) => setReadWindow((v) => (v === t ? null : t))}
+            />
 
             {/*
               What happened in the candle just tapped: the bot's own reading of
@@ -1430,7 +1498,7 @@ export function Manual({
               so the two are the same question asked of the chart instead of
               the list.
             */}
-            {viewWindow == null && readWindow != null && (
+            {readWindow != null && (
               <WindowRead
                 windowStart={readWindow}
                 orders={readOrders}
@@ -1451,9 +1519,9 @@ export function Manual({
               which on a bet that lasts five minutes is the half that decides
               the side.
             */}
-            {viewWindow == null && <CandlePanel interval="1m" height={110} />}
+            <CandlePanel interval="1m" height={110} />
 
-            {viewWindow == null && <DepthPanel />}
+            <DepthPanel />
 
             {/*
               Only what is still working. A round that has closed is history and
@@ -1484,7 +1552,7 @@ export function Manual({
                   // "Down" is a different token from this window's.
                   const editSide = live
                     ? sideOfToken(live.assetId)
-                    : viewWindow == null && (t.outcome === 'Up' || t.outcome === 'Down')
+                    : t.outcome === 'Up' || t.outcome === 'Down'
                       ? t.outcome
                       : null;
                   // A resting sell is as much a price you might want to move
@@ -2170,70 +2238,6 @@ function PriceSpinner({
   );
 }
 
-/**
- * How the last few five-minute events went.
- *
- * A window is the unit this app trades, so it is the unit worth scoring: which
- * side it closed on, and what the round made. The colour is the side — green
- * for Up, red for Down — and the money keeps its own sign, because a round can
- * be lost on the side that won and won on the side that lost.
- *
- * Tapping one shows that window's orders below. The running window is the way
- * back, and the strip scrolls itself there whenever it changes.
- */
-function EventStrip({
-  events,
-  windowStart,
-  selected,
-  onSelect,
-}: {
-  events: EventSummary[];
-  windowStart: number;
-  selected: number | null;
-  onSelect: (windowStart: number | null) => void;
-}) {
-  const past = events.filter((e) => e.windowStart !== windowStart);
-  const live = events.find((e) => e.windowStart === windowStart);
-
-  return (
-    <div className="card tight eventcard">
-      <div className="eventstrip">
-        <button
-          className={`eventchip now${selected === null ? ' on' : ''}`}
-          onClick={() => onSelect(null)}
-        >
-          <span className="eventchip-time">сейчас</span>
-          <span
-            className={
-              live == null ? 'muted' : live.pnl >= 0 ? 'up' : 'down'
-            }
-          >
-            {live == null ? '—' : signedUsd(live.pnl)}
-          </span>
-        </button>
-        {past.map((e) => (
-          <button
-            key={e.windowStart}
-            className={`eventchip${selected === e.windowStart ? ' on' : ''}${
-              e.winner === 'Up' ? ' win-up' : e.winner === 'Down' ? ' win-down' : ''
-            }`}
-            onClick={() => onSelect(selected === e.windowStart ? null : e.windowStart)}
-            title={`${clockOf(e.windowStart)} · закрытие ${e.winner || '—'}`}
-          >
-            <span className="eventchip-time">
-              {clockOf(e.windowStart)}
-              {e.winner && <b>{e.winner === 'Up' ? '↑' : '↓'}</b>}
-            </span>
-            <span className={e.pnl >= 0 ? 'up' : 'down'}>{signedUsd(e.pnl)}</span>
-          </button>
-        ))}
-        {past.length === 0 && (
-          <span className="muted empty">Сыгранных событий ещё нет</span>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /**
  * The pulse bot's own panel.
@@ -2423,6 +2427,7 @@ function TakeCard({
  */
 function ProbeCard({
   state,
+  seen,
   onEnable,
   onStake,
   onLead,
@@ -2431,11 +2436,19 @@ function ProbeCard({
   onDemo,
   onLive,
   onBank,
-  onMode,
   onEdge,
   onReset,
 }: {
   state: ProbeState;
+  /**
+   * Which account is on screen, chosen a row above this card.
+   *
+   * The picker used to live inside here, next to a second picker for the
+   * entry mode, on a card that already had a switch of its own — four
+   * controls answering "which bot, whose money, is it on" before a single
+   * setting. They are one ladder now, and this is the rung below the top.
+   */
+  seen: boolean;
   onEnable: (enabled: boolean) => void;
   onStake: (usd: number, real: boolean) => void;
   onLead: (sec: number, real: boolean) => void;
@@ -2444,19 +2457,11 @@ function ProbeCard({
   onDemo: (demo: boolean) => void;
   onLive: (live: boolean) => void;
   onBank: (usd: number) => void;
-  onMode: (mode: 'line' | 'fade' | 'inside', real: boolean) => void;
   onEdge: (usd: number, real: boolean) => void;
   onReset: () => void;
 }) {
   const [why, setWhy] = useState(false);
-  // Both accounts can be running, so the report has to say whose it is. It
-  // opens on the one that is actually trading, and falls back to paper.
-  const [showLive, setShowLive] = useState(state.live && !state.demo);
   const both = state.demo && state.live;
-  // The picker chooses whose settings are on screen as well as whose record,
-  // and the two accounts keep their own dials — so it is worth having even
-  // when only one of them is trading.
-  const seen = showLive;
   const shown = both
     ? state.rounds.filter((r) => r.demo !== seen)
     : state.rounds;
@@ -2502,15 +2507,29 @@ function ProbeCard({
     state.roomToRound != null &&
     state.roomToRound <= state.roundBand;
   const tone = all.pnl > 0 ? 'up' : all.pnl < 0 ? 'down' : 'muted';
+  /** Whether the account on screen is the one actually buying. */
+  const trading = state.enabled && (seen ? state.live : state.demo);
 
   return (
     <div className="card tight">
       <div className="counterhead">
-        <span>Проба</span>
+        <span>{dial.inside ? 'Цена' : dial.fade ? 'Свеча' : 'Линия'}</span>
         <WhyButton open={why} onClick={() => setWhy((v) => !v)} />
+        {/*
+          One switch, for the account being looked at. There used to be two —
+          a master switch and a flag per account — and every combination of
+          them except one meant the same thing: nothing is trading. Turning an
+          account on turns the rule on with it; turning it off leaves the
+          other account exactly as it was.
+        */}
         <button
-          className={`switch ${state.enabled ? 'on' : ''}`}
-          onClick={() => onEnable(!state.enabled)}
+          className={`switch ${trading ? 'on' : ''}`}
+          onClick={() => {
+            const next = !trading;
+            if (seen) onLive(next);
+            else onDemo(next);
+            if (next && !state.enabled) onEnable(true);
+          }}
         />
       </div>
 
@@ -2714,46 +2733,11 @@ function ProbeCard({
         paper meant not running it, and running it meant losing the record
         that says whether it is worth running. Now either, both or neither.
       */}
-      <div className="botbar">
-        <button
-          className={`demoflag${state.demo ? ' on' : ''}`}
-          onClick={() => onDemo(!state.demo)}
-        >
-          демо
-        </button>
-        <button
-          className={`demoflag real${state.live ? ' on' : ''}`}
-          onClick={() => onLive(!state.live)}
-        >
-          реально
-        </button>
-        {!state.demo && !state.live && (
-          <b className="down">оба счёта выключены</b>
-        )}
-        {state.live && state.walletOut && (
+      {seen && state.walletOut && (
+        <div className="botbar">
           <b className="down">кошелёк не подключён</b>
-        )}
-      </div>
-
-      {/*
-        And whose numbers everything under here is: the balance, the stake,
-        the run, the totals and every window in the list. With one account
-        running there is nothing to pick and the tabs stay out of the way.
-      */}
-      <div className="botbar accounts">
-        <button
-          className={`demoflag${!seen ? ' on' : ''}`}
-          onClick={() => setShowLive(false)}
-        >
-          счёт: демо
-        </button>
-        <button
-          className={`demoflag real${seen ? ' on' : ''}`}
-          onClick={() => setShowLive(true)}
-        >
-          счёт: реально
-        </button>
-      </div>
+        </div>
+      )}
 
       <div className="botbar">
         {seen ? (
@@ -2777,40 +2761,6 @@ function ProbeCard({
         </b>
       </div>
 
-      {/*
-        And which of the two entries is running. They are not variants of one
-        rule: one picks a side from the chart before the window opens, the
-        other picks no side at all and buys whichever the book has mispriced
-        once the window is under way. Nearly every field below belongs to one
-        of them, so the switch comes before the fields.
-      */}
-      {/*
-        Three entries, one at a time. They read different things and want
-        different leads, so the switch sets the lead with the mode — the
-        candle entry reads the five minutes closing as the window opens, so
-        the later it looks the more of that candle it has seen, while the line
-        is an average over a quarter of an hour and settled long before.
-      */}
-      <div className="botbar modes">
-        <button
-          className={`demoflag${!dial.inside && !dial.fade ? ' on' : ''}`}
-          onClick={() => onMode('line', seen)}
-        >
-          линия
-        </button>
-        <button
-          className={`demoflag${dial.fade ? ' on' : ''}`}
-          onClick={() => onMode('fade', seen)}
-        >
-          свеча
-        </button>
-        <button
-          className={`demoflag${dial.inside ? ' on' : ''}`}
-          onClick={() => onMode('inside', seen)}
-        >
-          цена
-        </button>
-      </div>
       <div className="botbar">
         <b className="muted small">
           {dial.inside
@@ -3229,6 +3179,7 @@ function ProbeRow({ round, offer }: { round: ProbeRound; offer?: ProbeOffer }) {
 
 function PulseCard({
   state,
+  seen,
   onEnable,
   onBank,
   onShares,
@@ -3236,6 +3187,8 @@ function PulseCard({
   onReset,
 }: {
   state: PulseState;
+  /** Which account is on screen — and, for this rule, the one it runs on. */
+  seen: boolean;
   onEnable: (enabled: boolean) => void;
   onBank: (usd: number) => void;
   onShares: (shares: number) => void;
@@ -3278,17 +3231,22 @@ function PulseCard({
       )}
 
       {/*
-        Paper or real. It decides what every number under it means, so it is
-        the first thing after the name — and paper is the default, because a
-        rule is worth watching for a day before it is trusted with anything.
+        Unlike the trend rule, this one runs on one account at a time: picking
+        an account above moves it, rather than starting a second copy. Said
+        here so the picker is not read as promising two records.
       */}
+      {seen !== !state.demo && (
+        <div className="botbar">
+          <button className="demoflag" onClick={() => onDemo(!seen)}>
+            перевести на {seen ? 'реальные' : 'демо'}
+          </button>
+          <b className="muted small">
+            сейчас на {state.demo ? 'демо' : 'реальных'}
+          </b>
+        </div>
+      )}
+
       <div className="botbar">
-        <button
-          className={`demoflag${state.demo ? ' on' : ''}`}
-          onClick={() => onDemo(!state.demo)}
-        >
-          {state.demo ? 'демо' : 'реально'}
-        </button>
         <b className={state.cash >= state.bankUsd ? 'up' : 'down'}>
           {usd(state.cash)}
           {state.demo && <em> / {usd(state.bankUsd)}</em>}

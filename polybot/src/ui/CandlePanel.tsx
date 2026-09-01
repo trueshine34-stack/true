@@ -48,6 +48,7 @@ export function CandlePanel({
   onPick,
   picked,
   height = 150,
+  results,
 }: {
   interval?: string;
   /** Called with a candle's open time when it is tapped. */
@@ -55,6 +56,15 @@ export function CandlePanel({
   picked?: number | null;
   /** Chart units tall. The closer view is the shorter one. */
   height?: number;
+  /**
+   * What each window made, by the open time of its candle in milliseconds.
+   *
+   * A five-minute window is a five-minute candle, so its result belongs over
+   * that candle. It used to live in a strip of chips behind a button of its
+   * own — the same windows in the same order as the chart, drawn a second
+   * time, one tap away from the chart that was already showing them.
+   */
+  results?: Record<string, number>;
 }) {
   const [candles, setCandles] = useState<Candle[]>([]);
   const [levels, setLevels] = useState<DayLevel[]>([]);
@@ -137,6 +147,7 @@ export function CandlePanel({
       picked={picked}
       levels={levels}
       settled={settled}
+      results={results}
     />
   );
 }
@@ -159,6 +170,7 @@ export function CandleFace({
   picked,
   levels: held,
   settled,
+  results,
 }: {
   candles: Candle[];
   interval?: string;
@@ -170,6 +182,8 @@ export function CandleFace({
   levels?: DayLevel[];
   /** How each window settled on Polymarket, keyed by window start. */
   settled?: Record<string, 'Up' | 'Down'>;
+  /** And what each window made, keyed the same way. */
+  results?: Record<string, number>;
 }) {
   const shape = candleShape(candles, W, H);
   // The rule's own levels when they are to hand, so the line under the candle
@@ -384,6 +398,34 @@ export function CandleFace({
                 y={tip.toFixed(1)}
               >
                 {up ? '▲' : '▼'}
+              </text>
+            );
+          })}
+
+        {/*
+          And what each window made, over its own candle, above the arrow.
+          Only the windows that traded carry one: a nought over every candle
+          the desk sat out would bury the few it did not.
+        */}
+        {interval === '5m' &&
+          results &&
+          shape?.bars.map((bar, i) => {
+            const pnl = results[String(candles[i]?.[0])];
+            if (pnl == null) return null;
+            const won = pnl >= 0;
+            // Over the settlement arrow, which sits just over the wick.
+            const tip = Math.max(5, bar.high - (settled?.[String(candles[i]?.[0])] ? 14 : 4));
+            return (
+              <text
+                key={`pnl-${i}`}
+                className={`pnlmark ${won ? 'up' : 'down'}`}
+                x={bar.x.toFixed(1)}
+                y={tip.toFixed(1)}
+              >
+                {won ? '+' : '−'}
+                {Math.abs(pnl) >= 10
+                  ? Math.round(Math.abs(pnl))
+                  : Math.abs(pnl).toFixed(1)}
               </text>
             );
           })}

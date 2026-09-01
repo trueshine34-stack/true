@@ -3188,6 +3188,46 @@ button.wide {
   fill: var(--down);
 }
 
+/* And what the window made, over its own candle above that arrow. */
+.pnlmark {
+  font-size: 6px;
+  font-weight: 700;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 2px;
+}
+
+.pnlmark.up {
+  fill: var(--up);
+}
+
+.pnlmark.down {
+  fill: var(--down);
+}
+
+/* The four rules, one tab each, with a dot for the one that is live. */
+.bottabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.bottabs .demoflag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+/* On a tab the dot sits in the line of the label, not in a corner of it. */
+.bottabs .raildot {
+  position: static;
+  flex: 0 0 5px;
+}
+
 .sband {
   stroke: none;
 }
