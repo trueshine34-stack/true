@@ -98,6 +98,7 @@ object PulsePlan {
 
     /** The settings that make one, over whatever the strict rule holds. */
     fun soft(): Settings = Settings(
+        ladder = true,
         fromSec = SOFT_FROM_SEC,
         minEdge = SOFT_MIN_EDGE,
         minLean = SOFT_MIN_LEAN,
@@ -178,6 +179,20 @@ object PulsePlan {
          * its own lot and its own totals.
          */
         val live: Boolean = false,
+        /**
+         * Exit by the desk's own sell ladder instead of one fixed margin.
+         *
+         * The two are different bets on the same position. A fixed margin
+         * asks one price and waits: it wins whole when the book comes to it
+         * and nothing at all when the book stops a cent short. The ladder
+         * starts higher and walks down with the clock, so it takes what the
+         * window is actually offering rather than what the entry hoped for —
+         * which suits a rule that enters often on thin evidence, where most
+         * positions are small moves rather than the one big one.
+         *
+         * The strict rule keeps the fixed margin; the soft one takes this.
+         */
+        val ladder: Boolean = false,
     )
 
     /** Everything the rule looks at, read once per check. */

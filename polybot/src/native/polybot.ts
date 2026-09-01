@@ -512,6 +512,8 @@ export type PulseState = {
    * second account is running beside it on real money.
    */
   live: boolean;
+  /** Exits by the desk's sell ladder rather than by one fixed margin. */
+  ladder?: boolean;
   cash: number;
   /** Why it is not buying, in its own words. */
   note?: string | null;

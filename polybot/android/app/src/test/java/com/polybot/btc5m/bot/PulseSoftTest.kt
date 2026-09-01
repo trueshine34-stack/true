@@ -87,12 +87,21 @@ class PulseSoftTest {
      * sells at is the same floor. Trading more often on thinner evidence is
      * the point; selling cheaper is not.
      */
+    /** And the exit is the desk's ladder rather than one fixed margin. */
+    @Test
+    fun theSoftRuleExitsByTheLadder() {
+        assertEquals(false, strict.ladder)
+        assertEquals(true, soft.ladder)
+    }
+
     @Test
     fun momentumAndMarginAreNotSoftened() {
         val against = read(lead = 8.0, lean = 0.60, volume = 1.0, ask = 0.55)
             .copy(momentum = -1.0)
 
         assertEquals("импульс против", PulsePlan.blockedBecause(against, soft, holding = false))
+        // The margin is the same where the margin is what is used; the soft
+        // rule simply uses the ladder instead.
         assertEquals(
             PulsePlan.takePrice(0.40, strict, 0.01),
             PulsePlan.takePrice(0.40, soft, 0.01),

@@ -40,6 +40,7 @@ class PulseStore(
         minVolume = prefs.getFloat("minVolume", fallback.minVolume.toFloat()).toDouble(),
         minPrice = fallback.minPrice,
         maxPrice = fallback.maxPrice,
+        ladder = fallback.ladder,
         takePct = prefs.getFloat("takePct", fallback.takePct.toFloat()).toDouble(),
         cutUsd = prefs.getFloat("cutUsd", fallback.cutUsd.toFloat()).toDouble(),
         // A desk that was running this rule on real money keeps doing so:

@@ -53,6 +53,7 @@ import {
   type EventSummary,
   type LoggedOrder,
   type NativeMarket,
+  type PulseRound,
   type PulseState,
   type ProbeState,
   type ProbeOffer,
@@ -2858,6 +2859,101 @@ function ProbeCard({
 }
 
 /**
+ * One closed window in a pulse's record, and what it looks like opened.
+ *
+ * Shut it is a line: when, which side, the size, the result. That answers
+ * "how did it go" and nothing else — and the questions that follow are always
+ * the same two, what it cost and where the money came from, because a round
+ * that made forty cents on settlement is a different round from one that made
+ * forty cents on a sale even though the line is identical. So the row opens.
+ */
+function PulseRow({ round: r }: { round: PulseRound }) {
+  const [open, setOpen] = useState(false);
+  const spent = r.spent && r.spent > 0 ? r.spent : r.shares * r.price;
+  const avg = r.shares > 0 ? spent / r.shares : r.price;
+  // What the sales themselves went at, which is not the ask they were placed
+  // at once a bid jumped past it.
+  const soldShares = r.settled > 0 ? r.shares - r.settled : r.shares;
+  const soldAt = soldShares > 0.01 && r.proceeds > 0 ? r.proceeds / soldShares : null;
+
+  return (
+    <>
+      <div
+        className={`probesum${open ? ' on' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="muted">{clockOf(r.windowStart)}</span>
+        <b className={r.outcome === 'Up' ? 'up' : 'down'}>{r.outcome}</b>
+        <span className="muted">
+          {r.shares.toFixed(1)} × {cents(r.price)}
+        </span>
+        <b className={r.pnl >= 0 ? 'up pushright' : 'down pushright'}>
+          {signedUsd(r.pnl)}
+        </b>
+        <em className="muted">{open ? '−' : '+'}</em>
+      </div>
+      {open && (
+        <div className="probedetail">
+          <div>
+            <span className="muted">вход</span>
+            <b>{cents(r.price)}</b>
+          </div>
+          {/* Only when a bid under the entry filled and moved it. */}
+          {Math.abs(avg - r.price) > 0.005 && (
+            <div>
+              <span className="muted">средняя</span>
+              <b>{cents(avg)}</b>
+            </div>
+          )}
+          <div>
+            <span className="muted">доли</span>
+            <b>{r.shares.toFixed(1)}</b>
+          </div>
+          <div>
+            <span className="muted">вложено</span>
+            <b>{usd(spent)}</b>
+          </div>
+          {soldAt != null && (
+            <div>
+              <span className="muted">продано по</span>
+              <b>{cents(soldAt)}</b>
+            </div>
+          )}
+          {r.proceeds > 0 && (
+            <div>
+              <span className="muted">с продаж</span>
+              <b>{usd(r.proceeds)}</b>
+            </div>
+          )}
+          {r.settled > 0 && (
+            <div>
+              <span className="muted">расчёт</span>
+              <b>{usd(r.settled)}</b>
+            </div>
+          )}
+          <div>
+            <span className="muted">закрытие</span>
+            <b className={r.winner === 'Up' ? 'up' : r.winner === 'Down' ? 'down' : undefined}>
+              {r.winner || '—'}
+            </b>
+          </div>
+          <div>
+            <span className="muted">итог</span>
+            <b className={r.pnl >= 0 ? 'up' : 'down'}>{signedUsd(r.pnl)}</b>
+          </div>
+          {r.note && (
+            <div className="wide">
+              <span className="muted">как вышли</span>
+              <b>{r.note}</b>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
  * One five-minute candle, opened.
  *
  * A candle and a window are the same thing seen two ways, so tapping one asks
@@ -3159,11 +3255,20 @@ function PulseCard({
         Берёт {state.shares.toFixed(0)} долей стороны, за которую разом
         высказались четыре вещи: ход окна от его открытия, импульс минуток,
         объём под ним и перевес в стакане Binance. Выходит по{' '}
-        +{Math.round(state.takePct * 100)}% лимиткой — и это пол, а не
+        {state.ladder
+          ? 'лесенке продаж — той же, на которую настроен стол: цена начинается ' +
+            'высоко и идёт вниз по часам, так что берётся то, что окно на ' +
+            'самом деле даёт, а не то, на что рассчитывал вход. Фиксированная ' +
+            'цель ждёт одну цену и выигрывает целиком, когда стакан до неё ' +
+            'дошёл, и ничего, когда он остановился в центре от неё; правилу, ' +
+            'которое входит часто и на тонком, ступени подходят больше — у ' +
+            'него почти все позиции это небольшие ходы, а не один крупный. '
+          : `+${Math.round(state.takePct * 100)}% лимиткой — и это пол, а не
         пожелание: правило переходит спред, чтобы взять сторону, за которую
         высказались четверо, то есть уже заплатило за это согласие в аске, и
         дешевле пятнадцати процентов круг превращается в подброс монеты с
-        комиссией. Режет по рынку, если перевес развернулся, и не продаёт
+        комиссией. `}
+        Режет по рынку, если перевес развернулся, и не продаёт
         вовсе, если к концу окна ведёт — расчёт платит доллар без комиссии.
         Входит в любую секунду окна, включая последнюю минуту: поздней покупке
         уже не дойти до своей цели, но выигрывающая сторона доезжает до
@@ -3238,17 +3343,7 @@ function PulseCard({
           </div>
           <div className="probelist">
             {history.slice(0, 40).map((r) => (
-              <div className="probesum" key={`${r.windowStart}-${r.outcome}`}>
-                <span className="muted">{clockOf(r.windowStart)}</span>
-                <b className={r.outcome === 'Up' ? 'up' : 'down'}>{r.outcome}</b>
-                <span className="muted">
-                  {r.shares.toFixed(1)} × {cents(r.price)}
-                </span>
-                <b className={r.pnl >= 0 ? 'up pushright' : 'down pushright'}>
-                  {signedUsd(r.pnl)}
-                </b>
-                {r.note && <em className="muted">{r.note}</em>}
-              </div>
+              <PulseRow key={`${r.windowStart}-${r.outcome}`} round={r} />
             ))}
           </div>
         </>

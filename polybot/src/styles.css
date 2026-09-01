@@ -3230,6 +3230,48 @@ button.wide {
   font-size: 10px;
 }
 
+.probesum {
+  cursor: pointer;
+}
+
+.probesum.on {
+  border-bottom-color: transparent;
+}
+
+/*
+ * The same round, opened. Two columns of label-over-figure: the questions
+ * that follow a result are always what it cost and where the money came from,
+ * and a round that made forty cents on settlement is a different round from
+ * one that made it on a sale even though the line above is identical.
+ */
+.probedetail {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px 8px;
+  padding: 6px 2px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.probedetail > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.probedetail .wide {
+  grid-column: 1 / -1;
+}
+
+.probedetail span {
+  font-size: 9px;
+}
+
+.probedetail b {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* The four rules, one tab each, with a dot for the one that is live. */
 .bottabs {
   display: grid;

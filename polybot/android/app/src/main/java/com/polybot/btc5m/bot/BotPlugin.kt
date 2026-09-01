@@ -1398,6 +1398,8 @@ class BotPlugin : Plugin() {
                 // Paper always runs, so what is left to say is whether the
                 // wallet runs beside it.
                 .put("live", bot.settings.live)
+                // Which exit it uses, so the card describes the rule it is.
+                .put("ladder", bot.settings.ladder)
                 .put("cash", bot.cash(bot.paper))
                 .put("note", bot.note)
                 .put("lastFault", bot.lastFault)

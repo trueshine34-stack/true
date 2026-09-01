@@ -498,6 +498,59 @@ class PulseBot(
     }
 
     /**
+     * What the position is asking, and by which rule.
+     *
+     * One fixed margin over the entry, or the desk's own ladder — a price
+     * that starts high and walks down with the clock, taking what the window
+     * is actually offering. The ladder's rungs are absolute, so it can ask
+     * under a dear entry; that is the whole of the trade it makes, and the
+     * rule that wants it enters often enough on thin evidence that most of
+     * its positions are small moves rather than the one big one.
+     */
+    private fun askPrice(open: Lot, market: Market, bid: Double?): Double {
+        if (!settings.ladder) {
+            // A doubling is taken whatever the take price says.
+            return SellLadder.capped(
+                PulsePlan.takePrice(open.price, settings, market.tickSize),
+                open.price,
+            )
+        }
+        val nowSec = Clock.nowSec()
+        return ProbePlan.exitPrice(
+            cost = open.price,
+            elapsedSec = nowSec - open.windowStart,
+            secondsLeft = open.windowStart + PulsePlan.WINDOW_SEC - nowSec,
+            highWater = open.highWater,
+            rung = open.rung,
+            bestBid = bid,
+            exit = exit(),
+            tick = market.tickSize,
+        )
+    }
+
+    /**
+     * Walks the ladder's step on, once the ask for this tick has been read
+     * off the mark it had before.
+     *
+     * Pricing a rung off the same bid it is tested against walks it up out of
+     * reach every time the price jumps, and a resting offer does not do that
+     * — it gets hit. So the mark moves after the decision, never before it.
+     */
+    private fun walkRung(open: Lot, bid: Double) {
+        open.highWater = maxOf(open.highWater, bid)
+        if (!settings.ladder) return
+        open.rung = maxOf(
+            open.rung,
+            ProbePlan.exitStep(
+                Clock.nowSec() - open.windowStart,
+                open.highWater,
+                open.rung,
+                exit(),
+            ),
+        )
+    }
+
+    /**
      * The three bids that wait under an entry, each for the size the entry
      * was, six cents apart.
      *
@@ -629,10 +682,7 @@ class PulseBot(
                 // the rule exists to collect. What is left of the ladder here
                 // is the doubling cap, which only ever lowers an ask that has
                 // run away above twice cost.
-                val want = SellLadder.capped(
-                    PulsePlan.takePrice(open.price, settings, market.tickSize),
-                    open.price,
-                )
+                val want = askPrice(open, market, bid)
                 open.sellPrice = want
                 if (SellLadder.reached(bid, want)) {
                     // Up to the last minute nothing is on the book: the price
@@ -649,7 +699,7 @@ class PulseBot(
                             " ${(got * 100).toInt()}¢",
                     )
                 }
-                open.highWater = maxOf(open.highWater, bid)
+                walkRung(open, bid)
             }
         }
     }
@@ -765,11 +815,13 @@ class PulseBot(
             }
 
             PulsePlan.Exit.HOLD -> {
-                // A doubling is taken whatever the take price says.
-                val want = SellLadder.capped(
-                    PulsePlan.takePrice(open.price, settings, market.tickSize),
-                    open.price,
-                )
+                val seen = try {
+                    ClobApi.bestBid(open.asset)
+                } catch (e: Exception) {
+                    null
+                }
+                val want = askPrice(open, market, seen)
+                if (seen != null && seen > 0.0) walkRung(open, seen)
                 val secondsLeft = open.windowStart + PulsePlan.WINDOW_SEC - Clock.nowSec()
 
                 // Up to the last minute the price is watched rather than
@@ -779,11 +831,7 @@ class PulseBot(
                 // makes the same number a floor instead of a ceiling.
                 if (!SellLadder.restsNow(secondsLeft)) {
                     if (open.sellOrderId != null) cancelOffer(open)
-                    val bid = try {
-                        ClobApi.bestBid(open.asset)
-                    } catch (e: Exception) {
-                        null
-                    }
+                    val bid = seen
                     open.sellPrice = want
                     if (!SellLadder.reached(bid, want)) {
                         open.note = "жду ${(want * 100).toInt()}¢"
