@@ -543,6 +543,10 @@ class PulseBot(
      * what can be given back.
      */
     private fun running(open: Lot, bid: Double): Boolean {
+        // Four cents from a dollar there is nothing left to ride: the rest of
+        // the way is settlement, which is minutes off, and waiting for a move
+        // to finish here risks the whole gain to chase a rounding error.
+        if (bid >= PulsePlan.RIDE_TOP - 1e-9) return false
         if (bid > open.highWater + 1e-9) return true
         if (open.highAt <= 0L) return false
         return System.currentTimeMillis() - open.highAt < PulsePlan.RIDE_MS

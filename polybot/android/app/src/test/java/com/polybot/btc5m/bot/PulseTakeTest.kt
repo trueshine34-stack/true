@@ -181,4 +181,14 @@ class PulseRideTest {
     fun `the wait is long enough to be a pause and short enough to be one`() {
         assertEquals(2_500L, PulsePlan.RIDE_MS)
     }
+
+    /**
+     * And a ceiling on the whole idea. Four cents from a dollar there is
+     * nothing left to ride: the rest of the way is settlement, minutes off.
+     */
+    @Test
+    fun `ninety-six is taken on the tick that finds it`() {
+        assertEquals(0.96, PulsePlan.RIDE_TOP, 1e-9)
+        assertTrue(PulsePlan.RIDE_TOP > PulsePlan.LAST_ASK)
+    }
 }

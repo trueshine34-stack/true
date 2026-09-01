@@ -214,6 +214,17 @@ object PulsePlan {
      */
     const val RIDE_MS = 2_500L
 
+    /**
+     * And where riding stops being worth anything.
+     *
+     * Above this there is almost nothing left to run to: a side at ninety-six
+     * has four cents of room to a dollar, and it only reaches the dollar by
+     * settling, which is minutes away. Waiting for the move to finish there
+     * risks the whole gain to chase a rounding error — so a bid this high is
+     * taken on the tick that finds it, however fast it is still climbing.
+     */
+    const val RIDE_TOP = 0.96
+
     /** No offer under [LAST_ASK] once the close is that near. */
     fun lateFloor(price: Double, secondsLeft: Long): Double =
         if (secondsLeft in 0..LAST_ASK_SEC) maxOf(price, LAST_ASK) else price
