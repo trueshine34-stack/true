@@ -42,7 +42,6 @@ class PulseStore(
         maxPrice = fallback.maxPrice,
         ladder = fallback.ladder,
         takePct = prefs.getFloat("takePct", fallback.takePct.toFloat()).toDouble(),
-        cutUsd = prefs.getFloat("cutUsd", fallback.cutUsd.toFloat()).toDouble(),
         // A desk that was running this rule on real money keeps doing so:
         // the old "demo" flag being off is exactly the old way of saying it.
         live = prefs.getBoolean("live", !prefs.getBoolean("demo", true)),
@@ -56,7 +55,6 @@ class PulseStore(
             .putFloat("minLean", s.minLean.toFloat())
             .putFloat("minVolume", s.minVolume.toFloat())
             .putFloat("takePct", s.takePct.toFloat())
-            .putFloat("cutUsd", s.cutUsd.toFloat())
             .putBoolean("live", s.live)
             .apply()
     }

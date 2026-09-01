@@ -150,11 +150,17 @@ class PulsePlanTest {
         )
     }
 
+    /**
+     * A position the lead has turned on is held, not dumped into the book.
+     *
+     * Selling at whatever was bid bought the worst price of the window every
+     * time — a side is marked down hardest exactly when the move is against
+     * it — so there is one way out now and it is the price the exit asks for.
+     */
     @Test
-    fun cutsAPositionTheLeadHasTurnedOn() {
+    fun aTurnedLeadIsHeldRatherThanDumped() {
         val turned = good(lead = -4.0)
-        assertEquals(PulsePlan.Exit.CUT, PulsePlan.exitFor("Up", turned, on))
-        // Still ahead: the resting offer does the work, not a market sale.
+        assertEquals(PulsePlan.Exit.HOLD, PulsePlan.exitFor("Up", turned, on))
         assertEquals(PulsePlan.Exit.HOLD, PulsePlan.exitFor("Up", good(), on))
     }
 
@@ -164,9 +170,10 @@ class PulsePlanTest {
         // with seconds left is worth more held than sold.
         val late = good(elapsed = 280)
         assertEquals(PulsePlan.Exit.RIDE, PulsePlan.exitFor("Up", late, on))
-        // Late but losing is still a cut.
+        // Late and losing is held too: it rides to a settlement that pays
+        // nothing rather than to a book that pays almost nothing and a spread.
         assertEquals(
-            PulsePlan.Exit.CUT,
+            PulsePlan.Exit.HOLD,
             PulsePlan.exitFor("Up", good(elapsed = 280, lead = -9.0), on),
         )
     }

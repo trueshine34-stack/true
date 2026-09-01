@@ -1327,7 +1327,6 @@ class BotPlugin : Plugin() {
                 minPrice = d.minPrice,
                 maxPrice = d.maxPrice,
                 takePct = call.getDouble("takePct") ?: d.takePct,
-                cutUsd = call.getDouble("cutUsd") ?: d.cutUsd,
                 live = call.getBoolean("live") ?: d.live,
             ),
         )

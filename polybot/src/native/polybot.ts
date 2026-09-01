@@ -285,7 +285,6 @@ export interface PolyBotPlugin {
     minLean?: number;
     minVolume?: number;
     takePct?: number;
-    cutUsd?: number;
     /** Whether the wallet trades it too. Paper always does. */
     live?: boolean;
   }): Promise<void>;

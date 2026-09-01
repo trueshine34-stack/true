@@ -666,22 +666,11 @@ class PulseBot(
                 return
             }
 
-            PulsePlan.Exit.CUT -> {
-                open.note = "режу по рынку"
-                paperSell(book, open, bid, "режу")
-                return
-            }
-
             PulsePlan.Exit.HOLD -> {
-                // Its own price and nothing else. The desk's ladder used to be
-                // laid over this and the lower of the two was asked — which is
-                // what a ladder does, walk a price down over the window — and
-                // the ladder's rungs are absolute: 77¢ early, whatever the
-                // shares cost. On a side taken at 85¢ that asked 77¢, a loss
-                // sold on purpose, and on every entry it undercut the margin
-                // the rule exists to collect. What is left of the ladder here
-                // is the doubling cap, which only ever lowers an ask that has
-                // run away above twice cost.
+                // One price, by whichever rule this pulse exits on, and no
+                // other way out. Nothing sells under it: not a rung walked
+                // down by the clock, not a bid that has run away from it, and
+                // not a lead that turned around.
                 val want = askPrice(open, market, bid)
                 open.sellPrice = want
                 if (SellLadder.reached(bid, want)) {
@@ -800,20 +789,6 @@ class PulseBot(
                 }
             }
 
-            PulsePlan.Exit.CUT -> {
-                if (open.sellOrderId != null) cancelOffer(open)
-                val bid = try {
-                    ClobApi.bestBid(open.asset)
-                } catch (e: Exception) {
-                    null
-                }
-                if (bid == null || bid <= 0.0) {
-                    open.note = "нет спроса"
-                    return
-                }
-                offer(open, (bid - market.tickSize).coerceAtLeast(market.tickSize), market, cut = true)
-            }
-
             PulsePlan.Exit.HOLD -> {
                 val seen = try {
                     ClobApi.bestBid(open.asset)
@@ -838,12 +813,15 @@ class PulseBot(
                         return
                     }
                     // Reached: take it, a tick under the bid so the top of
-                    // book moving between the read and the send cannot miss.
+                    // book moving between the read and the send cannot miss —
+                    // but never under the price that was being waited for. A
+                    // bid sitting exactly on the rung would otherwise be sold
+                    // into one tick below it, which is a sale off the ladder.
                     offer(
                         open,
-                        (bid!! - market.tickSize).coerceAtLeast(market.tickSize),
+                        maxOf(want, (bid!! - market.tickSize)).coerceAtLeast(market.tickSize),
                         market,
-                        cut = true,
+                        taking = true,
                     )
                     return
                 }
@@ -852,7 +830,7 @@ class PulseBot(
                     return
                 }
                 if (open.sellOrderId != null) cancelOffer(open)
-                offer(open, want, market, cut = false)
+                offer(open, want, market, taking = false)
             }
         }
     }
@@ -925,7 +903,14 @@ class PulseBot(
         )
     }
 
-    private fun offer(open: Lot, price: Double, market: Market, cut: Boolean) {
+    /**
+     * Puts the exit on the book.
+     *
+     * [taking] says the price asked for has already been reached, so this
+     * order is crossing to a bid that is at or above it rather than waiting.
+     * It is not a way out at any price: there is no such thing here any more.
+     */
+    private fun offer(open: Lot, price: Double, market: Market, taking: Boolean) {
         if (open.open < market.minimumOrderSize - 1e-6) return
 
         // The venue locks freshly bought shares; how long for has been measured
@@ -958,11 +943,11 @@ class PulseBot(
             open.sellOrderId = result.orderId
             open.sellPrice = price
             open.sellPlacedAt = System.currentTimeMillis()
-            open.note = if (cut) "режу по рынку" else null
-            if (cut) {
+            open.note = if (taking) "беру ${(price * 100).toInt()}¢" else null
+            if (taking) {
                 engine.log(
-                    "warn",
-                    "Пульс: режу ${open.outcome} по ${(price * 100).toInt()}¢ — перевес ушёл",
+                    "trade",
+                    "Пульс: беру ${open.outcome} по ${(price * 100).toInt()}¢ — цена дошла",
                 )
             }
         } else {

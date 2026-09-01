@@ -180,9 +180,6 @@ object PulsePlan {
             .filter { it >= step }
     }
 
-    /** Dollars the lead has to flip against the position before it is cut. */
-    const val DEFAULT_CUT_USD = 3.0
-
     data class Settings(
         val enabled: Boolean = false,
         val bankUsd: Double = DEFAULT_BANK_USD,
@@ -196,7 +193,6 @@ object PulsePlan {
         val minPrice: Double = DEFAULT_MIN_PRICE,
         val maxPrice: Double = DEFAULT_MAX_PRICE,
         val takePct: Double = DEFAULT_TAKE_PCT,
-        val cutUsd: Double = DEFAULT_CUT_USD,
         /**
          * Whether the wallet trades this rule as well.
          *
@@ -302,9 +298,6 @@ object PulsePlan {
         /** Leave the offer where it is. */
         HOLD,
 
-        /** The lead has gone: take what the book is bidding, now. */
-        CUT,
-
         /** Ahead and nearly done: settlement pays a dollar and charges nothing. */
         RIDE,
     }
@@ -313,14 +306,22 @@ object PulsePlan {
      * What to do with an open lot.
      *
      * Taking profit is not in here: that offer is resting on the book from the
-     * moment the lot is opened, and the book fills it or does not. This is only
-     * for the two things that need a decision — the lead turning against the
-     * position, and the end of the window arriving with it still ahead.
+     * moment the lot is opened, and the book fills it or does not.
+     *
+     * Nor is cutting one. A lot used to be sold into the book at whatever it
+     * was bidding once the lead had flipped by a few dollars, and what that
+     * bought was the worst price of the window every time: the book marks a
+     * side down hardest exactly when the move is against it, so the rule sold
+     * ten shares that cost seventy cents at twenty-seven. There is one way out
+     * of a position now and it is the price the exit asks for — a rung, or the
+     * margin — and a side that never reaches it rides to settlement, which
+     * pays a dollar or nothing and charges no fee either way. Losing the whole
+     * stake on the windows that go wrong is the shape of this bet; paying the
+     * book to leave early was losing most of it and a spread as well.
      */
     fun exitFor(side: String, read: Read, settings: Settings): Exit {
         val ahead = if (side == "Up") read.lead else -read.lead
         if (read.elapsedSec >= settings.rideSec && ahead >= settings.minEdge) return Exit.RIDE
-        if (ahead <= -settings.cutUsd) return Exit.CUT
         return Exit.HOLD
     }
 
