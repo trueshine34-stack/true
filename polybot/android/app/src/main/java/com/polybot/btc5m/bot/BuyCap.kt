@@ -3,12 +3,12 @@ package com.polybot.btc5m.bot
 /**
  * The dearest a buy may be, early in a window.
  *
- * A side that already costs 63c in the first minute is being paid for a move
- * that has barely started, with the whole window left for it to come back:
- * there is little left to win on those shares and most of a dollar to lose.
- * The ceiling lifts as the window runs out of time to reverse — 77c through
- * the third minute, then the fourth minute open, when a dear side is dear
- * because it has very nearly won.
+ * A side that already costs most of a dollar in the first minute is being
+ * paid for a move that has barely started, with the whole window left for it
+ * to come back: there is little left to win on those shares and most of a
+ * dollar to lose. The ceiling lifts as the window runs out of time to
+ * reverse — 77c through the third minute, then the fourth minute open, when a
+ * dear side is dear because it has very nearly won.
  *
  * The last minute closes it again at 91c. A side quoted above that with under
  * a minute to run is asking most of a dollar for a few cents of profit, and
@@ -24,7 +24,16 @@ object BuyCap {
     const val FIRST_MINUTE_SEC = 60L
     const val EARLY_SEC = 180L
     const val LAST_MINUTE_SEC = 240L
-    const val FIRST_MINUTE_MAX = 0.63
+    /**
+     * The first minute's ceiling.
+     *
+     * Sixty-three cents was drawn for a desk placing limits by hand, where a
+     * minute is a long time to wait and a cheaper bid usually arrives. The
+     * rules that trade this minute do not wait — they read a window that has
+     * said something and take it — so the number that stopped a hasty tap was
+     * also stopping the entries that were the point of reading early.
+     */
+    const val FIRST_MINUTE_MAX = 0.68
     const val EARLY_MAX = 0.77
     const val LAST_MINUTE_MAX = 0.91
 

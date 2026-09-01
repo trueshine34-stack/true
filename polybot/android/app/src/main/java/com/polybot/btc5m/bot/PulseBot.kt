@@ -59,6 +59,16 @@ class PulseBot(
         val demo: Boolean = false,
         /** Best bid seen while holding, and the rung it has reached. */
         var highWater: Double = 0.0,
+        /**
+         * When that best bid was last bettered.
+         *
+         * A price these exits watch for is not taken the instant the book
+         * touches it — the bid that has just arrived at the target is usually
+         * on its way past it. This is what says whether the move is still
+         * going: a new high resets it, and a reached price is taken once it
+         * has stood for [PulsePlan.RIDE_MS] without one.
+         */
+        var highAt: Long = 0L,
         var rung: Int = 0,
         /**
          * What the shares actually cost, fee included.
@@ -524,6 +534,20 @@ class PulseBot(
         return PulsePlan.lateFloor(rawAsk(open, market, bid, nowSec), secondsLeft)
     }
 
+    /**
+     * Whether the bid is still on its way up.
+     *
+     * True while it is making new highs, and for two and a half seconds after
+     * the last one — a move that has stopped moving has stopped, and a bid
+     * that has fallen back is not making highs either, so the same wait caps
+     * what can be given back.
+     */
+    private fun running(open: Lot, bid: Double): Boolean {
+        if (bid > open.highWater + 1e-9) return true
+        if (open.highAt <= 0L) return false
+        return System.currentTimeMillis() - open.highAt < PulsePlan.RIDE_MS
+    }
+
     /** The price the rule this pulse exits by is asking, before the floor. */
     private fun rawAsk(open: Lot, market: Market, bid: Double?, nowSec: Long): Double {
         if (!settings.ladder) {
@@ -554,7 +578,10 @@ class PulseBot(
      * — it gets hit. So the mark moves after the decision, never before it.
      */
     private fun walkRung(open: Lot, bid: Double) {
-        open.highWater = maxOf(open.highWater, bid)
+        if (bid > open.highWater + 1e-9) {
+            open.highWater = bid
+            open.highAt = System.currentTimeMillis()
+        }
         if (!settings.ladder) return
         open.rung = maxOf(
             open.rung,
@@ -651,6 +678,11 @@ class PulseBot(
                     // what it jumped to. Inside the last minute the offer is
                     // resting there and gets the price it asked for.
                     val resting = SellLadder.restsNow(secondsLeft)
+                    if (!resting && running(open, bid)) {
+                        open.note = "идёт вверх ${(bid * 100).toInt()}¢"
+                        walkRung(open, bid)
+                        return
+                    }
                     val got = if (resting) want else bid
                     paperSell(
                         book,
@@ -744,6 +776,12 @@ class PulseBot(
                     open.sellPrice = want
                     if (!SellLadder.reached(bid, want)) {
                         open.note = "жду ${(want * 100).toInt()}¢"
+                        return
+                    }
+                    // Reached, but a bid still climbing is a move still
+                    // happening: crossing into it sells the middle of a run.
+                    if (running(open, bid!!)) {
+                        open.note = "идёт вверх ${(bid * 100).toInt()}¢"
                         return
                     }
                     // Reached: take it, a tick under the bid so the top of

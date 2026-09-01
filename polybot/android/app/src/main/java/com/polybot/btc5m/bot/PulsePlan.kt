@@ -197,6 +197,23 @@ object PulsePlan {
     const val LAST_ASK_SEC = 65L
     const val LAST_ASK = 0.90
 
+    /**
+     * How long a bid has to stand still before a reached price is taken.
+     *
+     * These exits watch rather than rest: the price is a number to wait for,
+     * and when the book reaches it the rule crosses. Crossing on the first
+     * tick that touches it sells into the middle of a move — the bid that has
+     * just arrived at the target is usually on its way past it, and taking it
+     * there hands the rest of the run to whoever was on the other side.
+     *
+     * So a reached price is not taken while the bid is still making new highs.
+     * It is taken once the bid has gone two and a half seconds without making
+     * one, which is what a move looks like when it is over. A bid that falls
+     * back is not making highs either, so the same wait caps how much of the
+     * run can be given back.
+     */
+    const val RIDE_MS = 2_500L
+
     /** No offer under [LAST_ASK] once the close is that near. */
     fun lateFloor(price: Double, secondsLeft: Long): Double =
         if (secondsLeft in 0..LAST_ASK_SEC) maxOf(price, LAST_ASK) else price

@@ -166,3 +166,19 @@ class PulseLateFloorTest {
         assertEquals(0.77, PulsePlan.lateFloor(0.77, -5L), 1e-9)
     }
 }
+
+/**
+ * Waiting out a move before taking a price that has been reached.
+ *
+ * These exits watch rather than rest, so the rule chooses the moment it
+ * crosses — and the bid that has just arrived at the target is usually on its
+ * way past it. Crossing there sells the middle of a run.
+ */
+class PulseRideTest {
+
+    /** Two and a half seconds without a new high is a move that is over. */
+    @Test
+    fun `the wait is long enough to be a pause and short enough to be one`() {
+        assertEquals(2_500L, PulsePlan.RIDE_MS)
+    }
+}

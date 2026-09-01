@@ -9,8 +9,8 @@ class BuyCapTest {
 
     @Test
     fun firstMinuteStopsAtSixtyThree() {
-        assertEquals(0.63, BuyCap.ceiling(0), 1e-9)
-        assertEquals(0.63, BuyCap.ceiling(59), 1e-9)
+        assertEquals(0.68, BuyCap.ceiling(0), 1e-9)
+        assertEquals(0.68, BuyCap.ceiling(59), 1e-9)
     }
 
     @Test
@@ -35,8 +35,8 @@ class BuyCapTest {
 
     @Test
     fun theCeilingItselfIsAllowed() {
-        assertFalse(BuyCap.blocked(0.63, 30))
-        assertTrue(BuyCap.blocked(0.64, 30))
+        assertFalse(BuyCap.blocked(0.68, 30))
+        assertTrue(BuyCap.blocked(0.69, 30))
         assertFalse(BuyCap.blocked(0.77, 120))
         assertTrue(BuyCap.blocked(0.78, 120))
         assertFalse(BuyCap.blocked(0.95, 200))
@@ -55,12 +55,12 @@ class BuyCapTest {
         assertEquals(90L, BuyCap.elapsedFor(start, now = start + 90))
         // An order into a window that has not opened yet is at its start.
         assertEquals(-30L, BuyCap.elapsedFor(start, now = start - 30))
-        assertEquals(0.63, BuyCap.ceiling(BuyCap.elapsedFor(start, now = start - 30)), 1e-9)
+        assertEquals(0.68, BuyCap.ceiling(BuyCap.elapsedFor(start, now = start - 30)), 1e-9)
     }
 
     @Test
     fun theRefusalSaysWhichRuleAndWhatItAllows() {
-        assertEquals("В первую минуту не покупаем дороже 63¢", BuyCap.reason(10))
+        assertEquals("В первую минуту не покупаем дороже 68¢", BuyCap.reason(10))
         assertEquals("В первые 3 минуты не покупаем дороже 77¢", BuyCap.reason(100))
         assertEquals("В последнюю минуту не покупаем дороже 91¢", BuyCap.reason(250))
     }
