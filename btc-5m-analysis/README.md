@@ -296,3 +296,80 @@ after looking at six of them, so forward-test it before sizing up.
 * `nightruns.py` — runs by hour, per-day coverage, coin-flip baseline
 * `nightfade.py` — what the candle after a 6+ run does, by session and by month
 * `report_nightruns.txt` — raw output
+
+## Question 7 — martingale on the fade-after-6 signal
+
+Rules simulated (`martingale.py`): when a run hits exactly 6 same-direction 5m
+candles, buy the opposite side at 50¢ and close at 99¢ — a win pays +98% of the
+stake, a loss costs 100%. Stake starts at $100 and doubles on the same side after
+every loss until the sequence wins. The deposit reported is the deepest point of
+the cash line, i.e. what the account actually has to hold.
+
+### Last 100 days (23 May – 31 Aug 2026)
+
+| | sequences | bets | worst losing streak | largest bet | profit | deposit needed |
+|---|---|---|---|---|---|---|
+| all hours | 405 | 733 | 6 | $6 400 | **$37 944** | **$9 456** |
+| 00:00–08:00 ICT | 140 | 218 | 5 | $3 200 | $13 414 | $2 810 |
+| all hours, capped at 4 doublings | 405 | 721 | 5 | $1 600 | $13 112 | $4 616 |
+
+Hit rate on the signal in this window: 54.84% over all hours (403 bets), 64.75% at
+night (139 bets). Break-even at 50¢/99¢ is 50.5%, so the signal itself is
+profitable — that is where all the money comes from, not from the doubling.
+
+### The doubling makes it worse, not better
+
+Flat staking on exactly the same signals, scaled up until it needs the same deposit:
+
+| | martingale | flat stake, same deposit |
+|---|---|---|
+| all hours, $9 456 deposit | $37 944 | **$53 429** (at $1 545 a bet) |
+| night only, $2 810 deposit | $13 414 | **$36 474** (at $930 a bet) |
+
+Same signals, same capital, same 100 days: flat betting earns 41% more over all
+hours and nearly 3× more at night. The martingale spends its capital sitting in
+recovery bets instead of in fresh ones.
+
+At a 98% payout the doubling does not even recover fully. Winning on the k-th
+double nets `100 − 2·2^k` dollars: +$98 with no losses, +$36 after five, and
+**−$28 after six** — the $6 400 bet wins and the sequence still ends red. After
+seven losses it is −$156, after eight −$412.
+
+### The deposit is set by the tail, and 100 days did not contain it
+
+Run the same rules over all 8 months and the picture changes:
+
+| window | worst streak | largest bet | profit | deposit needed |
+|---|---|---|---|---|
+| last 100 days | 6 | $6 400 | $37 944 | $9 456 |
+| full 8 months | **8** | **$25 600** | $84 042 | **$33 210** |
+
+The 14-candle run on 3 March means 8 losses in a row: stake $25 600, $51 100
+committed to one sequence, and the win that closes it books −$412. A 15-candle run
+— which did not occur this year but a coin flip would have produced two — takes the
+next bet to $51 200 and the deposit past $100 000. There is no streak length at
+which the strategy is safe; there is only the streak you have not met yet.
+
+### And it all hangs on the 99¢ exit
+
+| buy | sell | payout | break-even | EV @ 53.6% | EV @ 58.3% |
+|---|---|---|---|---|---|
+| 50¢ | 99¢ | 98% | 50.5% | +$6.13 | +$15.43 |
+| 50¢ | 90¢ | 80% | 55.6% | −$3.52 | +$4.94 |
+| 51¢ | 95¢ | 86% | 53.7% | −$0.16 | +$8.60 |
+| 51¢ | 85¢ | 67% | 60.0% | −$10.67 | −$2.83 |
+
+Selling at 99¢ every time assumes a fill at one cent under settlement on every
+winner. Give up nine cents of that and the all-hours version is already negative;
+only the night filter survives.
+
+**Verdict.** The edge is real and it is in the signal, not in the money management.
+Flat stakes, night filter, and a hard check that the app really fills at those
+prices. The martingale converts a modest positive expectation into a strategy whose
+worst case is bounded only by the longest run that has not happened yet.
+
+### Files added
+
+* `martingale.py` — the doubling simulation, the flat-stake comparison at equal
+  deposit, and the payout sensitivity table
+* `report_martingale.txt` — raw output for 100 days and for the full sample
