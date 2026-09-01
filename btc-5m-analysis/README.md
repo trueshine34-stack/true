@@ -510,3 +510,90 @@ that the worst case is half as bad.
 
 Flat staking at the same deposit still wins on this trigger too: $3 013 a bet over
 the last 100 days earns $51 215 against the ×2 martingale's $17 146.
+
+## Question 10 — the best strategy the data actually supports
+
+`strategy.py` answers the sizing question directly instead of ranking martingale
+variants against each other.
+
+### Why any progression is the wrong tool here
+
+Fade win rate by the run length at which the bet is placed:
+
+| run length | all hours | n | night 00–08 | n |
+|---|---|---|---|---|
+| 5 | 51.6% | 1876 | 52.1% | 643 |
+| 6 | 53.6% | 906 | 58.3% | 307 |
+| **7** | **57.4%** | 418 | **64.8%** | 128 |
+| 8 | 52.8% | 178 | 46.7% | 45 |
+| 9 | 50.0% | 84 | 50.0% | 24 |
+| 10 | 50.0% | 42 | 46.2% | 13 |
+
+A martingale triggered at 7 places its recovery bets at runs 8, 9, 10 — rows where
+the edge is gone. It scales the stake up exactly as the edge goes to zero. That is
+the whole case against it, and it is not a risk-tolerance question.
+
+Measured per dollar at risk, the step multiplier changes nothing:
+
+| scheme | EV per $1 of maximum exposure |
+|---|---|
+| one bet at run 7, all hours | **+0.137** |
+| one bet at run 7, night | **+0.284** |
+| bet at 6, then ×1.5 at 7 | +0.063 |
+| bet at 6, then ×2.0 at 7 | +0.063 |
+| bet at 6, then ×2.5 at 7 | +0.063 |
+
+Steeper steps raise both the profit and the exposure by the same factor. The single
+trigger-7 bet is twice as efficient as any two-step version.
+
+### Sizing: flat fraction of bankroll, 8 months of trades, $1000 start
+
+All hours, 418 trades at 57.42% (95% CI 52.7–62.2%), full Kelly = 14.0%:
+
+| stake | median | 5th pct | 95th pct | median DD | 95th DD | P(bankroll halved) |
+|---|---|---|---|---|---|---|
+| 1% | $1 736 | $1 240 | $2 383 | 10.5% | 17.8% | 0.0% |
+| **2%** | **$2 893** | $1 475 | $5 453 | 20.2% | 33.1% | 0.0% |
+| 3% | $4 630 | $1 686 | $11 983 | 29.1% | 46.1% | 0.0% |
+| 5% | $10 493 | $1 946 | $51 257 | 44.9% | 66.0% | 0.1% |
+| 10% | $39 786 | $1 354 | $958 265 | 73.5% | 91.7% | 1.4% |
+| 14% (Kelly) | $55 154 | $483 | $4.7M | 87.1% | 98.1% | 5.5% |
+
+Night only, 128 trades at 64.84%: 2% → median $2 018, 95th-pct drawdown 16.9%;
+5% → median $5 271, drawdown 38.1%.
+
+### Fragility
+
+Same 2% plan, 418 trades, if the true win rate is not 57.4%:
+
+| assumed rate | median | 5th pct |
+|---|---|---|
+| 57.4% (point estimate) | $2 893 | $1 475 |
+| 52.7% (CI lower bound) | $1 310 | $668 |
+| 50.5% (break-even price) | $917 | $468 |
+
+The plan survives a moderate overestimate and dies at break-even, which is what a
+2% stake is for: it keeps the 5th percentile above water while the estimate is
+still being confirmed live.
+
+### The recommendation
+
+1. **Signal**: fade a run of exactly 7 — enter opposite on the next candle. Highest
+   measured edge, and one candle later than 6 means half the capital at risk.
+2. **No progression, ever.** One bet per signal. Run 8 and beyond is a coin flip;
+   that is where every doubling scheme puts its biggest money.
+3. **Stake 2% of the current bankroll**, recomputed as it moves. That is roughly
+   quarter-Kelly on the CI lower bound — the level whose 5th percentile stays above
+   the starting bankroll. 3% if the night filter is on and you can watch it.
+4. **Weight the night**: 00:00–08:00 ICT signals are worth about twice the day ones
+   (+0.284 vs +0.137 per $1). Double the stake there, or trade only that window and
+   accept ~16 trades a month instead of ~52.
+5. **Stop rule**: log every bet. After 200 live bets, if the hit rate is under 52%,
+   the edge is not there at your fill prices — stop.
+6. **If you cannot resist a recovery bet**: allow exactly one, at run 7 after a
+   run-6 loss, step ×2 maximum, and never a third. Both of those bets are +EV; a
+   third is not.
+
+Bet size for a given bankroll at 2%: $500 → $10, $1 000 → $20, $2 500 → $50,
+$5 000 → $100. Every number above assumes fills at 50¢ in and 99¢ out; check that
+first on ten live trades, because at 51¢/90¢ the all-hours version is already flat.

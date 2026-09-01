@@ -1,0 +1,67 @@
+edge by run length — the first bet of a sequence vs the chase bets
+
+run length    all hours n  fade win%       p     night n  fade win%       p
+---------------------------------------------------------------------------
+5                    1876     51.60%   0.166         643     52.10%   0.287
+6                     906     53.64%   0.028         307     58.31%   0.004
+7                     418     57.42%   0.002         128     64.84%   0.001
+8                     178     52.81%   0.454          45     46.67%   0.655
+9                      84     50.00%   1.000          24     50.00%   1.000
+10                     42     50.00%   1.000          13     46.15%   0.782
+11                     21     47.62%   0.827           7     57.14%   0.705
+
+A martingale after a 7-run buys its next bets at run 8, 9, 10 — read the rows above:
+the chase bets carry less edge than the trigger bet, at several times the size.
+
+
+sizing for the trigger-7 signal (bankroll $1000, 8 months of trades)
+
+all hours: 418 trades, win 57.42% (95% CI 52.7-62.2%)
+  full Kelly on the point estimate : 14.0% of bankroll
+  full Kelly on the CI lower bound : 4.4%
+  stake       median $   5th pct  95th pct   median DD   95th DD  P(bank halved)
+  ------------------------------------------------------------------------------
+  1.0%           1,736     1,240     2,383       10.5%     17.8%            0.0%
+  2.0%           2,893     1,475     5,453       20.2%     33.1%            0.0%
+  3.0%           4,630     1,686    11,983       29.1%     46.1%            0.0%
+  5.0%          10,493     1,946    51,257       44.9%     66.0%            0.1%
+  10.0%         39,786     1,354   958,265       73.5%     91.7%            1.4%
+  14.0% K       55,154       483 4,762,749       87.1%     98.1%            5.5%
+
+00:00-08:00 ICT: 128 trades, win 64.84% (95% CI 56.6-73.1%)
+  full Kelly on the point estimate : 29.0% of bankroll
+  full Kelly on the CI lower bound : 12.3%
+  stake       median $   5th pct  95th pct   median DD   95th DD  P(bank halved)
+  ------------------------------------------------------------------------------
+  1.0%           1,429     1,196     1,708        5.0%      8.8%            0.0%
+  2.0%           2,018     1,413     2,882        9.8%     16.9%            0.0%
+  3.0%           2,813     1,648     4,803       14.5%     24.5%            0.0%
+  5.0%           5,271     2,160    12,865       23.4%     38.1%            0.0%
+  10.0%         20,460     3,417   122,503       43.0%     64.1%            0.0%
+  29.0% K      210,445     1,02243,347,545       88.3%     98.3%            2.6%
+
+
+EV of a single bet, in units of the stake
+  run 6, all hours: n= 906 p=53.64%  EV=+0.0621 per 1 risked
+  run 6, night   : n= 307 p=58.31%  EV=+0.1545 per 1 risked
+  run 7, all hours: n= 418 p=57.42%  EV=+0.1368 per 1 risked
+  run 7, night   : n= 128 p=64.84%  EV=+0.2839 per 1 risked
+
+two-step scheme: bet at run 6, one more at run 7, then stop
+   2nd bet  session   seqs    EV/seq  max risk  EV per risk
+-----------------------------------------------------------
+      1.0x      all    906   +0.1253      2.00       0.0626
+      1.0x    night    307   +0.2728      2.00       0.1364
+      1.5x      all    906   +0.1568      2.50       0.0627
+      1.5x    night    307   +0.3320      2.50       0.1328
+      2.0x      all    906   +0.1884      3.00       0.0628
+      2.0x    night    307   +0.3912      3.00       0.1304
+      2.5x      all    906   +0.2200      3.50       0.0628
+      2.5x    night    307   +0.4504      3.50       0.1287
+  compare: one bet at run 7 returns +0.1368 per 1 risked (all hours), +0.2839 at night —
+  about twice the efficiency of any two-step version.
+
+how fragile is 2% flat staking? bankroll $1000, 418 trades
+  point estimate 57.4%     median $2,893   5th pct $1,475
+  CI lower bound 52.7%     median $1,310   5th pct $668
+  break-even 50.5%         median $917   5th pct $468
