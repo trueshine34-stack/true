@@ -21,7 +21,8 @@ WIN_MULT = SELL / BUY - 1        # +0.98 per 1 staked
 BASE = 100.0
 
 
-def simulate(k, t, d, run, lo, hi, night_only=False, max_doubles=None, base=BASE):
+def simulate(k, t, d, run, lo, hi, night_only=False, max_doubles=None, base=BASE,
+             mult=2.0):
     """Walk the candles once; returns the trade log and the capital line."""
     seqs = []
     cash = 0.0            # running cash flow, starts at zero
@@ -52,7 +53,7 @@ def simulate(k, t, d, run, lo, hi, night_only=False, max_doubles=None, base=BASE
             losses += 1
             if max_doubles is not None and losses > max_doubles:
                 break                     # give up, take the loss
-            stake *= 2
+            stake *= mult
             j += 1
         seqs.append({"start": t[i], "losses": losses, "won": won,
                      "spent": spent, "pnl": cash})
@@ -130,6 +131,58 @@ def main(path="candles240.json.gz", days=100):
               f"profit ${cash*scale:,.2f}")
 
 
+def grid(path="candles240.json.gz", days=100,
+         mults=(1.5, 2.0, 2.5, 3.0), bases=(10, 25, 50, 100)):
+    """Step multiplier x base stake: profit, deposit and the worst bet reached."""
+    k = search.load(path)
+    t = [datetime.fromtimestamp(x[0] / 1000, nightruns.ICT) for x in k]
+    d = [(x[4] > x[1]) - (x[4] < x[1]) for x in k]
+    run = [0] * len(k)
+    for i in range(len(k)):
+        run[i] = run[i - 1] + 1 if i and d[i] and d[i] == d[i - 1] else (1 if d[i] else 0)
+    lo = max(0, len(k) - days * 288)
+
+    for night in (False, True):
+        title = "00:00-08:00 ICT only" if night else "all hours"
+        print(f"\n\nstep multiplier grid, {title}, last {days} days")
+        hdr = (f"{'step':>6}{'base':>7}{'profit $':>12}{'deposit $':>12}"
+               f"{'max bet $':>12}{'worst streak':>14}{'profit/deposit':>16}")
+        print(hdr); print("-" * len(hdr))
+        for m in mults:
+            for b in bases:
+                seqs, cash, need, ms = simulate(k, t, d, run, lo, len(k), night,
+                                                None, float(b), m)
+                worst = max(s["losses"] for s in seqs) if seqs else 0
+                print(f"{m:>5.1f}x{b:>7.0f}{cash:>12,.0f}{need:>12,.0f}{ms:>12,.0f}"
+                      f"{worst:>14}{cash/need if need else 0:>15.2f}x")
+
+
+def recovery(mults=(1.5, 2.0, 2.5, 3.0), kmax=8, base=100.0, win=WIN_MULT):
+    """What one sequence nets when it finally wins after k losses.
+
+    Profit on the closing bet is win * base * m^k; the losses behind it are
+    base * (m^k - 1) / (m - 1). A step is a true recovery scheme only when the
+    first term outgrows the second for every k, which needs m >= 1 + 1/win.
+    """
+    print(f"\n\nnet result of one sequence that wins after k losses "
+          f"(base ${base:.0f}, payout {win*100:.0f}%)")
+    hdr = f"{'k losses':<10}" + "".join(f"{'x' + format(m, '.1f'):>12}" for m in mults)
+    print(hdr); print("-" * len(hdr))
+    for k in range(kmax + 1):
+        row = f"{k:<10}"
+        for m in mults:
+            net = win * base * m ** k - base * (m ** k - 1) / (m - 1)
+            row += f"{net:>+12,.0f}"
+        print(row)
+    print(f"\nminimum step that always recovers: x{1 + 1 / win:.3f} "
+          f"(at a {win*100:.0f}% payout)")
+    for m in mults:
+        fails = [k for k in range(kmax + 1)
+                 if win * base * m ** k - base * (m ** k - 1) / (m - 1) < 0]
+        print(f"  x{m:.1f}: " + (f"goes negative from k={fails[0]} losses onwards"
+                                 if fails else "recovers at every depth"))
+
+
 def sensitivity(rates=(0.536, 0.583, 0.6475)):
     """The whole thing lives or dies on the payout, so price it out."""
     print("\n\nprice sensitivity, flat $100 per bet")
@@ -146,6 +199,9 @@ def sensitivity(rates=(0.536, 0.583, 0.6475)):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "candles240.json.gz",
-         int(sys.argv[2]) if len(sys.argv) > 2 else 100)
+    p = sys.argv[1] if len(sys.argv) > 1 else "candles240.json.gz"
+    dd = int(sys.argv[2]) if len(sys.argv) > 2 else 100
+    main(p, dd)
+    grid(p, dd)
+    recovery()
     sensitivity()

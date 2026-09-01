@@ -373,3 +373,68 @@ worst case is bounded only by the longest run that has not happened yet.
 * `martingale.py` — the doubling simulation, the flat-stake comparison at equal
   deposit, and the payout sensitivity table
 * `report_martingale.txt` — raw output for 100 days and for the full sample
+
+## Question 8 — bigger steps (×1.5 / ×2 / ×2.5 / ×3) and smaller base stakes
+
+`martingale.py` now takes a step multiplier and a base stake. "+150% on each new
+bet" is a ×2.5 step and "+200%" is a ×3 step; ×1.5 and ×2 are kept as reference.
+
+### Does the step actually recover? (net result of one sequence, base $100)
+
+| losses before the win | ×1.5 | ×2.0 | ×2.5 | ×3.0 |
+|---|---|---|---|---|
+| 0 | +$98 | +$98 | +$98 | +$98 |
+| 1 | +$47 | +$96 | +$145 | +$194 |
+| 2 | −$30 | +$92 | +$262 | +$482 |
+| 4 | −$316 | +$68 | +$1 291 | +$3 938 |
+| 6 | −$962 | −$28 | +$7 716 | +$35 042 |
+| 8 | −$2 414 | −$412 | +$47 878 | +$314 978 |
+
+At a 98% payout a step recovers at every depth only if it is at least
+**×2.020** (= 1 + 1/0.98). So ×1.5 stops recovering after 2 losses, ×2 after 6,
+and ×2.5 / ×3 always recover — that is the real difference between them.
+
+### Last 100 days, all hours (profit and deposit scale linearly with the base)
+
+| step | base $10 | base $25 | base $50 | base $100 | profit / deposit |
+|---|---|---|---|---|---|
+| ×1.5 | $1 366 / dep $176 | $3 415 / $441 | $6 830 / $882 | $13 661 / $1 764 | **7.74×** |
+| ×2.0 | $3 794 / $946 | $9 486 / $2 364 | $18 972 / $4 728 | $37 944 / $9 456 | 4.01× |
+| ×2.5 | $11 318 / $3 445 | $28 295 / $8 613 | $56 590 / $17 227 | $113 180 / $34 454 | 3.28× |
+| ×3.0 | $30 868 / $9 810 | $77 170 / $24 524 | $154 341 / $49 048 | $308 682 / $98 096 | 3.15× |
+
+Largest single bet at base $10: $114 (×1.5), $640 (×2), $2 441 (×2.5), $7 290 (×3).
+Worst streak in this window: 6 losses.
+
+### Last 100 days, 00:00–08:00 ICT only
+
+| step | base $10 | base $25 | base $50 | base $100 | profit / deposit |
+|---|---|---|---|---|---|
+| ×1.5 | $827 / dep $113 | $2 067 / $282 | $4 133 / $563 | $8 266 / $1 127 | **7.34×** |
+| ×2.0 | $1 341 / $281 | $3 354 / $702 | $6 707 / $1 405 | $13 414 / $2 810 | 4.77× |
+| ×2.5 | $2 423 / $606 | $6 058 / $1 514 | $12 117 / $3 028 | $24 233 / $6 056 | 4.00× |
+| ×3.0 | $4 521 / $1 298 | $11 302 / $3 246 | $22 604 / $6 492 | $45 208 / $12 984 | 3.48× |
+
+Worst streak at night: 5 losses. Fewer signals (140 vs 405) but a better hit rate.
+
+### The same grid over the full 8 months, where the worst streak is 8
+
+| step | deposit, base $10 | deposit, base $100 | largest bet, base $100 | profit / deposit |
+|---|---|---|---|---|
+| ×1.5 | $392 | $3 920 | $2 563 | 6.22× |
+| ×2.0 | $3 321 | $33 210 | $25 600 | 2.53× |
+| ×2.5 | $18 539 | $185 388 | $152 588 | 1.83× |
+| ×3.0 | $75 264 | $752 642 | $656 100 | 1.60× |
+
+One extra losing candle multiplies the requirement by the step, so ×3 at base $100
+needs three quarters of a million dollars to survive a run that already happened
+this year. Return on capital moves the other way from the step size: the mildest
+progression is the most efficient, and flat staking at the same deposit
+($9 456 → $1 545 a bet) still earned $53 429 over these 100 days — more than ×2
+and at a fraction of ×2.5's exposure.
+
+**What the grid says.** Steeper steps buy a guarantee that any single sequence
+closes green, and pay for it with a deposit that grows as `stepᵏ`. The profit
+column grows too, but only because more money is at risk — profit per dollar of
+deposit falls monotonically from ×1.5 to ×3. Nothing here changes the edge; it only
+changes how much capital is standing behind the same 54–65% hit rate.
