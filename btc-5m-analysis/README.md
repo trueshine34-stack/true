@@ -711,3 +711,64 @@ $50 base — 511× the first bet — and even that carries a ~10% chance of ruin
 days. Compounding the base makes it worse, not better: the base rises after wins, so
 the losing sequence, when it comes, is priced off a larger bankroll. To halve the
 requirement, cut the first entry to $25.
+
+## Question 13 — riding the winner: one more bet, same side, double stake
+
+`ride.py`. After the fade sequence finally wins, place one more bet in the
+direction that just won, at twice the winning stake.
+
+### The ride bet on its own
+
+| window | session | cases | same side again | P | p-value |
+|---|---|---|---|---|---|
+| 100 days | all hours | 99 | 47 | 47.47% | 0.615 |
+| 100 days | night | 28 | 16 | 57.14% | 0.450 |
+| 300 days | all hours | 288 | 148 | **51.39%** | 0.637 |
+| 300 days | night | 99 | 57 | 57.58% | 0.132 |
+
+51.4% against a 50.5% break-even. Statistically it is a coin flip — the reversal
+candle that just paid says nothing about the one after it.
+
+### 100 days — it looks like a discovery
+
+| deposit | baseline | + ride | + ride and chase |
+|---|---|---|---|
+| $5 000 | 5.67× | **15.12×** | RUIN |
+| $12 750 | 1.98× | 3.62× | RUIN |
+| $25 550 | 1.41× | 1.98× | 9.58× |
+
+### 300 days — it is the opposite
+
+| deposit | baseline | + ride | + ride and chase |
+|---|---|---|---|
+| $5 000 | RUIN | RUIN | RUIN |
+| $12 750 | RUIN ($0) | RUIN | RUIN |
+| $25 550 | **2.54×** (ruin risk 11%) | **0.75× — RUIN** | RUIN |
+| $51 150 | 1.59× | **0.50×** | RUIN (100% in MC) |
+
+The ride turns the one deposit that survived into a loser, and the "chase the ride
+too" version wipes out every deposit up to $51 150 with 100% ruin in simulation.
+Overall hit rate falls from 55.0% to 52.8% — the added bets are coin flips — and the
+bet count rises from 940 to 1457.
+
+### Why it breaks the account when the bet is roughly break-even
+
+The damage is the sizing, not the edge. Doubling the *winning* stake means a
+sequence that just fought its way out of five losses hands the ride bet 64× the
+base — $3 200 at a $50 base, and 512× ($25 600) at the worst point of the 300-day
+sample. A near-coin-flip placed at that size relative to the bankroll has negative
+geometric growth even with a slightly positive expectation: over-betting eats the
+edge.
+
+Proof that it is sizing and not the signal — the same extra bet, kept at the base
+stake instead of double the winner:
+
+| ride stake | 300 days at $25 550 | MC ruin |
+|---|---|---|
+| none (baseline) | 2.54× | 11.2% |
+| 1× base | 2.45× | 11.7% |
+| 2× base | 2.36× | 10.9% |
+| 2× the winning stake | **0.75×, RUIN** | 63.7% |
+
+At a small fixed size the ride is harmless and pointless; at double the winner it is
+fatal. Do not add it.
