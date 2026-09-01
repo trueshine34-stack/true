@@ -1,0 +1,23 @@
+300 days, 2025-11-05 .. 2026-09-01, 517 sequences, deepest 8 losses, first bet $50
+
+plan                    deposit  1st bet      final      x   max bet   max DD   x/DD  funds  MC ruin
+----------------------------------------------------------------------------------------------------
+flat 2.0%, no chase       2,500       50      7,094   2.84       148    20.1%   14.2    n/a     0.0%
+flat 2.5%, no chase       2,000       50      7,138   3.57       188    24.5%   14.6    n/a     0.0%
+flat 3.0%, no chase       1,667       50      7,386   4.43       236    28.7%   15.5    n/a     0.0%
+flat 4.0%, no chase       1,250       50      8,227   6.58       358    36.5%   18.0    n/a     0.0%
+chase at a constant stake    2,500       50     11,231   4.49       226    29.7%   15.1    n/a     0.0%
+x1.5, no cap              5,000       50     18,647   3.73     1,500    24.7%   15.1      8     0.0%
+x1.5, no cap              5,667       50     18,308   3.23     1,474    21.8%   14.8      9     0.0%
+x1.5, no cap              8,550       50     18,943   2.22     1,408    14.5%   15.3     10     0.0%
+x1.5, cap 4 steps         2,500       50      7,112   2.84       778    55.7%    5.1      7     0.0%
+x1.5, cap 6 steps         3,000       50     11,406   3.80     1,318    61.6%    6.2      7     0.0%
+x1.75, no cap            12,750       50     32,474   2.55     4,839    11.7%   21.8      8     0.0%
+x2.0, no cap             25,550       50     65,018   2.54    13,897     0.8%  315.6      8    10.4%
+
+'funds' = consecutive losses the plan can pay for before it cannot place the next bet
+'x/DD'  = multiple earned per unit of worst drawdown
+Read x/DD carefully: a martingale shows almost no drawdown right up until it dies,
+so for those rows the honest risk number is 'funds' and 'MC ruin', not the drawdown.
+
+best return per unit of drawdown: x2.0, no cap on $25,550 -> 2.54x with a 0.8% drawdown

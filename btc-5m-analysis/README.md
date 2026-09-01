@@ -845,3 +845,55 @@ right on the edge of one: it funds exactly 8 consecutive losses, and 8 is the
 deepest the 300-day sample contains. A run of 16 candles empties it. Raising the
 deposit to $5 667 covers 9 losses and $8 550 covers 10 — cheap insurance, and the
 reason ×1.5 is the only progression here worth considering at all.
+
+## Question 15 — the final answer: stake, step, deposit
+
+`final.py` puts every finalist on the same 300 days with the same $50 first bet.
+
+| plan | deposit | 1st bet | final | multiple | largest bet | max DD | x per unit DD | funds N losses | MC ruin |
+|---|---|---|---|---|---|---|---|---|---|
+| flat 2.0%, no chase | $2 500 | $50 | $7 094 | 2.84× | $148 | 20.1% | 14.2 | — | 0% |
+| **flat 2.5%, no chase** | **$2 000** | **$50** | **$7 138** | **3.57×** | $188 | 24.5% | 14.6 | — | **0%** |
+| flat 3.0%, no chase | $1 667 | $50 | $7 386 | 4.43× | $236 | 28.7% | 15.5 | — | 0% |
+| flat 4.0%, no chase | $1 250 | $50 | $8 227 | 6.58× | $358 | 36.5% | 18.0 | — | 0% |
+| chase at a constant stake | $2 500 | $50 | $11 231 | 4.49× | $226 | 29.7% | 15.1 | — | 0% |
+| ×1.5, base 1% | $5 000 | $50 | $18 647 | 3.73× | $1 500 | 24.7% | 15.1 | 8 | 0% |
+| ×1.5, base 1% | $8 550 | $50 | $18 943 | 2.22× | $1 408 | 14.5% | 15.3 | 10 | 0% |
+| ×1.5, capped at 6 steps | $3 000 | $50 | $11 406 | 3.80× | $1 318 | 61.6% | 6.2 | 7 | 0% |
+| ×1.75 | $12 750 | $50 | $32 474 | 2.55× | $4 839 | 11.7% | 21.8 | 8 | 0% |
+| ×2.0 | $25 550 | $50 | $65 018 | 2.54× | $13 897 | 0.8% | 315.6 | 8 | **10.4%** |
+
+Two things fall out of that table.
+
+**Every scheme sits on the same line.** Return per unit of drawdown is 14–15.5 for
+flat staking at any percentage, 15.1 for constant-stake chasing, and 15.1 for ×1.5.
+No progression buys extra return; all it does is move you along the same
+risk/return line, and the capped versions (5.1 and 6.2) sit *below* it.
+
+**Drawdown lies about martingales.** The ×2 row shows a 0.8% drawdown and an
+absurd 315 ratio — because a martingale by construction shows almost no drawdown
+right up until the sequence it cannot fund. Its real risk is in the last two
+columns: it funds 8 losses, the sample contains an 8-loss sequence, and simulation
+puts ruin at 10.4%.
+
+At an identical $5 000 deposit, the honest comparison is decisive: a $50 base is
+the *largest* base a ×1.5 progression can carry (2% base → 62% ruin, 3% base → 86%),
+while flat staking on the same $5 000 runs a $150 bet and returns more.
+
+### The answer
+
+**Deposit $2 000. First bet $50 — 2.5% of the bankroll, recomputed as it moves.
+Step: none.** Fade a run of exactly 7, one bet, next signal.
+
+Over the last 300 days that plan turned $2 000 into $7 138 (3.57×, +$5 138), with a
+worst drawdown of 24.5%, a largest single bet of $188, and no sequence of events in
+the data or in 4000 simulated re-orderings that takes it to zero.
+
+Want more? Raise the percentage, not a step: 3% → 4.43×, 4% → 6.58×, at 29% and 37%
+drawdown. Want less? 2% → 2.84% at a 20% drawdown. That single dial moves you along
+the whole efficient line, and unlike a step it has no cliff at the end of it.
+
+The only progression worth anything is ×1.5 with the base kept at 1% of the deposit
+(so $5 000 behind a $50 first bet). It returns 3.73× against flat's 3.57% at the
+same drawdown — a rounding error — for two and a half times the capital and a
+$1 500 worst bet instead of $188. Not worth it.
