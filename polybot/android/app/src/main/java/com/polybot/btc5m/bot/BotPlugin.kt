@@ -48,6 +48,13 @@ class BotPlugin : Plugin() {
     /** The bot that buys the favourite while it is under its own exit. */
     private val pulseBot: PulseBot get() = EngineHolder.pulse(context)
 
+    /** The same rule with its gates opened up, on its own money. */
+    private val softPulse: PulseBot get() = EngineHolder.pulseSoft(context)
+
+    /** Which of the two a call is about. */
+    private fun pulseFor(call: PluginCall): PulseBot =
+        if (call.getBoolean("soft") == true) softPulse else pulseBot
+
 
     private val probeBot: ProbeBot get() = EngineHolder.probe(context)
 
@@ -1307,8 +1314,9 @@ class BotPlugin : Plugin() {
 
     @PluginMethod
     fun pulseUpdate(call: PluginCall) {
-        val d = pulseBot.settings
-        pulseBot.update(
+        val bot = pulseFor(call)
+        val d = bot.settings
+        bot.update(
             PulsePlan.Settings(
                 enabled = call.getBoolean("enabled") ?: d.enabled,
                 bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
@@ -1331,14 +1339,14 @@ class BotPlugin : Plugin() {
 
     @PluginMethod
     fun pulseReset(call: PluginCall) {
-        pulseBot.resetBank()
+        pulseFor(call).resetBank()
         call.resolve()
     }
 
     /** What the pulse bot holds, what it is looking at, and how it has done. */
     @PluginMethod
     fun pulseState(call: PluginCall) {
-        val bot = pulseBot
+        val bot = pulseFor(call)
         val t = bot.paper.totals
         val rt = bot.real.totals
         val read = bot.read

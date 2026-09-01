@@ -276,6 +276,8 @@ export interface PolyBotPlugin {
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
   pulseUpdate(args: {
+    /** Which of the two: the strict rule, or the one with its gates opened. */
+    soft?: boolean;
     enabled?: boolean;
     bankUsd?: number;
     shares?: number;
@@ -287,8 +289,8 @@ export interface PolyBotPlugin {
     /** Whether the wallet trades it too. Paper always does. */
     live?: boolean;
   }): Promise<void>;
-  pulseReset(): Promise<void>;
-  pulseState(): Promise<PulseState>;
+  pulseReset(args?: { soft?: boolean }): Promise<void>;
+  pulseState(args?: { soft?: boolean }): Promise<PulseState>;
   /**
    * What one address holds off the venue: USDT on BSC and USDC on Polygon.
    * Read-only — the app has no key for BSC and never sends there.

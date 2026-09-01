@@ -88,6 +88,7 @@ class BotService : Service() {
         // lives on. Ask here, where the process comes up.
         EngineHolder.probe(this)
         EngineHolder.pulse(this)
+        EngineHolder.pulseSoft(this)
         stateHook = { updateNotification() }
         EngineHolder.onServiceState = stateHook
     }

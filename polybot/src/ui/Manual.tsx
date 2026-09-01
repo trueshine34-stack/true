@@ -198,6 +198,8 @@ export function Manual({
    */
   const [side, setSide] = useState<'Up' | 'Down' | null>(null);
   const [pulseBot, setPulseBot] = useState<PulseState | null>(null);
+  /** The same rule with its gates opened up, on its own money. */
+  const [softBot, setSoftBot] = useState<PulseState | null>(null);
   /**
    * The bot deck: whether it is open, which rule is on it, and whose money.
    *
@@ -207,9 +209,9 @@ export function Manual({
    * reading a setting without knowing whose it was.
    */
   const [botOpen, setBotOpen] = useState(false);
-  const [botTab, setBotTab] = useState<'line' | 'fade' | 'inside' | 'pulse'>(
-    'line',
-  );
+  const [botTab, setBotTab] = useState<
+    'line' | 'fade' | 'inside' | 'pulse' | 'pulse2'
+  >('line');
   const [botLive, setBotLive] = useState(false);
   const [probeBot, setProbeBot] = useState<ProbeState | null>(null);
   /** The five-minute candle being read, and that window's own orders. */
@@ -519,6 +521,11 @@ export function Manual({
       void PolyBot.pulseState()
         .then((s) => {
           if (!cancelled) setPulseBot(s);
+        })
+        .catch(() => {});
+      void PolyBot.pulseState({ soft: true })
+        .then((s) => {
+          if (!cancelled) setSoftBot(s);
         })
         .catch(() => {});
       void PolyBot.probeState()
@@ -1205,6 +1212,9 @@ export function Manual({
                 } else if (pulseBot?.live) {
                   setBotLive(true);
                   setBotTab('pulse');
+                } else if (softBot?.live) {
+                  setBotLive(true);
+                  setBotTab('pulse2');
                 }
               }
               setBotOpen((v) => !v);
@@ -1227,7 +1237,8 @@ export function Manual({
             <i
               className={`raildot${
                 (probeBot?.running && probeBot.live) ||
-                (pulseBot?.running && pulseBot.live)
+                (pulseBot?.running && pulseBot.live) ||
+                (softBot?.running && softBot.live)
                   ? ' live'
                   : ''
               }`}
@@ -1263,6 +1274,7 @@ export function Manual({
                 ['fade', 'свеча'],
                 ['inside', 'цена'],
                 ['pulse', 'пульс'],
+                ['pulse2', 'пульс 2'],
               ] as const
             ).map(([key, label]) => {
               // The dot is real money. Everything runs on paper all the
@@ -1271,9 +1283,11 @@ export function Manual({
               const live =
                 key === 'pulse'
                   ? (pulseBot?.running ?? false) && (pulseBot?.live ?? false)
-                  : (probeBot?.running ?? false) &&
-                    (probeBot?.live ?? false) &&
-                    probeMode(probeBot) === key;
+                  : key === 'pulse2'
+                    ? (softBot?.running ?? false) && (softBot?.live ?? false)
+                    : (probeBot?.running ?? false) &&
+                      (probeBot?.live ?? false) &&
+                      probeMode(probeBot) === key;
               return (
                 <button
                   key={key}
@@ -1282,7 +1296,7 @@ export function Manual({
                     setBotTab(key);
                     // Picking a trend tab is picking that entry: the engine
                     // reads one at a time, and the lead moves with it.
-                    if (key !== 'pulse' && probeBot) {
+                    if (key !== 'pulse' && key !== 'pulse2' && probeBot) {
                       void PolyBot.probeUpdate({
                         real: botLive,
                         inside: key === 'inside',
@@ -1326,6 +1340,40 @@ export function Manual({
         </>
       )}
 
+      {botOpen && botTab === 'pulse2' && softBot && (
+        <PulseCard
+          state={softBot}
+          seen={botLive}
+          soft
+          onBank={(usd) => {
+            if (!Number.isFinite(usd) || usd < 0) return;
+            void PolyBot.pulseUpdate({ soft: true, bankUsd: usd })
+              .then(() => PolyBot.pulseState({ soft: true }))
+              .then(setSoftBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onShares={(n) => {
+            if (!Number.isFinite(n) || n <= 0) return;
+            void PolyBot.pulseUpdate({ soft: true, shares: n })
+              .then(() => PolyBot.pulseState({ soft: true }))
+              .then(setSoftBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onDemo={(live) => {
+            void PolyBot.pulseUpdate({ soft: true, live })
+              .then(() => PolyBot.pulseState({ soft: true }))
+              .then(setSoftBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+          onReset={() => {
+            void PolyBot.pulseReset({ soft: true })
+              .then(() => PolyBot.pulseState({ soft: true }))
+              .then(setSoftBot)
+              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
+          }}
+        />
+      )}
+
       {botOpen && botTab === 'pulse' && pulseBot && (
         <PulseCard
           state={pulseBot}
@@ -1359,7 +1407,7 @@ export function Manual({
         />
       )}
 
-      {botOpen && botTab !== 'pulse' && probeBot && (
+      {botOpen && botTab !== 'pulse' && botTab !== 'pulse2' && probeBot && (
         <ProbeCard
           state={probeBot}
           seen={botLive}
@@ -3045,6 +3093,7 @@ function ProbeRow({ round, offer }: { round: ProbeRound; offer?: ProbeOffer }) {
 function PulseCard({
   state,
   seen,
+  soft = false,
   onBank,
   onShares,
   onDemo,
@@ -3053,6 +3102,8 @@ function PulseCard({
   state: PulseState;
   /** Which account is on screen — and, for this rule, the one it runs on. */
   seen: boolean;
+  /** The variant with its gates opened up, which is a different rule's card. */
+  soft?: boolean;
   onBank: (usd: number) => void;
   onShares: (shares: number) => void;
   onDemo: (demo: boolean) => void;
@@ -3087,7 +3138,7 @@ function PulseCard({
   return (
     <div className="card tight">
       <div className="counterhead">
-        <span>Пульс</span>
+        <span>{soft ? 'Пульс 2' : 'Пульс'}</span>
         <WhyButton open={why} onClick={() => setWhy((v) => !v)} />
         {/*
           The switch is real money, and there is none on the paper page: this
@@ -3117,6 +3168,15 @@ function PulseCard({
         Входит в любую секунду окна, включая последнюю минуту: поздней покупке
         уже не дойти до своей цели, но выигрывающая сторона доезжает до
         расчёта, а он платит целый доллар.
+        {soft &&
+          ' Это тот же вопрос, заданный четырежды, но ответы засчитываются' +
+            ' раньше: половина перевеса, стакан, который просто не против' +
+            ' стороны, а не за неё, объём, который просто не мёртвый, и шире' +
+            ' полоса котировок. Строгое правило редко проходит все четыре' +
+            ' ворота, а когда проходит — сторону уже переоценили; это входит в' +
+            ' разы чаще на доказательствах в разы тоньше. Какое из двух право,' +
+            ' спорить незачем: они идут по одним и тем же окнам на своих' +
+            ' деньгах, и через несколько дней записи ответят.'}
         {' Вместе со входом под ним встают три заявки — на 6, 12 и 18 центов' +
           ' дешевле, каждая на тот же размер. Правило покупает в момент, когда' +
           ' четверо согласились, то есть когда сторона дороже всего, а окно,' +

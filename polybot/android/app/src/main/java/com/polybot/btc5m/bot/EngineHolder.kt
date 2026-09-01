@@ -21,6 +21,9 @@ object EngineHolder {
     private var pulseBot: PulseBot? = null
 
     @Volatile
+    private var softPulse: PulseBot? = null
+
+    @Volatile
     private var probeBot: ProbeBot? = null
 
     @Volatile
@@ -68,7 +71,8 @@ object EngineHolder {
                 // itself, and two rules pulling each other's orders would leave
                 // the position naked between them.
                 botShares = { asset ->
-                    pulseBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0
+                    (pulseBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0) +
+                        (softPulse?.takeIf { it.running }?.heldShares(asset) ?: 0.0)
                 },
                 onStateChanged = {
                     onState?.invoke()
@@ -108,6 +112,39 @@ object EngineHolder {
     }
 
     fun peekPulse(): PulseBot? = pulseBot
+
+    /**
+     * The same rule with its gates opened up, on its own money.
+     *
+     * One engine, two configurations. Which set of thresholds is right is not
+     * a thing to argue about in the abstract: they read the same windows side
+     * by side, each with its own paper bank and its own record, and in a few
+     * days the records answer it.
+     */
+    fun pulseSoft(context: Context): PulseBot {
+        softPulse?.let { return it }
+        val host = get(context)
+        return synchronized(this) {
+            softPulse ?: PulseBot(
+                engine = host,
+                store = PulseStore(
+                    context,
+                    name = "polybot_pulse2",
+                    fallback = PulsePlan.soft(),
+                ),
+                exit = { autoSell?.settings ?: AutoSell.Settings() },
+                onStateChanged = {
+                    onState?.invoke()
+                    onServiceState?.invoke()
+                },
+            ).also {
+                softPulse = it
+                if (it.settings.enabled) it.start()
+            }
+        }
+    }
+
+    fun peekSoftPulse(): PulseBot? = softPulse
 
     /**
      * The experiment: one five-dollar entry a window, the way the chart's line

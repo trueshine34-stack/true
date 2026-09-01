@@ -5,10 +5,20 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** The pulse bot's settings and running totals, kept across restarts. */
-class PulseStore(context: Context) {
+class PulseStore(
+    context: Context,
+    /**
+     * Which pulse this is. The soft rule keeps its settings, its money and
+     * its record in a file of its own — two rules sharing a store would be
+     * one rule with a confusing history.
+     */
+    private val name: String = "polybot_pulse",
+    /** And what it starts from, before anything has been stored. */
+    private val fallback: PulsePlan.Settings = PulsePlan.Settings(),
+) {
 
     private val prefs = context.applicationContext
-        .getSharedPreferences("polybot_pulse", Context.MODE_PRIVATE)
+        .getSharedPreferences(name, Context.MODE_PRIVATE)
 
     fun loadSettings(): PulsePlan.Settings = PulsePlan.Settings(
         // Always running, and not a stored answer. A rule switched off keeps
@@ -17,13 +27,21 @@ class PulseStore(context: Context) {
         // by a rule that was not running while nobody was watching. What is
         // still a choice is whose money it trades, which is [demo].
         enabled = true,
-        bankUsd = prefs.getFloat("bankUsd", PulsePlan.DEFAULT_BANK_USD.toFloat()).toDouble(),
-        shares = prefs.getFloat("shares", PulsePlan.DEFAULT_SHARES.toFloat()).toDouble(),
-        minEdge = prefs.getFloat("minEdge", PulsePlan.DEFAULT_MIN_EDGE.toFloat()).toDouble(),
-        minLean = prefs.getFloat("minLean", PulsePlan.DEFAULT_MIN_LEAN.toFloat()).toDouble(),
-        minVolume = prefs.getFloat("minVolume", PulsePlan.DEFAULT_MIN_VOLUME.toFloat()).toDouble(),
-        takePct = prefs.getFloat("takePct", PulsePlan.DEFAULT_TAKE_PCT.toFloat()).toDouble(),
-        cutUsd = prefs.getFloat("cutUsd", PulsePlan.DEFAULT_CUT_USD.toFloat()).toDouble(),
+        bankUsd = prefs.getFloat("bankUsd", fallback.bankUsd.toFloat()).toDouble(),
+        shares = prefs.getFloat("shares", fallback.shares.toFloat()).toDouble(),
+        // Everything that makes one rule softer than the other comes from
+        // its own fallback, so the soft one is soft on a fresh install and
+        // stays wherever it has been set afterwards.
+        fromSec = fallback.fromSec,
+        untilSec = fallback.untilSec,
+        rideSec = fallback.rideSec,
+        minEdge = prefs.getFloat("minEdge", fallback.minEdge.toFloat()).toDouble(),
+        minLean = prefs.getFloat("minLean", fallback.minLean.toFloat()).toDouble(),
+        minVolume = prefs.getFloat("minVolume", fallback.minVolume.toFloat()).toDouble(),
+        minPrice = fallback.minPrice,
+        maxPrice = fallback.maxPrice,
+        takePct = prefs.getFloat("takePct", fallback.takePct.toFloat()).toDouble(),
+        cutUsd = prefs.getFloat("cutUsd", fallback.cutUsd.toFloat()).toDouble(),
         // A desk that was running this rule on real money keeps doing so:
         // the old "demo" flag being off is exactly the old way of saying it.
         live = prefs.getBoolean("live", !prefs.getBoolean("demo", true)),

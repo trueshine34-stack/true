@@ -74,6 +74,38 @@ object PulsePlan {
     const val DEFAULT_MIN_PRICE = 0.30
     const val DEFAULT_MAX_PRICE = 0.80
 
+    /**
+     * The same rule, asking less of the market before it acts.
+     *
+     * Four independent readings agreeing is a high bar on a five-minute
+     * window: most of them never clear it, and the ones that do are the ones
+     * the book has already repriced. These are the same four questions with
+     * the answers taken earlier — half the lead, a book that merely is not
+     * against the side rather than behind it, volume that is merely not dead,
+     * and a wider band of odds — so it trades several times as often on
+     * evidence that is several times thinner.
+     *
+     * Which of the two is right is not something to argue about: they run on
+     * their own money, side by side, on the same windows, and the records say
+     * so in a few days.
+     */
+    const val SOFT_MIN_EDGE = 3.0
+    const val SOFT_MIN_LEAN = 0.50
+    const val SOFT_MIN_VOLUME = 0.45
+    const val SOFT_MIN_PRICE = 0.20
+    const val SOFT_MAX_PRICE = 0.88
+    const val SOFT_FROM_SEC = 20L
+
+    /** The settings that make one, over whatever the strict rule holds. */
+    fun soft(): Settings = Settings(
+        fromSec = SOFT_FROM_SEC,
+        minEdge = SOFT_MIN_EDGE,
+        minLean = SOFT_MIN_LEAN,
+        minVolume = SOFT_MIN_VOLUME,
+        minPrice = SOFT_MIN_PRICE,
+        maxPrice = SOFT_MAX_PRICE,
+    )
+
     /** What one round is trying to make, on the price paid. */
     const val DEFAULT_TAKE_PCT = 0.15
 
