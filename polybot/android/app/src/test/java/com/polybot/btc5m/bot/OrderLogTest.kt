@@ -237,6 +237,57 @@ class OrderLogTest {
         outcome = "Up",
     )
 
+    /**
+     * What is held, at cost — the base a percentage reserve is a share of.
+     *
+     * Of the cash alone the share re-answered itself after every purchase, so
+     * the same slice came back as spendable money over and over and nothing
+     * was ever actually held for a whole event.
+     */
+    @Test
+    fun whatIsHeldIsCountedAtWhatItCost() {
+        record("BUY", 0.50, 10.0, matched = 10.0)
+
+        assertEquals(5.0, OrderLog.heldCost(0L), 1e-9)
+    }
+
+    @Test
+    fun aSoldPositionIsNoLongerHeld() {
+        record("BUY", 0.50, 10.0, matched = 10.0)
+        record("SELL", 0.80, 10.0, matched = 10.0)
+
+        assertEquals(0.0, OrderLog.heldCost(0L), 1e-9)
+    }
+
+    /** A resting sell has sold nothing, so the shares under it are still held. */
+    @Test
+    fun aRestingSellDoesNotEmptyTheHolding() {
+        record("BUY", 0.50, 10.0, matched = 10.0)
+        record("SELL", 0.80, 10.0, matched = 0.0)
+
+        assertEquals(5.0, OrderLog.heldCost(0L), 1e-9)
+    }
+
+    /** And a window old enough to have paid out is cash again, not a holding. */
+    @Test
+    fun anOldWindowDropsOutOfTheHolding() {
+        OrderLog.record(
+            orderId = "old",
+            asset = "token-old",
+            conditionId = "cond-old",
+            outcome = "Up",
+            action = "BUY",
+            price = 0.50,
+            size = 10.0,
+            matched = 10.0,
+            auto = false,
+            windowStart = 1_000L,
+        )
+
+        assertEquals(5.0, OrderLog.heldCost(1_000L), 1e-9)
+        assertEquals(0.0, OrderLog.heldCost(1_000L + WINDOW_SECONDS), 1e-9)
+    }
+
     @Test
     fun aRestingSellKeepsTheRuleAwake() {
         val window = System.currentTimeMillis() / 1000 - (System.currentTimeMillis() / 1000) % WINDOW_SECONDS

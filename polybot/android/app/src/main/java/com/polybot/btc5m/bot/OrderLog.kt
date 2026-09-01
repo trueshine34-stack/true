@@ -342,6 +342,29 @@ object OrderLog {
     }
 
     /**
+     * What everything still held cost, over the windows that can still hold
+     * anything.
+     *
+     * Not what it is worth — what was paid for it. A share of the account has
+     * to mean the same amount of money for as long as the round lasts, and a
+     * base that moved with the price of the position would move the reserve
+     * with it, which is the one thing a reserve must not do.
+     *
+     * Scoped by window, and that is what keeps it honest: a five-minute market
+     * has its own token ids, so a window that has settled drops out by itself
+     * once it is old enough, at which point its money is back in the wallet
+     * and counted there instead.
+     */
+    fun heldCost(sinceWindow: Long): Double {
+        val assets = entries.filter { it.windowStart >= sinceWindow }
+            .map { it.asset }
+            .toSet()
+        return assets.sumOf { asset ->
+            heldLots(asset).sumOf { it.shares * it.price }
+        }
+    }
+
+    /**
      * Was this order's price chosen by hand?
      *
      * A sell the user placed or moved themselves is a decision, and the ladder

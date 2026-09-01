@@ -426,9 +426,30 @@ class BotEngine(
             field = if (value.isFinite()) value.coerceIn(0.0, 1.0) else 0.0
         }
 
-    /** What that comes to in dollars against a given wallet. */
-    fun lockedAgainst(wallet: Double): Double =
-        Reserve.lockedOf(wallet, lockedUsd, lockedPct)
+    /**
+     * What that comes to in dollars against a given wallet.
+     *
+     * A share is taken of everything the run has — the cash *and* what is
+     * already in the market, at what it cost — rather than of the cash alone.
+     * Of the cash alone it re-answered itself after every purchase: half of a
+     * hundred is fifty, and half of the fifty that is left is another
+     * twenty-five, so the same share came back as spendable money over and
+     * over and the reserve never actually held anything for a whole event.
+     * Against the run's own size it is one amount that stays that amount until
+     * the position is closed, which is what locking a sum for one event means.
+     */
+    fun lockedAgainst(wallet: Double): Double {
+        val nowSec = Clock.nowSec()
+        val window = nowSec - (nowSec % WINDOW_SECONDS)
+        val held = try {
+            // The window before this one can still be holding something the
+            // settlement has not paid out yet; anything older is cash again.
+            OrderLog.heldCost(window - WINDOW_SECONDS)
+        } catch (e: Exception) {
+            0.0
+        }
+        return Reserve.lockedOf(wallet + held, lockedUsd, lockedPct)
+    }
 
     /** The wallet itself, which is what the balance sheet is about. */
     fun usdcWallet(): Double {
