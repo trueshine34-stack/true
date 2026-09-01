@@ -772,3 +772,76 @@ stake instead of double the winner:
 
 At a small fixed size the ride is harmless and pointless; at double the winner it is
 fatal. Do not add it.
+
+## Question 14 — gentler steps: +50% and +75% instead of doubling
+
+`softstep.py`. $50 on red after seven greens; if the eighth closes green, $75
+(×1.5) or $87.50 (×1.75) on red for the ninth, and so on. Base grows with the
+bankroll as before.
+
+### What a gentle step gives up, and what it saves
+
+Net result of a sequence that wins after k losses (base $50):
+
+| k losses | ×1.5 | ×1.75 | ×2.0 |
+|---|---|---|---|
+| 0 | +$49 | +$49 | +$49 |
+| 1 | +$24 | +$36 | +$48 |
+| 2 | −$15 | +$13 | +$46 |
+| 3 | −$72 | −$28 | +$42 |
+| 5 | −$287 | −$223 | +$18 |
+| 8 | −$1 207 | −$1 487 | −$206 |
+
+×1.5 stops recovering after 2 losses, ×1.75 after 3, ×2 after 6. But look at what
+they cost to fund:
+
+| k losses | ×1.5 need / max bet | ×1.75 need / max bet | ×2.0 need / max bet |
+|---|---|---|---|
+| 5 | $1 039 / $380 | $1 848 / $821 | $3 150 / $1 600 |
+| 7 | $2 463 / $854 | $5 798 / $2 513 | $12 750 / $6 400 |
+| 8 | $3 744 / $1 281 | $10 196 / $4 398 | $25 550 / $12 800 |
+
+### 300 days (5 Nov 2025 – 1 Sep 2026), 517 sequences, deepest 8 losses
+
+| step | deposit | final | multiple | largest bet | max DD | MC ruin |
+|---|---|---|---|---|---|---|
+| ×1.5 | $2 500 | $50 | 0.02× | $1 154 | 100% | 62.8% |
+| **×1.5** | **$5 000** | **$18 647** | **3.73×** | $1 500 | 24.7% | **0.0%** |
+| ×1.5 | $12 750 | $21 901 | 1.72× | $1 365 | 9.7% | 0.0% |
+| ×1.75 | $5 000 | $2 182 | 0.44× | $1 826 | 100% | 85.7% |
+| **×1.75** | **$12 750** | **$32 474** | **2.55×** | $4 839 | 11.7% | 0.0% |
+| ×2.0 | $12 750 | $0 | 0.00× | $7 545 | 100% | 74.5% |
+| ×2.0 | $25 550 | $65 018 | 2.54× | $13 897 | — | 10.2% |
+
+The gentle step wins outright. **×1.5 on $5 000 returns 3.73× where ×2 needs
+$25 550 to return 2.54×** — a fifth of the capital, a ninth of the largest bet
+($1 500 vs $13 897), and no ruin in 4000 simulated paths against 10.2%.
+
+The reason: the deep sequences that ×2 pays a fortune to fully recover are rare.
+Giving up full recovery on them costs a few hundred dollars each; the capital freed
+goes to work on the 57% bet instead.
+
+### 100 days, for reference
+
+| step | $2 500 | $5 000 | $12 750 |
+|---|---|---|---|
+| ×1.5 | 3.70× | 1.95× | 1.30× |
+| ×1.75 | 8.30× | 2.91× | 1.53× |
+| ×2.0 | RUIN | 5.67× | 1.98× |
+
+### But flat staking still matches it
+
+Same signal, one bet per signal, no chasing, 300 days on $5 000:
+
+| stake | first bet | final | multiple | max DD |
+|---|---|---|---|---|
+| 2.0% | $100 | $14 200 | 2.84× | 20.1% |
+| **2.5%** | $125 | $17 864 | **3.57×** | **24.5%** |
+| 3.0% | $150 | $22 192 | 4.44× | 28.7% |
+
+At the same 24–25% drawdown, flat 2.5% returns 3.57× against the ×1.5 martingale's
+3.73×. A dead heat — except the flat plan has no cliff, and ×1.5 on $5 000 sits
+right on the edge of one: it funds exactly 8 consecutive losses, and 8 is the
+deepest the 300-day sample contains. A run of 16 candles empties it. Raising the
+deposit to $5 667 covers 9 losses and $8 550 covers 10 — cheap insurance, and the
+reason ×1.5 is the only progression here worth considering at all.
