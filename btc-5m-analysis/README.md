@@ -201,3 +201,76 @@ large relative to costs.
 * `stability.py` — month-by-month edge and the break-even fee
 * `variants.py` — stricter signal definitions ranked by gross per trade
 * `report_horizon.txt` — raw output
+
+## Question 6 — night runs (Vietnam time) and daily coverage
+
+All times ICT (UTC+7). Sample: 69 120 candles, 3 Jan – 31 Aug 2026, 239 complete days.
+
+### Are runs of 6+ concentrated at 03:00–07:00?
+
+No, not by frequency. 170 runs of 6+ start in that window against 151 expected if
+they were spread evenly — 14.76 per 1000 candles vs 12.81 for the rest of the day,
+1.15×, z = 1.66, **p = 0.096**. For runs of 8+ the night is actually below
+expectation (25 observed, 29.7 expected). The busiest single hour of the year is
+13:00 ICT, not a night hour.
+
+What *is* true about those hours is the volatility. Average 5m candle range by hour:
+
+| hour ICT | 03 | 04 | 05 | 06 | … | 20 | 21 | 22 |
+|---|---|---|---|---|---|---|---|---|
+| avg range | 0.152% | 0.147% | 0.169% | 0.148% | | 0.213% | 0.265% | 0.252% |
+
+03:00–07:00 is the quietest part of the day; 20:00–23:00 (US session) is 1.7× wider.
+A 6-candle run at 04:00 moves 0.47–0.73% in small, clean, same-size steps; the same
+run at 21:00 moves ~1.0% in a mess of long wicks. The night runs are not more
+frequent, they are more *legible* — which is what makes them memorable.
+
+And the wider context: long runs are **rarer** on 5m BTC than a coin flip predicts —
+908 runs of 6+ against 1080 expected (0.84×), 42 runs of 10+ against 68 (0.62×).
+That is the same mean reversion the earlier sections found.
+
+### Does every day have a run of 6 / 7 / 8 / 9 / 10?
+
+| N in a row | days with it | share | avg per day | days without |
+|---|---|---|---|---|
+| 6+ | 236 / 239 | **98.7%** | 3.77 | 3 |
+| 7+ | 202 / 239 | 84.5% | 1.74 | 37 |
+| 8+ | 133 / 239 | 55.6% | 0.74 | 106 |
+| 9+ | 74 / 239 | 31.0% | 0.35 | 165 |
+| 10+ | 42 / 239 | 17.6% | 0.17 | 197 |
+| 11+ | 21 / 239 | 8.8% | 0.09 | 218 |
+| 12+ | 11 / 239 | 4.6% | 0.05 | 228 |
+
+Practically every day carries a run of 6 — the three exceptions this year are
+1 Mar, 16 May and 22 May. A run of 7 happens on 5 days out of 6, a run of 8 about
+every other day, and a run of 10 roughly once a week.
+
+### The one thing in this that looks tradeable
+
+The candle *after* a run of 6+ reverses more often than it continues, and the effect
+is concentrated in the Asian night (`nightfade.py`):
+
+| window ICT | events | continues | reverses | p |
+|---|---|---|---|---|
+| 00:00–04:00 | 255 | 41.6% | **58.4%** | 0.007 |
+| 04:00–08:00 | 273 | 41.8% | **58.2%** | 0.006 |
+| 08:00–12:00 | 255 | 44.7% | 55.3% | 0.091 |
+| 12:00–16:00 | 341 | 52.5% | 47.5% | 0.357 |
+| 16:00–20:00 | 278 | 47.8% | 52.2% | 0.472 |
+| 20:00–24:00 | 262 | 43.5% | 56.5% | 0.036 |
+| **00:00–08:00** | **528** | **41.7%** | **58.3%** | **0.00013** |
+
+It holds in both halves of the sample (41.8% continuation before 19 Jun, 36.7%
+after) and in 7 of 8 months. Unlike everything else in this repo, 58% on a binary
+payout does clear its cost — a 51¢ contract paying $1 breaks even at 51%.
+
+Caveats: this is OKX's candle grid, so an app using another feed or another 5-minute
+alignment is not measuring the same thing; a contract that settles on a rolling
+window rather than on the candle close is a different bet; and the window was chosen
+after looking at six of them, so forward-test it before sizing up.
+
+### Files added
+
+* `nightruns.py` — runs by hour, per-day coverage, coin-flip baseline
+* `nightfade.py` — what the candle after a 6+ run does, by session and by month
+* `report_nightruns.txt` — raw output
