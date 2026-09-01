@@ -92,6 +92,7 @@ class PulseStore(context: Context) {
                     outcome = o.optString("outcome"),
                     shares = o.optDouble("shares", 0.0),
                     price = o.optDouble("price", 0.0),
+                    spent = o.optDouble("spent", 0.0),
                     proceeds = o.optDouble("proceeds", 0.0),
                     settled = o.optDouble("settled", 0.0),
                     winner = o.optString("winner"),
@@ -112,6 +113,7 @@ class PulseStore(context: Context) {
                     .put("outcome", it.outcome)
                     .put("shares", it.shares)
                     .put("price", it.price)
+                    .put("spent", it.spent)
                     .put("proceeds", it.proceeds)
                     .put("settled", it.settled)
                     .put("winner", it.winner)

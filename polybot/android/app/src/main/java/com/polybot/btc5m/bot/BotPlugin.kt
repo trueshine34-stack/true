@@ -1353,6 +1353,7 @@ class BotPlugin : Plugin() {
                         .put("outcome", it.outcome)
                         .put("shares", it.shares)
                         .put("price", it.price)
+                        .put("spent", it.spent)
                         .put("proceeds", it.proceeds)
                         .put("settled", it.settled)
                         .put("winner", it.winner)
@@ -1368,6 +1369,10 @@ class BotPlugin : Plugin() {
                 .put("outcome", it.outcome)
                 .put("shares", it.open)
                 .put("price", it.price)
+                // What the whole position averages once a bid below the entry
+                // has filled — the exit is still priced off the entry.
+                .put("avg", if (it.shares > 0.0) it.cost / it.shares else it.price)
+                .put("bids", it.bids.size)
                 .put("sellPrice", it.sellPrice)
                 .put("note", it.note)
         }

@@ -88,6 +88,35 @@ object PulsePlan {
      */
     const val MIN_TAKE_PCT = 0.15
 
+    /**
+     * How far under the entry the standing bids sit, in cents.
+     *
+     * The rule buys a side the moment four readings agree, which is the
+     * moment it is dearest — and a five-minute window that goes the other way
+     * first and comes back is the ordinary shape of one, not an exception. So
+     * three more bids wait below, each for the same size, and each one that
+     * fills buys the same conviction cheaper.
+     *
+     * Six cents apart because that is about what a window's ordinary swing is
+     * worth on a side priced near the middle: close enough that the first one
+     * is reached often, far enough that three of them are not all taken by the
+     * same wobble.
+     */
+    val ADD_STEPS = listOf(0.06, 0.12, 0.18)
+
+    /**
+     * The bids under an entry, dearest first, dropped where they fall off the
+     * bottom of the book.
+     */
+    fun addPrices(entry: Double, tick: Double): List<Double> {
+        if (entry <= 0.0) return emptyList()
+        val step = if (tick > 0) tick else 0.01
+        return ADD_STEPS
+            .map { Math.round((entry - it) / step) * step }
+            .map { Math.round(it * 10_000.0) / 10_000.0 }
+            .filter { it >= step }
+    }
+
     /** Dollars the lead has to flip against the position before it is cut. */
     const val DEFAULT_CUT_USD = 3.0
 
