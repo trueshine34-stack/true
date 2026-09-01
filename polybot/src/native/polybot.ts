@@ -329,7 +329,8 @@ export interface PolyBotPlugin {
     fade?: boolean;
     edgeUsd?: number;
   }): Promise<void>;
-  probeReset(): Promise<void>;
+  /** Clears one entry's record on one account, leaving the other five. */
+  probeReset(args?: { real?: boolean; mode?: string }): Promise<void>;
   probeState(): Promise<ProbeState>;
   /** One transfer of USDC on Polygon, to the address given. */
   withdraw(args: { to: string; usd: number }): Promise<{ hash: string }>;
@@ -474,6 +475,19 @@ export type PulseLot = {
   note?: string | null;
 };
 
+/** One window a pulse account closed, and what it came to. */
+export type PulseRound = {
+  windowStart: number;
+  outcome: string;
+  shares: number;
+  price: number;
+  proceeds: number;
+  settled: number;
+  winner: string;
+  pnl: number;
+  note?: string | null;
+};
+
 export type PulseState = {
   enabled: boolean;
   running: boolean;
@@ -512,6 +526,9 @@ export type PulseState = {
   liveSettled: number;
   livePnl: number;
   liveLot?: PulseLot | null;
+  /** Window by window, per account. Totals cannot tell a steady run from a wild one. */
+  roundList: PulseRound[];
+  liveRoundList: PulseRound[];
 };
 
 /** A position the take rule is watching, and what closing it would pay. */
@@ -530,6 +547,13 @@ export type ProbeRound = {
   windowStart: number;
   /** Paper money: nothing about this round reached the venue. */
   demo: boolean;
+  /**
+   * Which entry took it: "line", "fade" or "inside".
+   *
+   * The three keep separate records, separate paper balances and separate
+   * runs — they are three strategies, and their average is nobody's.
+   */
+  mode: string;
   /** The level the trade was taken for, and closed at when price got there. */
   target: number;
   /** A bid still waiting at this price, with nothing bought yet. */
@@ -854,6 +878,8 @@ const webStub: PolyBotPlugin = {
     liveGot: 0,
     liveSettled: 0,
     livePnl: 0,
+    roundList: [],
+    liveRoundList: [],
   }),
   addListener: async () => ({ remove: async () => {} }) as PluginListenerHandle,
 };

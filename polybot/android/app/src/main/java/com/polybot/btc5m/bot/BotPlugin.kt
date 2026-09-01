@@ -1343,6 +1343,26 @@ class BotPlugin : Plugin() {
         val rt = bot.real.totals
         val read = bot.read
 
+        fun roundsOf(book: PulseBot.Book): JSArray {
+            val out = JSArray()
+            // Newest first: the report is read from the top.
+            book.rounds.asReversed().forEach {
+                out.put(
+                    JSObject()
+                        .put("windowStart", it.windowStart)
+                        .put("outcome", it.outcome)
+                        .put("shares", it.shares)
+                        .put("price", it.price)
+                        .put("proceeds", it.proceeds)
+                        .put("settled", it.settled)
+                        .put("winner", it.winner)
+                        .put("pnl", it.pnl)
+                        .put("note", it.note),
+                )
+            }
+            return out
+        }
+
         fun lotOf(lot: PulseBot.Lot?) = lot?.let {
             JSObject()
                 .put("outcome", it.outcome)
@@ -1392,7 +1412,9 @@ class BotPlugin : Plugin() {
                         .put("downAsk", it.downAsk)
                 })
                 .put("lot", lotOf(bot.paper.lot))
-                .put("liveLot", lotOf(bot.real.lot)),
+                .put("liveLot", lotOf(bot.real.lot))
+                .put("roundList", roundsOf(bot.paper))
+                .put("liveRoundList", roundsOf(bot.real)),
         )
     }
 
@@ -1575,7 +1597,9 @@ class BotPlugin : Plugin() {
 
     @PluginMethod
     fun probeReset(call: PluginCall) {
-        probeBot.reset()
+        // One entry on one account: the other five records are other tests.
+        val real = call.getBoolean("real") ?: false
+        probeBot.reset(demo = !real, mode = call.getString("mode") ?: probeBot.modeOf(!real))
         call.resolve()
     }
 
@@ -1587,6 +1611,9 @@ class BotPlugin : Plugin() {
         fun row(r: ProbeBot.Round, open: Boolean): JSObject = JSObject()
             .put("windowStart", r.windowStart)
             .put("demo", r.demo)
+            // Which entry took it. The three keep separate records, and the
+            // screen filters this list by the tab it is showing.
+            .put("mode", r.mode)
             .put("target", r.target)
             .put("resting", r.resting)
             .put("adds", r.adds)

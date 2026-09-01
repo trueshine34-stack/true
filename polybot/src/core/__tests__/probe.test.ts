@@ -7,6 +7,7 @@ const round = (over: Partial<ProbeRound>): ProbeRound => {
   const base: ProbeRound = {
     windowStart: 1_787_817_600,
     demo: true,
+  mode: 'line',
     target: 0,
     resting: 0,
     adds: 0,

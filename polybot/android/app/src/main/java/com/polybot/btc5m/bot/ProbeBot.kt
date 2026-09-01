@@ -46,6 +46,17 @@ class ProbeBot(
         val asset: String,
         /** Paper money: nothing about this round reached the venue. */
         val demo: Boolean,
+        /**
+         * Which entry took it: "line", "fade" or "inside".
+         *
+         * The three are one engine reading three ways, and for a while they
+         * were also one record — so a run of the candle entry inherited the
+         * line's balance, its streak and its win rate, and the number on the
+         * card was an average of three strategies nobody was running. They
+         * are told apart here, at the only place that can tell them apart:
+         * the round itself, stamped as it is taken.
+         */
+        val mode: String = "line",
         val side: String,
         /** How fast the line was climbing or falling when it was followed. */
         val perHour: Double,
@@ -188,20 +199,25 @@ class ProbeBot(
      * What the current winning run has added to the stake. Zero after a loss,
      * which is the whole of the rule: the run stakes winnings, never the base.
      *
-     * One run per account. The two trade the same windows and still come
-     * apart — a bid the venue never filled is a window the wallet sat out and
-     * the paper account had — so neither account's run may be decided by the
-     * other's results.
+     * One run per account *and per entry*. The accounts trade the same windows
+     * and still come apart — a bid the venue never filled is a window the
+     * wallet sat out and the paper account had — and the three entries are
+     * three different strategies, so a run built by the line does not carry
+     * over to the candle when the tab is switched.
      */
-    @Volatile
-    var streakPaper: Double = store.loadStreak(demo = true)
-        private set
+    private val streaks: MutableMap<String, Double> = (
+        listOf("line", "fade", "inside").flatMap { mode ->
+            listOf(true, false).map { demo ->
+                runKey(mode, demo) to store.loadStreak(demo, mode)
+            }
+        }
+        ).toMap().toMutableMap()
 
-    @Volatile
-    var streakReal: Double = store.loadStreak(demo = false)
-        private set
+    fun streakOf(demo: Boolean, mode: String = modeOf(demo)): Double =
+        streaks[runKey(mode, demo)] ?: 0.0
 
-    fun streakOf(demo: Boolean) = if (demo) streakPaper else streakReal
+    val streakPaper: Double get() = streakOf(true)
+    val streakReal: Double get() = streakOf(false)
 
     /** Bought and still riding, usually one and briefly two at a boundary. */
     @Volatile
@@ -290,9 +306,23 @@ class ProbeBot(
      * paper should not have its paper balance moved by real money, and the
      * other way round.
      */
-    /** Everything one account's closed rounds have made. */
-    fun won(demo: Boolean): Double = rounds
-        .filter { it.demo == demo && it.shares > 0.0 }
+    /**
+     * Which of the three entries an account is set to.
+     *
+     * Each keeps its own record, its own paper balance and its own run, so
+     * this is the second half of every question about them: not "what has the
+     * paper account done" but "what has the paper account done on this
+     * entry". The three read the market three different ways and there is
+     * nothing to learn from their average.
+     */
+    fun modeOf(demo: Boolean): String {
+        val r = rules(demo)
+        return if (r.inside) "inside" else if (r.fade) "fade" else "line"
+    }
+
+    /** Everything one account's closed rounds have made, on one entry. */
+    fun won(demo: Boolean, mode: String = modeOf(demo)): Double = rounds
+        .filter { it.demo == demo && it.mode == mode && it.shares > 0.0 }
         .sumOf { it.pnl }
 
     /**
@@ -338,7 +368,7 @@ class ProbeBot(
         ProbePlan.stakeFor(rules(demo).stakeUsd, won(demo), settings.bankUsd, ridingOf(demo), held(demo))
 
     /** The account the run is a quarter of: the paper purse, or the wallet. */
-    private fun held(demo: Boolean): Double = if (demo) bank else wallet
+    private fun held(demo: Boolean): Double = if (demo) bankOf(modeOf(true)) else wallet
 
     /** Which accounts are trading this window — either, both, or neither. */
     private fun modesOn(): List<Boolean> = buildList {
@@ -391,10 +421,25 @@ class ProbeBot(
         if (demo) ridingPaper = value else ridingReal = value
     }
 
-    val bank: Double
-        get() = settings.bankUsd +
-            rounds.filter { it.demo && it.shares > 0.0 }.sumOf { it.pnl } -
-            working.filter { it.demo }.sumOf { it.cost }
+    /** One run, named by whose it is and which entry built it. */
+    private fun runKey(mode: String, demo: Boolean) =
+        mode + if (demo) ":paper" else ":live"
+
+    /**
+     * What the paper account is worth on one entry: what every entry starts
+     * with, plus what this one's closed rounds came to, less what it has in
+     * the market right now.
+     *
+     * Three balances from one opening figure, and not one balance shared
+     * three ways. A strategy tested on money another strategy won is not
+     * being tested.
+     */
+    fun bankOf(mode: String): Double =
+        settings.bankUsd +
+            rounds.filter { it.demo && it.mode == mode && it.shares > 0.0 }.sumOf { it.pnl } -
+            working.filter { it.demo && it.mode == mode }.sumOf { it.cost }
+
+    val bank: Double get() = bankOf(modeOf(true))
 
     private var scope: CoroutineScope? = null
     private var job: Job? = null
@@ -470,14 +515,19 @@ class ProbeBot(
         }
     }
 
-    /** Wipes the record. The settings, and anything riding, are left alone. */
-    fun reset() {
-        rounds = emptyList()
-        streakPaper = 0.0
-        streakReal = 0.0
-        ridingPaper = 0.0
-        ridingReal = 0.0
-        store.clearRounds()
+    /**
+     * Wipes one entry's record on one account, leaving the other five alone.
+     *
+     * They are separate tests on separate money; clearing the candle's run
+     * because the line's was cleared would throw away the only thing either
+     * of them is for.
+     */
+    fun reset(demo: Boolean = true, mode: String = modeOf(demo)) {
+        rounds = rounds.filterNot { it.demo == demo && it.mode == mode }
+        streaks[runKey(mode, demo)] = 0.0
+        store.saveStreak(demo, 0.0, mode)
+        if (mode == modeOf(demo)) setRiding(demo, 0.0)
+        store.saveRounds(rounds)
         onStateChanged()
     }
 
@@ -731,6 +781,7 @@ class ProbeBot(
                 windowStart = missed,
                 asset = "",
                 demo = demo,
+                mode = modeOf(demo),
                 // The side it was going to buy, and nothing when there was not
             // one. Falling back to the line's tilt here printed "Up · хотел,
             // но нет линии" — a row claiming a side in the same breath as
@@ -1023,6 +1074,7 @@ class ProbeBot(
             windowStart = windowStart,
             asset = token,
             demo = false,
+            mode = modeOf(false),
             side = way,
             perHour = trend?.perHour ?: 0.0,
             shares = fill.shares,
@@ -1301,6 +1353,7 @@ class ProbeBot(
                     windowStart = windowStart,
                     asset = token,
                     demo = false,
+                    mode = modeOf(false),
                     side = way,
                     perHour = line?.perHour ?: 0.0,
                     shares = 0.0,
@@ -1333,6 +1386,7 @@ class ProbeBot(
                 windowStart = windowStart,
                 asset = token,
                 demo = false,
+                mode = modeOf(false),
                 side = way,
                 perHour = line?.perHour ?: 0.0,
                 shares = 0.0,
@@ -1351,6 +1405,7 @@ class ProbeBot(
             windowStart = windowStart,
             asset = token,
             demo = false,
+            mode = modeOf(false),
             side = way,
             perHour = line?.perHour ?: 0.0,
             shares = fill.shares,
@@ -1612,6 +1667,7 @@ class ProbeBot(
             windowStart = windowStart,
             asset = token,
             demo = true,
+            mode = modeOf(true),
             side = way,
             perHour = line?.perHour ?: 0.0,
             shares = size,
@@ -2168,6 +2224,7 @@ class ProbeBot(
             windowStart = windowStart,
             asset = token,
             demo = true,
+            mode = modeOf(true),
             side = way,
             perHour = line?.perHour ?: 0.0,
             shares = 0.0,
@@ -2471,7 +2528,7 @@ class ProbeBot(
             it.copy(note = it.note ?: "продано лесенкой", soldAt = at)
         }
         store.saveRounds(rounds)
-        done.forEach { carryRun(it.demo, it.pnl) }
+        done.forEach { carryRun(it.demo, it.mode, it.pnl) }
         done.forEach {
             engine.log(
                 if (it.pnl >= 0) "trade" else "warn",
@@ -2491,13 +2548,14 @@ class ProbeBot(
      * window ends the run and the stake falls back to the base — so the run
      * only ever risks money the rule has already made.
      */
-    private fun carryRun(demo: Boolean, pnl: Double) {
-        val was = streakOf(demo)
+    private fun carryRun(demo: Boolean, mode: String, pnl: Double) {
+        val was = streakOf(demo, mode)
         val next = ProbePlan.nextStreak(was, pnl)
         if (next == was) return
-        if (demo) streakPaper = next else streakReal = next
-        setRiding(demo, next)
-        store.saveStreak(demo, next)
+        streaks[runKey(mode, demo)] = next
+        // The run on the entry being traded is the one on the card.
+        if (mode == modeOf(demo)) setRiding(demo, next)
+        store.saveStreak(demo, next, mode)
         engine.log(
             "info",
             (if (demo) "Проба (демо): " else "Проба: ") +
@@ -2555,7 +2613,7 @@ class ProbeBot(
 
             stillOpen = stillOpen.filterNot { it.windowStart == open.windowStart && it.leg == open.leg }
             closed = closed + scored
-            carryRun(scored.demo, scored.pnl)
+            carryRun(scored.demo, scored.mode, scored.pnl)
             engine.log(
                 if (scored.pnl >= 0) "trade" else "warn",
                 "Проба: окно " + hhmm(open.windowStart) + " — " +

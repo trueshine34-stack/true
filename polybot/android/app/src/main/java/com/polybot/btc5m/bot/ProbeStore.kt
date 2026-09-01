@@ -91,6 +91,10 @@ class ProbeStore(context: Context) {
                     windowStart = o.optLong("windowStart"),
                     asset = o.optString("asset"),
                     demo = o.optBoolean("demo", false),
+                    // Rounds filed before the three entries kept their own
+                    // records were all taken by the line, which is what the
+                    // desk shipped with and what the others were split from.
+                    mode = o.optString("mode").ifEmpty { "line" },
                     target = o.optDouble("target", 0.0),
                     // Older records carried a single flag; one add is one add.
                     adds = o.optInt("adds", if (o.optBoolean("added", false)) 1 else 0),
@@ -123,6 +127,7 @@ class ProbeStore(context: Context) {
                     .put("windowStart", it.windowStart)
                     .put("asset", it.asset)
                     .put("demo", it.demo)
+                    .put("mode", it.mode)
                     .put("target", it.target)
                     .put("adds", it.adds)
                     .put("leg", it.leg)
@@ -155,13 +160,17 @@ class ProbeStore(context: Context) {
      * out and the paper account traded — so a run is a property of an account
      * and not of the rule.
      */
-    fun loadStreak(demo: Boolean): Double =
-        prefs.getFloat(streakKey(demo), 0f).toDouble()
+    fun loadStreak(demo: Boolean, mode: String = "line"): Double =
+        prefs.getFloat(streakKey(demo, mode), 0f).toDouble()
 
-    fun saveStreak(demo: Boolean, streak: Double) =
-        prefs.edit().putFloat(streakKey(demo), streak.toFloat()).apply()
+    fun saveStreak(demo: Boolean, streak: Double, mode: String = "line") =
+        prefs.edit().putFloat(streakKey(demo, mode), streak.toFloat()).apply()
 
-    // The paper run keeps the old key, so a run in progress survives the
-    // update rather than being quietly reset by a rename.
-    private fun streakKey(demo: Boolean) = if (demo) "streak" else "streakLive"
+    // The paper run on the line entry keeps the old key, so a run in progress
+    // survives the update rather than being quietly reset by a rename; the
+    // other five are new and start at nothing, which they were anyway.
+    private fun streakKey(demo: Boolean, mode: String): String {
+        val base = if (demo) "streak" else "streakLive"
+        return if (mode == "line") base else "$base.$mode"
+    }
 }

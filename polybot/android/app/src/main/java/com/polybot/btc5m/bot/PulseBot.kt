@@ -64,6 +64,29 @@ class PulseBot(
         val open: Double get() = (shares - sold).coerceAtLeast(0.0)
     }
 
+    /**
+     * One closed round, kept so the rule can be read window by window.
+     *
+     * Totals answer "how has it done" and nothing else: a run of forty
+     * rounds that nets a dollar looks identical to one that made and lost
+     * forty, and only the second is worth stopping. The list is what says
+     * which of the two happened.
+     */
+    data class Round(
+        val windowStart: Long,
+        val demo: Boolean,
+        val outcome: String,
+        val shares: Double,
+        val price: Double,
+        val proceeds: Double,
+        val settled: Double,
+        val winner: String,
+        val note: String?,
+    ) {
+        val cost: Double get() = shares * price
+        val pnl: Double get() = proceeds + settled - cost
+    }
+
     data class Totals(
         val rounds: Int = 0,
         val wins: Int = 0,
@@ -91,10 +114,18 @@ class PulseBot(
     class Book(val demo: Boolean, @Volatile var totals: Totals) {
         @Volatile
         var lot: Lot? = null
+
+        /** Every window this account has closed, oldest first. */
+        @Volatile
+        var rounds: List<Round> = emptyList()
     }
 
-    val paper = Book(demo = true, totals = store.loadTotals(demo = true))
-    val real = Book(demo = false, totals = store.loadTotals(demo = false))
+    val paper = Book(demo = true, totals = store.loadTotals(demo = true)).also {
+        it.rounds = store.loadRounds(demo = true)
+    }
+    val real = Book(demo = false, totals = store.loadTotals(demo = false)).also {
+        it.rounds = store.loadRounds(demo = false)
+    }
 
     private val books get() = listOf(paper, real)
 
@@ -151,6 +182,9 @@ class PulseBot(
 
     private companion object {
         const val TICK_MS = 2_000L
+
+        /** More than a day of five-minute windows, which is enough to read. */
+        const val MAX_ROUNDS = 200
     }
 
     fun update(next: PulsePlan.Settings) {
@@ -167,7 +201,9 @@ class PulseBot(
     fun resetBank() {
         for (book in books) {
             book.totals = Totals()
+            book.rounds = emptyList()
             store.saveTotals(book.totals, demo = book.demo)
+            store.saveRounds(book.rounds, demo = book.demo)
         }
         onStateChanged()
     }
@@ -759,6 +795,7 @@ class PulseBot(
     private fun finish(book: Book, open: Lot) {
         book.lot = null
         val pnl = open.proceeds - open.cost
+        file(book, open, settlement = 0.0, winner = "", note = open.note ?: "продано")
         book.totals = book.totals.copy(
             rounds = book.totals.rounds + 1,
             wins = book.totals.wins + if (pnl > 0) 1 else 0,
@@ -772,6 +809,35 @@ class PulseBot(
         )
     }
 
+    /**
+     * Files a closed round on the account that traded it.
+     *
+     * Capped at a couple of hundred, which is more than a day of five-minute
+     * windows — long enough to read a run, short enough not to grow forever.
+     */
+    private fun file(
+        book: Book,
+        open: Lot,
+        settlement: Double,
+        winner: String,
+        note: String?,
+    ) {
+        book.rounds = (
+            book.rounds + Round(
+                windowStart = open.windowStart,
+                demo = book.demo,
+                outcome = open.outcome,
+                shares = open.shares,
+                price = open.price,
+                proceeds = open.proceeds,
+                settled = settlement,
+                winner = winner,
+                note = note,
+            )
+            ).takeLast(MAX_ROUNDS)
+        store.saveRounds(book.rounds, demo = book.demo)
+    }
+
     /** The window ended holding shares: they settle, at a dollar or at nothing. */
     private fun closeRound(book: Book, open: Lot) {
         book.lot = null
@@ -780,6 +846,7 @@ class PulseBot(
         val winner = EventStats.winnerFor(open.windowStart, Clock.nowSec())
         val settlement = if (open.outcome == winner) open.open else 0.0
         val pnl = open.proceeds + settlement - open.cost
+        file(book, open, settlement, winner, open.note ?: "расчёт")
 
         book.totals = book.totals.copy(
             rounds = book.totals.rounds + 1,

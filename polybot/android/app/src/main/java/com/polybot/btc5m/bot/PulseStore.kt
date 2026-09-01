@@ -1,6 +1,8 @@
 package com.polybot.btc5m.bot
 
 import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 
 /** The pulse bot's settings and running totals, kept across restarts. */
 class PulseStore(context: Context) {
@@ -71,12 +73,61 @@ class PulseStore(context: Context) {
             .apply()
     }
 
+    /**
+     * Every window an account has closed, kept across restarts.
+     *
+     * Totals alone cannot tell a steady run from a wild one that happens to
+     * net the same, and the second is the one worth stopping — so the rounds
+     * themselves are kept, per account, capped where the bot caps them.
+     */
+    fun loadRounds(demo: Boolean): List<PulseBot.Round> {
+        val raw = prefs.getString(key("rounds.json", demo), null) ?: return emptyList()
+        return try {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { i ->
+                val o = array.optJSONObject(i) ?: return@mapNotNull null
+                PulseBot.Round(
+                    windowStart = o.optLong("windowStart"),
+                    demo = demo,
+                    outcome = o.optString("outcome"),
+                    shares = o.optDouble("shares", 0.0),
+                    price = o.optDouble("price", 0.0),
+                    proceeds = o.optDouble("proceeds", 0.0),
+                    settled = o.optDouble("settled", 0.0),
+                    winner = o.optString("winner"),
+                    note = o.optString("note").takeIf { it.isNotEmpty() },
+                )
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveRounds(rounds: List<PulseBot.Round>, demo: Boolean) {
+        val array = JSONArray()
+        rounds.forEach {
+            array.put(
+                JSONObject()
+                    .put("windowStart", it.windowStart)
+                    .put("outcome", it.outcome)
+                    .put("shares", it.shares)
+                    .put("price", it.price)
+                    .put("proceeds", it.proceeds)
+                    .put("settled", it.settled)
+                    .put("winner", it.winner)
+                    .put("note", it.note),
+            )
+        }
+        prefs.edit().putString(key("rounds.json", demo), array.toString()).apply()
+    }
+
     fun clear() {
         val edit = prefs.edit()
         for (demo in listOf(true, false)) {
             edit.remove(key("rounds", demo)).remove(key("wins", demo))
                 .remove(key("losses", demo)).remove(key("spent", demo))
                 .remove(key("got", demo)).remove(key("settled", demo))
+                .remove(key("rounds.json", demo))
         }
         edit.apply()
     }

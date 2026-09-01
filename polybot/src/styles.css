@@ -3206,6 +3206,30 @@ button.wide {
   fill: var(--down);
 }
 
+/*
+ * One closed window in the pulse's own record: when, which side, what it cost
+ * and what it made. The same shape as the trend rule's list, because it is
+ * the same question asked of a different rule.
+ */
+.probesum {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 2px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.probesum b {
+  font-weight: 700;
+}
+
+.probesum em {
+  font-style: normal;
+  font-size: 10px;
+}
+
 /* The four rules, one tab each, with a dot for the one that is live. */
 .bottabs {
   display: grid;

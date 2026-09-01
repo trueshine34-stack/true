@@ -1412,7 +1412,7 @@ export function Manual({
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
           onReset={() => {
-            void PolyBot.probeReset()
+            void PolyBot.probeReset({ real: botLive, mode: botTab })
               .then(() => PolyBot.probeState())
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
@@ -2319,11 +2319,6 @@ function ProbeCard({
   onReset: () => void;
 }) {
   const [why, setWhy] = useState(false);
-  // Paper always runs, so "both" is simply whether the wallet joined it.
-  const both = state.live;
-  const shown = both
-    ? state.rounds.filter((r) => r.demo !== seen)
-    : state.rounds;
   // Every dial belongs to the account being looked at.
   const dial = {
     stakeUsd: seen ? (state.realStakeUsd ?? state.stakeUsd) : state.stakeUsd,
@@ -2334,6 +2329,19 @@ function ProbeCard({
     fade: seen ? (state.realFade ?? false) : state.fade,
     edgeUsd: seen ? (state.realEdgeUsd ?? state.edgeUsd) : state.edgeUsd,
   };
+
+  /**
+   * The record on screen: this account's, on this entry.
+   *
+   * Both halves matter. The two accounts trade the same windows and come
+   * apart on execution; the three entries are three different strategies and
+   * come apart on everything. A list mixing either pair is an average of
+   * things that were never one thing.
+   */
+  const mode = dial.inside ? 'inside' : dial.fade ? 'fade' : 'line';
+  const shown = state.rounds.filter(
+    (r) => r.demo !== seen && (r.mode ?? 'line') === mode,
+  );
   const all = summarise(shown);
   const sides = bySide(shown);
   const purse = seen ? (state.wallet ?? 0) : state.bank;
@@ -3070,6 +3078,7 @@ function PulseCard({
         losses: state.losses,
       };
   const tone = book.pnl > 0 ? 'up' : book.pnl < 0 ? 'down' : 'muted';
+  const history = (seen ? state.liveRoundList : state.roundList) ?? [];
   const read = state.read;
   const lot = seen ? state.liveLot : state.lot;
   // Which side each reading is pointing at, so a glance says "three of four".
@@ -3140,6 +3149,36 @@ function PulseCard({
           {book.rounds} кругов · {book.wins}/{book.losses}
         </em>
       </div>
+
+      {/*
+        Window by window, for the account on screen. The totals above answer
+        "how has it done"; a run of forty rounds that nets a dollar looks the
+        same there whether it was steady or wild, and only one of those is
+        worth stopping.
+      */}
+      {history.length > 0 && (
+        <>
+          <div className="listhead second">
+            <span>По пятиминуткам</span>
+            <span className="muted">свежие сверху</span>
+          </div>
+          <div className="probelist">
+            {history.slice(0, 40).map((r) => (
+              <div className="probesum" key={`${r.windowStart}-${r.outcome}`}>
+                <span className="muted">{clockOf(r.windowStart)}</span>
+                <b className={r.outcome === 'Up' ? 'up' : 'down'}>{r.outcome}</b>
+                <span className="muted">
+                  {r.shares.toFixed(1)} × {cents(r.price)}
+                </span>
+                <b className={r.pnl >= 0 ? 'up pushright' : 'down pushright'}>
+                  {signedUsd(r.pnl)}
+                </b>
+                {r.note && <em className="muted">{r.note}</em>}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {read && (
         <div className="botreads">
