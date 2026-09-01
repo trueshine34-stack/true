@@ -284,7 +284,8 @@ export interface PolyBotPlugin {
     minVolume?: number;
     takePct?: number;
     cutUsd?: number;
-    demo?: boolean;
+    /** Whether the wallet trades it too. Paper always does. */
+    live?: boolean;
   }): Promise<void>;
   pulseReset(): Promise<void>;
   pulseState(): Promise<PulseState>;
@@ -480,8 +481,14 @@ export type PulseState = {
   shares: number;
   minEdge: number;
   takePct: number;
-  /** Paper money, which is how it runs unless told otherwise. */
-  demo: boolean;
+  /**
+   * Whether the wallet trades this rule too.
+   *
+   * Paper is not a mode: it always runs, on its own bank, and everything
+   * without a `live` prefix below is that account's. This says whether a
+   * second account is running beside it on real money.
+   */
+  live: boolean;
   cash: number;
   /** Why it is not buying, in its own words. */
   note?: string | null;
@@ -495,6 +502,16 @@ export type PulseState = {
   pnl: number;
   read?: PulseRead | null;
   lot?: PulseLot | null;
+  /** And the wallet's own record, kept apart from the paper one. */
+  liveCash: number;
+  liveRounds: number;
+  liveWins: number;
+  liveLosses: number;
+  liveSpent: number;
+  liveGot: number;
+  liveSettled: number;
+  livePnl: number;
+  liveLot?: PulseLot | null;
 };
 
 /** A position the take rule is watching, and what closing it would pay. */
@@ -820,7 +837,7 @@ const webStub: PolyBotPlugin = {
     shares: 5,
     minEdge: 6,
     takePct: 0.12,
-    demo: true,
+    live: false,
     cash: 100,
     rounds: 0,
     wins: 0,
@@ -829,6 +846,14 @@ const webStub: PolyBotPlugin = {
     got: 0,
     settled: 0,
     pnl: 0,
+    liveCash: 0,
+    liveRounds: 0,
+    liveWins: 0,
+    liveLosses: 0,
+    liveSpent: 0,
+    liveGot: 0,
+    liveSettled: 0,
+    livePnl: 0,
   }),
   addListener: async () => ({ remove: async () => {} }) as PluginListenerHandle,
 };

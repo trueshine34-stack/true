@@ -1202,7 +1202,7 @@ export function Manual({
                 if (probeBot?.live) {
                   setBotLive(true);
                   setBotTab(probeMode(probeBot));
-                } else if (pulseBot && !pulseBot.demo) {
+                } else if (pulseBot?.live) {
                   setBotLive(true);
                   setBotTab('pulse');
                 }
@@ -1227,7 +1227,7 @@ export function Manual({
             <i
               className={`raildot${
                 (probeBot?.running && probeBot.live) ||
-                (pulseBot?.running && !pulseBot.demo)
+                (pulseBot?.running && pulseBot.live)
                   ? ' live'
                   : ''
               }`}
@@ -1270,7 +1270,7 @@ export function Manual({
               // nothing; what is worth a mark is what is spending.
               const live =
                 key === 'pulse'
-                  ? (pulseBot?.running ?? false) && !pulseBot?.demo
+                  ? (pulseBot?.running ?? false) && (pulseBot?.live ?? false)
                   : (probeBot?.running ?? false) &&
                     (probeBot?.live ?? false) &&
                     probeMode(probeBot) === key;
@@ -1344,8 +1344,8 @@ export function Manual({
               .then(setPulseBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
-          onDemo={(demo) => {
-            void PolyBot.pulseUpdate({ demo })
+          onDemo={(live) => {
+            void PolyBot.pulseUpdate({ live })
               .then(() => PolyBot.pulseState())
               .then(setPulseBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
@@ -2319,7 +2319,8 @@ function ProbeCard({
   onReset: () => void;
 }) {
   const [why, setWhy] = useState(false);
-  const both = state.demo && state.live;
+  // Paper always runs, so "both" is simply whether the wallet joined it.
+  const both = state.live;
   const shown = both
     ? state.rounds.filter((r) => r.demo !== seen)
     : state.rounds;
@@ -2390,18 +2391,19 @@ function ProbeCard({
 
       {why && (
       <div className="counterrule muted">
-        {state.demo && state.live
+        {state.live
           ? 'Оба счёта сразу. Одно и то же правило, те же окна и тот же стакан, ' +
             'но деньги разные: бумажный счёт берёт предложение всегда, а на ' +
             'реальном ещё должна налиться заявка — вся разница между двумя ' +
             'историями в этом. Настройки у счетов свои: переключатель выше ' +
             'выбирает, чьи ставка, запас и режим входа показаны, и чья ' +
             'история ниже. '
-          : state.demo
-            ? 'На бумаге: читает тот же живой стакан, берёт те же предложения по тем же ценам, платит ту же комиссию и выходит по тем же ступеням — только деньги ненастоящие и на биржу ничего не уходит. '
-            : state.live
-              ? 'На реальные деньги. '
-              : 'Оба счёта выключены — правило считает и пишет, но не покупает. '}
+          : 'На бумаге, и так всегда: читает тот же живой стакан, берёт те же ' +
+            'предложения по тем же ценам, платит ту же комиссию и выходит по ' +
+            'тем же ступеням — только деньги ненастоящие и на биржу ничего не ' +
+            'уходит. Выключателя у бумаги нет: правило, которое не работало, ' +
+            'пока никто не смотрел, не отвечает на вопрос, ради которого оно ' +
+            'считает. '}
         {state.inside ? (
           <>
             {'Сторона не угадывается заранее. Первые полминуты окно оставлено ' +
@@ -2659,7 +2661,7 @@ function ProbeCard({
         )}
         {/* The paper account's opening balance is the desk's one answer, not
             a dial, so it shows on the paper page only. */}
-        {state.demo && !seen && (
+        {!seen && (
           <NumField
             label="счёт $"
             value={state.bankUsd}
@@ -3049,9 +3051,27 @@ function PulseCard({
   onReset: () => void;
 }) {
   const [why, setWhy] = useState(false);
-  const tone = state.pnl > 0 ? 'up' : state.pnl < 0 ? 'down' : 'muted';
+  /**
+   * Whose record is on screen. Both accounts run on the same reads and the
+   * same windows, so everything above this line is shared and everything
+   * below it — the lot, the totals, the money — belongs to one of them.
+   */
+  const book = seen
+    ? {
+        pnl: state.livePnl,
+        rounds: state.liveRounds,
+        wins: state.liveWins,
+        losses: state.liveLosses,
+      }
+    : {
+        pnl: state.pnl,
+        rounds: state.rounds,
+        wins: state.wins,
+        losses: state.losses,
+      };
+  const tone = book.pnl > 0 ? 'up' : book.pnl < 0 ? 'down' : 'muted';
   const read = state.read;
-  const lot = state.lot;
+  const lot = seen ? state.liveLot : state.lot;
   // Which side each reading is pointing at, so a glance says "three of four".
   const side = read ? (read.lead >= 0 ? 'up' : 'down') : 'muted';
 
@@ -3062,14 +3082,12 @@ function PulseCard({
         <WhyButton open={why} onClick={() => setWhy((v) => !v)} />
         {/*
           The switch is real money, and there is none on the paper page: this
-          rule always runs. Unlike the trend rule it runs on one account at a
-          time, so turning this on moves it off paper rather than starting a
-          second copy — which is what the row under this says.
+          rule always runs, on its own bank, whatever the wallet is doing.
         */}
         {seen ? (
           <button
-            className={`switch ${!state.demo ? 'on' : ''}`}
-            onClick={() => onDemo(state.demo === false)}
+            className={`switch ${state.live ? 'on' : ''}`}
+            onClick={() => onDemo(!state.live)}
           />
         ) : (
           <b className="muted small">всегда считает</b>
@@ -3086,32 +3104,40 @@ function PulseCard({
         расчёт платит доллар без комиссии. Входит в любую секунду окна, включая
         последнюю минуту: поздней покупке уже не дойти до своей цели, но
         выигрывающая сторона доезжает до расчёта, а он платит целый доллар.
-        {state.demo &&
+        {!seen &&
           ' В демо к этому добавлена лесенка продаж: продаёт по тому, до чего' +
             ' стакан дойдёт раньше — до своей цели или до ступени, — так что' +
             ' позиция не остаётся висеть.'}
+        {seen &&
+          ' Реальный счёт идёт рядом с бумажным на тех же чтениях и тех же' +
+            ' окнах: одно решение, две покупки, две записи. Расходятся они там,' +
+            ' где расходится исполнение — бумага берёт предложение всегда, а' +
+            ' здесь ещё должна налиться заявка.'}
       </div>
       )}
 
-      {/*
-        Unlike the trend rule, this one runs on one account at a time: picking
-        an account above moves it, rather than starting a second copy. Said
-        here so the picker is not read as promising two records.
-      */}
-      {!seen && !state.demo && (
+      {seen && !state.live && (
         <div className="botbar">
-          <b className="down">сейчас торгует реальными — бумажного счёта нет</b>
+          <b className="muted small">
+            на реальные не запущен — бумажный счёт считает своё
+          </b>
         </div>
       )}
 
       <div className="botbar">
-        <b className={state.cash >= state.bankUsd ? 'up' : 'down'}>
-          {usd(state.cash)}
-          {state.demo && <em> / {usd(state.bankUsd)}</em>}
-        </b>
-        <b className={tone}>{signedUsd(state.pnl)}</b>
+        {seen ? (
+          <b className="muted">
+            кошелёк<em> {usd(state.liveCash)}</em>
+          </b>
+        ) : (
+          <b className={state.cash >= state.bankUsd ? 'up' : 'down'}>
+            {usd(state.cash)}
+            <em> / {usd(state.bankUsd)}</em>
+          </b>
+        )}
+        <b className={tone}>{signedUsd(book.pnl)}</b>
         <em className="muted">
-          {state.rounds} кругов · {state.wins}/{state.losses}
+          {book.rounds} кругов · {book.wins}/{book.losses}
         </em>
       </div>
 

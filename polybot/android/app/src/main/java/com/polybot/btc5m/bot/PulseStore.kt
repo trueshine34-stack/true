@@ -22,7 +22,9 @@ class PulseStore(context: Context) {
         minVolume = prefs.getFloat("minVolume", PulsePlan.DEFAULT_MIN_VOLUME.toFloat()).toDouble(),
         takePct = prefs.getFloat("takePct", PulsePlan.DEFAULT_TAKE_PCT.toFloat()).toDouble(),
         cutUsd = prefs.getFloat("cutUsd", PulsePlan.DEFAULT_CUT_USD.toFloat()).toDouble(),
-        demo = prefs.getBoolean("demo", true),
+        // A desk that was running this rule on real money keeps doing so:
+        // the old "demo" flag being off is exactly the old way of saying it.
+        live = prefs.getBoolean("live", !prefs.getBoolean("demo", true)),
     )
 
     fun saveSettings(s: PulsePlan.Settings) {
@@ -34,32 +36,48 @@ class PulseStore(context: Context) {
             .putFloat("minVolume", s.minVolume.toFloat())
             .putFloat("takePct", s.takePct.toFloat())
             .putFloat("cutUsd", s.cutUsd.toFloat())
-            .putBoolean("demo", s.demo)
+            .putBoolean("live", s.live)
             .apply()
     }
 
-    fun loadTotals(): PulseBot.Totals = PulseBot.Totals(
-        rounds = prefs.getInt("rounds", 0),
-        wins = prefs.getInt("wins", 0),
-        losses = prefs.getInt("losses", 0),
-        spent = prefs.getFloat("spent", 0f).toDouble(),
-        got = prefs.getFloat("got", 0f).toDouble(),
-        settled = prefs.getFloat("settled", 0f).toDouble(),
+    /**
+     * The record, per account.
+     *
+     * The paper account keeps the original keys, so a desk that has been
+     * running keeps the history it has built; the real one is stored beside
+     * it under its own prefix and starts empty, which is the truth — until
+     * now there was no such thing as this rule's real record separate from
+     * its paper one.
+     */
+    private fun key(name: String, demo: Boolean) = if (demo) name else "real.$name"
+
+    fun loadTotals(demo: Boolean = true): PulseBot.Totals = PulseBot.Totals(
+        rounds = prefs.getInt(key("rounds", demo), 0),
+        wins = prefs.getInt(key("wins", demo), 0),
+        losses = prefs.getInt(key("losses", demo), 0),
+        spent = prefs.getFloat(key("spent", demo), 0f).toDouble(),
+        got = prefs.getFloat(key("got", demo), 0f).toDouble(),
+        settled = prefs.getFloat(key("settled", demo), 0f).toDouble(),
     )
 
-    fun saveTotals(t: PulseBot.Totals) {
+    fun saveTotals(t: PulseBot.Totals, demo: Boolean = true) {
         prefs.edit()
-            .putInt("rounds", t.rounds)
-            .putInt("wins", t.wins)
-            .putInt("losses", t.losses)
-            .putFloat("spent", t.spent.toFloat())
-            .putFloat("got", t.got.toFloat())
-            .putFloat("settled", t.settled.toFloat())
+            .putInt(key("rounds", demo), t.rounds)
+            .putInt(key("wins", demo), t.wins)
+            .putInt(key("losses", demo), t.losses)
+            .putFloat(key("spent", demo), t.spent.toFloat())
+            .putFloat(key("got", demo), t.got.toFloat())
+            .putFloat(key("settled", demo), t.settled.toFloat())
             .apply()
     }
 
-    fun clear() = prefs.edit()
-        .remove("rounds").remove("wins").remove("losses")
-        .remove("spent").remove("got").remove("settled")
-        .apply()
+    fun clear() {
+        val edit = prefs.edit()
+        for (demo in listOf(true, false)) {
+            edit.remove(key("rounds", demo)).remove(key("wins", demo))
+                .remove(key("losses", demo)).remove(key("spent", demo))
+                .remove(key("got", demo)).remove(key("settled", demo))
+        }
+        edit.apply()
+    }
 }

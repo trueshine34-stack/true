@@ -1323,7 +1323,7 @@ class BotPlugin : Plugin() {
                 maxPrice = d.maxPrice,
                 takePct = call.getDouble("takePct") ?: d.takePct,
                 cutUsd = call.getDouble("cutUsd") ?: d.cutUsd,
-                demo = call.getBoolean("demo") ?: d.demo,
+                live = call.getBoolean("live") ?: d.live,
             ),
         )
         call.resolve()
@@ -1339,8 +1339,18 @@ class BotPlugin : Plugin() {
     @PluginMethod
     fun pulseState(call: PluginCall) {
         val bot = pulseBot
-        val t = bot.totals
+        val t = bot.paper.totals
+        val rt = bot.real.totals
         val read = bot.read
+
+        fun lotOf(lot: PulseBot.Lot?) = lot?.let {
+            JSObject()
+                .put("outcome", it.outcome)
+                .put("shares", it.open)
+                .put("price", it.price)
+                .put("sellPrice", it.sellPrice)
+                .put("note", it.note)
+        }
 
         call.resolve(
             JSObject()
@@ -1350,8 +1360,10 @@ class BotPlugin : Plugin() {
                 .put("shares", bot.settings.shares)
                 .put("minEdge", bot.settings.minEdge)
                 .put("takePct", bot.settings.takePct)
-                .put("demo", bot.settings.demo)
-                .put("cash", bot.cash)
+                // Paper always runs, so what is left to say is whether the
+                // wallet runs beside it.
+                .put("live", bot.settings.live)
+                .put("cash", bot.cash(bot.paper))
                 .put("note", bot.note)
                 .put("lastFault", bot.lastFault)
                 .put("rounds", t.rounds)
@@ -1361,6 +1373,15 @@ class BotPlugin : Plugin() {
                 .put("got", t.got)
                 .put("settled", t.settled)
                 .put("pnl", t.pnl)
+                // And the same record for the wallet, kept apart from it.
+                .put("liveCash", bot.cash(bot.real))
+                .put("liveRounds", rt.rounds)
+                .put("liveWins", rt.wins)
+                .put("liveLosses", rt.losses)
+                .put("liveSpent", rt.spent)
+                .put("liveGot", rt.got)
+                .put("liveSettled", rt.settled)
+                .put("livePnl", rt.pnl)
                 .put("read", read?.let {
                     JSObject()
                         .put("lead", it.lead)
@@ -1370,14 +1391,8 @@ class BotPlugin : Plugin() {
                         .put("upAsk", it.upAsk)
                         .put("downAsk", it.downAsk)
                 })
-                .put("lot", bot.lot?.let {
-                    JSObject()
-                        .put("outcome", it.outcome)
-                        .put("shares", it.open)
-                        .put("price", it.price)
-                        .put("sellPrice", it.sellPrice)
-                        .put("note", it.note)
-                }),
+                .put("lot", lotOf(bot.paper.lot))
+                .put("liveLot", lotOf(bot.real.lot)),
         )
     }
 

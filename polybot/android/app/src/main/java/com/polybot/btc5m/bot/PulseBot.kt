@@ -79,9 +79,24 @@ class PulseBot(
     var settings: PulsePlan.Settings = store.loadSettings()
         private set
 
-    @Volatile
-    var totals: Totals = store.loadTotals()
-        private set
+    /**
+     * One account: what it holds and what it has done.
+     *
+     * The rule reads the market once and then acts twice — the reads, the
+     * gates and the side are the same for both, and only the money differs.
+     * Holding them side by side rather than switching between them is what
+     * lets the paper record keep running while the wallet trades, which is
+     * the whole point of a paper record.
+     */
+    class Book(val demo: Boolean, @Volatile var totals: Totals) {
+        @Volatile
+        var lot: Lot? = null
+    }
+
+    val paper = Book(demo = true, totals = store.loadTotals(demo = true))
+    val real = Book(demo = false, totals = store.loadTotals(demo = false))
+
+    private val books get() = listOf(paper, real)
 
     @Volatile
     var running: Boolean = false
@@ -89,10 +104,6 @@ class PulseBot(
 
     @Volatile
     var lastFault: String? = null
-        private set
-
-    @Volatile
-    var lot: Lot? = null
         private set
 
     /** The last read, so the screen can show what the rule is looking at. */
@@ -104,13 +115,34 @@ class PulseBot(
     var note: String? = null
         private set
 
-    val cash: Double
-        get() = settings.bankUsd + totals.got + totals.settled - totals.spent -
-            (lot?.cost ?: 0.0) + (lot?.proceeds ?: 0.0)
+    /**
+     * What an account has to spend.
+     *
+     * Paper is arithmetic on its own bank; the real one is the wallet, and
+     * the wallet already has the locked reserve taken out of it, so this rule
+     * cannot reach money set aside any more than the desk can.
+     */
+    fun cash(book: Book): Double =
+        if (book.demo) {
+            settings.bankUsd + book.totals.got + book.totals.settled -
+                book.totals.spent - (book.lot?.cost ?: 0.0) +
+                (book.lot?.proceeds ?: 0.0)
+        } else {
+            engine.usdcRecent() ?: try {
+                engine.usdcBalance()
+            } catch (e: Exception) {
+                0.0
+            }
+        }
 
-    /** Shares this bot holds, so the desk's own rule leaves them alone. */
+    /**
+     * Shares this bot holds, so the desk's own rule leaves them alone.
+     *
+     * The real lot only: paper shares are not on the venue, and claiming them
+     * would hide somebody else's real position from the rule that exits it.
+     */
     fun heldShares(asset: String): Double =
-        lot?.takeIf { it.asset == asset }?.open ?: 0.0
+        real.lot?.takeIf { it.asset == asset }?.open ?: 0.0
 
     private var scope: CoroutineScope? = null
     private var job: Job? = null
@@ -131,9 +163,12 @@ class PulseBot(
         }
     }
 
+    /** Wipes both records: the paper run and the real one start over together. */
     fun resetBank() {
-        totals = Totals()
-        store.saveTotals(totals)
+        for (book in books) {
+            book.totals = Totals()
+            store.saveTotals(book.totals, demo = book.demo)
+        }
         onStateChanged()
     }
 
@@ -179,12 +214,10 @@ class PulseBot(
         val session = engine.session()
         // On paper there is nothing to sign, so an unconnected wallet is not a
         // reason to stop: the whole point of watching a rule on paper is that
-        // it can be watched before there is any money to watch it with.
-        if (session == null && !settings.demo) {
-            lastFault = "кошелёк не подключён"
-            return
-        }
-        lastFault = null
+        // it can be watched before there is any money to watch it with. The
+        // paper account carries on either way; only the real one is held back.
+        lastFault = if (session == null && settings.live) "кошелёк не подключён" else null
+        val realOn = settings.live && session != null
 
         val nowSec = Clock.nowSec()
         val windowStart = nowSec - SellLadder.elapsedInWindow(nowSec)
@@ -203,13 +236,23 @@ class PulseBot(
         var current = read(windowStart, elapsed)
         read = current
 
-        lot?.let { open ->
-            // A lot from a window that has closed is settled, not managed.
-            if (open.windowStart != windowStart) closeRound(open)
-            else work(open, current, market)
+        // Each account's own position first. They are the same rule on the
+        // same window, so they usually agree — but a paper lot that filled
+        // where a real order did not is exactly the difference worth keeping,
+        // and each is worked out on its own terms.
+        for (book in books) {
+            if (!book.demo && !realOn) continue
+            book.lot?.let { open ->
+                // A lot from a window that has closed is settled, not managed.
+                if (open.windowStart != windowStart) closeRound(book, open)
+                else work(book, open, current, market)
+            }
         }
 
-        if (lot != null) {
+        // Whichever accounts are free to open something. With both holding
+        // there is no decision left to make this tick.
+        val free = books.filter { (it.demo || realOn) && it.lot == null }
+        if (free.isEmpty()) {
             note = "в позиции"
             onStateChanged()
             return
@@ -234,7 +277,22 @@ class PulseBot(
         if (blocked == null) {
             val side = PulsePlan.leader(current.lead, settings.minEdge)
             val ask = PulsePlan.askFor(side, current)
-            if (side != null && ask != null) buy(market, side, ask, windowStart)
+            if (side != null && ask != null) {
+                for (book in free) {
+                    // The gates above were read against the paper purse; an
+                    // account is still only allowed to spend its own money.
+                    val mine = PulsePlan.blockedBecause(
+                        current.copy(cashUsd = cash(book)),
+                        settings,
+                        holding = false,
+                    )
+                    if (mine != null) {
+                        if (!book.demo) note = mine
+                        continue
+                    }
+                    buy(book, market, side, ask, windowStart)
+                }
+            }
         }
 
         onStateChanged()
@@ -263,7 +321,7 @@ class PulseBot(
             upAsk = null,
             downAsk = null,
             ceiling = BuyCap.ceiling(elapsed),
-            cashUsd = cash,
+            cashUsd = cash(paper),
         )
     }
 
@@ -301,7 +359,13 @@ class PulseBot(
         null
     }
 
-    private fun buy(market: Market, side: String, ask: Double, windowStart: Long) {
+    private fun buy(
+        book: Book,
+        market: Market,
+        side: String,
+        ask: Double,
+        windowStart: Long,
+    ) {
         val token = if (side == "Up") market.up.tokenId else market.down.tokenId
         val size = maxOf(settings.shares, Orders.minShares(ask, market.minimumOrderSize))
         // Crossing by a tick can step over the window's ceiling by that same
@@ -311,8 +375,8 @@ class PulseBot(
             BuyCap.ceiling(BuyCap.elapsedFor(market.windowStart)),
         )
 
-        if (settings.demo) {
-            paperBuy(market, token, side, ask, size, windowStart)
+        if (book.demo) {
+            paperBuy(book, market, token, side, ask, size, windowStart)
             return
         }
 
@@ -355,7 +419,7 @@ class PulseBot(
         }
 
         val price = if (fill.usd > 0.0) fill.usd / fill.shares else limit
-        lot = Lot(
+        book.lot = Lot(
             asset = token,
             conditionId = market.conditionId,
             outcome = side,
@@ -364,8 +428,8 @@ class PulseBot(
             boughtAt = System.currentTimeMillis(),
             windowStart = windowStart,
         )
-        totals = totals.copy(spent = totals.spent + fill.shares * price)
-        store.saveTotals(totals)
+        book.totals = book.totals.copy(spent = book.totals.spent + fill.shares * price)
+        store.saveTotals(book.totals, demo = false)
         engine.log(
             "trade",
             "Пульс: взял " + String.format("%.1f", fill.shares) + " $side по " +
@@ -381,6 +445,7 @@ class PulseBot(
      * profit the same trade would not have made.
      */
     private fun paperBuy(
+        book: Book,
         market: Market,
         token: String,
         side: String,
@@ -389,7 +454,7 @@ class PulseBot(
         windowStart: Long,
     ) {
         val price = ProbePlan.takenPrice(ask)
-        lot = Lot(
+        book.lot = Lot(
             asset = token,
             conditionId = market.conditionId,
             outcome = side,
@@ -399,12 +464,12 @@ class PulseBot(
             windowStart = windowStart,
             demo = true,
         )
-        totals = totals.copy(spent = totals.spent + size * price)
-        store.saveTotals(totals)
+        book.totals = book.totals.copy(spent = book.totals.spent + size * price)
+        store.saveTotals(book.totals, demo = true)
         engine.log(
             "trade",
             "Пульс (демо): взял " + String.format("%.1f", size) + " $side по " +
-                "${(ask * 100).toInt()}¢ — счёт $" + String.format("%.2f", cash),
+                "${(ask * 100).toInt()}¢ — счёт $" + String.format("%.2f", cash(book)),
         )
     }
 
@@ -421,7 +486,7 @@ class PulseBot(
      * still standing at the close pays a whole dollar and no fee, which beats
      * every rung.
      */
-    private fun workPaper(open: Lot, current: PulsePlan.Read, market: Market) {
+    private fun workPaper(book: Book, open: Lot, current: PulsePlan.Read, market: Market) {
         val nowSec = Clock.nowSec()
         val elapsed = nowSec - open.windowStart
         val secondsLeft = open.windowStart + 300L - nowSec
@@ -451,7 +516,7 @@ class PulseBot(
 
             PulsePlan.Exit.CUT -> {
                 open.note = "режу по рынку"
-                paperSell(open, bid, "режу")
+                paperSell(book, open, bid, "режу")
                 return
             }
 
@@ -482,6 +547,7 @@ class PulseBot(
                     val resting = SellLadder.restsNow(secondsLeft)
                     val got = if (resting) want else bid
                     paperSell(
+                        book,
                         open,
                         got,
                         (if (resting) "лимитка" else "по рынку") +
@@ -498,14 +564,14 @@ class PulseBot(
         }
     }
 
-    private fun paperSell(open: Lot, price: Double, why: String) {
+    private fun paperSell(book: Book, open: Lot, price: Double, why: String) {
         val left = open.open
         if (left <= 1e-9) return
         val got = left * SellPercent.netSell(price)
         open.sold += left
         open.proceeds += got
-        totals = totals.copy(got = totals.got + got)
-        store.saveTotals(totals)
+        book.totals = book.totals.copy(got = book.totals.got + got)
+        store.saveTotals(book.totals, demo = true)
         engine.log(
             "trade",
             "Пульс (демо): продал " + String.format("%.1f", left) + " ${open.outcome} $why",
@@ -520,16 +586,16 @@ class PulseBot(
      * against the position is sold into the book at once, and a lead that is
      * still standing at the end of the window is not sold at all.
      */
-    private fun work(open: Lot, current: PulsePlan.Read, market: Market) {
+    private fun work(book: Book, open: Lot, current: PulsePlan.Read, market: Market) {
         if (open.demo) {
-            workPaper(open, current, market)
-            if (open.open <= 1e-6) finish(open)
+            workPaper(book, open, current, market)
+            if (open.open <= 1e-6) finish(book, open)
             return
         }
 
         collect(open)
         if (open.open <= 1e-6) {
-            finish(open)
+            finish(book, open)
             return
         }
 
@@ -624,8 +690,8 @@ class PulseBot(
         val price = entry.realPrice
         open.sold = entry.matched
         open.proceeds += gained * price
-        totals = totals.copy(got = totals.got + gained * price)
-        store.saveTotals(totals)
+        real.totals = real.totals.copy(got = real.totals.got + gained * price)
+        store.saveTotals(real.totals, demo = false)
         engine.log(
             "trade",
             "Пульс: продал " + String.format("%.1f", gained) + " по ${(price * 100).toInt()}¢",
@@ -690,41 +756,42 @@ class PulseBot(
     }
 
     /** A round that sold out: count it and free the bot to trade again. */
-    private fun finish(open: Lot) {
-        lot = null
+    private fun finish(book: Book, open: Lot) {
+        book.lot = null
         val pnl = open.proceeds - open.cost
-        totals = totals.copy(
-            rounds = totals.rounds + 1,
-            wins = totals.wins + if (pnl > 0) 1 else 0,
-            losses = totals.losses + if (pnl < 0) 1 else 0,
+        book.totals = book.totals.copy(
+            rounds = book.totals.rounds + 1,
+            wins = book.totals.wins + if (pnl > 0) 1 else 0,
+            losses = book.totals.losses + if (pnl < 0) 1 else 0,
         )
-        store.saveTotals(totals)
+        store.saveTotals(book.totals, demo = book.demo)
         engine.log(
             if (pnl >= 0) "trade" else "warn",
-            "Пульс закрыл круг: " + (if (pnl >= 0) "+" else "−") +
-                "$" + String.format("%.2f", abs(pnl)),
+            "Пульс" + (if (book.demo) " (демо)" else "") + " закрыл круг: " +
+                (if (pnl >= 0) "+" else "−") + "$" + String.format("%.2f", abs(pnl)),
         )
     }
 
     /** The window ended holding shares: they settle, at a dollar or at nothing. */
-    private fun closeRound(open: Lot) {
-        lot = null
-        cancelOffer(open)
+    private fun closeRound(book: Book, open: Lot) {
+        book.lot = null
+        if (!open.demo) cancelOffer(open)
 
         val winner = EventStats.winnerFor(open.windowStart, Clock.nowSec())
         val settlement = if (open.outcome == winner) open.open else 0.0
         val pnl = open.proceeds + settlement - open.cost
 
-        totals = totals.copy(
-            rounds = totals.rounds + 1,
-            wins = totals.wins + if (pnl > 0) 1 else 0,
-            losses = totals.losses + if (pnl < 0) 1 else 0,
-            settled = totals.settled + settlement,
+        book.totals = book.totals.copy(
+            rounds = book.totals.rounds + 1,
+            wins = book.totals.wins + if (pnl > 0) 1 else 0,
+            losses = book.totals.losses + if (pnl < 0) 1 else 0,
+            settled = book.totals.settled + settlement,
         )
-        store.saveTotals(totals)
+        store.saveTotals(book.totals, demo = book.demo)
         engine.log(
             if (pnl >= 0) "trade" else "warn",
-            "Пульс: окно закрылось на " + (if (winner.isEmpty()) "—" else winner) + ", " +
+            "Пульс" + (if (book.demo) " (демо)" else "") + ": окно закрылось на " +
+                (if (winner.isEmpty()) "—" else winner) + ", " +
                 (if (pnl >= 0) "+" else "−") + "$" + String.format("%.2f", abs(pnl)),
         )
     }

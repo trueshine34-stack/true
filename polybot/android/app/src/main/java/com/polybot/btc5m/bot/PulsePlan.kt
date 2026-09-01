@@ -95,15 +95,17 @@ object PulsePlan {
         val takePct: Double = DEFAULT_TAKE_PCT,
         val cutUsd: Double = DEFAULT_CUT_USD,
         /**
-         * Paper money. On by default, and the reason the bank above is a
-         * hundred dollars: the rule can be watched for a day before it is
-         * trusted with anything, whether or not the wallet has a cent in it.
+         * Whether the wallet trades this rule as well.
          *
-         * It reads the same live book, takes the same offers at the same
-         * prices and pays the same fee; only the money is imaginary and
-         * nothing is sent to the venue.
+         * Paper is not a mode any more, it is the floor: the rule always
+         * reads the same live book, takes the same offers at the same prices
+         * and pays the same fee on a hundred imaginary dollars, and that
+         * record is the only thing that can answer whether it deserves real
+         * money. This says whether it has been given some — a second account
+         * beside the paper one, on the same reads and the same windows, with
+         * its own lot and its own totals.
          */
-        val demo: Boolean = true,
+        val live: Boolean = false,
     )
 
     /** Everything the rule looks at, read once per check. */
