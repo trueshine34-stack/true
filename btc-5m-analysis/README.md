@@ -976,3 +976,83 @@ a day. On the last 300 days that compounds to 46.96× with a 35% worst drawdown;
 the pessimistic end of the confidence interval (53.5%) it is still about ×1.21 a
 month. Verify the fills before trusting any of it, and re-measure the hit rate every
 200 bets — at 163 signals a month that is a check every five weeks.
+
+## Question 17 — buying more at 33¢ inside the same candle
+
+`addon.py`. The 15m entry candle is three 5m bars, so the 5m file shows exactly
+what happened inside it. Rule: if the price is still running against us partway
+through the candle, the contract is cheap — buy a second lot for the same dollar
+amount at 33¢. Both lots settle at 99¢ if the candle closes our way.
+
+* base lot: $S at 50¢ → **+0.98S** on a win, −S on a loss
+* add-on: $S at 33¢ → **+2.00S** on a win, −S on a loss
+* both together: **+2.98S** on 2S risked, or −2S — so the pair needs **40.2%**
+
+### What the data says
+
+| decision point | signals | add-on fires | P(win \| fired) | P(win \| not fired) |
+|---|---|---|---|---|
+| after 5 minutes | 1794 | 797 (44%) | **35.26%** | 72.22% |
+| after 10 minutes | 1794 | 798 (44%) | **19.55%** | 84.84% |
+
+Timing is everything. After one 5m bar against us the candle still closes our way
+35.3% of the time; the add-on at 33¢ needs 33.3%, so it is barely positive
+(+0.058 per $1). After two bars against us the chance collapses to 19.5% and buying
+at 33¢ loses 41 cents on the dollar. **The window is the first five minutes only.**
+
+### It is positive and still not worth adding
+
+| plan | bets | final on $2000 | multiple | max DD |
+|---|---|---|---|---|
+| flat 2.5%, no add-on | 1626 | $93 910 | 46.96× | 35.3% |
+| flat 2.5% + add-on at 5 min | 1626 | $100 522 | 50.26× | 54.3% |
+| **flat 3.6% (same money at risk, no add-on)** | 1626 | **$373 100** | **186.55×** | 47.3% |
+| flat 1.7% + add-on (same risk as 2.5% flat) | 1626 | $40 161 | 20.08× | 40.3% |
+
+Per signal the add-on earns more (+0.130 vs +0.105 per $1 of base stake), but it
+puts $1.44 at risk instead of $1.00, and **return per dollar risked falls from
+0.105 to 0.090**. Take the same extra money and simply bet a larger flat stake and
+you get 186× instead of 50×. The add-on is a weaker bet crowding out a stronger one.
+
+### And the 33¢ is an assumption, not a fact
+
+| add-on price | payout | break-even | EV at the measured 35.3% |
+|---|---|---|---|
+| 25¢ | +296% | 25.3% | +0.396 |
+| 30¢ | +230% | 30.3% | +0.164 |
+| **33¢** | +200% | 33.3% | **+0.058** |
+| 35¢ | +183% | 35.4% | −0.003 |
+| 40¢ | +147% | 40.4% | −0.127 |
+
+Fair value five minutes in is 35¢. The whole idea lives in the two cents between
+33¢ and 35¢, and the app on the screenshot prices its contracts at 50¢/51¢ — near
+fair. If it quotes 38¢ or 40¢ when you look, the add-on is losing money, and there
+is no way to know which you will get without watching the real quotes.
+
+---
+
+# The final 15m strategy
+
+**Signal.** On the 15m chart, wait for exactly **4 candles in a row** the same
+colour. On the next candle's open, buy the **opposite** side. All hours — the night
+filter does not survive out of sample on this timeframe.
+
+**Size.** **2.5% of the current bankroll**, recomputed as it moves. $50 on a $2000
+deposit. One bet per signal.
+
+**Progression.** None. No doubling, no add-on at 33¢, no riding the winner. Every
+one of those was measured and every one of them loses to simply raising the flat
+percentage.
+
+**Deposit.** $2000 for a $50 bet. The multiple does not depend on the deposit, so
+start with whatever you can afford to see fall 35%; scale the percentage, not the
+scheme, to change the risk.
+
+**What it did.** 1626 signals in 300 days (163 a month, 5–6 a day), 55.90% hit
+rate, $2000 → $93 910 (46.96×, ×1.47 a month) with a 35.3% worst drawdown. Out of
+sample: train 55.55%, test 56.47%. Positive in all 11 months.
+
+**What kills it.** Fills. At 50¢ in / 99¢ out the edge is +$10.68 per $100; at 51¢ /
+90¢ it is −$1.35. Check the real quotes on twenty trades before believing any of
+the numbers above, and re-measure your hit rate every 200 bets — five weeks at this
+signal rate. Below 53% for 200 bets, stop.

@@ -1,0 +1,42 @@
+15m trigger 4; the add-on is priced at 33c and sells at 99c (+200%)
+break-even for the pair: 40.2%
+
+decide after    signals  add-on fires  P(win|fired)  P(win|not)   overall
+-------------------------------------------------------------------------
+  5 minutes         1794      797 (44%)        35.26%      72.22%    55.80%
+ 10 minutes         1794      798 (44%)        19.55%      84.84%    55.80%
+
+decide after 5 minutes:
+  base lot alone            : +0.1048 per $1
+  add-on lot alone          : +0.0577 per $1 (needs 33.3%, has 35.3%)
+  base + add-on, per signal : +0.1304 per $1 of base stake
+  ... per $1 actually risked: +0.0903  (avg $1.44 at risk per signal)
+decide after 10 minutes:
+  base lot alone            : +0.1048 per $1
+  add-on lot alone          : -0.4135 per $1 (needs 33.3%, has 19.5%)
+  base + add-on, per signal : -0.0792 per $1 of base stake
+  ... per $1 actually risked: -0.0548  (avg $1.44 at risk per signal)
+
+What the add-on price would have to be to be fair:
+  after 5 min: P(win) = 35.3%  ->  fair price 35c against the 33c assumed
+  after 10 min: P(win) = 19.5%  ->  fair price 19c against the 33c assumed
+
+
+300 days on a $2,000 bankroll, 15m trigger 4, add-on bought at 33c
+plan                                 bets   win %     final $        x   max DD
+-------------------------------------------------------------------------------
+flat 2.5%, no add-on                 1626  55.90%      93,910    46.96    35.3%
+flat 2.5% + add-on at 5 min          1626  55.90%     100,522    50.26    54.3%
+flat 3.6% (same money at risk)       1626  55.90%     373,100   186.55    47.3%
+flat 1.7% + add-on (same risk)       1626  55.90%      40,161    20.08    40.3%
+
+add-on price sensitivity (per $1 of the add-on lot, P(win)=35.3%)
+   price    payout  break-even        EV
+----------------------------------------
+     25c      296%       25.3%   +0.3963
+     30c      230%       30.3%   +0.1636
+     33c      200%       33.3%   +0.0578
+     35c      183%       35.4%   -0.0026
+     38c      161%       38.4%   -0.0814
+     40c      147%       40.4%   -0.1273
+     45c      120%       45.5%   -0.2243
