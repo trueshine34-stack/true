@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DAY_MULTIPLE,
+  buyingStopped,
   dayReached,
   dayTarget,
   isLocked,
@@ -30,6 +31,17 @@ describe('the day', () => {
     expect(dayTarget(startDay(20, noon(25)))).toBe(20 * DAY_MULTIPLE);
     expect(dayReached(startDay(20, noon(25)), 199)).toBe(false);
     expect(dayReached(startDay(20, noon(25)), 200)).toBe(true);
+  });
+
+  it('does not stop buying when the stop is switched off', () => {
+    const hit = markHit(startDay(20, noon(25)), evening(25, 18));
+
+    expect(buyingStopped(hit, true, evening(25, 23))).toBe(true);
+    // The day is still counted and still marked as taken — only the block on
+    // buying goes away.
+    expect(buyingStopped(hit, false, evening(25, 23))).toBe(false);
+    expect(hit.hitAt).toBeGreaterThan(0);
+    expect(isLocked(hit, evening(25, 23))).toBe(true);
   });
 
   it('stops buying for the rest of that day, and only that day', () => {

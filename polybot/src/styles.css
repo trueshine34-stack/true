@@ -932,6 +932,20 @@ button.compact.narrow {
   color: var(--text);
   font-family: inherit;
   cursor: pointer;
+  /* A press and hold on it opens the keyboard, so the OS must not take the
+     same gesture for a text selection first. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* The same box with the keyboard in it, lit so the hold is visibly answered. */
+input.limitsize.typed {
+  width: 82px;
+  border-color: var(--accent);
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* Wide enough to hit without looking at it. */
@@ -2743,6 +2757,28 @@ button.step.big {
   margin: 0;
 }
 
+/*
+  What the day's goal comes to, beside the number it is counted from.
+
+  Read-only: the target is ten times the baseline and there is nothing to
+  choose about it, so it sits where the $/% picker sits on the row above —
+  same height, same alignment, no button.
+*/
+.balgoal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 2px;
+  padding-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.balgoal b {
+  font-size: 16px;
+  font-weight: 700;
+}
+
 /* The same two-button picker, sitting in a row of numeric fields. */
 .stakemode {
   display: grid;
@@ -3632,7 +3668,14 @@ button.wide {
 }
 
 .pairmarkline {
-  font-size: 10px;
+  /*
+    Ten points was a footnote. This line is the settlement price and the price
+    now — the two numbers the side buttons are an opinion about — so it is read
+    at a glance, not squinted at. Thirteen still fits both prices and the arrow
+    between them on one line in the middle column.
+  */
+  font-size: 13px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }

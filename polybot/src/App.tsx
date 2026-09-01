@@ -35,7 +35,10 @@ import {
   dayReached,
   dayTarget,
   isLocked,
+  buyingStopped,
   loadDayGoal,
+  loadDayLock,
+  saveDayLock,
   markHit,
   needsBaseline,
   saveDayGoal,
@@ -116,6 +119,14 @@ export function App() {
   const [slowStart, setSlowStart] = useState(false);
   const [day, setDay] = useState<DayGoal | null>(null);
   const [dayAsked, setDayAsked] = useState(false);
+  /**
+   * Whether the goal is allowed to stop buying.
+   *
+   * On unless it was turned off, and read before the first balance arrives —
+   * so a day that was already won never flashes its block onto a screen whose
+   * owner switched the block off yesterday.
+   */
+  const [dayLock, setDayLock] = useState(true);
   const [dayInput, setDayInput] = useState('');
 
   useEffect(() => {
@@ -297,6 +308,7 @@ export function App() {
     void loadBalanceHistory().then(setBalanceHistory);
     void loadAdjustments().then(setAdjustments);
     void loadGoal().then(setGoal);
+    void loadDayLock().then(setDayLock);
     void loadDayGoal().then((d) => {
       setDay(d);
       setDayAsked(true);
@@ -331,8 +343,12 @@ export function App() {
   }, [goal, worth]);
 
 
-  const askDay = dayAsked && needsBaseline(day) && worth != null;
-  const locked = isLocked(day);
+  // The sheet on the first trade of the day is part of the stop: it is asking
+  // for the number the stop is measured from. With the stop off there is
+  // nothing to measure, so it does not open — the goal is then edited in the
+  // balance sheet like any other figure.
+  const askDay = dayLock && dayAsked && needsBaseline(day) && worth != null;
+  const locked = buyingStopped(day, dayLock);
 
   const setDayBaseline = useCallback((amount: number) => {
     if (!Number.isFinite(amount) || amount <= 0) return;
@@ -395,6 +411,9 @@ export function App() {
               .then(readBalance)
               .catch(() => {});
           }}
+          day={day}
+          dayLock={dayLock}
+          onDayBaseline={setDayBaseline}
           savings={savings}
           savingsAddress={savingsAddress}
           onSavingsAddress={(next) => {
@@ -497,7 +516,16 @@ export function App() {
           savings={savings}
           locked={locked}
           appSettings={
-            <SettingsScreen account={account} onForget={onForget} />
+            <SettingsScreen
+              account={account}
+              onForget={onForget}
+              dayLock={dayLock}
+              onDayLock={(on) => {
+                setDayLock(on);
+                void saveDayLock(on);
+              }}
+              dayHit={isLocked(day)}
+            />
           }
         />
       </div>

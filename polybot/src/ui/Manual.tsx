@@ -78,6 +78,9 @@ const WINDOW_SEC = 300;
 /** How long a banner stays up before it clears itself. */
 const NOTE_MS = 5_000;
 
+/** A press this long is a hold, not a tap. Android's own threshold is 500 ms. */
+const HOLD_MS = 450;
+
 /**
  * The window's phase, as a colour on its clock.
  *
@@ -172,6 +175,24 @@ export function Manual({
    * field has to be the one the price on the screen would actually buy.
    */
   const [sizePct, setSizePct] = useState<number | null>(null);
+  /**
+   * Typing the size out by hand, which is what a long press on it asks for.
+   *
+   * The chips answer "a quarter, half, all of it" and that is the size nearly
+   * every time — but not the time you want eleven shares, and until now there
+   * was no way to say eleven at all. A press and hold turns the number into a
+   * field; a tap still opens the chips.
+   */
+  const [typingSize, setTypingSize] = useState(false);
+  /** The hold timer, and whether it fired — a fired hold eats the tap after it. */
+  const holdRef = useRef<number | null>(null);
+  const heldRef = useRef(false);
+  const clearHold = useCallback(() => {
+    if (holdRef.current != null) {
+      window.clearTimeout(holdRef.current);
+      holdRef.current = null;
+    }
+  }, []);
   const [pickingPrice, setPickingPrice] = useState(false);
   /**
    * The side the dock is about to buy.
@@ -1762,12 +1783,56 @@ export function Manual({
                 +
               </button>
             </div>
-            <button
-              className="limitsize"
-              onClick={() => setSizingLimit((v) => !v)}
-            >
-              {limitSize || limitDefaultSize.toFixed(0)}
-            </button>
+            {typingSize ? (
+              /*
+                The same box, opened. A typed size is nobody's share of
+                anything, so the chip that was lit is let go — otherwise the
+                next tick of the price would overwrite what was just typed.
+              */
+              <input
+                className="limitsize typed"
+                type="text"
+                inputMode="decimal"
+                autoFocus
+                value={limitSize}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => {
+                  setSizePct(null);
+                  setLimitSize(e.target.value.replace(',', '.'));
+                }}
+                onBlur={() => setTypingSize(false)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                }}
+              />
+            ) : (
+              <button
+                className="limitsize"
+                onPointerDown={() => {
+                  heldRef.current = false;
+                  holdRef.current = window.setTimeout(() => {
+                    heldRef.current = true;
+                    setSizePct(null);
+                    setTypingSize(true);
+                  }, HOLD_MS);
+                }}
+                onPointerUp={() => clearHold()}
+                onPointerLeave={() => clearHold()}
+                onPointerCancel={() => clearHold()}
+                onContextMenu={(e) => e.preventDefault()}
+                onClick={() => {
+                  // The hold already did something; the tap it ends with must
+                  // not also toggle the chips underneath.
+                  if (heldRef.current) {
+                    heldRef.current = false;
+                    return;
+                  }
+                  setSizingLimit((v) => !v);
+                }}
+              >
+                {limitSize || limitDefaultSize.toFixed(0)}
+              </button>
+            )}
           </div>
         </div>
         </>
@@ -3148,7 +3213,7 @@ function WindowMark({ windowStart }: { windowStart: number }) {
 
   return (
     <div className="pairmark">
-      <span className="pairmarkline muted">
+      <span className="pairmarkline">
         {bigPrice(mark?.target)} → {bigPrice(mark?.price)}
       </span>
       <span className={`pairmarkmove ${move ? move.way : 'muted'}`}>

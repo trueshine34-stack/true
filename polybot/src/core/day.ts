@@ -94,3 +94,38 @@ export function untilMidnightText(at = Date.now()): string {
   const mins = Math.floor((ms % 3_600_000) / 60_000);
   return hours > 0 ? `${hours} ч ${mins} мин` : `${mins} мин`;
 }
+
+/**
+ * Whether the stop is wanted at all.
+ *
+ * The goal is a discipline, not a rule of the venue, and a day that was meant
+ * to be traded through should not be argued with at midnight. Off, the day is
+ * still counted and still shown — only the block on buying goes away, which is
+ * the part that was ever in the way.
+ */
+const LOCK_KEY = 'daygoal.lock.v1';
+
+/**
+ * The stop as the app actually asks about it: is buying stopped right now?
+ *
+ * The goal keeps being counted with the switch off — the day still has a
+ * number and it still gets marked as taken — so the switch is applied here,
+ * at the one question that takes the buttons away, rather than by throwing
+ * the day away.
+ */
+export function buyingStopped(
+  goal: DayGoal | null,
+  lockOn: boolean,
+  at = Date.now(),
+): boolean {
+  return lockOn && isLocked(goal, at);
+}
+
+export async function loadDayLock(): Promise<boolean> {
+  const { value } = await Preferences.get({ key: LOCK_KEY });
+  return value !== 'off';
+}
+
+export async function saveDayLock(on: boolean): Promise<void> {
+  await Preferences.set({ key: LOCK_KEY, value: on ? 'on' : 'off' });
+}

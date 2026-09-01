@@ -6,13 +6,22 @@ import { Diagnostics } from './Diagnostics';
 import { Logs } from './Logs';
 import { Fold } from './Fold';
 import { APP_VERSION } from '../version';
+import { DAY_MULTIPLE } from '../core/day';
 
 export function SettingsScreen({
   account,
   onForget,
+  dayLock,
+  onDayLock,
+  dayHit,
 }: {
   account: AccountConfig | null;
   onForget: () => void;
+  /** Whether reaching the day's goal stops buying until midnight. */
+  dayLock: boolean;
+  onDayLock: (on: boolean) => void;
+  /** Whether it is stopped right now, which is what the switch would lift. */
+  dayHit: boolean;
 }) {
   const [balance, setBalance] = useState<string | null>(null);
   const [balanceError, setBalanceError] = useState<string | null>(null);
@@ -206,6 +215,35 @@ export function SettingsScreen({
           )}
         </Fold>
       )}
+
+      {/*
+        The stop, and only the stop.
+
+        The number it is measured from lives in the balance sheet, where the
+        balance it is measured against is — this is the one thing about the
+        goal that is a setting: whether hitting it is allowed to take the
+        buttons away for the rest of the day.
+      */}
+      <Fold title="Цель дня">
+        <button
+          className={`ruletile${dayLock ? ' on' : ''}`}
+          onClick={() => onDayLock(!dayLock)}
+        >
+          <span className={`switch mini ${dayLock ? 'on' : ''}`} />
+          <b>блокировка</b>
+          <i>×{DAY_MULTIPLE} → стоп до полуночи</i>
+        </button>
+        <div className="muted balhint" style={{ marginTop: 10 }}>
+          {dayLock
+            ? 'Когда счёт доходит до цели, покупки блокируются до полуночи.' +
+              ' Продажи и выход по лесенке работают всегда.'
+            : 'Цель считается и показывается, но покупки не останавливаются.'}
+          {dayHit &&
+            dayLock &&
+            ' Сейчас цель взята — выключите, чтобы торговать дальше сегодня.'}
+          {' Сумма, от которой считается цель, — в балансе.'}
+        </div>
+      </Fold>
 
       <Fold title="Журнал">
         <Logs />

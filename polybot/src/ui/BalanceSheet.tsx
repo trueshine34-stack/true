@@ -10,6 +10,7 @@ import {
   type BalancePoint,
 } from '../core/balance';
 import { signedPct, signedUsd, usd } from '../core/money';
+import { DAY_MULTIPLE, dayTarget, type DayGoal } from '../core/day';
 
 const W = 320;
 const H = 132;
@@ -33,6 +34,9 @@ export function BalanceSheet({
   lockedUsd,
   lockedPct,
   onLocked,
+  day,
+  dayLock,
+  onDayBaseline,
   savings,
   savingsAddress,
   onSavingsAddress,
@@ -50,6 +54,11 @@ export function BalanceSheet({
   lockedUsd: number;
   lockedPct: number;
   onLocked: (usd: number, pct: number) => void;
+  /** The day's goal, whose number is edited here rather than in settings. */
+  day: DayGoal | null;
+  /** Whether reaching it actually stops buying, which is a setting. */
+  dayLock: boolean;
+  onDayBaseline: (amount: number) => void;
   /** USDT held off the venue, where profit is withdrawn to. */
   savings: number;
   savingsAddress: string;
@@ -201,6 +210,46 @@ export function BalanceSheet({
               ` того, что уже в рынке, по цене входа. Поэтому после покупки` +
               ` блок не пересчитывается вниз — сумма держится всё событие, а` +
               ` растёт вместе со счётом. Сейчас это ${usd(locked)}.`}
+        </div>
+
+        {/*
+          The day's goal, which is one number: what the day is counted from.
+          The target is ten times it and the stop follows it, so the number
+          belongs here, next to the balance it is measured against — settings
+          only says whether the stop is armed.
+
+          Changing it starts the day again from the new figure: a goal moved
+          up is a day that is no longer over, and the block lifts with it.
+        */}
+        <div className="lockrow">
+          <label className="field ballock">
+            <span>цель дня, от $</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="1"
+              placeholder={balance != null ? balance.toFixed(2) : '0'}
+              defaultValue={day != null ? String(day.baseline) : ''}
+              onBlur={(e) => {
+                const value = Number(e.target.value.replace(',', '.'));
+                if (Number.isFinite(value) && value > 0) onDayBaseline(value);
+              }}
+            />
+          </label>
+          <div className="balgoal">
+            <span className="muted">×{DAY_MULTIPLE}</span>
+            <b>{day != null ? usd(dayTarget(day)) : '—'}</b>
+          </div>
+        </div>
+        <div className="muted balhint">
+          {dayLock
+            ? 'Когда счёт доходит до цели, покупки блокируются до полуночи —' +
+              ' продажи и выход по лесенке продолжают работать. Выключается в' +
+              ' настройках.'
+            : 'Блокировка по цели выключена в настройках: цель только' +
+              ' считается и показывается, покупки не останавливаются.'}
+          {day?.hitAt != null && ' Цель на сегодня уже взята.'}
         </div>
 
         {/*
