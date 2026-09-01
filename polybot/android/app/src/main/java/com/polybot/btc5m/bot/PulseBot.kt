@@ -331,7 +331,12 @@ class PulseBot(
             return
         }
 
-        val early = PulsePlan.blockedBecause(current, settings, holding = false)
+        val early = PulsePlan.blockedBecause(
+            current,
+            settings,
+            holding = false,
+            minimumOrderSize = market.minimumOrderSize,
+        )
         if (early != null && early != "нет цены") {
             note = early
             onStateChanged()
@@ -345,7 +350,12 @@ class PulseBot(
         )
         read = current
 
-        val blocked = PulsePlan.blockedBecause(current, settings, holding = false)
+        val blocked = PulsePlan.blockedBecause(
+            current,
+            settings,
+            holding = false,
+            minimumOrderSize = market.minimumOrderSize,
+        )
         note = blocked
         if (blocked == null) {
             val side = PulsePlan.leader(current.lead, settings.minEdge)
@@ -358,6 +368,7 @@ class PulseBot(
                         current.copy(cashUsd = cash(book)),
                         settings,
                         holding = false,
+                        minimumOrderSize = market.minimumOrderSize,
                     )
                     if (mine != null) {
                         if (!book.demo) note = mine
@@ -445,6 +456,14 @@ class PulseBot(
             ask,
             market.minimumOrderSize,
         )
+        // Nothing the stake can pay for. The gate above says so first; this
+        // is the second lock on the same door, because an order sized past
+        // the stake spends money that is not the stake's — and where a
+        // reserve is set, that money is the reserve's.
+        if (size <= 0.0) {
+            note = "мало на минимальный ордер"
+            return
+        }
         // Crossing by a tick can step over the window's ceiling by that same
         // tick, and the venue would refuse the order rather than shave it.
         val limit = minOf(

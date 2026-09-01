@@ -49,7 +49,7 @@ object PulsePlan {
      * is what is being risked, so money is what is set, and the shares come
      * out of it at whatever the price is.
      */
-    const val DEFAULT_STAKE_USD = 3.0
+    const val DEFAULT_STAKE_USD = 5.0
 
     /**
      * Or that much of what is free to trade, where a share is set instead.
@@ -334,7 +334,13 @@ object PulsePlan {
      * screen is the first thing that is actually wrong rather than the last
      * thing tested.
      */
-    fun blockedBecause(read: Read, settings: Settings, holding: Boolean): String? {
+    fun blockedBecause(
+        read: Read,
+        settings: Settings,
+        holding: Boolean,
+        /** The venue's own smallest order, which a stake has to be able to pay for. */
+        minimumOrderSize: Double = 5.0,
+    ): String? {
         if (!settings.enabled) return "выключен"
         if (holding) return "в позиции"
         if (read.elapsedSec < settings.fromSec) return "рано"
@@ -362,7 +368,14 @@ object PulsePlan {
         val top = minOf(topPrice(read.elapsedSec, settings), read.ceiling)
         if (ask > top + 1e-9) return "дорого " + cents(ask) + " из " + cents(top)
         if (ask < settings.minPrice - 1e-9) return "рынок против " + cents(ask)
-        if (read.cashUsd < stakeOf(read.cashUsd, settings)) return "нет денег"
+        val stake = stakeOf(read.cashUsd, settings)
+        if (read.cashUsd < stake) return "нет денег"
+        // And a stake that cannot pay for the venue's smallest order is not a
+        // smaller order, it is no order: buying one anyway spends money the
+        // stake does not have, which where a reserve is set is the reserve's.
+        if (sharesFor(stake, ask, minimumOrderSize) <= 0.0) {
+            return "мало на минимальный ордер"
+        }
 
         return null
     }
@@ -434,18 +447,27 @@ object PulsePlan {
     }
 
     /**
-     * How many shares that buys, never under the venue's own floor.
+     * How many shares a stake buys, or nothing when it cannot buy an order.
      *
-     * The floor is the venue's, not this rule's: an order under it is refused
-     * outright, so a stake too small to clear it buys the smallest order that
-     * exists rather than nothing — and the cash gate above has already agreed
-     * there is money for it.
+     * Priced at what a taken offer actually costs — the venue's fee is
+     * charged on top of the quote, not out of it, so sizing on the quote
+     * alone spends more than the stake by the fee, every time.
+     *
+     * The venue's own floor used to be applied as a *raise*: a stake too
+     * small to reach it bought the smallest order that exists instead of
+     * nothing. That is money the stake did not have, and where a reserve is
+     * set it is the reserve's money — the one thing the reserve exists to
+     * make unreachable. It returns nothing now, and the gate below refuses
+     * the window rather than the venue refusing the order.
      */
     fun sharesFor(stakeUsd: Double, price: Double, minimumOrderSize: Double): Double {
-        if (price <= 0.0) return 0.0
-        val wanted = stakeUsd / price
+        if (price <= 0.0 || stakeUsd <= 0.0) return 0.0
+        val each = Exits.takenPrice(price)
+        if (each <= 0.0) return 0.0
         val floor = Orders.minShares(price, minimumOrderSize)
-        return maxOf(floor, Math.round(wanted * 10.0) / 10.0)
+        if (floor * each > stakeUsd + 1e-9) return 0.0
+        val wanted = Math.floor((stakeUsd / each) * 10.0) / 10.0
+        return maxOf(floor, wanted)
     }
 
     /** Crossing the spread by a tick: this is meant to be taken now. */

@@ -138,9 +138,9 @@ class PulsePlanTest {
 
     @Test
     fun willNotSpendMoneyItDoesNotHave() {
-        // The stake is three dollars, and a stake is not shaved to fit.
-        assertEquals("нет денег", PulsePlan.blockedBecause(good(cash = 2.0), on, holding = false))
-        assertNull(PulsePlan.blockedBecause(good(cash = 3.0), on, holding = false))
+        // The stake is five dollars, and a stake is not shaved to fit.
+        assertEquals("нет денег", PulsePlan.blockedBecause(good(cash = 4.0), on, holding = false))
+        assertNull(PulsePlan.blockedBecause(good(cash = 5.0), on, holding = false))
     }
 
     @Test

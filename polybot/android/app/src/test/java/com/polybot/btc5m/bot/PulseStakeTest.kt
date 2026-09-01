@@ -15,6 +15,7 @@ import org.junit.Test
 class PulseStakeTest {
 
     private val flat = PulsePlan.Settings(stakeUsd = 3.0)
+
     private val share = PulsePlan.Settings(stakeUsd = 3.0, stakePct = 0.10)
 
     @Test
@@ -67,26 +68,61 @@ class PulseStakeTest {
 
     @Test
     fun `the shares come out of the money at whatever the price is`() {
-        // Three dollars of a forty-cent side is seven and a half shares.
-        assertEquals(7.5, PulsePlan.sharesFor(3.0, 0.40, 5.0), 1e-9)
-        // Five dollars buys six and a bit of an eighty-cent one.
-        assertEquals(6.3, PulsePlan.sharesFor(5.0, 0.80, 5.0), 1e-9)
+        // Priced at what a taken offer costs: forty cents plus the fee on it.
+        val each = Exits.takenPrice(0.40)
+        assertEquals(
+            Math.floor((3.0 / each) * 10.0) / 10.0,
+            PulsePlan.sharesFor(3.0, 0.40, 5.0),
+            1e-9,
+        )
+        // And never more than the stake pays for, fee included.
+        assertTrue(PulsePlan.sharesFor(3.0, 0.40, 5.0) * each <= 3.0 + 1e-9)
+        assertTrue(PulsePlan.sharesFor(5.0, 0.80, 5.0) * Exits.takenPrice(0.80) <= 5.0 + 1e-9)
     }
 
     /**
-     * Never under the venue's own floor: an order below it is refused, so a
-     * stake too small to clear it buys the smallest order that exists.
+     * The one that cost real money. The venue's floor used to be applied as a
+     * raise — a stake too small to reach it bought the smallest order that
+     * exists — which spends money the stake does not have, and where a
+     * reserve is set that money is the reserve's. It buys nothing now.
      */
     @Test
-    fun `the venue's minimum still holds`() {
-        assertEquals(5.0, PulsePlan.sharesFor(1.0, 0.80, 5.0), 1e-9)
-        // At a cent the floor is one over the price, not the five.
-        assertTrue(PulsePlan.sharesFor(0.10, 0.01, 5.0) >= 100.0)
+    fun `a stake too small for the venue's minimum buys nothing`() {
+        // Five shares at eighty cents is four dollars and change with the fee.
+        assertEquals(0.0, PulsePlan.sharesFor(1.0, 0.80, 5.0), 1e-9)
+        assertEquals(0.0, PulsePlan.sharesFor(3.9, 0.80, 5.0), 1e-9)
+        assertTrue(PulsePlan.sharesFor(4.2, 0.80, 5.0) >= 5.0)
+    }
+
+    /** And the rule refuses the window rather than the venue refusing it. */
+    @Test
+    fun `the gate says so before an order is built`() {
+        val read = PulsePlan.Read(
+            elapsedSec = 120L,
+            lead = 20.0,
+            momentum = 1.0,
+            volume = 1.0,
+            lean = 0.70,
+            upAsk = 0.80,
+            downAsk = 0.20,
+            ceiling = 0.95,
+            cashUsd = 2.0,
+        )
+        assertEquals(
+            "мало на минимальный ордер",
+            PulsePlan.blockedBecause(
+                read,
+                PulsePlan.Settings(enabled = true, stakeUsd = 0.0, stakePct = 1.0),
+                holding = false,
+                minimumOrderSize = 5.0,
+            ),
+        )
     }
 
     @Test
     fun `nothing is bought without a price`() {
         assertEquals(0.0, PulsePlan.sharesFor(3.0, 0.0, 5.0), 1e-9)
+        assertEquals(0.0, PulsePlan.sharesFor(0.0, 0.40, 5.0), 1e-9)
     }
 
     /** And the soft rule still sits out the start of a window. */
