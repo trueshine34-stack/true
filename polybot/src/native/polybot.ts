@@ -447,12 +447,8 @@ export type PulseRead = {
 export type PulseLot = {
   outcome: string;
   shares: number;
-  /** The first price paid, which the exit is priced off. */
+  /** What was paid, which the exit is priced off. */
   price: number;
-  /** And what the position averages once a bid under the entry has filled. */
-  avg?: number;
-  /** How many of those bids are still waiting under it. */
-  bids?: number;
   sellPrice: number;
   note?: string | null;
 };
@@ -463,7 +459,7 @@ export type PulseRound = {
   outcome: string;
   shares: number;
   price: number;
-  /** What the whole position cost, the lots added under the entry included. */
+  /** What the shares cost, fee included. */
   spent?: number;
   proceeds: number;
   settled: number;

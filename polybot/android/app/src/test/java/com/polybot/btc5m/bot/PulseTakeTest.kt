@@ -77,15 +77,24 @@ class PulseLateCapTest {
         assertEquals(0.80, PulsePlan.topPrice(179L, strict), 1e-9)
     }
 
+    /**
+     * And keeps holding across the minute mark itself. A new candle opens
+     * there, and the first seconds of one say nothing yet — the allowance
+     * waits a quarter of a minute for it to.
+     */
     @Test
-    fun `the last two minutes allow eighty-three`() {
-        assertEquals(0.83, PulsePlan.topPrice(180L, strict), 1e-9)
-        assertEquals(0.83, PulsePlan.topPrice(239L, strict), 1e-9)
+    fun `the allowance waits fifteen seconds past the minute`() {
+        assertEquals(0.80, PulsePlan.topPrice(180L, strict), 1e-9)
+        assertEquals(0.80, PulsePlan.topPrice(194L, strict), 1e-9)
+        assertEquals(0.83, PulsePlan.topPrice(195L, strict), 1e-9)
+
+        assertEquals(0.83, PulsePlan.topPrice(240L, strict), 1e-9)
+        assertEquals(0.83, PulsePlan.topPrice(254L, strict), 1e-9)
+        assertEquals(0.86, PulsePlan.topPrice(255L, strict), 1e-9)
     }
 
     @Test
-    fun `and the last minute eighty-six`() {
-        assertEquals(0.86, PulsePlan.topPrice(240L, strict), 1e-9)
+    fun `and it holds to the close once it has lifted`() {
         assertEquals(0.86, PulsePlan.topPrice(299L, strict), 1e-9)
     }
 
@@ -95,15 +104,15 @@ class PulseLateCapTest {
      */
     @Test
     fun `a wider band is not narrowed by the allowance`() {
-        assertEquals(0.88, PulsePlan.topPrice(180L, soft), 1e-9)
-        assertEquals(0.88, PulsePlan.topPrice(240L, soft), 1e-9)
+        assertEquals(0.88, PulsePlan.topPrice(195L, soft), 1e-9)
+        assertEquals(0.88, PulsePlan.topPrice(255L, soft), 1e-9)
     }
 
     /** And the desk's own ceiling still sits over the top of it. */
     @Test
     fun `the desk's ceiling still binds`() {
         val read = PulsePlan.Read(
-            elapsedSec = 250L,
+            elapsedSec = 260L,
             lead = 20.0,
             momentum = 1.0,
             volume = 1.0,
@@ -111,7 +120,7 @@ class PulseLateCapTest {
             upAsk = 0.93,
             downAsk = 0.07,
             // The last minute closes the desk's own cap at 91c.
-            ceiling = BuyCap.ceiling(250L),
+            ceiling = BuyCap.ceiling(260L),
             cashUsd = 100.0,
         )
         val why = PulsePlan.blockedBecause(read, strict.copy(enabled = true), holding = false)

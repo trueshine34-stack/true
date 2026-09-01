@@ -89,8 +89,19 @@ object PulsePlan {
      * It only ever lifts. A rule already allowed to pay more late keeps what
      * it had; this cannot narrow a band, only widen it.
      */
-    const val LATE_SEC = 180L
-    const val LAST_SEC = 240L
+    /**
+     * A quarter of a minute after the boundary, not on it.
+     *
+     * These are minute marks, and a minute mark is where a new candle opens.
+     * The first seconds of one are the least settled part of a window — the
+     * price the rule would be reading at 3:00 exactly has had no time to mean
+     * anything yet — so the allowance waits for the candle to say something
+     * first. Fifteen seconds is long enough for the opening jump to be over
+     * and short enough to leave most of the minute.
+     */
+    const val SETTLE_SEC = 15L
+    const val LATE_SEC = 180L + SETTLE_SEC
+    const val LAST_SEC = 240L + SETTLE_SEC
     const val LATE_MAX = 0.83
     const val LAST_MAX = 0.86
 
@@ -150,35 +161,6 @@ object PulsePlan {
      * would otherwise keep selling under it, quietly, forever.
      */
     const val MIN_TAKE_PCT = 0.15
-
-    /**
-     * How far under the entry the standing bids sit, in cents.
-     *
-     * The rule buys a side the moment four readings agree, which is the
-     * moment it is dearest — and a five-minute window that goes the other way
-     * first and comes back is the ordinary shape of one, not an exception. So
-     * three more bids wait below, each for the same size, and each one that
-     * fills buys the same conviction cheaper.
-     *
-     * Six cents apart because that is about what a window's ordinary swing is
-     * worth on a side priced near the middle: close enough that the first one
-     * is reached often, far enough that three of them are not all taken by the
-     * same wobble.
-     */
-    val ADD_STEPS = listOf(0.06, 0.12, 0.18)
-
-    /**
-     * The bids under an entry, dearest first, dropped where they fall off the
-     * bottom of the book.
-     */
-    fun addPrices(entry: Double, tick: Double): List<Double> {
-        if (entry <= 0.0) return emptyList()
-        val step = if (tick > 0) tick else 0.01
-        return ADD_STEPS
-            .map { Math.round((entry - it) / step) * step }
-            .map { Math.round(it * 10_000.0) / 10_000.0 }
-            .filter { it >= step }
-    }
 
     data class Settings(
         val enabled: Boolean = false,

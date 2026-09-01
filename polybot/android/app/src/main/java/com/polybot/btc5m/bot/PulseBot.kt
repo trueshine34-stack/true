@@ -43,9 +43,8 @@ class PulseBot(
         val asset: String,
         val conditionId: String,
         val outcome: String,
-        /** Everything held, which grows as the bids under the entry fill. */
-        var shares: Double,
-        /** The first price paid, which is what the exit is priced off. */
+        val shares: Double,
+        /** What was paid, which is what the exit is priced off. */
         val price: Double,
         val boughtAt: Long,
         val windowStart: Long,
@@ -62,23 +61,15 @@ class PulseBot(
         var highWater: Double = 0.0,
         var rung: Int = 0,
         /**
-         * Shares added by the bids waiting under the entry, and what they and
-         * the entry together actually cost.
+         * What the shares actually cost, fee included.
          *
-         * The entry [price] is left alone as the first price paid, because
-         * that is what the exit is priced off — a lower lot bought at a
-         * cheaper price is not a reason to ask less for the whole position,
-         * it is a reason to make more on that lot at the same ask. What the
-         * round *made*, though, is money out against money in, and once a bid
-         * has filled those are two different numbers.
+         * The same multiplication as shares times price for a lot bought
+         * once, which is the only way they are bought now — kept as its own
+         * figure because the record stores it, and a stored round from when
+         * bids waited under the entry has a cost that is not that product.
          */
         var spent: Double = 0.0,
-        /** The bids still waiting under it, so they can be pulled together. */
-        var bids: List<String> = emptyList(),
-        /** How much of each of those has already been counted in. */
-        var bidFilled: Map<String, Double> = emptyMap(),
     ) {
-        /** What the whole position has cost, the added lots included. */
         val cost: Double get() = if (spent > 0.0) spent else shares * price
         val open: Double get() = (shares - sold).coerceAtLeast(0.0)
     }
@@ -494,7 +485,6 @@ class PulseBot(
             "Пульс: взял " + String.format("%.1f", fill.shares) + " $side по " +
                 "${(price * 100).toInt()}¢",
         )
-        book.lot?.let { placeAdds(book, it, market, size) }
     }
 
     /**
@@ -550,49 +540,6 @@ class PulseBot(
         )
     }
 
-    /**
-     * The three bids that wait under an entry, each for the size the entry
-     * was, six cents apart.
-     *
-     * They go out once, with the entry, and are pulled when the window ends.
-     * Each is only sent if the account can still pay for it — the wallet's
-     * balance is already net of anything locked away, so this cannot reach
-     * money that was set aside.
-     */
-    private fun placeAdds(book: Book, open: Lot, market: Market, size: Double) {
-        val ids = ArrayList<String>()
-        var left = cash(book)
-        for (at in PulsePlan.addPrices(open.price, market.tickSize)) {
-            val need = size * at
-            if (need > left) break
-            val result = try {
-                engine.placeManualOrder(
-                    tokenId = open.asset,
-                    conditionId = open.conditionId,
-                    side = "BUY",
-                    price = at,
-                    size = size,
-                    orderType = "GTC",
-                    auto = true,
-                )
-            } catch (e: Exception) {
-                break
-            }
-            if (!result.success) break
-            result.orderId?.let { ids.add(it) }
-            left -= need
-        }
-        open.bids = ids
-        if (ids.isNotEmpty()) {
-            engine.log(
-                "info",
-                "Пульс: под входом ждут " + ids.size + " заявки по " +
-                    PulsePlan.addPrices(open.price, market.tickSize)
-                        .take(ids.size)
-                        .joinToString("/") { "${(it * 100).toInt()}¢" },
-            )
-        }
-    }
 
     /**
      * The same buy, on paper.
@@ -658,8 +605,6 @@ class PulseBot(
             return
         }
 
-        paperAdds(book, open, market)
-
         when (PulsePlan.exitFor(open.outcome, current, settings)) {
             PulsePlan.Exit.RIDE -> {
                 open.note = "довожу до расчёта"
@@ -693,43 +638,6 @@ class PulseBot(
         }
     }
 
-    /**
-     * The same three bids, on paper.
-     *
-     * A resting bid fills when somebody sells into it, so the test is the
-     * offer side of the book coming down to meet it: an ask at or under the
-     * bid's price is a seller who would have taken it. Each rung fills once,
-     * for the size the entry was, and only while the paper purse can pay.
-     */
-    private fun paperAdds(book: Book, open: Lot, market: Market) {
-        val ask = try {
-            ClobApi.bestAsk(open.asset)
-        } catch (e: Exception) {
-            null
-        } ?: return
-        if (ask <= 0.0) return
-
-        val size = maxOf(settings.shares, Orders.minShares(ask, market.minimumOrderSize))
-        for ((i, at) in PulsePlan.addPrices(open.price, market.tickSize).withIndex()) {
-            val id = "paper$i"
-            if (open.bidFilled.containsKey(id)) continue
-            if (ask > at + 1e-9) continue
-            // Paper pays the fee the same as the entry did.
-            val paid = Exits.takenPrice(at)
-            if (size * paid > cash(book)) break
-            open.bidFilled = open.bidFilled + (id to size)
-            open.shares += size
-            open.spent += size * paid
-            book.totals = book.totals.copy(spent = book.totals.spent + size * paid)
-            store.saveTotals(book.totals, demo = true)
-            engine.log(
-                "trade",
-                "Пульс (демо): добрал " + String.format("%.1f", size) + " ${open.outcome}" +
-                    " по ${(at * 100).toInt()}¢ — средняя " +
-                    "${((open.spent / open.shares) * 100).toInt()}¢",
-            )
-        }
-    }
 
     private fun paperSell(book: Book, open: Lot, price: Double, why: String) {
         val left = open.open
@@ -760,7 +668,6 @@ class PulseBot(
             return
         }
 
-        collectAdds(book, open)
         collect(open)
         if (open.open <= 1e-6) {
             finish(book, open)
@@ -835,55 +742,7 @@ class PulseBot(
         }
     }
 
-    /**
-     * Reads the fills of the bids waiting under the entry.
-     *
-     * Each one that fills buys the same side cheaper and makes the position
-     * bigger; the entry price is left alone, because it is what the exit is
-     * priced off, and a lot bought lower simply makes more at the same ask.
-     */
-    private fun collectAdds(book: Book, open: Lot) {
-        if (open.bids.isEmpty()) return
-        val log = OrderLog.all()
-        for (id in open.bids) {
-            val entry = log.firstOrNull { it.orderId == id } ?: continue
-            val had = open.bidFilled[id] ?: 0.0
-            if (entry.matched <= had + 1e-9) continue
 
-            val gained = entry.matched - had
-            val price = entry.realPrice
-            open.bidFilled = open.bidFilled + (id to entry.matched)
-            open.shares += gained
-            open.spent += gained * price
-            book.totals = book.totals.copy(spent = book.totals.spent + gained * price)
-            store.saveTotals(book.totals, demo = book.demo)
-            engine.log(
-                "trade",
-                "Пульс: добрал " + String.format("%.1f", gained) + " ${open.outcome} по " +
-                    "${(price * 100).toInt()}¢ — средняя " +
-                    "${((open.spent / open.shares) * 100).toInt()}¢",
-            )
-            // The offer standing over the position is now for fewer shares
-            // than are held; it goes back out for the whole of it.
-            if (open.sellOrderId != null) cancelOffer(open)
-        }
-    }
-
-    /** Pulls whatever is still waiting under a position that is done. */
-    private fun cancelAdds(open: Lot) {
-        if (open.bids.isEmpty()) return
-        val session = engine.session()
-        if (session != null) {
-            for (id in open.bids) {
-                try {
-                    ClobApi.cancelOrder(session.creds, session.account.signerAddress, id)
-                } catch (e: Exception) {
-                    // It may have filled in between; the log knows either way.
-                }
-            }
-        }
-        open.bids = emptyList()
-    }
 
     /** Reads the fill of our own offer off the order log. */
     private fun collect(open: Lot) {
@@ -970,7 +829,6 @@ class PulseBot(
     /** A round that sold out: count it and free the bot to trade again. */
     private fun finish(book: Book, open: Lot) {
         book.lot = null
-        if (!open.demo) cancelAdds(open)
         val pnl = open.proceeds - open.cost
         file(book, open, settlement = 0.0, winner = "", note = open.note ?: "продано")
         book.totals = book.totals.copy(
@@ -1019,12 +877,7 @@ class PulseBot(
     /** The window ended holding shares: they settle, at a dollar or at nothing. */
     private fun closeRound(book: Book, open: Lot) {
         book.lot = null
-        if (!open.demo) {
-            cancelOffer(open)
-            // A bid left standing under a settled window would buy a side of
-            // a market that has already paid out.
-            cancelAdds(open)
-        }
+        if (!open.demo) cancelOffer(open)
 
         val winner = EventStats.winnerFor(open.windowStart, Clock.nowSec())
         val settlement = if (open.outcome == winner) open.open else 0.0
