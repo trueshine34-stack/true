@@ -9,7 +9,12 @@ class PulseStore(context: Context) {
         .getSharedPreferences("polybot_pulse", Context.MODE_PRIVATE)
 
     fun loadSettings(): PulsePlan.Settings = PulsePlan.Settings(
-        enabled = prefs.getBoolean("enabled", false),
+        // Always running, and not a stored answer. A rule switched off keeps
+        // no record, and the record is the whole reason for paper money: the
+        // question it answers — is this worth real money — cannot be answered
+        // by a rule that was not running while nobody was watching. What is
+        // still a choice is whose money it trades, which is [demo].
+        enabled = true,
         bankUsd = prefs.getFloat("bankUsd", PulsePlan.DEFAULT_BANK_USD.toFloat()).toDouble(),
         shares = prefs.getFloat("shares", PulsePlan.DEFAULT_SHARES.toFloat()).toDouble(),
         minEdge = prefs.getFloat("minEdge", PulsePlan.DEFAULT_MIN_EDGE.toFloat()).toDouble(),
@@ -22,7 +27,6 @@ class PulseStore(context: Context) {
 
     fun saveSettings(s: PulsePlan.Settings) {
         prefs.edit()
-            .putBoolean("enabled", s.enabled)
             .putFloat("bankUsd", s.bankUsd.toFloat())
             .putFloat("shares", s.shares.toFloat())
             .putFloat("minEdge", s.minEdge.toFloat())

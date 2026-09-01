@@ -53,7 +53,6 @@ import {
   type EventSummary,
   type LoggedOrder,
   type NativeMarket,
-  type TakeState,
   type PulseState,
   type ProbeState,
   type ProbeOffer,
@@ -212,8 +211,6 @@ export function Manual({
     'line',
   );
   const [botLive, setBotLive] = useState(false);
-  const [takeBot, setTakeBot] = useState<TakeState | null>(null);
-  const [takeOpen, setTakeOpen] = useState(false);
   const [probeBot, setProbeBot] = useState<ProbeState | null>(null);
   /** The five-minute candle being read, and that window's own orders. */
   const [readWindow, setReadWindow] = useState<number | null>(null);
@@ -522,11 +519,6 @@ export function Manual({
       void PolyBot.pulseState()
         .then((s) => {
           if (!cancelled) setPulseBot(s);
-        })
-        .catch(() => {});
-      void PolyBot.takeState()
-        .then((s) => {
-          if (!cancelled) setTakeBot(s);
         })
         .catch(() => {});
       void PolyBot.probeState()
@@ -1193,27 +1185,6 @@ export function Manual({
           drawn twice, and the mark was a tap in the way of it. The results
           went onto the candles instead: the window is the candle.
         */}
-        {takeBot && (
-          <button
-            className={`railmark${takeOpen ? ' on' : ''}`}
-            onClick={() => setTakeOpen((v) => !v)}
-            aria-label="Забираю плюс"
-          >
-            {/* Its own mark: a gain taken off the top, lit while it watches. */}
-            <svg viewBox="0 0 16 16" aria-hidden>
-              <path
-                d="M2 11l4-4 3 3 5-6M13 4h-3M13 4v3"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <i className={`raildot${takeBot.running ? ' live' : ''}`} aria-hidden />
-          </button>
-        )}
-
         {/*
           One mark for all four rules. They used to have one each, so the rail
           asked "which of these four icons is the one I want" before anything
@@ -1228,11 +1199,11 @@ export function Manual({
               // Opening lands on whatever is actually running, which is the
               // thing you opened it to look at.
               if (!botOpen) {
-                if (probeBot?.running) {
-                  setBotLive(probeBot.live && !probeBot.demo);
+                if (probeBot?.live) {
+                  setBotLive(true);
                   setBotTab(probeMode(probeBot));
-                } else if (pulseBot?.running) {
-                  setBotLive(!pulseBot.demo);
+                } else if (pulseBot && !pulseBot.demo) {
+                  setBotLive(true);
                   setBotTab('pulse');
                 }
               }
@@ -1251,9 +1222,14 @@ export function Manual({
                 strokeLinejoin="round"
               />
             </svg>
+            {/* Lit when real money is on the table, not merely when a rule
+                is counting: they all count, always. */}
             <i
               className={`raildot${
-                probeBot?.running || pulseBot?.running ? ' live' : ''
+                (probeBot?.running && probeBot.live) ||
+                (pulseBot?.running && !pulseBot.demo)
+                  ? ' live'
+                  : ''
               }`}
               aria-hidden
             />
@@ -1270,25 +1246,6 @@ export function Manual({
           </button>
         </div>
       </div>
-
-      {takeOpen && takeBot && (
-        <TakeCard
-          state={takeBot}
-          onEnable={(enabled) => {
-            void PolyBot.takeUpdate({ enabled })
-              .then(() => PolyBot.takeState())
-              .then(setTakeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onGain={(gain) => {
-            if (!Number.isFinite(gain) || gain <= 0) return;
-            void PolyBot.takeUpdate({ gain })
-              .then(() => PolyBot.takeState())
-              .then(setTakeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-        />
-      )}
 
       {botOpen && (
         <>
@@ -1308,10 +1265,15 @@ export function Manual({
                 ['pulse', 'пульс'],
               ] as const
             ).map(([key, label]) => {
+              // The dot is real money. Everything runs on paper all the
+              // time now, so "is it running" marks all four and says
+              // nothing; what is worth a mark is what is spending.
               const live =
                 key === 'pulse'
-                  ? (pulseBot?.running ?? false)
-                  : (probeBot?.running ?? false) && probeMode(probeBot) === key;
+                  ? (pulseBot?.running ?? false) && !pulseBot?.demo
+                  : (probeBot?.running ?? false) &&
+                    (probeBot?.live ?? false) &&
+                    probeMode(probeBot) === key;
               return (
                 <button
                   key={key}
@@ -1368,12 +1330,6 @@ export function Manual({
         <PulseCard
           state={pulseBot}
           seen={botLive}
-          onEnable={(enabled) => {
-            void PolyBot.pulseUpdate({ enabled })
-              .then(() => PolyBot.pulseState())
-              .then(setPulseBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
           onBank={(usd) => {
             if (!Number.isFinite(usd) || usd < 0) return;
             void PolyBot.pulseUpdate({ bankUsd: usd })
@@ -1407,12 +1363,6 @@ export function Manual({
         <ProbeCard
           state={probeBot}
           seen={botLive}
-          onEnable={(enabled) => {
-            void PolyBot.probeUpdate({ enabled })
-              .then(() => PolyBot.probeState())
-              .then(setProbeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
           onStake={(usdAmount, real) => {
             if (!Number.isFinite(usdAmount) || usdAmount <= 0) return;
             void PolyBot.probeUpdate({ stakeUsd: usdAmount, real })
@@ -1437,12 +1387,6 @@ export function Manual({
           onRound={(band, real) => {
             if (!Number.isFinite(band) || band < 0) return;
             void PolyBot.probeUpdate({ roundBand: band, real })
-              .then(() => PolyBot.probeState())
-              .then(setProbeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onDemo={(demo) => {
-            void PolyBot.probeUpdate({ demo })
               .then(() => PolyBot.probeState())
               .then(setProbeBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
@@ -2333,88 +2277,6 @@ function WhyButton({
   );
 }
 
-/**
- * The rule that takes a gain the standing offer will not reach.
- *
- * One switch and one number, and under them what it is watching: what the
- * position cost, what the bids are paying, and how far apart those are. That
- * last figure is the whole rule — when it crosses the threshold the position
- * is sold into the book.
- */
-function TakeCard({
-  state,
-  onEnable,
-  onGain,
-}: {
-  state: TakeState;
-  onEnable: (enabled: boolean) => void;
-  onGain: (gain: number) => void;
-}) {
-  const [why, setWhy] = useState(false);
-  const pct = Math.round(state.gain * 100);
-
-  return (
-    <div className="card tight">
-      <div className="counterhead">
-        <span>Забираю плюс</span>
-        <WhyButton open={why} onClick={() => setWhy((v) => !v)} />
-        <button
-          className={`switch ${state.enabled ? 'on' : ''}`}
-          onClick={() => onEnable(!state.enabled)}
-        />
-      </div>
-
-      {why && (
-      <div className="counterrule muted">
-        Смотрит не на свою лимитку, а на то, сколько дают в стакане. Как только
-        покупатель платит больше +{pct}% к цене покупки — с учётом комиссии —
-        снимает наши продажи по этой стороне и продаёт по рынку. Для случая,
-        когда цена сходила в плюс, но до лимитки не дотянулась.
-      </div>
-      )}
-
-      <div className="fields botfields">
-        <NumField
-          label="продавать от, %"
-          value={pct}
-          onCommit={(n) =>
-            onGain(n / 100)
-          }
-        />
-      </div>
-
-      {state.watching.length > 0 ? (
-        <div className="counterlive tight">
-          {state.watching.map((w, i) => (
-            <div key={i}>
-              <span className={w.outcome === 'Up' ? 'up' : 'down'}>{w.outcome}</span>{' '}
-              {w.shares.toFixed(1)} по {cents(w.cost)} · дают{' '}
-              {w.bid > 0 ? cents(w.bid) : '—'}{' '}
-              <b className={w.gain >= state.gain ? 'up' : 'muted'}>
-                {w.gain >= 0 ? '+' : '−'}
-                {Math.abs(Math.round(w.gain * 100))}%
-              </b>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="counterlive muted">
-          {state.enabled ? 'позиций нет' : 'выключено'}
-        </div>
-      )}
-
-      {state.takes > 0 && (
-        <div className="botbar">
-          <b>{state.takes} забрал</b>
-          <em className="muted">{state.shares.toFixed(1)} долей</em>
-          <b className="up">{usd(state.got)}</b>
-        </div>
-      )}
-
-      {state.lastFault && <div className="banner warn">{state.lastFault}</div>}
-    </div>
-  );
-}
 
 /**
  * The test bot's report.
@@ -2428,12 +2290,10 @@ function TakeCard({
 function ProbeCard({
   state,
   seen,
-  onEnable,
   onStake,
   onLead,
   onRoom,
   onRound,
-  onDemo,
   onLive,
   onBank,
   onEdge,
@@ -2449,12 +2309,10 @@ function ProbeCard({
    * setting. They are one ladder now, and this is the rung below the top.
    */
   seen: boolean;
-  onEnable: (enabled: boolean) => void;
   onStake: (usd: number, real: boolean) => void;
   onLead: (sec: number, real: boolean) => void;
   onRoom: (share: number, real: boolean) => void;
   onRound: (band: number, real: boolean) => void;
-  onDemo: (demo: boolean) => void;
   onLive: (live: boolean) => void;
   onBank: (usd: number) => void;
   onEdge: (usd: number, real: boolean) => void;
@@ -2507,8 +2365,6 @@ function ProbeCard({
     state.roomToRound != null &&
     state.roomToRound <= state.roundBand;
   const tone = all.pnl > 0 ? 'up' : all.pnl < 0 ? 'down' : 'muted';
-  /** Whether the account on screen is the one actually buying. */
-  const trading = state.enabled && (seen ? state.live : state.demo);
 
   return (
     <div className="card tight">
@@ -2516,21 +2372,20 @@ function ProbeCard({
         <span>{dial.inside ? 'Цена' : dial.fade ? 'Свеча' : 'Линия'}</span>
         <WhyButton open={why} onClick={() => setWhy((v) => !v)} />
         {/*
-          One switch, for the account being looked at. There used to be two —
-          a master switch and a flag per account — and every combination of
-          them except one meant the same thing: nothing is trading. Turning an
-          account on turns the rule on with it; turning it off leaves the
-          other account exactly as it was.
+          One switch, and only on the real page. Paper has none: it always
+          runs. A rule switched off keeps no record, and the record is the
+          only thing paper money is for — "is this worth real money" cannot be
+          answered by a rule that was not running while nobody was watching,
+          and the switch was there to be left off by accident.
         */}
-        <button
-          className={`switch ${trading ? 'on' : ''}`}
-          onClick={() => {
-            const next = !trading;
-            if (seen) onLive(next);
-            else onDemo(next);
-            if (next && !state.enabled) onEnable(true);
-          }}
-        />
+        {seen ? (
+          <button
+            className={`switch ${state.live ? 'on' : ''}`}
+            onClick={() => onLive(!state.live)}
+          />
+        ) : (
+          <b className="muted small">всегда считает</b>
+        )}
       </div>
 
       {why && (
@@ -3180,7 +3035,6 @@ function ProbeRow({ round, offer }: { round: ProbeRound; offer?: ProbeOffer }) {
 function PulseCard({
   state,
   seen,
-  onEnable,
   onBank,
   onShares,
   onDemo,
@@ -3189,7 +3043,6 @@ function PulseCard({
   state: PulseState;
   /** Which account is on screen — and, for this rule, the one it runs on. */
   seen: boolean;
-  onEnable: (enabled: boolean) => void;
   onBank: (usd: number) => void;
   onShares: (shares: number) => void;
   onDemo: (demo: boolean) => void;
@@ -3207,10 +3060,20 @@ function PulseCard({
       <div className="counterhead">
         <span>Пульс</span>
         <WhyButton open={why} onClick={() => setWhy((v) => !v)} />
-        <button
-          className={`switch ${state.enabled ? 'on' : ''}`}
-          onClick={() => onEnable(!state.enabled)}
-        />
+        {/*
+          The switch is real money, and there is none on the paper page: this
+          rule always runs. Unlike the trend rule it runs on one account at a
+          time, so turning this on moves it off paper rather than starting a
+          second copy — which is what the row under this says.
+        */}
+        {seen ? (
+          <button
+            className={`switch ${!state.demo ? 'on' : ''}`}
+            onClick={() => onDemo(state.demo === false)}
+          />
+        ) : (
+          <b className="muted small">всегда считает</b>
+        )}
       </div>
 
       {why && (
@@ -3235,14 +3098,9 @@ function PulseCard({
         an account above moves it, rather than starting a second copy. Said
         here so the picker is not read as promising two records.
       */}
-      {seen !== !state.demo && (
+      {!seen && !state.demo && (
         <div className="botbar">
-          <button className="demoflag" onClick={() => onDemo(!seen)}>
-            перевести на {seen ? 'реальные' : 'демо'}
-          </button>
-          <b className="muted small">
-            сейчас на {state.demo ? 'демо' : 'реальных'}
-          </b>
+          <b className="down">сейчас торгует реальными — бумажного счёта нет</b>
         </div>
       )}
 

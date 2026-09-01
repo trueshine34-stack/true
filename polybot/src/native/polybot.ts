@@ -307,8 +307,6 @@ export interface PolyBotPlugin {
     sendable: number;
     gasReady: boolean;
   }>;
-  takeUpdate(args: { enabled?: boolean; gain?: number }): Promise<void>;
-  takeState(): Promise<TakeState>;
   probeUpdate(args: {
     /**
      * Whose dials these are. The two accounts keep their own stake, lead,
@@ -667,16 +665,6 @@ export type ProbeState = {
   offers: ProbeOffer[];
 };
 
-export type TakeState = {
-  enabled: boolean;
-  running: boolean;
-  gain: number;
-  lastFault?: string | null;
-  takes: number;
-  shares: number;
-  got: number;
-  watching: TakeWatch[];
-};
 
 /** What the app has timed for itself about the venue's own delays. */
 export type Timings = {
@@ -792,16 +780,6 @@ const webStub: PolyBotPlugin = {
   withdraw: async () => {
     throw new Error('Вывод доступен только в приложении Android');
   },
-  takeUpdate: async () => {},
-  takeState: async () => ({
-    enabled: false,
-    running: false,
-    gain: 0.15,
-    takes: 0,
-    shares: 0,
-    got: 0,
-    watching: [],
-  }),
   probeUpdate: async () => {},
   probeReset: async () => {},
   probeState: async () => ({

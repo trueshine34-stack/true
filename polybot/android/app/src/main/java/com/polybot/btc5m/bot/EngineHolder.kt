@@ -21,9 +21,6 @@ object EngineHolder {
     private var pulseBot: PulseBot? = null
 
     @Volatile
-    private var takeBot: TakeBot? = null
-
-    @Volatile
     private var probeBot: ProbeBot? = null
 
     @Volatile
@@ -111,34 +108,6 @@ object EngineHolder {
     }
 
     fun peekPulse(): PulseBot? = pulseBot
-
-    /**
-     * The rule that takes a gain the book is showing but the standing offer
-     * will not reach. It works the desk's own positions, so it is told which
-     * shares belong to the other rules and leaves those alone.
-     */
-    fun taker(context: Context): TakeBot {
-        takeBot?.let { return it }
-        val host = get(context)
-        return synchronized(this) {
-            takeBot ?: TakeBot(
-                engine = host,
-                store = TakeStore(context),
-                botShares = { asset ->
-                    pulseBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0
-                },
-                onStateChanged = {
-                    onState?.invoke()
-                    onServiceState?.invoke()
-                },
-            ).also {
-                takeBot = it
-                if (it.settings.enabled) it.start()
-            }
-        }
-    }
-
-    fun peekTaker(): TakeBot? = takeBot
 
     /**
      * The experiment: one five-dollar entry a window, the way the chart's line

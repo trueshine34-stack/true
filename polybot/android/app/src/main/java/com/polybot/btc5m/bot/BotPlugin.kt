@@ -48,7 +48,6 @@ class BotPlugin : Plugin() {
     /** The bot that buys the favourite while it is under its own exit. */
     private val pulseBot: PulseBot get() = EngineHolder.pulse(context)
 
-    private val takeBot: TakeBot get() = EngineHolder.taker(context)
 
     private val probeBot: ProbeBot get() = EngineHolder.probe(context)
 
@@ -1515,48 +1514,6 @@ class BotPlugin : Plugin() {
                 call.reject(e.message ?: "не удалось отправить перевод")
             }
         }.start()
-    }
-
-    @PluginMethod
-    fun takeUpdate(call: PluginCall) {
-        val d = takeBot.settings
-        takeBot.update(
-            d.copy(
-                enabled = call.getBoolean("enabled") ?: d.enabled,
-                gain = call.getDouble("gain") ?: d.gain,
-            ),
-        )
-        // The service keeps it alive with the screen off, which is when a move
-        // this rule exists to catch is most likely to be missed.
-        if (takeBot.settings.enabled) BotService.startAutoSell(context)
-        call.resolve()
-    }
-
-    @PluginMethod
-    fun takeState(call: PluginCall) {
-        val bot = takeBot
-        val watching = JSArray()
-        bot.watching.forEach {
-            watching.put(
-                JSObject()
-                    .put("outcome", it.outcome)
-                    .put("shares", it.shares)
-                    .put("cost", it.cost)
-                    .put("bid", it.bid)
-                    .put("gain", it.gain),
-            )
-        }
-        call.resolve(
-            JSObject()
-                .put("enabled", bot.settings.enabled)
-                .put("running", bot.running)
-                .put("gain", bot.settings.gain)
-                .put("lastFault", bot.lastFault)
-                .put("takes", bot.totals.takes)
-                .put("shares", bot.totals.shares)
-                .put("got", bot.totals.got)
-                .put("watching", watching),
-        )
     }
 
     @PluginMethod

@@ -31,7 +31,13 @@ class ProbeStore(context: Context) {
     private fun key(name: String, real: Boolean) = if (real) "real.$name" else name
 
     fun loadSettings(real: Boolean = false): ProbePlan.Settings = ProbePlan.Settings(
-        enabled = prefs.getBoolean("enabled", false),
+        // Paper always runs, and neither of these is a stored answer any
+        // more. A rule switched off is a rule with no record, and the record
+        // is the entire reason a paper account exists: the question it
+        // answers — is this worth real money — cannot be answered by a rule
+        // that was not running while you were not watching. Only the real
+        // account has a switch now, and that one is [live].
+        enabled = true,
         stakeUsd = dial("stakeUsd", real, ProbePlan.DEFAULT_STAKE),
         // The lead has been ten seconds, then twenty, and is now forty-five.
         // A setting still sitting on either of the old defaults is an old
@@ -41,7 +47,7 @@ class ProbeStore(context: Context) {
             .let { if (it in ProbePlan.OLD_LEADS) ProbePlan.DEFAULT_LEAD_SEC else it },
         roomShare = dial("roomShare", real, ProbePlan.DEFAULT_ROOM),
         roundBand = dial("roundBand", real, ProbePlan.DEFAULT_ROUND_BAND),
-        demo = prefs.getBoolean("demo", true),
+        demo = true,
         // The two were one switch, so "not demo" meant "real". A setting
         // saved before they were separated says which of the two was on, and
         // that is what it keeps until the person says otherwise.
@@ -69,8 +75,6 @@ class ProbeStore(context: Context) {
         // written once, by whichever account was being edited.
         if (!real) {
             edit
-                .putBoolean("enabled", s.enabled)
-                .putBoolean("demo", s.demo)
                 .putBoolean("live", s.live)
                 .putFloat("bankUsd", s.bankUsd.toFloat())
         }
