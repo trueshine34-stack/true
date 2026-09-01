@@ -24,9 +24,6 @@ object EngineHolder {
     private var softPulse: PulseBot? = null
 
     @Volatile
-    private var probeBot: ProbeBot? = null
-
-    @Volatile
     var onState: (() -> Unit)? = null
 
     @Volatile
@@ -145,35 +142,6 @@ object EngineHolder {
     }
 
     fun peekSoftPulse(): PulseBot? = softPulse
-
-    /**
-     * The experiment: one five-dollar entry a window, the way the chart's line
-     * points, out by the desk's own ladder. Created on first ask so the report
-     * can be read whether it is running or not.
-     */
-    fun probe(context: Context): ProbeBot {
-        probeBot?.let { return it }
-        val host = get(context)
-        return synchronized(this) {
-            probeBot ?: ProbeBot(
-                engine = host,
-                store = ProbeStore(context),
-                // Its paper exits follow the desk's own sell rule as it is
-                // set — rungs or margin, with the same late floors — so a demo
-                // run answers a question about the ladder actually running.
-                exit = { autoSell?.settings ?: AutoSell.Settings() },
-                onStateChanged = {
-                    onState?.invoke()
-                    onServiceState?.invoke()
-                },
-            ).also {
-                probeBot = it
-                if (it.settings.enabled) it.start()
-            }
-        }
-    }
-
-    fun peekProbe(): ProbeBot? = probeBot
 
     /** Null when nothing has touched the engine yet this process. */
     fun peek(): BotEngine? = engine

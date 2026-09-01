@@ -355,7 +355,7 @@ class LadderIsTheOnlyExitTest {
     @Test
     fun `the exit price is the rung the clock and the high-water mark reached`() {
         val rule = AutoSell.Settings(ladder = SellLadder.HALF_MINUTE)
-        val want = ProbePlan.exitPrice(
+        val want = Exits.price(
             cost = 0.80,
             elapsedSec = 60,
             secondsLeft = 240,
@@ -365,7 +365,7 @@ class LadderIsTheOnlyExitTest {
             exit = rule,
         )
         assertEquals(
-            SellLadder.HALF_MINUTE[ProbePlan.exitStep(60, 0.88, 0, rule)],
+            SellLadder.HALF_MINUTE[Exits.step(60, 0.88, 0, rule)],
             want,
             1e-9,
         )
@@ -379,7 +379,7 @@ class LadderIsTheOnlyExitTest {
         // not care: the rung the clock is on is the price, and that is the
         // whole of the rule now.
         val rule = AutoSell.Settings(ladder = SellLadder.HALF_MINUTE)
-        val want = ProbePlan.exitPrice(
+        val want = Exits.price(
             cost = 0.34,
             elapsedSec = 30,
             secondsLeft = 270,
@@ -389,7 +389,7 @@ class LadderIsTheOnlyExitTest {
             exit = rule,
         )
         assertEquals(
-            SellLadder.HALF_MINUTE[ProbePlan.exitStep(30, 0.0, 0, rule)],
+            SellLadder.HALF_MINUTE[Exits.step(30, 0.0, 0, rule)],
             want,
             1e-9,
         )
@@ -422,7 +422,7 @@ class DipRescueTest {
     @Test
     fun `it asks the first rung for the whole window`() {
         // Four minutes in, where the clock's rung is near the top.
-        val want = ProbePlan.exitPrice(
+        val want = Exits.price(
             cost = 0.50,
             elapsedSec = 240,
             secondsLeft = 60,
@@ -443,7 +443,7 @@ class DipRescueTest {
         assertEquals(30L, SellLadder.DIP_LAST_SEC)
         assertEquals(
             0.93,
-            ProbePlan.exitPrice(
+            Exits.price(
                 cost = 0.50,
                 elapsedSec = 275,
                 secondsLeft = 25,
@@ -459,7 +459,7 @@ class DipRescueTest {
 
     @Test
     fun `a position that never went that cheap is untouched`() {
-        val plain = ProbePlan.exitPrice(
+        val plain = Exits.price(
             cost = 0.50,
             elapsedSec = 240,
             secondsLeft = 60,
@@ -470,7 +470,7 @@ class DipRescueTest {
             exit = rule,
         )
         assertEquals(
-            SellLadder.HALF_MINUTE[ProbePlan.exitStep(240, 0.80, 0, rule)],
+            SellLadder.HALF_MINUTE[Exits.step(240, 0.80, 0, rule)],
             plain,
             1e-9,
         )
@@ -479,7 +479,7 @@ class DipRescueTest {
     @Test
     fun `and the setting turns it off`() {
         val off = rule.copy(dipRescue = false)
-        val want = ProbePlan.exitPrice(
+        val want = Exits.price(
             cost = 0.50,
             elapsedSec = 240,
             secondsLeft = 60,
@@ -490,7 +490,7 @@ class DipRescueTest {
             exit = off,
         )
         assertEquals(
-            SellLadder.HALF_MINUTE[ProbePlan.exitStep(240, 0.80, 0, off)],
+            SellLadder.HALF_MINUTE[Exits.step(240, 0.80, 0, off)],
             want,
             1e-9,
         )

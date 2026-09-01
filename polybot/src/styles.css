@@ -3275,9 +3275,8 @@ button.wide {
 /* The four rules, one tab each, with a dot for the one that is live. */
 .bottabs {
   display: grid;
-  /* Five rules across a phone: the labels are short and the dot is 5px. */
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
 }
 
 .bottabs .demoflag {

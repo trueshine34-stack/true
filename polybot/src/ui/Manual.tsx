@@ -39,7 +39,6 @@ import {
   targetPrice,
   usd,
 } from '../core/money';
-import { bySide, pnlOf, summarise, traded } from '../core/probe';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
 import { Fold } from './Fold';
 import { CandlePanel } from './CandlePanel';
@@ -55,9 +54,6 @@ import {
   type NativeMarket,
   type PulseRound,
   type PulseState,
-  type ProbeState,
-  type ProbeOffer,
-  type ProbeRound,
   type NativePosition,
   type OpenOrder,
 } from '../native/polybot';
@@ -89,20 +85,6 @@ const NOTE_MS = 5_000;
  * position has room to work, red in the last minute — where the rule stops
  * holding out for a margin and the only thing left to do is get out.
  */
-/**
- * Which of the three entries the trend rule is set to, for the account that
- * is trading. The two accounts keep their own, so a tab is lit as live only
- * when the account actually buying is on that entry.
- */
-const probeMode = (
-  state: { inside: boolean; fade: boolean; realInside?: boolean;
-           realFade?: boolean; live: boolean } | null,
-): 'line' | 'fade' | 'inside' => {
-  if (!state) return 'line';
-  const inside = state.live ? (state.realInside ?? false) : state.inside;
-  const fade = state.live ? (state.realFade ?? false) : state.fade;
-  return inside ? 'inside' : fade ? 'fade' : 'line';
-};
 
 /** Seconds as a clock reads them. */
 const clock = (secondsLeft: number): string =>
@@ -214,7 +196,6 @@ export function Manual({
     'line' | 'fade' | 'inside' | 'pulse' | 'pulse2'
   >('line');
   const [botLive, setBotLive] = useState(false);
-  const [probeBot, setProbeBot] = useState<ProbeState | null>(null);
   /** The five-minute candle being read, and that window's own orders. */
   const [readWindow, setReadWindow] = useState<number | null>(null);
   const [readOrders, setReadOrders] = useState<LoggedOrder[]>([]);
@@ -527,11 +508,6 @@ export function Manual({
       void PolyBot.pulseState({ soft: true })
         .then((s) => {
           if (!cancelled) setSoftBot(s);
-        })
-        .catch(() => {});
-      void PolyBot.probeState()
-        .then((s) => {
-          if (!cancelled) setProbeBot(s);
         })
         .catch(() => {});
     };
@@ -1200,17 +1176,14 @@ export function Manual({
           wrong answer. Now it opens a deck: pick the rule, pick the account,
           and everything under that belongs to the one you picked.
         */}
-        {(pulseBot || probeBot) && (
+        {(pulseBot || softBot) && (
           <button
             className={`railmark${botOpen ? ' on' : ''}`}
             onClick={() => {
-              // Opening lands on whatever is actually running, which is the
-              // thing you opened it to look at.
+              // Opening lands on whatever is spending, which is the thing you
+              // opened it to look at.
               if (!botOpen) {
-                if (probeBot?.live) {
-                  setBotLive(true);
-                  setBotTab(probeMode(probeBot));
-                } else if (pulseBot?.live) {
+                if (pulseBot?.live) {
                   setBotLive(true);
                   setBotTab('pulse');
                 } else if (softBot?.live) {
@@ -1237,7 +1210,6 @@ export function Manual({
                 is counting: they all count, always. */}
             <i
               className={`raildot${
-                (probeBot?.running && probeBot.live) ||
                 (pulseBot?.running && pulseBot.live) ||
                 (softBot?.running && softBot.live)
                   ? ' live'
@@ -1262,55 +1234,30 @@ export function Manual({
       {botOpen && (
         <>
           {/*
-            Which rule, and then whose money. The three trend entries are one
-            engine with three ways of choosing a side, so exactly one of them
-            runs at a time and picking a tab moves it — the dot says which one
-            is live. The pulse is a separate rule and runs alongside any of
-            them.
+            Which rule, and then whose money. Two rules now: the same four
+            readings, one asking all of them and one taking the answers
+            earlier. They run side by side on their own money, which is the
+            only way to find out which is right.
           */}
           <div className="botbar bottabs">
             {(
               [
-                ['line', 'линия'],
-                ['fade', 'свеча'],
-                ['inside', 'цена'],
                 ['pulse', 'пульс'],
                 ['pulse2', 'пульс 2'],
               ] as const
             ).map(([key, label]) => {
-              // The dot is real money. Everything runs on paper all the
-              // time now, so "is it running" marks all four and says
-              // nothing; what is worth a mark is what is spending.
+              // The dot is real money. Both run on paper all the time now,
+              // so "is it running" marks both and says nothing; what is
+              // worth a mark is what is spending.
               const live =
                 key === 'pulse'
                   ? (pulseBot?.running ?? false) && (pulseBot?.live ?? false)
-                  : key === 'pulse2'
-                    ? (softBot?.running ?? false) && (softBot?.live ?? false)
-                    : (probeBot?.running ?? false) &&
-                      (probeBot?.live ?? false) &&
-                      probeMode(probeBot) === key;
+                  : (softBot?.running ?? false) && (softBot?.live ?? false);
               return (
                 <button
                   key={key}
                   className={`demoflag${botTab === key ? ' on' : ''}`}
-                  onClick={() => {
-                    setBotTab(key);
-                    // Picking a trend tab is picking that entry: the engine
-                    // reads one at a time, and the lead moves with it.
-                    if (key !== 'pulse' && key !== 'pulse2' && probeBot) {
-                      void PolyBot.probeUpdate({
-                        real: botLive,
-                        inside: key === 'inside',
-                        fade: key === 'fade',
-                        leadSec: key === 'fade' ? 15 : 50,
-                      })
-                        .then(() => PolyBot.probeState())
-                        .then(setProbeBot)
-                        .catch((e) =>
-                          setNote(e instanceof Error ? e.message : String(e)),
-                        );
-                    }
-                  }}
+                  onClick={() => setBotTab(key)}
                 >
                   {label}
                   <i className={`raildot${live ? ' live' : ''}`} aria-hidden />
@@ -1320,9 +1267,9 @@ export function Manual({
           </div>
 
           {/*
-            And whose money. It decides what every number below means — the
-            balance, the stake, the run, the record — and for the trend rule
-            the settings too, since the two accounts keep their own.
+            And whose money. It decides what every number below means: the
+            balance, the size, the record, and which of the two positions is
+            the one on the card.
           */}
           <div className="botbar accounts">
             <button
@@ -1408,67 +1355,6 @@ export function Manual({
         />
       )}
 
-      {botOpen && botTab !== 'pulse' && botTab !== 'pulse2' && probeBot && (
-        <ProbeCard
-          state={probeBot}
-          seen={botLive}
-          onStake={(usdAmount, real) => {
-            if (!Number.isFinite(usdAmount) || usdAmount <= 0) return;
-            void PolyBot.probeUpdate({ stakeUsd: usdAmount, real })
-              .then(() => PolyBot.probeState())
-              .then(setProbeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onLead={(sec, real) => {
-            if (!Number.isFinite(sec) || sec <= 0) return;
-            void PolyBot.probeUpdate({ leadSec: Math.round(sec), real })
-              .then(() => PolyBot.probeState())
-              .then(setProbeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onRoom={(share, real) => {
-            if (!Number.isFinite(share) || share < 0) return;
-            void PolyBot.probeUpdate({ roomShare: share, real })
-              .then(() => PolyBot.probeState())
-              .then(setProbeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onRound={(band, real) => {
-            if (!Number.isFinite(band) || band < 0) return;
-            void PolyBot.probeUpdate({ roundBand: band, real })
-              .then(() => PolyBot.probeState())
-              .then(setProbeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onLive={(live) => {
-            void PolyBot.probeUpdate({ live })
-              .then(() => PolyBot.probeState())
-              .then(setProbeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onBank={(bankUsd) => {
-            if (!Number.isFinite(bankUsd) || bankUsd <= 0) return;
-            void PolyBot.probeUpdate({ bankUsd })
-              .then(() => PolyBot.probeState())
-              .then(setProbeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onEdge={(edgeUsd, real) => {
-            if (!Number.isFinite(edgeUsd) || edgeUsd <= 0) return;
-            void PolyBot.probeUpdate({ edgeUsd, real })
-              .then(() => PolyBot.probeState())
-              .then(setProbeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onReset={() => {
-            void PolyBot.probeReset({ real: botLive, mode: botTab })
-              .then(() => PolyBot.probeState())
-              .then(setProbeBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-        />
-      )}
-
       {tab !== 'settings' && (
           <div className="card tight">
             {/*
@@ -1495,13 +1381,6 @@ export function Manual({
               <WindowRead
                 windowStart={readWindow}
                 orders={readOrders}
-                round={
-                  probeBot
-                    ? [...probeBot.riding, ...probeBot.rounds].find(
-                        (r) => r.windowStart === readWindow,
-                      ) ?? null
-                    : null
-                }
                 onClose={() => setReadWindow(null)}
               />
             )}
@@ -2327,536 +2206,6 @@ function WhyButton({
 }
 
 
-/**
- * The test bot's report.
- *
- * The bot is one sentence long, so the panel is mostly the record: what it
- * did, and then what that came to. The two halves of the answer are kept
- * apart on purpose — how often the line called the direction right, and how
- * much money following it made — because a run can be right most windows and
- * still lose, and a report that averaged the two would hide exactly that.
- */
-function ProbeCard({
-  state,
-  seen,
-  onStake,
-  onLead,
-  onRoom,
-  onRound,
-  onLive,
-  onBank,
-  onEdge,
-  onReset,
-}: {
-  state: ProbeState;
-  /**
-   * Which account is on screen, chosen a row above this card.
-   *
-   * The picker used to live inside here, next to a second picker for the
-   * entry mode, on a card that already had a switch of its own — four
-   * controls answering "which bot, whose money, is it on" before a single
-   * setting. They are one ladder now, and this is the rung below the top.
-   */
-  seen: boolean;
-  onStake: (usd: number, real: boolean) => void;
-  onLead: (sec: number, real: boolean) => void;
-  onRoom: (share: number, real: boolean) => void;
-  onRound: (band: number, real: boolean) => void;
-  onLive: (live: boolean) => void;
-  onBank: (usd: number) => void;
-  onEdge: (usd: number, real: boolean) => void;
-  onReset: () => void;
-}) {
-  const [why, setWhy] = useState(false);
-  // Every dial belongs to the account being looked at.
-  const dial = {
-    stakeUsd: seen ? (state.realStakeUsd ?? state.stakeUsd) : state.stakeUsd,
-    leadSec: seen ? (state.realLeadSec ?? state.leadSec) : state.leadSec,
-    roomShare: seen ? (state.realRoomShare ?? state.roomShare) : state.roomShare,
-    roundBand: seen ? (state.realRoundBand ?? state.roundBand) : state.roundBand,
-    inside: seen ? (state.realInside ?? false) : state.inside,
-    fade: seen ? (state.realFade ?? false) : state.fade,
-    edgeUsd: seen ? (state.realEdgeUsd ?? state.edgeUsd) : state.edgeUsd,
-  };
-
-  /**
-   * The record on screen: this account's, on this entry.
-   *
-   * Both halves matter. The two accounts trade the same windows and come
-   * apart on execution; the three entries are three different strategies and
-   * come apart on everything. A list mixing either pair is an average of
-   * things that were never one thing.
-   */
-  const mode = dial.inside ? 'inside' : dial.fade ? 'fade' : 'line';
-  const shown = state.rounds.filter(
-    (r) => r.demo !== seen && (r.mode ?? 'line') === mode,
-  );
-  const all = summarise(shown);
-  const sides = bySide(shown);
-  const purse = seen ? (state.wallet ?? 0) : state.bank;
-  const staking = seen ? (state.stakeNowLive ?? state.stakeNow) : state.stakeNow;
-  const run = seen ? (state.streakLive ?? 0) : state.streak;
-  const sinking = seen ? (state.losingLive ?? false) : (state.losing ?? false);
-  const line = state.trend;
-  const way = line?.way ?? '';
-  // Both charts have to point the same way before anything is bought, so both
-  // arrows are on the card and the cell says so when they do not.
-  const wideWay = state.wide?.way ?? '';
-  const agree = way !== '' && way === wideWay;
-  const arrow = (w: string) => (w === 'Up' ? '↑' : w === 'Down' ? '↓' : '—');
-  const arrowTone = (w: string) =>
-    w === 'Up' ? 'up' : w === 'Down' ? 'down' : 'muted';
-  // Which way the closing candle went, and whether that is the way the line
-  // is pointing. Both are on the card because one of them stops the entry.
-  const candleTone =
-    state.candleBody > 0 ? 'up' : state.candleBody < 0 ? 'down' : 'muted';
-  const minuteTone =
-    state.minuteBody > 0 ? 'up' : state.minuteBody < 0 ? 'down' : 'muted';
-  // Whether either candle is going the other way. It no longer stops an
-  // entry — the closing candle stopped voting — so this is said plainly
-  // rather than in the red of something being refused.
-  const disagrees = (body: number) =>
-    way !== '' && body !== 0 && (way === 'Up') !== (body > 0);
-  const against = disagrees(state.candleBody) || disagrees(state.minuteBody);
-  const atRound =
-    state.roundBand > 0 &&
-    state.roomToRound != null &&
-    state.roomToRound <= state.roundBand;
-  const tone = all.pnl > 0 ? 'up' : all.pnl < 0 ? 'down' : 'muted';
-
-  return (
-    <div className="card tight">
-      <div className="counterhead">
-        <span>{dial.inside ? 'Цена' : dial.fade ? 'Свеча' : 'Линия'}</span>
-        <WhyButton open={why} onClick={() => setWhy((v) => !v)} />
-        {/*
-          One switch, and only on the real page. Paper has none: it always
-          runs. A rule switched off keeps no record, and the record is the
-          only thing paper money is for — "is this worth real money" cannot be
-          answered by a rule that was not running while nobody was watching,
-          and the switch was there to be left off by accident.
-        */}
-        {seen ? (
-          <button
-            className={`switch ${state.live ? 'on' : ''}`}
-            onClick={() => onLive(!state.live)}
-          />
-        ) : (
-          <b className="muted small">всегда считает</b>
-        )}
-      </div>
-
-      {why && (
-      <div className="counterrule muted">
-        {state.live
-          ? 'Оба счёта сразу. Одно и то же правило, те же окна и тот же стакан, ' +
-            'но деньги разные: бумажный счёт берёт предложение всегда, а на ' +
-            'реальном ещё должна налиться заявка — вся разница между двумя ' +
-            'историями в этом. Настройки у счетов свои: переключатель выше ' +
-            'выбирает, чьи ставка, запас и режим входа показаны, и чья ' +
-            'история ниже. '
-          : 'На бумаге, и так всегда: читает тот же живой стакан, берёт те же ' +
-            'предложения по тем же ценам, платит ту же комиссию и выходит по ' +
-            'тем же ступеням — только деньги ненастоящие и на биржу ничего не ' +
-            'уходит. Выключателя у бумаги нет: правило, которое не работало, ' +
-            'пока никто не смотрел, не отвечает на вопрос, ради которого оно ' +
-            'считает. '}
-        {state.inside ? (
-          <>
-            {'Сторона не угадывается заранее. Первые полминуты окно оставлено ' +
-              'в покое, а дальше на каждом тике считается, чего каждая из ' +
-              'сторон стоит на самом деле: насколько цена уже ушла от цены ' +
-              'открытия, в долях обычного хода пятиминутки, и сколько времени ' +
-              'осталось, чтобы этот ход отыграли назад. Ход в половину ' +
-              'обычного за две минуты до конца — это уже далеко не половина ' +
-              'шансов. Формула откалибрована на 31 756 наблюдениях за 28 дней ' +
-              'и проверена на тех днях, которых не видела. '}
-            {'Дальше читается стакан. Берётся та сторона, за которую просят ' +
-              'меньше, чем она стоит, — с учётом комиссии 7% от p·(1−p), — и ' +
-              'меньше не на копейку, а хотя бы на '}
-            {Math.round(state.edgeUsd * 100)}¢ на голос.{' '}
-            {'Если обе стороны в стакане оценены честно или дороже честного — ' +
-              'окно пропускается целиком, и это нормальный исход: платить ' +
-              'справедливую цену не за что. Дороже 95¢ не берёт ничего: там ' +
-              'вся прибыль — округление, а весь риск на месте. '}
-            {'Выходит только лесенкой продаж — той, на которую настроен стол; ' +
-              'ничего не закрывается «по ощущению». '}
-            Всё, что наторгует, ниже по окнам.
-          </>
-        ) : (
-          <>
-          {'После выигранного окна ставит следующую на четверть выигрыша больше, ' +
-            'и так по нарастающей, пока не проиграет — тогда снова с базовой. ' +
-            'Каждое удвоение счёта поднимает базовую ставку в полтора раза. '}
-          За {dial.leadSec} с до начала пятиминутки берёт {usd(dial.stakeUsd)}{' '}
-          той стороны, куда показывает линия тренда на минутном графике — по
-          рынку: берёт то, что стоит в стакане, пока это не дороже 56¢. Окно
-          длится пять минут, и заявка, ждущая цену, которая уже на экране,
-          тратит их на ожидание. Исключение одно: сторона открылась дороже
-          максимума, брать нечего — тогда ставит лимитку по 58¢, то есть по
-          самой дорогой цене, которую и так был готов заплатить. И дальше
-          следит за стаканом весь лид: как только просят 58¢ или меньше —
-          снимает заявку и берёт по рынку. Пятьдесят секунд — это долго для
-          книги, которая переоценивается каждый тик, и цена, прочитанная один
-          раз, ничего не решает. Не налили и не подешевело — заявка снимается
-          через минуту, чтобы деньги не висели до конца окна. За 10 с до
-          начала перечитывает картину и снимает заявку, если сторона
-          поменялась. И это единственная покупка за окно: докупок по 42¢ и 33¢
-          больше нет, откупа после проданной ступени тоже — оба клали деньги в
-          окно, которое уже шло. Купленное продаётся
-          только лесенкой, и лесенкой в чистом виде. Ступени стоят
-          лимитками на книге всё окно, а не сторожатся: цена дошла до ступени
-          — заявка исполнилась по ней. Ступень выбирается по часам и по
-          максимуму цены за окно, вниз не откатывается. Одна поправка на
-          испуг: если нашу сторону в этом окне отдавали дешевле 33¢, окно
-          признаётся спасательным — лесенка целиком складывается в первую
-          ступень и стоит там всё время, а на 93¢ переставляется только в
-          последние 30 секунд. Сторона, за которую просили треть доллара,
-          прошла мимо расчёта и вернулась; ждать от неё верхних ступеней —
-          это ждать второй раз то, что уже один раз не случилось, а первая
-          ступень выше цены входа и закрывает окно в плюс. Правило одно на
-          всех — обоих ботов и руками поставленные позиции — и снимается
-          плиткой «спасение». Больше выйти не по
-          чему: ни удвоения входа, ни продажи у уровня, ни фиксации на
-          развернувшейся минутке — каждое из них продавало по своей цене и по
-          своему поводу, и вместе они дотягивали до ступени в меньшинстве
-          окон. Единственное исключение — проигранное окно. Лесенка выводит
-          только выигравшую сторону: все её ступени выше цены входа, и сторона,
-          которая проигрывает, до них не доходит никогда — раньше такое окно
-          просто доезжало до расчёта и не платило ничего, то есть на свою
-          ошибку правило не отвечало вообще. За 10 секунд до конца отвечает:
-          если по расчётной цене Полимаркета мы по другую сторону от цены
-          открытия, остаток продаётся по рынку. Расчёт идёт по 60-секундному
-          среднему на закрытии, так что к этому моменту пять шестых его уже
-          история — то, что ещё дают за сторону, это последние деньги, а не
-          шанс. Что лесенка не продала и что не успели забрать — заберёт
-          расчёт.{' '}
-          Это описание входа «по линии». «По свече» — другой вход, и
-          единственный здесь, чьи числа проверялись на данных, которых поиск
-          не видел: свеча делает экстремум за 20 свечей и закрывается в
-          дальней четверти собственного размаха, то есть импульс выдохся —
-          берётся противоположная сторона. На 8 месяцах пятиминуток: 59.2%
-          на обучении и 56.4% на отложенных для новых максимумов, 58.2% и
-          57.6% для минимумов. Тот же перебор по перемешанным меткам выдаёт
-          «паттерны» на 57–58% там, где он их искал, и они рассыпаются до 51%
-          на новых данных; эти два не рассыпаются. Считать это готовым
-          заработком нельзя: на 58¢ комиссия поднимает безубыток примерно до
-          60%, а тут 57% — эдж живёт только в дешёвом конце стакана. Вход по
-          свече идёт за 15 секунд до открытия, а не за 50: он читает
-          пятиминутку, которая закрывается вместе с открытием окна, и чем
-          позже смотрит, тем больше её видел.{' '}
-          Сторону во входе «по линии» задаёт линия: пятиминутная возражает лишь
-          тогда, когда сама называет направление. А если минутная говорит
-          «вбок» — окно больше не пропускается. Плоская линия значит, что
-          рынок последнюю четверть часа шёл никуда, а рынок, идущий никуда,
-          возвращается к своей середине чаще, чем уходит от неё: цена ниже
-          средней за 30 минут — берём вверх, выше — вниз. Читается это за 15
-          секунд до открытия, а не за 50: это не направление, которое рынок
-          держит, а то, где цена сейчас стоит относительно того, где она была,
-          — значит смотреть надо как можно позже. Средняя берётся за 30 минут,
-          вдвое больше, чем длина самой линии, и это намеренно: средняя ровно
-          по тому же куску — это середина той же линии, а у неё ответа нет.
-          Останавливает вход теперь одно, и это про закрывающуюся пятиминутку:
-          если её размах втрое больше среднего за последний час и она идёт в
-          нашу сторону — не входим. Свеча такого размера это не тренд, а
-          реакция: прострел, ликвидации, новость, — и пока она закрывалась,
-          сторону уже переоценили под неё; покупается ход, который уже
-          состоялся, по цене, которую он и сделал.{' '}
-          Ни уровень впереди, ни круглые числа, ни хвост свечи вход не
-          останавливают — они по очереди отсеивали окна и ни одно из них не
-          отделяло выигрышные от проигрышных. Дольше всех держался отбой от
-          уровня: свеча дотянулась до цены впереди и закрылась обратно — значит
-          туда не пускают. Но фитиль в уровень и закрытие под ним — это ровно
-          то, как выглядит ход, который через уровень идёт, и запрет резал не
-          проигрыши, а окна, где линия называла сторону верно и её никто не
-          спрашивал. Уровни всё ещё считаются за целые сутки, раз в минуту,
-          только с добавлением новых, так что линии не прыгают, — но нужны они
-          теперь для графика, а не для того, чтобы решать, куда входить. Всё, что наторгует, ниже по окнам.
-          </>
-        )}
-      </div>
-      )}
-
-      {/*
-        Everything the rule is looking at, in one row of four. Each is a label
-        and a number: the line it follows, the candles closing with the window,
-        the round number nearest the open and the level ahead — and under them,
-        only when there is one, the single word that says why the side is not
-        simply the line's.
-      */}
-      <div className="botreads">
-        <div>
-          <span>линия 1м / 5м</span>
-          <b>
-            <i className={arrowTone(way)}>{arrow(way)}</i>
-            <i className={arrowTone(wideWay)}>{arrow(wideWay)}</i>
-          </b>
-          <em className={agree ? undefined : 'down'}>
-            {agree ? `${Math.round(Math.abs(line?.perHour ?? 0))}/ч` : 'спорят'}
-          </em>
-        </div>
-        <div>
-          <span>свеча 5м / 1м</span>
-          <b>
-            <i className={candleTone}>
-              {state.candleBody > 0 ? '▲' : state.candleBody < 0 ? '▼' : '—'}
-              {Math.round(Math.abs(state.candleBody))}
-            </i>
-            <i className={minuteTone}>
-              {state.minuteBody > 0 ? '▲' : state.minuteBody < 0 ? '▼' : '—'}
-              {Math.round(Math.abs(state.minuteBody))}
-            </i>
-          </b>
-          <em className="muted">{against ? 'против' : 'по линии'}</em>
-        </div>
-        <div>
-          <span>круглый</span>
-          <b className={atRound ? 'down' : undefined}>
-            {bigPrice(state.roundNear)}
-          </b>
-          <em className={atRound ? 'down' : undefined}>
-            {state.roomToRound == null
-              ? '—'
-              : atRound
-                ? 'на нём'
-                : `+${Math.round(state.roomToRound)}`}
-          </em>
-        </div>
-        <div>
-          <span>разворот</span>
-          <b>{bigPrice(state.levelAhead)}</b>
-          {/* The room there is, against the room the setting would demand.
-              Neither number stops an entry any more — the level ahead is
-              here to be looked at, not to decide. */}
-          <em>
-            {state.roomToLevel == null ? '—' : `+${Math.round(state.roomToLevel)}`}
-            {state.roomNeed != null && ` / ${Math.round(state.roomNeed)}`}
-          </em>
-        </div>
-      </div>
-
-      {state.chose && <div className="botwhy warn">{state.chose}</div>}
-
-      {/*
-        Paper or real, and what the paper account is worth. The switch is the
-        first thing on the card after the name because it is the thing that
-        decides what every number under it means.
-      */}
-      {/*
-        Two accounts, two switches. They used to be one — watching the rule on
-        paper meant not running it, and running it meant losing the record
-        that says whether it is worth running. Now either, both or neither.
-      */}
-      {seen && state.walletOut && (
-        <div className="botbar">
-          <b className="down">кошелёк не подключён</b>
-        </div>
-      )}
-
-      <div className="botbar">
-        {seen ? (
-          <b className="muted">
-            кошелёк
-            {purse > 0 && <em> {usd(purse)}</em>}
-          </b>
-        ) : (
-          <b className={state.bank >= state.bankUsd ? 'up' : 'down'}>
-            {usd(state.bank)}
-            <em> / {usd(state.bankUsd)}</em>
-          </b>
-        )}
-        {/* What the next window will actually stake, when it is not the base. */}
-        <b className={run > 0 && !sinking ? 'up pushright' : 'pushright'}>
-          {usd(staking)}
-          {/* A run riding on a window that is already losing is over: the
-              stake falls back to base before the next entry, not after. */}
-          {run > 0 && !sinking && <em> серия +{usd(run)}</em>}
-          {run > 0 && sinking && <em className="down"> серия сброшена</em>}
-        </b>
-      </div>
-
-      <div className="botbar">
-        <b className="muted small">
-          {dial.inside
-            ? 'ждёт внутри окна и берёт недооценённую сторону'
-            : dial.fade
-              ? 'против свечи, сделавшей экстремум за 20 и закрывшейся в дальней четверти'
-              : 'выбирает сторону до открытия по графику'}
-        </b>
-      </div>
-
-      <div className="fields botfields">
-        <NumField
-          label="ставка $"
-          value={dial.stakeUsd}
-          onCommit={(n) => onStake(n, seen)}
-        />
-        {dial.inside ? (
-          <NumField
-            label="запас ¢"
-            value={Math.round(dial.edgeUsd * 100)}
-            onCommit={(n) => onEdge(n / 100, seen)}
-          />
-        ) : (
-          <>
-            <NumField
-              label="за скол. с"
-              value={dial.leadSec}
-              onCommit={(n) => onLead(n, seen)}
-            />
-            <NumField
-              label="запас %"
-              value={Math.round(dial.roomShare * 100)}
-              onCommit={(n) => onRoom(n / 100, seen)}
-            />
-            <NumField
-              label="круглые $"
-              value={Math.round(dial.roundBand)}
-              onCommit={(n) => onRound(n, seen)}
-            />
-          </>
-        )}
-        {/* The paper account's opening balance is the desk's one answer, not
-            a dial, so it shows on the paper page only. */}
-        {!seen && (
-          <NumField
-            label="счёт $"
-            value={state.bankUsd}
-            onCommit={(n) => onBank(n)}
-          />
-        )}
-      </div>
-
-      {shown.length > 0 ? (
-        <>
-          <div className="listhead second">
-            <span>
-              Итог за {all.rounds} окон
-              {shown.length > all.rounds
-                ? ` · пропущено ${shown.length - all.rounds}`
-                : ''}
-            </span>
-            <button className="linkbtn" onClick={onReset}>
-              очистить
-            </button>
-          </div>
-
-          {/*
-            The money only when there was any. A run that stood out of every
-            window has nothing to average, and the list below still says why.
-          */}
-          {all.rounds > 0 && (
-          <>
-          <div className="countergrid">
-            <div>
-              <span className="muted">итог</span>
-              <b className={tone}>
-                {all.pnl >= 0 ? '+' : '−'}
-                {usd(Math.abs(all.pnl))}
-              </b>
-            </div>
-            <div>
-              <span className="muted">угадал</span>
-              <b>
-                {all.hitRate === null
-                  ? '—'
-                  : `${Math.round(all.hitRate * 100)}%`}
-              </b>
-            </div>
-            <div>
-              <span className="muted">плюс/минус</span>
-              <b>
-                <span className="up">{all.wins}</span>
-                <span className="muted">/</span>
-                <span className="down">{all.losses}</span>
-              </b>
-            </div>
-            <div>
-              <span className="muted">за окно</span>
-              <b className={(all.average ?? 0) >= 0 ? 'up' : 'down'}>
-                {(all.average ?? 0) >= 0 ? '+' : '−'}
-                {usd(Math.abs(all.average ?? 0))}
-              </b>
-            </div>
-            <div>
-              <span className="muted">лучшее</span>
-              <b className="up">+{usd(Math.abs(all.best ?? 0))}</b>
-            </div>
-            <div>
-              <span className="muted">худшее</span>
-              <b className="down">−{usd(Math.abs(all.worst ?? 0))}</b>
-            </div>
-            <div>
-              <span className="muted">вложено</span>
-              <b>{usd(all.spent)}</b>
-            </div>
-            <div>
-              <span className="muted">лесенкой</span>
-              <b>{all.byLadder}</b>
-            </div>
-            <div>
-              <span className="muted">до расчёта</span>
-              <b>{all.toSettlement}</b>
-            </div>
-          </div>
-
-          <div className="probesides">
-            <div>
-              <span className="up">Up</span> {sides.up.rounds} ·{' '}
-              <b className={sides.up.pnl >= 0 ? 'up' : 'down'}>
-                {sides.up.pnl >= 0 ? '+' : '−'}
-                {usd(Math.abs(sides.up.pnl))}
-              </b>
-            </div>
-            <div>
-              <span className="down">Down</span> {sides.down.rounds} ·{' '}
-              <b className={sides.down.pnl >= 0 ? 'up' : 'down'}>
-                {sides.down.pnl >= 0 ? '+' : '−'}
-                {usd(Math.abs(sides.down.pnl))}
-              </b>
-            </div>
-          </div>
-          </>
-          )}
-
-          <div className="listhead second">
-            <span>По пятиминуткам</span>
-            <span className="muted">свежие сверху</span>
-          </div>
-          <div className="probelist">
-            {/* What is open sits at the top of the same list it will join. */}
-            {state.riding.map((r) => (
-              <ProbeRow
-                key={`${r.windowStart}-${r.leg}`}
-                round={r}
-                offer={offerFor(state.offers, r)}
-              />
-            ))}
-            {shown.map((r) => (
-              <ProbeRow key={`${r.windowStart}-${r.leg}`} round={r} />
-            ))}
-          </div>
-        </>
-      ) : (
-        <div className="botbar muted">
-          {state.riding.length > 0 ? (
-            state.riding.map((r) => (
-              <ProbeRow
-                key={`${r.windowStart}-${r.leg}`}
-                round={r}
-                offer={offerFor(state.offers, r)}
-              />
-            ))
-          ) : (
-            <b className="muted">{state.note || 'ждёт окна'}</b>
-          )}
-        </div>
-      )}
-
-      {state.lastFault && <div className="banner warn">{state.lastFault}</div>}
-    </div>
-  );
-}
 
 /**
  * One closed window in a pulse's record, and what it looks like opened.
@@ -2957,53 +2306,27 @@ function PulseRow({ round: r }: { round: PulseRound }) {
  * One five-minute candle, opened.
  *
  * A candle and a window are the same thing seen two ways, so tapping one asks
- * the question the history answers in a list: what was done here, and what the
- * rule was looking at when it decided. Orders come from the log for that
- * window; the reading comes from the round the bot filed for it, traded or
- * skipped alike.
+ * what was done here — every order the app sent into that window, by hand or
+ * by a rule, from its own log.
  */
 function WindowRead({
   windowStart,
   orders,
-  round,
   onClose,
 }: {
   windowStart: number;
   orders: LoggedOrder[];
-  round: ProbeRound | null;
   onClose: () => void;
 }) {
-  const facts = (round?.why ?? '').trim();
   const done = orders.filter((o) => o.matched > 1e-6);
-  const money = round && traded(round) ? pnlOf(round) : null;
 
   return (
     <div className="card tight windowread">
       <div className="counterhead">
         <span>Свеча {clockOf(windowStart)}</span>
-        {money != null && (
-          <b className={money >= 0 ? 'up' : 'down'}>
-            {money >= 0 ? '+' : '−'}
-            {usd(Math.abs(money))}
-          </b>
-        )}
         <button className="shut" onClick={onClose}>
           ✕
         </button>
-      </div>
-
-      {/* What the bot did with this window, in its own words. */}
-      <div className="probefact">
-        <span className="muted">бот</span>
-        <b>
-          {round == null
-            ? 'не смотрел'
-            : traded(round)
-              ? `${round.side} ${round.shares.toFixed(1)} · ${cents(round.price)}`
-              : round.side
-                ? `хотел ${round.side}, но ${round.note || 'без причины'}`
-                : round.note || 'пропуск'}
-        </b>
       </div>
 
       {done.length > 0 ? (
@@ -3036,155 +2359,11 @@ function WindowRead({
         </div>
       )}
 
-      {facts && (
-        <div className="probewhy">
-          {facts.split('\n').map((line) => {
-            const at = line.indexOf(':');
-            const name = at > 0 ? line.slice(0, at) : '';
-            const value = at > 0 ? line.slice(at + 1).trim() : line;
-            return (
-              <div className="probefact" key={line}>
-                <span className="muted">{name}</span>
-                <b>{value}</b>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
 
-/** The offer standing over a position, matched by window and leg. */
-function offerFor(
-  offers: ProbeOffer[] | undefined,
-  round: ProbeRound,
-): ProbeOffer | undefined {
-  return (offers ?? []).find(
-    (o) => o.windowStart === round.windowStart && o.leg === round.leg,
-  );
-}
 
-/**
- * One window, as a line: what was taken, and what it came to.
- *
- * Tapping it opens what the rule was looking at when it chose the side. A
- * history that only says "Down, lost" cannot be argued with; the round carries
- * its whole reading, so the line can show it.
- */
-function ProbeRow({ round, offer }: { round: ProbeRound; offer?: ProbeOffer }) {
-  const [open, setOpen] = useState(false);
-  const why = (round.why ?? '').trim();
-
-  // Only a row with something to say is worth tapping.
-  const body = (inner: React.ReactNode, cls: string) =>
-    why ? (
-      <>
-        <button
-          type="button"
-          className={`proberow tappable ${cls}${open ? ' opened' : ''}`}
-          onClick={() => setOpen(!open)}
-        >
-          {inner}
-        </button>
-        {open && (
-          <div className="probewhy">
-            {why.split('\n').map((line) => {
-              const at = line.indexOf(':');
-              const name = at > 0 ? line.slice(0, at) : '';
-              const value = at > 0 ? line.slice(at + 1).trim() : line;
-              return (
-                <div className="probefact" key={line}>
-                  <span className="muted">{name}</span>
-                  <b>{value}</b>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </>
-    ) : (
-      <div className={`proberow ${cls}`}>{inner}</div>
-    );
-
-  // A window still running shows what is held, where it is aiming, and — the
-  // part nothing else on the screen shows in demo — the offer standing over it.
-  if (round.open) {
-    return body(
-      <>
-        <span className="probewhen">{clockOf(round.windowStart)}</span>
-        <span className={round.side === 'Up' ? 'up' : 'down'}>{round.side}</span>
-        <span className="muted">
-          {round.shares > 0
-            ? `${round.shares.toFixed(1)} · ${cents(round.price)}`
-            : `ждёт ${cents(round.resting || 0)}`}
-          {round.adds > 0 ? ` ×${round.adds + 1}` : ''}
-          {round.leg > 0 ? ' откуп' : ''}
-          {/* Up to the last minute the rung is watched, not offered: the
-              shares go into the bid the moment it reaches up, so the price is
-              a floor. In the last minute the offer rests at it. */}
-          {offer
-            ? offer.resting
-              ? ` · лимитка ${cents(offer.price)}`
-              : ` · ждёт ${cents(offer.price)}+`
-            : round.target > 0
-              ? ` → ${bigPrice(round.target)}`
-              : ''}
-        </span>
-        <span className="probemark">·</span>
-        <b className="warn">идёт</b>
-      </>,
-      'live',
-    );
-  }
-
-  // A window it stood out of still gets a line, with the reason in place of
-  // the numbers — that is the whole point of writing them down. And with the
-  // side it was about to buy: "у уровня 78700" is only half a reason until
-  // it says which way the money was going.
-  if (!traded(round)) {
-    return body(
-      <>
-        <span className="probewhen">{clockOf(round.windowStart)}</span>
-        <span className={round.side === 'Up' ? 'up' : round.side === 'Down' ? 'down' : 'muted'}>
-          {round.side || '—'}
-        </span>
-        <span className="muted">
-          {round.side ? 'хотел, но ' : 'пропуск: '}
-          {round.note || 'без причины'}
-        </span>
-        <span className="probemark">·</span>
-        <b className="muted">—</b>
-      </>,
-      'skipped',
-    );
-  }
-
-  const money = pnlOf(round);
-  const tone = money > 0.005 ? 'up' : money < -0.005 ? 'down' : 'muted';
-  // What the shares averaged on the way out, sale and settlement together,
-  // which is the number worth comparing with what they cost.
-  const out =
-    round.shares > 0 ? (round.proceeds + round.settled) / round.shares : 0;
-
-  return body(
-    <>
-      <span className="probewhen">{clockOf(round.windowStart)}</span>
-      <span className={round.side === 'Up' ? 'up' : 'down'}>{round.side}</span>
-      <span className="muted">
-        {round.shares.toFixed(1)} · {cents(round.price)} → {cents(out)}
-      </span>
-      <span className="probemark">
-        {round.winner ? (round.right ? '✓' : '✕') : '·'}
-      </span>
-      <b className={tone}>
-        {money >= 0 ? '+' : '−'}
-        {usd(Math.abs(money))}
-      </b>
-    </>,
-    '',
-  );
-}
 
 function PulseCard({
   state,

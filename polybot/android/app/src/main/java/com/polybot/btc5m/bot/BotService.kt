@@ -86,7 +86,6 @@ class BotService : Service() {
         // The screen used to be the only thing that asked — so a rule the user
         // had turned on did nothing at all until they next opened the panel it
         // lives on. Ask here, where the process comes up.
-        EngineHolder.probe(this)
         EngineHolder.pulse(this)
         EngineHolder.pulseSoft(this)
         stateHook = { updateNotification() }

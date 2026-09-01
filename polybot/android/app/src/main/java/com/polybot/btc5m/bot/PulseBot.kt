@@ -516,7 +516,7 @@ class PulseBot(
             )
         }
         val nowSec = Clock.nowSec()
-        return ProbePlan.exitPrice(
+        return Exits.price(
             cost = open.price,
             elapsedSec = nowSec - open.windowStart,
             secondsLeft = open.windowStart + PulsePlan.WINDOW_SEC - nowSec,
@@ -541,7 +541,7 @@ class PulseBot(
         if (!settings.ladder) return
         open.rung = maxOf(
             open.rung,
-            ProbePlan.exitStep(
+            Exits.step(
                 Clock.nowSec() - open.windowStart,
                 open.highWater,
                 open.rung,
@@ -610,7 +610,7 @@ class PulseBot(
         size: Double,
         windowStart: Long,
     ) {
-        val price = ProbePlan.takenPrice(ask)
+        val price = Exits.takenPrice(ask)
         book.lot = Lot(
             asset = token,
             conditionId = market.conditionId,
@@ -726,7 +726,7 @@ class PulseBot(
             if (open.bidFilled.containsKey(id)) continue
             if (ask > at + 1e-9) continue
             // Paper pays the fee the same as the entry did.
-            val paid = ProbePlan.takenPrice(at)
+            val paid = Exits.takenPrice(at)
             if (size * paid > cash(book)) break
             open.bidFilled = open.bidFilled + (id to size)
             open.shares += size
