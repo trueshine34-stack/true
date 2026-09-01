@@ -16,7 +16,7 @@ import search
 
 ICT = timezone(timedelta(hours=7))
 NIGHT = range(3, 7)          # 03:00-06:59 ICT
-LEVELS = (6, 7, 8, 9, 10, 11, 12)
+LEVELS = tuple(range(6, 26))
 
 
 def runs_of(k):
@@ -97,6 +97,13 @@ def main(path="candles240.json.gz"):
         have = sum(1 for d in days if longest.get(d, 0) >= L)
         tot = sum(counts[d][L] for d in days)
         print(f"{L:<5}{have:>14}{100*have/len(days):>8.1f}%{tot/len(days):>13.2f}{len(days)-have:>14}")
+
+    print("\nthe longest runs of the year")
+    hdr = f"{'start (ICT)':<19}{'len':>5}{'dir':>6}{'move %':>9}"
+    print(hdr); print("-" * len(hdr))
+    for i, ln, d in sorted(rs, key=lambda r: -r[1])[:20]:
+        mv = (k[i + ln - 1][4] - k[i][1]) / k[i][1] * 100
+        print(f"{t[i]:%Y-%m-%d %H:%M}{'':<3}{ln:>5}{'up' if d > 0 else 'down':>6}{mv:>9.2f}")
 
     misses = [d for d in days if longest.get(d, 0) < 6]
     print(f"\ndays with no run of 6+: {len(misses)}" + (f" -> {', '.join(misses)}" if misses else ""))

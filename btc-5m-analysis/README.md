@@ -227,7 +227,9 @@ frequent, they are more *legible* — which is what makes them memorable.
 
 And the wider context: long runs are **rarer** on 5m BTC than a coin flip predicts —
 908 runs of 6+ against 1080 expected (0.84×), 42 runs of 10+ against 68 (0.62×).
-That is the same mean reversion the earlier sections found.
+That is the same mean reversion the earlier sections found, and it tightens as the
+runs get longer: 0.84× at 6, 0.62× at 9–11, 0.35× at 13, 0.24× at 14, and zero
+observed at 15+ where a coin flip would have produced about two.
 
 ### Does every day have a run of 6 / 7 / 8 / 9 / 10?
 
@@ -240,10 +242,30 @@ That is the same mean reversion the earlier sections found.
 | 10+ | 42 / 239 | 17.6% | 0.17 | 197 |
 | 11+ | 21 / 239 | 8.8% | 0.09 | 218 |
 | 12+ | 11 / 239 | 4.6% | 0.05 | 228 |
+| 13+ | 3 / 239 | 1.3% | 0.01 | 236 |
+| 14+ | 1 / 239 | 0.4% | 0.004 | 238 |
+| 15+ … 25+ | 0 / 239 | 0% | 0 | 239 |
 
 Practically every day carries a run of 6 — the three exceptions this year are
 1 Mar, 16 May and 22 May. A run of 7 happens on 5 days out of 6, a run of 8 about
-every other day, and a run of 10 roughly once a week.
+every other day, and a run of 10 roughly once a week. Above 12 the wall comes fast:
+three runs of 13 all year, one of 14, and nothing longer — 15 and up simply did not
+happen in 69 120 candles.
+
+The longest runs of 2026 so far:
+
+| start (ICT) | length | direction | move |
+|---|---|---|---|
+| 2026-03-03 14:55 | 14 | down | −1.84% |
+| 2026-01-22 06:50 | 13 | up | +0.69% |
+| 2026-03-09 13:00 | 13 | down | −1.07% |
+| 2026-08-19 21:45 | 12 | up | +4.91% |
+| 2026-06-09 20:50 | 12 | down | −1.97% |
+| 2026-01-14 02:25 | 12 | up | +0.90% |
+
+Note how little a long run has to move: the 14-candle run travelled 1.84% and the
+12-candle run on 14 May only 0.60%. Length and size are close to unrelated — the
+one outlier, +4.91% on 19 Aug, is a news candle.
 
 ### The one thing in this that looks tradeable
 
