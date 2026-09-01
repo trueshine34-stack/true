@@ -597,3 +597,52 @@ still being confirmed live.
 Bet size for a given bankroll at 2%: $500 → $10, $1 000 → $20, $2 500 → $50,
 $5 000 → $100. Every number above assumes fills at 50¢ in and 99¢ out; check that
 first on ten live trades, because at 51¢/90¢ the all-hours version is already flat.
+
+## Question 11 — expected profit and the deposit it needs
+
+`expected.py` walks the real 8-month signal list under the recommended plan (fade a
+run of 7, one bet per signal, stake as a % of the current bankroll) and then
+resamples it 5000 times for the spread.
+
+418 signals over 8 months = 52 a month, 16 of them at night. No chasing means no
+escalating exposure, so **the deposit is just the bankroll** — there is no margin to
+hold behind it.
+
+### Starting from $1000
+
+| plan | 8-month median | median $/month | median DD | 95th DD | worst month (5th pct) | P(ending below start) |
+|---|---|---|---|---|---|---|
+| 1% flat | $1 736 | +$92 | 10.4% | 17.3% | −$136 | 0.2% |
+| **2% flat** | **$2 893** | **+$237** | 20.1% | 32.3% | −$401 | 0.4% |
+| 2% day / 4% night | $5 628 | +$579 | 24.8% | 38.2% | −$791 | 0.1% |
+| night only, 3% | $2 828 | +$229 | 14.5% | 24.4% | −$279 | 0.1% |
+
+Month by month on the actual path at 2% flat: +268, +376, +269, +288, +133, **−97**,
++182, +474. One losing month in eight.
+
+### Scaled to other bankrolls (2% flat)
+
+| deposit | bet size | median after 8 months | median $/month | worst month (5th pct) |
+|---|---|---|---|---|
+| $100 | $2 | $289 | +$24 | −$40 |
+| $250 | $5 | $723 | +$59 | −$100 |
+| $500 | $10 | $1 447 | +$118 | −$200 |
+| $1 000 | $20 | $2 893 | +$237 | −$401 |
+| $2 500 | $50 | $7 233 | +$592 | −$1 002 |
+| $5 000 | $100 | $14 467 | +$1 183 | −$2 005 |
+
+Everything is linear in the deposit. The floor is set by the app's minimum bet: at
+a $1 minimum you need about $100 so that 2% still clears it after a 35% drawdown.
+
+### The same plan if the edge is weaker than measured
+
+| assumed win rate | EV per bet | per month at 2% | over 8 months |
+|---|---|---|---|
+| 57.4% (measured) | +0.137 | **+14.1%** | ×2.88 |
+| 52.7% (CI lower bound) | +0.044 | +3.6% | ×1.32 |
+| 50.5% (break-even price) | −0.000 | −1.0% | ×0.92 |
+
+That spread is the honest answer: the plan makes 14% a month if the historical rate
+holds, 3.6% a month at the pessimistic end of the confidence interval, and slowly
+bleeds if the fills are worse than 50¢/99¢. Which of the three you get is decided by
+the fill prices and by whether 57% survives out of sample — not by the sizing.
