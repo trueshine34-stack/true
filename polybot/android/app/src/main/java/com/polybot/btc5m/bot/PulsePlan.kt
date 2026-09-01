@@ -179,6 +179,28 @@ object PulsePlan {
         maxPrice = SOFT_MAX_PRICE,
     )
 
+    /**
+     * Inside this much of the close, nothing is offered under ninety cents.
+     *
+     * The last minute is not a normal part of the window. A side that is
+     * winning with a minute to run is nearly settled, and settlement pays a
+     * whole dollar and charges no fee — so an offer at eighty is giving away
+     * twenty cents of money that was very likely already ours, and a ladder
+     * that has walked down to seventy-seven asks for that giveaway by design.
+     * A side that is losing does not reach ninety and rides to a settlement
+     * that pays nothing, which is what it was going to do anyway.
+     *
+     * Sixty-five seconds rather than sixty: the boundary should sit clear of
+     * the minute mark rather than on it, for the same reason the buying
+     * allowances do.
+     */
+    const val LAST_ASK_SEC = 65L
+    const val LAST_ASK = 0.90
+
+    /** No offer under [LAST_ASK] once the close is that near. */
+    fun lateFloor(price: Double, secondsLeft: Long): Double =
+        if (secondsLeft in 0..LAST_ASK_SEC) maxOf(price, LAST_ASK) else price
+
     /** What one round is trying to make, on the price paid. */
     const val DEFAULT_TAKE_PCT = 0.15
 

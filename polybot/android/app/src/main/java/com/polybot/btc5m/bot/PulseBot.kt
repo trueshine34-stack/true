@@ -516,6 +516,16 @@ class PulseBot(
      * its positions are small moves rather than the one big one.
      */
     private fun askPrice(open: Lot, market: Market, bid: Double?): Double {
+        val nowSec = Clock.nowSec()
+        val secondsLeft = open.windowStart + PulsePlan.WINDOW_SEC - nowSec
+        // The late floor goes on last — over whichever rule set the price and
+        // over the doubling cap as well. Near the close it is the one that
+        // decides, because near the close settlement is.
+        return PulsePlan.lateFloor(rawAsk(open, market, bid, nowSec), secondsLeft)
+    }
+
+    /** The price the rule this pulse exits by is asking, before the floor. */
+    private fun rawAsk(open: Lot, market: Market, bid: Double?, nowSec: Long): Double {
         if (!settings.ladder) {
             // A doubling is taken whatever the take price says.
             return SellLadder.capped(
@@ -523,7 +533,6 @@ class PulseBot(
                 open.price,
             )
         }
-        val nowSec = Clock.nowSec()
         return Exits.price(
             cost = open.price,
             elapsedSec = nowSec - open.windowStart,

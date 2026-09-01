@@ -129,3 +129,40 @@ class PulseLateCapTest {
         assertEquals("дорого 93¢ из 86¢", why)
     }
 }
+
+/**
+ * The last minute, where settlement is close enough to be worth waiting for.
+ *
+ * A side that is winning with a minute to run is nearly settled, and
+ * settlement pays a whole dollar and charges no fee — so an offer at eighty
+ * gives away twenty cents of money that was very likely already ours, and a
+ * ladder walked down to seventy-seven asks for that giveaway by design.
+ */
+class PulseLateFloorTest {
+
+    @Test
+    fun `nothing is offered under ninety inside the last sixty-five seconds`() {
+        assertEquals(0.90, PulsePlan.lateFloor(0.77, 65L), 1e-9)
+        assertEquals(0.90, PulsePlan.lateFloor(0.80, 30L), 1e-9)
+        assertEquals(0.90, PulsePlan.lateFloor(0.46, 0L), 1e-9)
+    }
+
+    /** Before that the exit's own price stands, whatever it is. */
+    @Test
+    fun `earlier the exit asks what it asks`() {
+        assertEquals(0.77, PulsePlan.lateFloor(0.77, 66L), 1e-9)
+        assertEquals(0.46, PulsePlan.lateFloor(0.46, 200L), 1e-9)
+    }
+
+    /** It is a floor and not a price: an ask already above it is left alone. */
+    @Test
+    fun `a dearer ask is not pulled down to it`() {
+        assertEquals(0.97, PulsePlan.lateFloor(0.97, 20L), 1e-9)
+    }
+
+    /** A window that has already closed is not the last minute of one. */
+    @Test
+    fun `a window past its close is left alone`() {
+        assertEquals(0.77, PulsePlan.lateFloor(0.77, -5L), 1e-9)
+    }
+}
