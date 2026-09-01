@@ -438,3 +438,75 @@ closes green, and pay for it with a deposit that grows as `stepᵏ`. The profit
 column grows too, but only because more money is at risk — profit per dollar of
 deposit falls monotonically from ×1.5 to ×3. Nothing here changes the edge; it only
 changes how much capital is standing behind the same 54–65% hit rate.
+
+## Question 9 — the same thing, but entering after 7 in a row
+
+`martingale.py` now takes the trigger length as a third argument
+(`python3 martingale.py candles240.json.gz 100 7`).
+
+### The signal itself is better after 7 than after 6
+
+| trigger | window | bets | fade wins | p |
+|---|---|---|---|---|
+| after 6 | 8 months, all hours | 906 | 53.64% | 0.028 |
+| **after 7** | 8 months, all hours | 418 | **57.42%** | 0.002 |
+| after 8 | 8 months, all hours | 178 | 52.81% | 0.454 |
+| after 6 | 8 months, night | 307 | 58.31% | 0.004 |
+| **after 7** | 8 months, night | 128 | **64.84%** | 0.001 |
+| after 8 | 8 months, night | 45 | 46.67% | 0.655 |
+
+Waiting one more candle raises the hit rate by ~4 points and halves the number of
+signals. Waiting two more destroys it — after 8 the sample is thin and the effect
+is gone, so 7 is the last usable trigger, not a trend to extrapolate.
+
+### Last 100 days, entry after 7, all hours
+
+| step | base $10 | base $25 | base $50 | base $100 | profit / deposit |
+|---|---|---|---|---|---|
+| ×1.5 | $671 / dep $134 | $1 676 / $336 | $3 353 / $671 | $6 705 / $1 343 | **4.99×** |
+| ×2.0 | $1 715 / $476 | $4 286 / $1 190 | $8 573 / $2 380 | $17 146 / $4 760 | 3.60× |
+| ×2.5 | $4 379 / $1 381 | $10 948 / $3 452 | $21 896 / $6 904 | $43 792 / $13 807 | 3.17× |
+| ×3.0 | $10 164 / $3 272 | $25 411 / $8 180 | $50 822 / $16 360 | $101 644 / $32 720 | 3.11× |
+
+182 sequences, 327 bets, worst streak 5 losses, hit rate 55.25%.
+
+### Last 100 days, entry after 7, 00:00–08:00 ICT
+
+| step | base $10 | base $25 | base $50 | base $100 | profit / deposit |
+|---|---|---|---|---|---|
+| ×1.5 | $283 / dep $62 | $708 / $154 | $1 416 / $308 | $2 832 / $616 | **4.59×** |
+| ×2.0 | $470 / $130 | $1 174 / $326 | $2 349 / $652 | $4 698 / $1 304 | 3.60× |
+| ×2.5 | $809 / $234 | $2 022 / $585 | $4 043 / $1 171 | $8 086 / $2 342 | 3.45× |
+| ×3.0 | $1 373 / $532 | $3 432 / $1 330 | $6 865 / $2 660 | $13 730 / $5 320 | 2.58× |
+
+Only 49 sequences in 100 days — one every other day. Worst streak 4 losses.
+
+### Full 8 months, entry after 7, all hours (worst streak 7)
+
+| step | deposit, base $10 | deposit, base $100 | largest bet, base $100 | profit / deposit |
+|---|---|---|---|---|
+| ×1.5 | $217 | $2 172 | $1 709 | 5.71× |
+| ×2.0 | $1 651 | $16 508 | $12 800 | 2.37× |
+| ×2.5 | $7 408 | $74 078 | $61 035 | 1.80× |
+| ×3.0 | $25 082 | $250 816 | $218 700 | 1.59× |
+
+### Trigger 6 vs trigger 7, side by side
+
+| | after 6 | after 7 |
+|---|---|---|
+| sequences per day | 4.05 | 1.82 |
+| hit rate, 8 months | 53.6% | **57.4%** |
+| worst streak, 100 days | 6 | **5** |
+| worst streak, 8 months | 8 | **7** |
+| ×2 deposit, base $100, 8 months | $33 210 | **$16 508** |
+| ×2 profit, base $100, 8 months | $84 042 | $39 110 |
+| ×2.5 deposit, base $10, 8 months | $18 539 | **$7 408** |
+
+Entering after 7 halves the capital requirement — the run has to get one candle
+longer before each doubling, so the tail is one step shorter — and it raises the
+hit rate. It also halves the trade count and with it the profit. Per dollar of
+deposit the two are close (2.53× vs 2.37× at ×2 over 8 months); the real gain is
+that the worst case is half as bad.
+
+Flat staking at the same deposit still wins on this trigger too: $3 013 a bet over
+the last 100 days earns $51 215 against the ×2 martingale's $17 146.

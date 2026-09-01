@@ -22,7 +22,7 @@ BASE = 100.0
 
 
 def simulate(k, t, d, run, lo, hi, night_only=False, max_doubles=None, base=BASE,
-             mult=2.0):
+             mult=2.0, trigger=6):
     """Walk the candles once; returns the trade log and the capital line."""
     seqs = []
     cash = 0.0            # running cash flow, starts at zero
@@ -30,7 +30,7 @@ def simulate(k, t, d, run, lo, hi, night_only=False, max_doubles=None, base=BASE
     i = lo
     max_stake = 0.0
     while i < hi - 1:
-        if run[i] != 6 or d[i] == 0 or (night_only and t[i].hour >= 8):
+        if run[i] != trigger or d[i] == 0 or (night_only and t[i].hour >= 8):
             i += 1
             continue
         side = -d[i]                      # fade the run
@@ -78,7 +78,7 @@ def report(label, seqs, cash, need, max_stake, days):
     print(f"  largest single bet   : ${max_stake:,.0f}")
 
 
-def main(path="candles240.json.gz", days=100):
+def main(path="candles240.json.gz", days=100, trigger=6):
     k = search.load(path)
     t, d, run = nightruns.__dict__["datetime"], None, None
     t = [datetime.fromtimestamp(x[0] / 1000, nightruns.ICT) for x in k]
@@ -100,7 +100,8 @@ def main(path="candles240.json.gz", days=100):
                               ("MARTINGALE, 00:00-08:00 ICT only", True, None),
                               ("MARTINGALE, all hours, cap 4 doublings", False, 4),
                               ("MARTINGALE, night only, cap 4 doublings", True, 4)):
-        seqs, cash, need, ms = simulate(k, t, d, run, lo, len(k), night, cap)
+        seqs, cash, need, ms = simulate(k, t, d, run, lo, len(k), night, cap,
+                                        BASE, 2.0, trigger)
         if cap is None:
             mart_needs[night] = need
         report(label, seqs, cash, need, ms, days)
@@ -111,7 +112,7 @@ def main(path="candles240.json.gz", days=100):
         wins = losses = 0
         cash = 0.0; low = 0.0
         for i in range(lo, len(k) - 1):
-            if run[i] != 6 or d[i] == 0 or (night and t[i].hour >= 8) or d[i + 1] == 0:
+            if run[i] != trigger or d[i] == 0 or (night and t[i].hour >= 8) or d[i + 1] == 0:
                 continue
             cash -= BASE
             low = min(low, cash)
@@ -132,7 +133,7 @@ def main(path="candles240.json.gz", days=100):
 
 
 def grid(path="candles240.json.gz", days=100,
-         mults=(1.5, 2.0, 2.5, 3.0), bases=(10, 25, 50, 100)):
+         mults=(1.5, 2.0, 2.5, 3.0), bases=(10, 25, 50, 100), trigger=6):
     """Step multiplier x base stake: profit, deposit and the worst bet reached."""
     k = search.load(path)
     t = [datetime.fromtimestamp(x[0] / 1000, nightruns.ICT) for x in k]
@@ -144,14 +145,15 @@ def grid(path="candles240.json.gz", days=100,
 
     for night in (False, True):
         title = "00:00-08:00 ICT only" if night else "all hours"
-        print(f"\n\nstep multiplier grid, {title}, last {days} days")
+        print(f"\n\nstep multiplier grid, entry after {trigger} in a row, "
+              f"{title}, last {days} days")
         hdr = (f"{'step':>6}{'base':>7}{'profit $':>12}{'deposit $':>12}"
                f"{'max bet $':>12}{'worst streak':>14}{'profit/deposit':>16}")
         print(hdr); print("-" * len(hdr))
         for m in mults:
             for b in bases:
                 seqs, cash, need, ms = simulate(k, t, d, run, lo, len(k), night,
-                                                None, float(b), m)
+                                                None, float(b), m, trigger)
                 worst = max(s["losses"] for s in seqs) if seqs else 0
                 print(f"{m:>5.1f}x{b:>7.0f}{cash:>12,.0f}{need:>12,.0f}{ms:>12,.0f}"
                       f"{worst:>14}{cash/need if need else 0:>15.2f}x")
@@ -201,7 +203,8 @@ def sensitivity(rates=(0.536, 0.583, 0.6475)):
 if __name__ == "__main__":
     p = sys.argv[1] if len(sys.argv) > 1 else "candles240.json.gz"
     dd = int(sys.argv[2]) if len(sys.argv) > 2 else 100
-    main(p, dd)
-    grid(p, dd)
+    tg = int(sys.argv[3]) if len(sys.argv) > 3 else 6
+    main(p, dd, tg)
+    grid(p, dd, trigger=tg)
     recovery()
     sensitivity()
