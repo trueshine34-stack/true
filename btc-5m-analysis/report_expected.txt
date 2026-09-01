@@ -1,0 +1,44 @@
+trigger 7, 418 signals over 8 months (52 per month, of which 16 at night)
+win rate: all 57.42%, night 64.84%
+
+2% flat, all signals   — bankroll $1,000
+  actual 8-month path : $2,893 (2.89x), worst drawdown 20.1%
+  month by month      : 01:+268 02:+376 03:+269 04:+288 05:+133 06:-97 07:+182 08:+474
+  resampled median    : $2,893  (25-75%: $2,281-$3,818, 5th pct $1,475)
+  drawdown            : median 20.1%, 95th pct 32.3%
+  worst month         : median $-102, 5th pct $-399
+  chance of ending below the start: 0.4%
+
+2% day / 4% night   — bankroll $1,000
+  actual 8-month path : $5,556 (5.56x), worst drawdown 23.3%
+  month by month      : 01:+351 02:+635 03:+532 04:+845 05:+443 06:-266 07:+398 08:+1,618
+  resampled median    : $5,628  (25-75%: $3,870-$8,104, 5th pct $2,233)
+  drawdown            : median 24.8%, 95th pct 38.2%
+  worst month         : median $-108, 5th pct $-791
+  chance of ending below the start: 0.1%
+
+night only, 3%   — bankroll $1,000
+  actual 8-month path : $2,813 (2.81x), worst drawdown 9.4%
+  month by month      : 01:+110 02:+239 03:+197 04:+397 05:+216 06:-83 07:+104 08:+633
+  resampled median    : $2,828  (25-75%: $2,276-$3,542, 5th pct $1,617)
+  drawdown            : median 14.5%, 95th pct 24.4%
+  worst month         : median $-45, 5th pct $-279
+  chance of ending below the start: 0.1%
+
+1% flat (cautious)   — bankroll $1,000
+  actual 8-month path : $1,736 (1.74x), worst drawdown 10.5%
+  month by month      : 01:+129 02:+159 03:+106 04:+105 05:+49 06:-28 07:+65 08:+152
+  resampled median    : $1,736  (25-75%: $1,542-$1,994, 5th pct $1,240)
+  drawdown            : median 10.4%, 95th pct 17.3%
+  worst month         : median $-39, 5th pct $-136
+  chance of ending below the start: 0.2%
+
+same plan (2% flat) scaled to different starting bankrolls
+  bankroll  bet size   median after 8 mo   median $/month   worst month (5%)  min bet needed
+--------------------------------------------------------------------------------------------
+       100      2.00                 289               24                -40            1.30
+       250      5.00                 723               59               -100            3.25
+       500     10.00               1,447              118               -200            6.50
+     1,000     20.00               2,893              237               -401           13.00
+     2,500     50.00               7,233              592             -1,002           32.50
+     5,000    100.00              14,467            1,183             -2,005           65.00
