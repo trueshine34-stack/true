@@ -1317,7 +1317,10 @@ class BotPlugin : Plugin() {
             PulsePlan.Settings(
                 enabled = call.getBoolean("enabled") ?: d.enabled,
                 bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
-                shares = call.getDouble("shares") ?: d.shares,
+                // Either a sum or a share, never both: the desk sets one and
+                // clears the other, the same way the reserve does.
+                stakeUsd = call.getDouble("stakeUsd") ?: d.stakeUsd,
+                stakePct = call.getDouble("stakePct") ?: d.stakePct,
                 fromSec = d.fromSec,
                 untilSec = d.untilSec,
                 rideSec = d.rideSec,
@@ -1354,6 +1357,7 @@ class BotPlugin : Plugin() {
                 out.put(
                     JSObject()
                         .put("windowStart", it.windowStart)
+                        .put("boughtAt", it.boughtAt)
                         .put("outcome", it.outcome)
                         .put("shares", it.shares)
                         .put("price", it.price)
@@ -1382,7 +1386,8 @@ class BotPlugin : Plugin() {
                 .put("enabled", bot.settings.enabled)
                 .put("running", bot.running)
                 .put("bankUsd", bot.settings.bankUsd)
-                .put("shares", bot.settings.shares)
+                .put("stakeUsd", bot.settings.stakeUsd)
+                .put("stakePct", bot.settings.stakePct)
                 .put("minEdge", bot.settings.minEdge)
                 // What is actually asked for, floor included, rather than
                 // what happens to be stored under it.

@@ -21,7 +21,7 @@ class PulseSoftTest {
         lean: Double,
         volume: Double,
         ask: Double,
-        elapsed: Long = 60L,
+        elapsed: Long = 90L,
     ) = PulsePlan.Read(
         elapsedSec = elapsed,
         lead = lead,
@@ -73,13 +73,22 @@ class PulseSoftTest {
         assertNull(PulsePlan.blockedBecause(dear, soft, holding = false))
     }
 
-    /** It looks earlier in the window, too. */
+    /**
+     * It does *not* look earlier. Softer gates are about how much evidence is
+     * enough, not about reading a window that has not happened yet: in the
+     * first stretch the lead is a few seconds of noise and the book has not
+     * been tested, and that is the last thing to relax.
+     */
     @Test
-    fun itStartsLookingSooner() {
+    fun itStillWaitsOutTheStartOfAWindow() {
         val early = read(lead = 8.0, lean = 0.60, volume = 1.0, ask = 0.55, elapsed = 25L)
 
         assertEquals("рано", PulsePlan.blockedBecause(early, strict, holding = false))
-        assertNull(PulsePlan.blockedBecause(early, soft, holding = false))
+        assertEquals("рано", PulsePlan.blockedBecause(early, soft, holding = false))
+        // And it waits longer than the strict one, not less.
+        val mid = read(lead = 8.0, lean = 0.60, volume = 1.0, ask = 0.55, elapsed = 60L)
+        assertNull(PulsePlan.blockedBecause(mid, strict, holding = false))
+        assertEquals("рано", PulsePlan.blockedBecause(mid, soft, holding = false))
     }
 
     /**

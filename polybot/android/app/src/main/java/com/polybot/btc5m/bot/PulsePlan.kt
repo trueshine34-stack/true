@@ -39,8 +39,31 @@ object PulsePlan {
     /** Every window is five minutes long. */
     const val WINDOW_SEC = 300L
 
-    /** One clip, always. This bot's whole idea is repetition, not size. */
-    const val DEFAULT_SHARES = 5.0
+    /**
+     * What one entry puts in, in dollars.
+     *
+     * A count of shares is the wrong unit for this: five shares of a side at
+     * eight cents is forty cents at risk and five of a side at eighty is four
+     * dollars, and the rule takes both — so the same setting meant ten times
+     * the money depending on what the market happened to be charging. Money
+     * is what is being risked, so money is what is set, and the shares come
+     * out of it at whatever the price is.
+     */
+    const val DEFAULT_STAKE_USD = 3.0
+
+    /**
+     * Or that much of what is free to trade, where a share is set instead.
+     *
+     * A sum stays the sum while the account doubles or halves; a share grows
+     * and shrinks with it. Which is wanted depends on whether the number is a
+     * budget or a policy, and both are reasonable — so both are here, and a
+     * share, where one is set, is the answer.
+     *
+     * "Free" is the balance the desk can actually reach: the wallet already
+     * has the locked reserve taken out of it before this sees it, so a share
+     * of it can never be a share of money set aside.
+     */
+    const val DEFAULT_STAKE_PCT = 0.0
 
     /** The window has to have said something before it is worth trading. */
     const val DEFAULT_FROM_SEC = 45L
@@ -135,7 +158,15 @@ object PulsePlan {
     const val SOFT_MIN_VOLUME = 0.45
     const val SOFT_MIN_PRICE = 0.20
     const val SOFT_MAX_PRICE = 0.88
-    const val SOFT_FROM_SEC = 20L
+    /**
+     * And it still waits out the first stretch of a window.
+     *
+     * Softer gates are about how much evidence is enough, not about reading a
+     * window that has not happened yet: in the first minute and a quarter the
+     * lead is a few seconds of noise and the book has not been tested. This
+     * one is the last thing that should be relaxed.
+     */
+    const val SOFT_FROM_SEC = 75L
 
     /** The settings that make one, over whatever the strict rule holds. */
     fun soft(): Settings = Settings(
@@ -165,7 +196,8 @@ object PulsePlan {
     data class Settings(
         val enabled: Boolean = false,
         val bankUsd: Double = DEFAULT_BANK_USD,
-        val shares: Double = DEFAULT_SHARES,
+        val stakeUsd: Double = DEFAULT_STAKE_USD,
+        val stakePct: Double = DEFAULT_STAKE_PCT,
         val fromSec: Long = DEFAULT_FROM_SEC,
         val untilSec: Long = DEFAULT_UNTIL_SEC,
         val rideSec: Long = DEFAULT_RIDE_SEC,
@@ -271,7 +303,7 @@ object PulsePlan {
         val top = minOf(topPrice(read.elapsedSec, settings), read.ceiling)
         if (ask > top + 1e-9) return "дорого " + cents(ask) + " из " + cents(top)
         if (ask < settings.minPrice - 1e-9) return "рынок против " + cents(ask)
-        if (read.cashUsd < ask * settings.shares) return "нет денег"
+        if (read.cashUsd < stakeOf(read.cashUsd, settings)) return "нет денег"
 
         return null
     }
@@ -322,6 +354,39 @@ object PulsePlan {
         val step = if (tick > 0) tick else 0.01
         val snapped = kotlin.math.ceil(wanted / step - 1e-9) * step
         return (Math.round(snapped * 10_000.0) / 10_000.0).coerceIn(step, 1.0 - step)
+    }
+
+    /**
+     * What this entry is worth putting in, against what is free to trade.
+     *
+     * A share of the free balance where one is set, the flat sum otherwise.
+     * Not clamped to the balance: an account that cannot afford its own stake
+     * sits the window out rather than taking a smaller position, because half
+     * a stake is a different bet and a record made of them answers nothing.
+     * The cash gate is what turns that into a refusal.
+     */
+    fun stakeOf(cashUsd: Double, settings: Settings): Double {
+        val free = if (cashUsd.isFinite() && cashUsd > 0.0) cashUsd else 0.0
+        return if (settings.stakePct > 0.0) {
+            free * minOf(1.0, settings.stakePct)
+        } else {
+            settings.stakeUsd
+        }
+    }
+
+    /**
+     * How many shares that buys, never under the venue's own floor.
+     *
+     * The floor is the venue's, not this rule's: an order under it is refused
+     * outright, so a stake too small to clear it buys the smallest order that
+     * exists rather than nothing — and the cash gate above has already agreed
+     * there is money for it.
+     */
+    fun sharesFor(stakeUsd: Double, price: Double, minimumOrderSize: Double): Double {
+        if (price <= 0.0) return 0.0
+        val wanted = stakeUsd / price
+        val floor = Orders.minShares(price, minimumOrderSize)
+        return maxOf(floor, Math.round(wanted * 10.0) / 10.0)
     }
 
     /** Crossing the spread by a tick: this is meant to be taken now. */

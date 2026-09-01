@@ -1300,9 +1300,12 @@ export function Manual({
               .then(setSoftBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
-          onShares={(n) => {
-            if (!Number.isFinite(n) || n <= 0) return;
-            void PolyBot.pulseUpdate({ soft: true, shares: n })
+          onStake={(usdAmount, pct) => {
+            void PolyBot.pulseUpdate({
+              soft: true,
+              stakeUsd: usdAmount,
+              stakePct: pct,
+            })
               .then(() => PolyBot.pulseState({ soft: true }))
               .then(setSoftBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
@@ -1333,9 +1336,8 @@ export function Manual({
               .then(setPulseBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
           }}
-          onShares={(n) => {
-            if (!Number.isFinite(n) || n <= 0) return;
-            void PolyBot.pulseUpdate({ shares: n })
+          onStake={(usdAmount, pct) => {
+            void PolyBot.pulseUpdate({ stakeUsd: usdAmount, stakePct: pct })
               .then(() => PolyBot.pulseState())
               .then(setPulseBot)
               .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
@@ -2231,7 +2233,17 @@ function PulseRow({ round: r }: { round: PulseRound }) {
         className={`probesum${open ? ' on' : ''}`}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="muted">{clockOf(r.windowStart)}</span>
+        {/* The window is a five-minute box; where in it the entry landed is
+            the thing worth reading, so the seconds are shown. */}
+        <span className="muted">
+          {r.boughtAt
+            ? new Date(r.boughtAt).toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              })
+            : clockOf(r.windowStart)}
+        </span>
         <b className={r.outcome === 'Up' ? 'up' : 'down'}>{r.outcome}</b>
         <span className="muted">
           {r.shares.toFixed(1)} × {cents(r.price)}
@@ -2247,6 +2259,22 @@ function PulseRow({ round: r }: { round: PulseRound }) {
             <span className="muted">вход</span>
             <b>{cents(r.price)}</b>
           </div>
+          {r.boughtAt != null && r.boughtAt > 0 && (
+            <div>
+              <span className="muted">куплено</span>
+              <b>
+                {new Date(r.boughtAt).toLocaleTimeString('ru-RU', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                })}
+                <span className="muted">
+                  {' '}
+                  · {Math.max(0, Math.round(r.boughtAt / 1000 - r.windowStart))} с
+                </span>
+              </b>
+            </div>
+          )}
           {/* Only when a bid under the entry filled and moved it. */}
           {Math.abs(avg - r.price) > 0.005 && (
             <div>
@@ -2370,7 +2398,7 @@ function PulseCard({
   seen,
   soft = false,
   onBank,
-  onShares,
+  onStake,
   onDemo,
   onReset,
 }: {
@@ -2380,11 +2408,18 @@ function PulseCard({
   /** The variant with its gates opened up, which is a different rule's card. */
   soft?: boolean;
   onBank: (usd: number) => void;
-  onShares: (shares: number) => void;
+  /** What one entry puts in: a sum, or a share of what is free. Never both. */
+  onStake: (usd: number, pct: number) => void;
   onDemo: (demo: boolean) => void;
   onReset: () => void;
 }) {
   const [why, setWhy] = useState(false);
+  /**
+   * Whether the entry is being said as a share of the free balance rather
+   * than as a sum. Seeded from what is set, held here so switching to the
+   * empty one shows its empty field.
+   */
+  const [inPct, setInPct] = useState(state.stakePct > 0);
   /**
    * Whose record is on screen. Both accounts run on the same reads and the
    * same windows, so everything above this line is shared and everything
@@ -2431,7 +2466,11 @@ function PulseCard({
 
       {why && (
       <div className="counterrule muted">
-        Берёт {state.shares.toFixed(0)} долей стороны, за которую разом
+        Берёт на{' '}
+        {state.stakePct > 0
+          ? `${Math.round(state.stakePct * 100)}% свободного счёта`
+          : usd(state.stakeUsd)}{' '}
+        ту сторону, за которую разом
         высказались четыре вещи: ход окна от его открытия, импульс минуток,
         объём под ним и перевес в стакане Binance. Выходит по{' '}
         {state.ladder
@@ -2473,9 +2512,12 @@ function PulseCard({
             ' стороны, а не за неё, объём, который просто не мёртвый, и шире' +
             ' полоса котировок. Строгое правило редко проходит все четыре' +
             ' ворота, а когда проходит — сторону уже переоценили; это входит в' +
-            ' разы чаще на доказательствах в разы тоньше. Какое из двух право,' +
-            ' спорить незачем: они идут по одним и тем же окнам на своих' +
-            ' деньгах, и через несколько дней записи ответят.'}
+            ' разы чаще на доказательствах в разы тоньше. Начало окна при этом' +
+            ' не смягчается вовсе — первые 75 секунд оно не смотрит совсем:' +
+            ' мягче должны быть требования к доказательствам, а не готовность' +
+            ' читать окно, которого ещё не было. Какое из двух право, спорить' +
+            ' незачем: они идут по одним и тем же окнам на своих деньгах, и' +
+            ' через несколько дней записи ответят.'}
         {' Покупка одна на окно: заявок под входом больше нет. Усреднение' +
           ' удваивало ставку ровно на тех окнах, где правило ошиблось, — а' +
           ' ошибку оно и так не режет, позиция едет до расчёта, — так что' +
@@ -2576,11 +2618,45 @@ function PulseCard({
           value={state.bankUsd}
           onCommit={(n) => onBank(n)}
         />
+        {/*
+          What one entry puts in. A count of shares was the wrong unit: five
+          of a side at eight cents is forty cents at risk and five at eighty
+          is four dollars, and this rule takes both — so the same setting
+          meant ten times the money depending on what the market happened to
+          be charging.
+        */}
         <NumField
-          label="долей за раз"
-          value={state.shares}
-          onCommit={(n) => onShares(n)}
+          key={inPct ? 'pct' : 'usd'}
+          label={inPct ? 'вход, % счёта' : 'вход, $'}
+          value={inPct ? Math.round(state.stakePct * 100) : state.stakeUsd}
+          onCommit={(n) =>
+            inPct ? onStake(0, n / 100) : onStake(n, 0)
+          }
         />
+        {/*
+          Which of the two the number is. Switching does not carry the value
+          across — three dollars and three percent are different amounts.
+        */}
+        <div className="pcts stakemode">
+          <button
+            className={!inPct ? 'on' : undefined}
+            onClick={() => {
+              setInPct(false);
+              onStake(state.stakeUsd, 0);
+            }}
+          >
+            $
+          </button>
+          <button
+            className={inPct ? 'on' : undefined}
+            onClick={() => {
+              setInPct(true);
+              onStake(0, state.stakePct);
+            }}
+          >
+            %
+          </button>
+        </div>
       </div>
 
       {/* What it holds, or why it holds nothing — and the way to start over. */}

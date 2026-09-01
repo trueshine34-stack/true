@@ -2743,6 +2743,19 @@ button.step.big {
   margin: 0;
 }
 
+/* The same two-button picker, sitting in a row of numeric fields. */
+.stakemode {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  align-self: end;
+  gap: 5px;
+  margin: 0;
+}
+
+.stakemode button {
+  padding: 8px 0;
+}
+
 /* What the reserve field means, under the reserve field. */
 .balhint {
   margin: 6px 2px 2px;

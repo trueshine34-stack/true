@@ -280,7 +280,9 @@ export interface PolyBotPlugin {
     soft?: boolean;
     enabled?: boolean;
     bankUsd?: number;
-    shares?: number;
+    /** Either a sum or a share of what is free. The desk sets one, clears the other. */
+    stakeUsd?: number;
+    stakePct?: number;
     minEdge?: number;
     minLean?: number;
     minVolume?: number;
@@ -456,6 +458,8 @@ export type PulseLot = {
 /** One window a pulse account closed, and what it came to. */
 export type PulseRound = {
   windowStart: number;
+  /** When the shares were bought, to the second — paper rounds included. */
+  boughtAt?: number;
   outcome: string;
   shares: number;
   price: number;
@@ -472,7 +476,9 @@ export type PulseState = {
   enabled: boolean;
   running: boolean;
   bankUsd: number;
-  shares: number;
+  /** What one entry puts in: a sum, or a share of what is free to trade. */
+  stakeUsd: number;
+  stakePct: number;
   minEdge: number;
   takePct: number;
   /**
@@ -646,7 +652,8 @@ const webStub: PolyBotPlugin = {
     enabled: false,
     running: false,
     bankUsd: 100,
-    shares: 5,
+    stakeUsd: 3,
+    stakePct: 0,
     minEdge: 6,
     takePct: 0.12,
     live: false,

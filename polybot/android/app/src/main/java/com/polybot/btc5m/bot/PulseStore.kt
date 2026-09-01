@@ -28,7 +28,8 @@ class PulseStore(
         // still a choice is whose money it trades, which is [demo].
         enabled = true,
         bankUsd = prefs.getFloat("bankUsd", fallback.bankUsd.toFloat()).toDouble(),
-        shares = prefs.getFloat("shares", fallback.shares.toFloat()).toDouble(),
+        stakeUsd = prefs.getFloat("stakeUsd", fallback.stakeUsd.toFloat()).toDouble(),
+        stakePct = prefs.getFloat("stakePct", fallback.stakePct.toFloat()).toDouble(),
         // Everything that makes one rule softer than the other comes from
         // its own fallback, so the soft one is soft on a fresh install and
         // stays wherever it has been set afterwards.
@@ -50,7 +51,8 @@ class PulseStore(
     fun saveSettings(s: PulsePlan.Settings) {
         prefs.edit()
             .putFloat("bankUsd", s.bankUsd.toFloat())
-            .putFloat("shares", s.shares.toFloat())
+            .putFloat("stakeUsd", s.stakeUsd.toFloat())
+            .putFloat("stakePct", s.stakePct.toFloat())
             .putFloat("minEdge", s.minEdge.toFloat())
             .putFloat("minLean", s.minLean.toFloat())
             .putFloat("minVolume", s.minVolume.toFloat())
@@ -105,6 +107,7 @@ class PulseStore(
                 val o = array.optJSONObject(i) ?: return@mapNotNull null
                 PulseBot.Round(
                     windowStart = o.optLong("windowStart"),
+                    boughtAt = o.optLong("boughtAt"),
                     demo = demo,
                     outcome = o.optString("outcome"),
                     shares = o.optDouble("shares", 0.0),
@@ -127,6 +130,7 @@ class PulseStore(
             array.put(
                 JSONObject()
                     .put("windowStart", it.windowStart)
+                    .put("boughtAt", it.boughtAt)
                     .put("outcome", it.outcome)
                     .put("shares", it.shares)
                     .put("price", it.price)

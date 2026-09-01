@@ -84,6 +84,15 @@ class PulseBot(
      */
     data class Round(
         val windowStart: Long,
+        /**
+         * When the shares were actually bought, to the second.
+         *
+         * The window it belongs to is a five-minute box; where in that box
+         * the entry landed is the thing worth reading afterwards, and paper
+         * rounds need it as much as real ones — more, since a paper record
+         * exists to be studied.
+         */
+        val boughtAt: Long = 0L,
         val demo: Boolean,
         val outcome: String,
         val shares: Double,
@@ -241,8 +250,13 @@ class PulseBot(
         }
         engine.log(
             "info",
-            "Пульс включён: по " + String.format("%.0f", settings.shares) +
-                " долей, вход при перевесе от $" + String.format("%.0f", settings.minEdge) +
+            "Пульс включён: по " + (
+                if (settings.stakePct > 0.0) {
+                    String.format("%.0f", settings.stakePct * 100) + "% счёта"
+                } else {
+                    "$" + String.format("%.2f", settings.stakeUsd)
+                }
+                ) + ", вход при перевесе от $" + String.format("%.0f", settings.minEdge) +
                 ", выход +" + Math.round(PulsePlan.takeOf(settings) * 100) + "%",
         )
         onStateChanged()
@@ -416,7 +430,11 @@ class PulseBot(
         windowStart: Long,
     ) {
         val token = if (side == "Up") market.up.tokenId else market.down.tokenId
-        val size = maxOf(settings.shares, Orders.minShares(ask, market.minimumOrderSize))
+        val size = PulsePlan.sharesFor(
+            PulsePlan.stakeOf(cash(book), settings),
+            ask,
+            market.minimumOrderSize,
+        )
         // Crossing by a tick can step over the window's ceiling by that same
         // tick, and the venue would refuse the order rather than shave it.
         val limit = minOf(
@@ -860,6 +878,7 @@ class PulseBot(
         book.rounds = (
             book.rounds + Round(
                 windowStart = open.windowStart,
+                boughtAt = open.boughtAt,
                 demo = book.demo,
                 outcome = open.outcome,
                 shares = open.shares,
