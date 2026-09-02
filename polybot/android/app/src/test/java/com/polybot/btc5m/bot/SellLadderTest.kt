@@ -343,61 +343,6 @@ class SellLadderDoubleTest {
 }
 
 /**
- * The ladder is the exit, and the only exit.
- *
- * The hold-out that asked ninety of a clean run is gone, and so are the three
- * rules that sold before it: the doubling, the level ahead, and the minute
- * that turned against us. Each sold at its own price on its own reasoning,
- * and between them the rung was reached in a minority of windows.
- */
-class LadderIsTheOnlyExitTest {
-
-    @Test
-    fun `the exit price is the rung the clock and the high-water mark reached`() {
-        val rule = AutoSell.Settings(ladder = SellLadder.HALF_MINUTE)
-        val want = Exits.price(
-            cost = 0.80,
-            elapsedSec = 60,
-            secondsLeft = 240,
-            highWater = 0.88,
-            rung = 0,
-            bestBid = 0.88,
-            exit = rule,
-        )
-        assertEquals(
-            SellLadder.HALF_MINUTE[Exits.step(60, 0.88, 0, rule)],
-            want,
-            1e-9,
-        )
-        // And nothing above the rung: no run holds out for more.
-        assertTrue(want <= SellLadder.HALF_MINUTE.last())
-    }
-
-    @Test
-    fun `a doubling no longer brings the sale forward`() {
-        // Bought at a third. Two thirds is twice the money and the ladder does
-        // not care: the rung the clock is on is the price, and that is the
-        // whole of the rule now.
-        val rule = AutoSell.Settings(ladder = SellLadder.HALF_MINUTE)
-        val want = Exits.price(
-            cost = 0.34,
-            elapsedSec = 30,
-            secondsLeft = 270,
-            highWater = 0.0,
-            rung = 0,
-            bestBid = 0.60,
-            exit = rule,
-        )
-        assertEquals(
-            SellLadder.HALF_MINUTE[Exits.step(30, 0.0, 0, rule)],
-            want,
-            1e-9,
-        )
-        // Well above the sixty-eight cents the doubling used to take.
-        assertTrue(want > 0.68)
-    }
-}
-/**
  * A side the book once wrote off does not climb with the clock.
  *
  * The ladder is built for a position that is winning steadily: by the fourth
@@ -406,8 +351,6 @@ class LadderIsTheOnlyExitTest {
  * nothing — the recovery was real and the offer was somewhere else.
  */
 class DipRescueTest {
-
-    private val rule = AutoSell.Settings(ladder = SellLadder.HALF_MINUTE)
 
     @Test
     fun `a side that went under a third arms it`() {
@@ -421,21 +364,13 @@ class DipRescueTest {
 
     @Test
     fun `it asks the first rung for the whole window`() {
-        // Four minutes in, where the clock's rung is near the top.
-        val want = Exits.price(
-            cost = 0.50,
-            elapsedSec = 240,
-            secondsLeft = 60,
-            highWater = 0.80,
-            lowWater = 0.28,
-            rung = 0,
-            bestBid = 0.80,
-            exit = rule,
+        // Four minutes in, where the clock's rung is near the top — and this
+        // asks the bottom one, which is a price a recovery actually reaches.
+        assertEquals(
+            SellLadder.HALF_MINUTE.first(),
+            SellLadder.afterDip(SellLadder.HALF_MINUTE, secondsLeft = 60),
+            1e-9,
         )
-        assertEquals(SellLadder.HALF_MINUTE.first(), want, 1e-9)
-        // Which is a price a recovery to eighty actually reaches, unlike the
-        // rung the clock had walked to.
-        assertTrue(want < SellLadder.HALF_MINUTE.last())
     }
 
     @Test
@@ -443,55 +378,7 @@ class DipRescueTest {
         assertEquals(30L, SellLadder.DIP_LAST_SEC)
         assertEquals(
             0.93,
-            Exits.price(
-                cost = 0.50,
-                elapsedSec = 275,
-                secondsLeft = 25,
-                highWater = 0.95,
-                lowWater = 0.28,
-                rung = 0,
-                bestBid = 0.95,
-                exit = rule,
-            ),
-            1e-9,
-        )
-    }
-
-    @Test
-    fun `a position that never went that cheap is untouched`() {
-        val plain = Exits.price(
-            cost = 0.50,
-            elapsedSec = 240,
-            secondsLeft = 60,
-            highWater = 0.80,
-            lowWater = 0.45,
-            rung = 0,
-            bestBid = 0.80,
-            exit = rule,
-        )
-        assertEquals(
-            SellLadder.HALF_MINUTE[Exits.step(240, 0.80, 0, rule)],
-            plain,
-            1e-9,
-        )
-    }
-
-    @Test
-    fun `and the setting turns it off`() {
-        val off = rule.copy(dipRescue = false)
-        val want = Exits.price(
-            cost = 0.50,
-            elapsedSec = 240,
-            secondsLeft = 60,
-            highWater = 0.80,
-            lowWater = 0.28,
-            rung = 0,
-            bestBid = 0.80,
-            exit = off,
-        )
-        assertEquals(
-            SellLadder.HALF_MINUTE[Exits.step(240, 0.80, 0, off)],
-            want,
+            SellLadder.afterDip(SellLadder.HALF_MINUTE, secondsLeft = 25),
             1e-9,
         )
     }

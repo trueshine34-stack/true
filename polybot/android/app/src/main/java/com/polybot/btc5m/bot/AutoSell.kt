@@ -26,16 +26,6 @@ import kotlinx.coroutines.launch
  */
 class AutoSell(
     private val engine: BotEngine,
-    /**
-     * Shares of an outcome a bot is holding right now.
-     *
-     * Those are left alone: the bot arranges its own exit at its own rung, and
-     * blanketing them from here would mean two rules cancelling each other's
-     * orders. Everything else in the same position is the user's and gets sold
-     * — the wallet is shared, so a market-wide skip would silently ignore a
-     * hand-placed buy for as long as a bot happened to be trading that window.
-     */
-    private val botShares: (String) -> Double,
     private val onStateChanged: () -> Unit,
 ) {
     data class Settings(
@@ -89,6 +79,28 @@ class AutoSell(
         val lateFloor: Double = SellPercent.DEFAULT_LATE_FLOOR,
         /** How long that stretch runs, ending where the last minute begins. */
         val lateBandSec: Int = SellPercent.DEFAULT_LATE_BAND_SEC,
+        /**
+         * Ride the rung instead of resting an offer on it.
+         *
+         * The ladder decides the price either way; this decides what happens
+         * when the book gets there. Resting sells at the rung and the rest of
+         * the run belongs to whoever took it — riding holds while the bid
+         * keeps making new highs and crosses once it has stood still for
+         * [rideWaitMs], with ninety-three and ninety-eight overriding the
+         * wait as described in [Ride].
+         */
+        val ride: Boolean = true,
+        /** How long without a new high counts as the run being over. */
+        val rideWaitMs: Long = Ride.DEFAULT_WAIT_MS,
+        /**
+         * Sell everything the moment it is worth a cent more than it cost.
+         *
+         * A switch for one occasion — a window that has gone the wrong way and
+         * is briefly back at break-even — so it takes itself off the moment it
+         * fires. It outranks every other price here, ladder and ride alike:
+         * what it is for is getting out, not getting a good price.
+         */
+        val anyProfit: Boolean = false,
     )
 
     /** One position and what the rule has managed to do about it. */
@@ -145,6 +157,9 @@ class AutoSell(
         /** And the worst it has been bid, which is what arms the rescue. */
         var lowWater: Double,
         var step: Int,
+        /** The best bid the ride has seen, and when it saw it. */
+        var rideHigh: Double = 0.0,
+        var rideAtMs: Long = 0L,
         /**
          * Whether the bid has ever given back six cents of its best. Until it
          * has, the move is one clean run and the ask is held at ninety rather
@@ -223,6 +238,18 @@ class AutoSell(
 
         /** Pass interval while a fresh purchase is still waiting for its exit. */
         const val CHASE_GAP_MS = 1_000L
+
+        /**
+         * How often a ridden position is looked at.
+         *
+         * Riding decides on a pause of a couple of seconds, so it has to be
+         * asked at least that often or the pause is measured by the sweep
+         * rather than by the tape. Not faster: every pass asks the data API
+         * for positions, and a position is ridden for whole minutes at a
+         * time — a one-second cadence there is three hundred requests a
+         * window, which is how a rate limit is earned.
+         */
+        const val RIDE_GAP_MS = 2_000L
 
         /** How often to look at the balance while a sale's money is awaited. */
         const val CASH_PROBE_MS = 2_000L
@@ -325,10 +352,15 @@ class AutoSell(
                 // covered position is no longer uncovered.
                 val chasing = watching.isNotEmpty() &&
                     (Timings.measuring() || OrderLog.hasUncovered(windowNow))
-                val gapMs = if (chasing) {
-                    CHASE_GAP_MS
-                } else {
-                    settings.retryEverySec.coerceAtLeast(1) * 1000L
+                // A position with nothing resting on it is being ridden, and
+                // the ride is a decision about the last two seconds.
+                val riding = settings.enabled &&
+                    (settings.ride || settings.anyProfit) &&
+                    OrderLog.hasUncovered(windowNow)
+                val gapMs = when {
+                    riding -> RIDE_GAP_MS
+                    chasing -> CHASE_GAP_MS
+                    else -> settings.retryEverySec.coerceAtLeast(1) * 1000L
                 }
                 val due = now - lastFullMs >= gapMs
 
@@ -474,8 +506,9 @@ class AutoSell(
                 continue
             }
 
-            // Only the part of the position no bot is holding.
-            val mine = position.size - botShares(position.asset)
+            // The whole position. There is one rule holding shares now, and
+            // this is it — the bots that arranged their own exits are gone.
+            val mine = position.size
 
             val meta = metaFor(position.conditionId)
 
@@ -529,8 +562,32 @@ class AutoSell(
                 mine < meta.minimumOrderSize - 1e-6 ->
                     "меньше минимума " + String.format("%.1f", meta.minimumOrderSize)
                 hold > 0L -> "жду ${(hold + 999) / 1000} с по замеру"
+                // The last seconds: every offer comes off and the window is
+                // allowed to pay. Selling into what is left of the book with
+                // settlement six seconds away is giving away the difference
+                // between the bid and a dollar.
+                closesAt - now in 0..Ride.CLOSE_SEC -> pullForSettlement(position, open)
                 settings.percentMode ->
                     reconcilePercent(position, open, meta, percentPrice, mine)
+                // Any profit at all, and out: the switch is for a window that
+                // has gone wrong and come back, and it beats every price the
+                // rules below would hold out for.
+                settings.anyProfit ->
+                    reconcileAnyProfit(position, open, meta, mine, lotAt)
+                // Riding: nothing rests on the rung, the bid is watched, and
+                // the position is crossed out once the climb stops — or at
+                // once at the prices where there is nothing left to ride for.
+                settings.ride ->
+                    reconcileRide(
+                        position,
+                        open,
+                        meta,
+                        target,
+                        mine,
+                        lotAt,
+                        rung,
+                        closesAt - now,
+                    )
                 // The rung is an offer standing on the book for the whole
                 // window rather than a price something has to be awake to
                 // take. A bid that jumps clean past it still pays the rung —
@@ -881,7 +938,7 @@ class AutoSell(
         val covered = open
             .filter { it.assetId == position.asset && it.side == "SELL" }
             .sumOf { it.remaining }
-        val sellable = position.size - botShares(position.asset) - covered
+        val sellable = position.size - covered
         if (sellable < meta.minimumOrderSize - 1e-6) return null
 
         val lots = OrderLog.uncoveredLots(position.asset)
@@ -1071,6 +1128,160 @@ class AutoSell(
         // send without giving away more than one tick of it.
         val limit = maxOf(meta.tickSize, snapToTick(bid!! - meta.tickSize, meta.tickSize))
         return tryPlace(position, free, limit, lotAt)
+    }
+
+    /**
+     * Everything of ours off the book, because the window is about to pay.
+     *
+     * Hand-placed offers too: inside the last few seconds the price they were
+     * set at is a price from another moment, and the one thing that is certain
+     * about the next six seconds is that the market settles at the end of them.
+     */
+    private fun pullForSettlement(
+        position: Position,
+        open: List<ClobApi.OpenOrder>,
+    ): String {
+        val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
+        if (sells.isEmpty()) return "жду расчёт"
+        val session = engine.session() ?: return "нет сессии"
+        for (order in sells) {
+            try {
+                ClobApi.cancelOrder(session.creds, session.account.signerAddress, order.id)
+            } catch (e: Exception) {
+                return e.message ?: "не снять ордер"
+            }
+        }
+        engine.log("info", "Последние секунды — снял продажу, жду расчёт")
+        return "снял, жду расчёт"
+    }
+
+    /**
+     * The ladder, ridden rather than rested.
+     *
+     * Nothing of ours sits on the book here: a resting offer is exactly what
+     * caps the run this is trying to follow, so any of ours still out is
+     * pulled first. Then it is one decision per sweep — wait, ride, or cross
+     * — off the bid, the rung, and how long since the bid last made a high.
+     *
+     * Crossing goes a tick under the bid, which is what covers the top of book
+     * moving between reading it and sending, without giving away more than the
+     * one tick.
+     */
+    private fun reconcileRide(
+        position: Position,
+        open: List<ClobApi.OpenOrder>,
+        meta: ClobApi.MarketMeta,
+        target: Double,
+        mine: Double,
+        lotAt: Long,
+        rung: Rung,
+        secondsLeft: Long,
+    ): String {
+        val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
+        val (pinned, ours) = sells.partition { held(it) }
+        if (ours.isNotEmpty()) {
+            val session = engine.session() ?: return "нет сессии"
+            for (order in ours) {
+                try {
+                    ClobApi.cancelOrder(session.creds, session.account.signerAddress, order.id)
+                } catch (e: Exception) {
+                    return e.message ?: "не снять старый ордер"
+                }
+            }
+            return "веду до " + (target * 100).toInt() + "¢"
+        }
+
+        val free = mine - pinned.sumOf { it.remaining }
+        if (free < meta.minimumOrderSize - 1e-6) return "покрыто"
+
+        val bid = try {
+            ClobApi.bestBid(position.asset)
+        } catch (e: Exception) {
+            return "цена недоступна"
+        }
+
+        val nowMs = System.currentTimeMillis()
+        if (bid != null && bid > rung.rideHigh + 1e-9) {
+            rung.rideHigh = bid
+            rung.rideAtMs = nowMs
+        }
+        // A high that has never been set is not a run that has stood still for
+        // ever: until the bid has printed once, there is nothing to time.
+        val sinceHigh = if (rung.rideAtMs > 0L) nowMs - rung.rideAtMs else 0L
+
+        return when (Ride.act(bid, target, secondsLeft, sinceHigh, Ride.waitOf(settings.rideWaitMs))) {
+            Ride.Act.SETTLE -> "жду расчёт"
+            Ride.Act.WAIT -> "веду до " + (target * 100).toInt() + "¢"
+            Ride.Act.RIDE -> "иду за ценой " + ((bid ?: 0.0) * 100).toInt() + "¢"
+            Ride.Act.TAKE -> {
+                val price = maxOf(
+                    meta.tickSize,
+                    snapToTick((bid ?: 0.0) - meta.tickSize, meta.tickSize),
+                )
+                tryPlace(position, free, price, lotAt)
+            }
+        }
+    }
+
+    /**
+     * Out at the first price that is not a loss.
+     *
+     * Break-even is not the buy price: the fee is charged on the way in and
+     * again on the way out, so the price whose proceeds cover the cost is a
+     * couple of cents above what was paid. One tick over that is the first
+     * price that is actually a profit, and the switch asks for any profit —
+     * so that is the price it takes, the moment the book offers it.
+     */
+    private fun reconcileAnyProfit(
+        position: Position,
+        open: List<ClobApi.OpenOrder>,
+        meta: ClobApi.MarketMeta,
+        mine: Double,
+        lotAt: Long,
+    ): String {
+        val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
+        val (pinned, ours) = sells.partition { held(it) }
+        if (ours.isNotEmpty()) {
+            val session = engine.session() ?: return "нет сессии"
+            for (order in ours) {
+                try {
+                    ClobApi.cancelOrder(session.creds, session.account.signerAddress, order.id)
+                } catch (e: Exception) {
+                    return e.message ?: "не снять старый ордер"
+                }
+            }
+            return "жду плюс"
+        }
+
+        val free = mine - pinned.sumOf { it.remaining }
+        if (free < meta.minimumOrderSize - 1e-6) return "покрыто"
+
+        val cost = OrderLog.uncoveredLots(position.asset).firstOrNull()?.price
+            ?: position.avgPrice.takeIf { it > 0.0 }
+            ?: return "нет цены входа"
+        val even = SellPercent.targetPrice(cost, 0.0, meta.tickSize)
+        val wanted = minOf(1.0 - meta.tickSize, even + meta.tickSize)
+
+        val bid = try {
+            ClobApi.bestBid(position.asset)
+        } catch (e: Exception) {
+            return "цена недоступна"
+        }
+        if (bid == null || bid < wanted - 1e-9) {
+            return "жду плюс от " + (wanted * 100).toInt() + "¢"
+        }
+
+        val price = maxOf(meta.tickSize, snapToTick(bid - meta.tickSize, meta.tickSize))
+        val status = tryPlace(position, free, price, lotAt)
+        // One occasion, one firing. Whether or not the order came back filled,
+        // the ask has been sent at a price the book was showing — leaving the
+        // switch on would have it sell the next position too, which is not
+        // what a button pressed once means.
+        if (!status.startsWith("не ") && status != "нет сессии") {
+            update(settings.copy(anyProfit = false))
+            engine.log("info", "Выход по любому плюсу сработал — выключаю")
+        }
+        return status
     }
 
     private fun reconcile(

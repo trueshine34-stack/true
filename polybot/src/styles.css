@@ -2159,23 +2159,6 @@ button.step.big {
   min-width: 0;
 }
 
-/* Where each bot's explanation went. */
-.rulehint {
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  color: var(--muted);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  padding: 0;
-  cursor: pointer;
-}
-
 .rulehint.on {
   border-color: var(--accent);
   color: var(--accent);
@@ -2592,6 +2575,37 @@ button.step.big {
   margin-top: 6px;
 }
 
+/*
+  The ride's pause, as a slider.
+
+  Full width under the tiles: it is one number with a range that matters, and
+  a range is the one thing a number field cannot show. The ends are labelled
+  and the middle line says the two prices the pause does not apply to.
+*/
+.rideslider {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 2px 2px;
+  font-size: 11px;
+}
+
+.rideslider input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.rideends {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.rideends i {
+  font-style: normal;
+}
+
 .rules-note {
   font-size: 10px;
   padding-top: 5px;
@@ -2849,45 +2863,64 @@ button.step.big {
   opacity: 0.5;
 }
 
-.railmark {
-  position: relative;
+/*
+  The window's hint, and the way out of it.
+
+  Two small controls between the coins and the gear: an arrow with a count
+  behind it, and a switch that takes the first profit going. The arrow is a
+  button only so that it can say what it is looking at; it decides nothing.
+*/
+.railhint,
+.railany {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   flex: 0 0 34px;
   height: 30px;
+  gap: 0;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--surface-2);
   color: var(--muted);
   font-family: inherit;
-  font-size: 15px;
   cursor: pointer;
 }
 
-.railmark.on {
-  color: var(--text);
-  border-color: var(--text);
+.railhint b {
+  font-size: 12px;
+  line-height: 1;
 }
 
-.railmark svg {
-  width: 17px;
-  height: 17px;
+.railhint i {
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Lit while the bot's loop is up, in the corner of its own mark. */
-.raildot {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--muted);
+.railhint.up {
+  border-color: var(--up);
+  color: var(--up);
 }
 
-.raildot.live {
-  background: var(--up);
+.railhint.down {
+  border-color: var(--down);
+  color: var(--down);
+}
+
+.railany {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Armed. It fires once and then puts itself back, so the lit state is short. */
+.railany.on {
+  border-color: var(--warn, #f4b740);
+  background: rgba(244, 183, 64, 0.16);
+  color: var(--warn, #f4b740);
 }
 
 /* --------------------------------------------------- moving a resting order */
@@ -3332,64 +3365,8 @@ button.wide {
   border-bottom-color: transparent;
 }
 
-/*
- * The same round, opened. Two columns of label-over-figure: the questions
- * that follow a result are always what it cost and where the money came from,
- * and a round that made forty cents on settlement is a different round from
- * one that made it on a sale even though the line above is identical.
- */
-.probedetail {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px 8px;
-  padding: 6px 2px 10px;
-  border-bottom: 1px solid var(--line);
-}
-
-.probedetail > div {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
 .probedetail .wide {
   grid-column: 1 / -1;
-}
-
-.probedetail span {
-  font-size: 9px;
-}
-
-.probedetail b {
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* The four rules, one tab each, with a dot for the one that is live. */
-.bottabs {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
-}
-
-.bottabs .demoflag {
-  font-size: 11px;
-}
-
-.bottabs .demoflag {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding-left: 4px;
-  padding-right: 4px;
-}
-
-/* On a tab the dot sits in the line of the label, not in a corner of it. */
-.bottabs .raildot {
-  position: static;
-  flex: 0 0 5px;
 }
 
 .sband {
@@ -3747,55 +3724,8 @@ button.wide {
 /*
   A bot panel, densely.
 
-  Everything a rule is looking at is a label and a number, so they go in one
-  row of four rather than four rows of one — and the dials under them are the
-  same inputs at two thirds the height. An open panel should fit on the screen
-  with the chart still visible under it.
-*/
-.botreads {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 2px 6px;
-  padding: 2px 0 6px;
-}
-
-.botreads > div {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.25;
-}
-
-.botreads span {
-  font-size: 9px;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.botreads b {
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* Two numbers in one cell — the five-minute candle and the minute's. */
-.botreads b i {
-  font-style: normal;
-}
-
 .botreads b i + i {
   margin-left: 5px;
-}
-
-.botreads em {
-  font-style: normal;
-  font-size: 9px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
 }
 
 /* The one word that says why the side is not simply the line's. */
@@ -3807,62 +3737,12 @@ button.wide {
   padding-bottom: 5px;
 }
 
-/* Paper or real, and what the account is worth: one line, not three. */
-.botbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  padding: 2px 0;
-}
-
-/* The line beside the mode switch says what the switch means, and has to
-   stay out of the switch's way: it is a caption, not a number. */
-.botbar > b.small {
-  font-weight: 400;
-  font-size: 10px;
-  line-height: 1.25;
-}
-
-.botbar > b em {
-  font-style: normal;
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.botbar .proberow {
-  flex: 1;
-  border-bottom: 0;
-  padding: 0;
-}
-
-/* The dials, at two thirds the height. */
-/*
-  Every setting on one row. A column that wraps onto a line of its own and
-  leaves the rest of it empty reads as a mistake rather than as a layout, and
-  none of these numbers is wider than three or four digits — so the boxes get
-  narrow and the labels get short rather than the row getting taller.
-*/
-.botfields {
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px 3px;
-  align-items: end;
-  margin: 6px 0 4px;
-}
-
 /* The labels are the part that will not fit, so they get to wrap. */
 .botfields .field span {
   font-size: 8px;
   line-height: 1.15;
   white-space: normal;
   hyphens: auto;
-}
-
-.botfields input {
-  padding: 6px 1px;
-  font-size: 12px;
-  border-radius: 8px;
 }
 
 /*
@@ -3888,28 +3768,6 @@ button.wide {
   border-bottom-color: transparent;
 }
 
-/* What the rule was looking at, under the row it belongs to. */
-.probewhy {
-  display: grid;
-  gap: 2px;
-  padding: 6px 8px 8px;
-  margin-bottom: 4px;
-  background: var(--surface-2);
-  border-radius: 0 0 8px 8px;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.probefact {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.probefact b {
-  text-align: right;
-}
-
 /* A window the probe stood out of: the reason, where the numbers would be. */
 .proberow.skipped {
   opacity: 0.6;
@@ -3929,59 +3787,6 @@ button.wide {
   gap: 8px;
   border-bottom: 0;
   padding-bottom: 2px;
-}
-
-.demoflag {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface-2);
-  color: var(--muted);
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 10px;
-  cursor: pointer;
-}
-
-.demoflag.on {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-/*
-  Real money gets its own colour when it is on. Two switches side by side that
-  light up identically are two switches a person will mix up, and one of them
-  spends money.
-*/
-.demoflag.real.on {
-  border-color: var(--down);
-  color: var(--down);
-}
-
-/* The account tabs sit tight under the switches they belong to. */
-.botbar.accounts {
-  padding-top: 0;
-}
-
-/* Three entries, one at a time: equal widths so it reads as a choice. */
-.botbar.modes {
-  gap: 5px;
-  padding-bottom: 0;
-}
-
-.botbar.modes .demoflag {
-  flex: 1;
-  padding: 3px 4px;
-}
-
-/* The reset, pushed to the end of the bar it shares. */
-.botbar .pushright {
-  margin-left: auto;
-}
-
-.botbar > em {
-  font-style: normal;
-  font-size: 10px;
 }
 
 .counterlive.tight {

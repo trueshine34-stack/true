@@ -90,6 +90,16 @@ export type ManualSettings = {
   limitLadderStep: number;
   /** Keep the container's share out of reach of any order. */
   exposureGuard: boolean;
+  /**
+   * Ride the ladder's rung instead of resting an offer on it.
+   *
+   * Resting sells the instant the book touches the rung, and the rest of the
+   * run belongs to whoever took it. Riding watches the bid instead and sells
+   * once the climb has stopped for [autoSellRideMs].
+   */
+  autoSellRide: boolean;
+  /** How long without a new high counts as the run being over, in ms. */
+  autoSellRideMs: number;
 };
 
 /**
@@ -158,6 +168,8 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   limitLadder: false,
   limitLadderStep: 0.03,
   exposureGuard: true,
+  autoSellRide: true,
+  autoSellRideMs: 2000,
 };
 
 /** Never spend the last of the balance, whatever the fee works out to. */

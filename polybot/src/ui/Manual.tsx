@@ -53,8 +53,7 @@ import {
   type LoggedOrder,
   type NativeCoin,
   type NativeMarket,
-  type PulseRound,
-  type PulseState,
+  type SignalHint,
   type NativePosition,
   type OpenOrder,
 } from '../native/polybot';
@@ -185,6 +184,8 @@ export function Manual({
    * field; a tap still opens the chips.
    */
   const [typingSize, setTypingSize] = useState(false);
+  /** And the same for the price, which lost its wheel to the same gesture. */
+  const [typingPrice, setTypingPrice] = useState(false);
   /** The hold timer, and whether it fired — a fired hold eats the tap after it. */
   const holdRef = useRef<number | null>(null);
   const heldRef = useRef(false);
@@ -194,7 +195,6 @@ export function Manual({
       holdRef.current = null;
     }
   }, []);
-  const [pickingPrice, setPickingPrice] = useState(false);
   /**
    * The side the dock is about to buy.
    *
@@ -215,22 +215,15 @@ export function Manual({
   const [coins, setCoins] = useState<NativeCoin[]>([]);
   /** True while the feeds are being pointed somewhere else. */
   const [coinBusy, setCoinBusy] = useState(false);
-  const [pulseBot, setPulseBot] = useState<PulseState | null>(null);
-  /** The same rule with its gates opened up, on its own money. */
-  const [softBot, setSoftBot] = useState<PulseState | null>(null);
   /**
-   * The bot deck: whether it is open, which rule is on it, and whose money.
+   * Which way the window is leaning, as a hint over the clock.
    *
-   * Three questions in that order, and the order is the point. Every control
-   * under them belongs to one rule and one account, so asking anything else
-   * first — as four separate cards each with their own pickers did — meant
-   * reading a setting without knowing whose it was.
+   * All that is left of the pulse rule: it read four things — the lead off the
+   * window's open, a few minutes of momentum, whether the last minute traded,
+   * and which way the book leans — and then had opinions about money. The
+   * readings were the useful half, so they stayed and the opinions went.
    */
-  const [botOpen, setBotOpen] = useState(false);
-  const [botTab, setBotTab] = useState<
-    'line' | 'fade' | 'inside' | 'pulse' | 'pulse2'
-  >('line');
-  const [botLive, setBotLive] = useState(false);
+  const [hint, setHint] = useState<SignalHint | null>(null);
   /** The five-minute candle being read, and that window's own orders. */
   const [readWindow, setReadWindow] = useState<number | null>(null);
   const [readOrders, setReadOrders] = useState<LoggedOrder[]>([]);
@@ -299,6 +292,8 @@ export function Manual({
           closeFloor: stored.autoSellCloseFloor,
           lateFloor: stored.autoSellLateFloor,
           lateBandSec: stored.autoSellLateBandSec,
+          ride: stored.autoSellRide,
+          rideWaitMs: stored.autoSellRideMs,
         }).catch(() => {});
       }
     });
@@ -603,23 +598,19 @@ export function Manual({
     };
   }, [tokenFor]);
 
-  // The bots run on their own money in the service; the panel reads them.
+  // The hint is read off things already in memory on the native side, so it
+  // costs nothing but the bridge hop.
   useEffect(() => {
     let cancelled = false;
     const read = () => {
-      void PolyBot.pulseState()
+      void PolyBot.signal()
         .then((s) => {
-          if (!cancelled) setPulseBot(s);
-        })
-        .catch(() => {});
-      void PolyBot.pulseState({ soft: true })
-        .then((s) => {
-          if (!cancelled) setSoftBot(s);
+          if (!cancelled) setHint(s);
         })
         .catch(() => {});
     };
     read();
-    const timer = window.setInterval(read, 3000);
+    const timer = window.setInterval(read, 2000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -715,6 +706,8 @@ export function Manual({
               closeFloor: settingsRef.current.autoSellCloseFloor,
               lateFloor: settingsRef.current.autoSellLateFloor,
               lateBandSec: settingsRef.current.autoSellLateBandSec,
+              ride: settingsRef.current.autoSellRide,
+              rideWaitMs: settingsRef.current.autoSellRideMs,
             }).catch(() => {});
           }
         })
@@ -1132,19 +1125,6 @@ export function Manual({
       ? limitPriceNum
       : (askUp ?? askDown ?? 0);
 
-  /**
-   * Three cents under the dearer side.
-   *
-   * A hand-placed limit here is nearly always a bid just below the favourite,
-   * waiting for a dip that the five minutes usually provides. With no book to
-   * read yet it falls back to the middle of the range.
-   */
-  const wheelCenter = (() => {
-    const dearest = Math.max(askUp ?? 0, askDown ?? 0);
-    if (!(dearest > 0)) return 50;
-    return Math.min(99, Math.max(1, Math.round(dearest * 100) - 3));
-  })();
-
   /** What a share of the size is taken out of: the window's room, or the cash. */
   const sizeBudget = settings.exposureGuard ? exposure.room : freeCash;
 
@@ -1297,62 +1277,58 @@ export function Manual({
         )}
 
         {/*
-          The session used to be a mark here, opening a strip of chips — one
-          per event, each with its result. The chart below is already a row of
-          five-minute events in the same order, so the strip was the same list
-          drawn twice, and the mark was a tap in the way of it. The results
-          went onto the candles instead: the window is the candle.
+          Which way the window is leaning, and how much of the desk agrees.
+
+          A hint, not an instruction: nothing on the desk acts on it. Four
+          readings behind one arrow, with the count beside it — four out of
+          four is everything agreeing, one is a lead with the rest arguing.
+          Tapping it says which of them is arguing.
         */}
+        <button
+          className={`railhint ${hint?.side === 'Up' ? 'up' : ''}${
+            hint?.side === 'Down' ? 'down' : ''
+          }`}
+          onClick={() =>
+            setNote(
+              hint?.against
+                ? `${hint.side ?? 'Пока никак'}: ${hint.against}`
+                : hint?.side
+                  ? `${hint.side}: ход, импульс, объём и стакан заодно`
+                  : 'Окно пока ничего не говорит',
+            )
+          }
+          aria-label="Подсказка по окну"
+        >
+          <b>
+            {hint?.side === 'Up' ? '▲' : hint?.side === 'Down' ? '▼' : '–'}
+          </b>
+          <i>{hint?.side ? `${hint.agree}/4` : '—'}</i>
+        </button>
+
         {/*
-          One mark for all four rules. They used to have one each, so the rail
-          asked "which of these four icons is the one I want" before anything
-          could be read or changed — and three of the four were always the
-          wrong answer. Now it opens a deck: pick the rule, pick the account,
-          and everything under that belongs to the one you picked.
+          The way out of a window that went wrong, on one switch.
+
+          On, the sell rule stops holding out for its rung and takes the first
+          price that is a profit at all. It is for the moment a losing window
+          comes back to break-even, which is a moment that does not last — so
+          it fires once and takes itself off, and the switch reads its own
+          state back from the rule rather than remembering what was pressed.
         */}
-        {(pulseBot || softBot) && (
-          <button
-            className={`railmark${botOpen ? ' on' : ''}`}
-            onClick={() => {
-              // Opening lands on whatever is spending, which is the thing you
-              // opened it to look at.
-              if (!botOpen) {
-                if (pulseBot?.live) {
-                  setBotLive(true);
-                  setBotTab('pulse');
-                } else if (softBot?.live) {
-                  setBotLive(true);
-                  setBotTab('pulse2');
-                }
-              }
-              setBotOpen((v) => !v);
-            }}
-            aria-label="Боты"
-          >
-            {/* A flask: all four of these are still experiments. */}
-            <svg viewBox="0 0 16 16" aria-hidden>
-              <path
-                d="M6.5 1.5v4L2.5 12a1.6 1.6 0 001.4 2.5h8.2A1.6 1.6 0 0013.5 12l-4-6.5v-4M5.5 1.5h5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            {/* Lit when real money is on the table, not merely when a rule
-                is counting: they all count, always. */}
-            <i
-              className={`raildot${
-                (pulseBot?.running && pulseBot.live) ||
-                (softBot?.running && softBot.live)
-                  ? ' live'
-                  : ''
-              }`}
-              aria-hidden
-            />
-          </button>
-        )}
+        <button
+          className={`railany${autoSell.anyProfit ? ' on' : ''}`}
+          onClick={() => {
+            const next = !autoSell.anyProfit;
+            setAutoSell({ ...autoSell, anyProfit: next });
+            void PolyBot.autoSellUpdate({ anyProfit: next })
+              .then(() => PolyBot.autoSellState())
+              .then(setAutoSell)
+              .catch(() => {});
+          }}
+          aria-label="Выход при любом плюсе"
+          aria-pressed={autoSell.anyProfit ?? false}
+        >
+          +1¢
+        </button>
 
         <div className="deskbtns">
           <button
@@ -1364,132 +1340,6 @@ export function Manual({
           </button>
         </div>
       </div>
-
-      {botOpen && (
-        <>
-          {/*
-            Which rule, and then whose money. Two rules now: the same four
-            readings, one asking all of them and one taking the answers
-            earlier. They run side by side on their own money, which is the
-            only way to find out which is right.
-          */}
-          <div className="botbar bottabs">
-            {(
-              [
-                ['pulse', 'пульс'],
-                ['pulse2', 'пульс 2'],
-              ] as const
-            ).map(([key, label]) => {
-              // The dot is real money. Both run on paper all the time now,
-              // so "is it running" marks both and says nothing; what is
-              // worth a mark is what is spending.
-              const live =
-                key === 'pulse'
-                  ? (pulseBot?.running ?? false) && (pulseBot?.live ?? false)
-                  : (softBot?.running ?? false) && (softBot?.live ?? false);
-              return (
-                <button
-                  key={key}
-                  className={`demoflag${botTab === key ? ' on' : ''}`}
-                  onClick={() => setBotTab(key)}
-                >
-                  {label}
-                  <i className={`raildot${live ? ' live' : ''}`} aria-hidden />
-                </button>
-              );
-            })}
-          </div>
-
-          {/*
-            And whose money. It decides what every number below means: the
-            balance, the size, the record, and which of the two positions is
-            the one on the card.
-          */}
-          <div className="botbar accounts">
-            <button
-              className={`demoflag${!botLive ? ' on' : ''}`}
-              onClick={() => setBotLive(false)}
-            >
-              счёт: демо
-            </button>
-            <button
-              className={`demoflag real${botLive ? ' on' : ''}`}
-              onClick={() => setBotLive(true)}
-            >
-              счёт: реально
-            </button>
-          </div>
-        </>
-      )}
-
-      {botOpen && botTab === 'pulse2' && softBot && (
-        <PulseCard
-          state={softBot}
-          seen={botLive}
-          soft
-          onBank={(usd) => {
-            if (!Number.isFinite(usd) || usd < 0) return;
-            void PolyBot.pulseUpdate({ soft: true, bankUsd: usd })
-              .then(() => PolyBot.pulseState({ soft: true }))
-              .then(setSoftBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onStake={(usdAmount, pct) => {
-            void PolyBot.pulseUpdate({
-              soft: true,
-              stakeUsd: usdAmount,
-              stakePct: pct,
-            })
-              .then(() => PolyBot.pulseState({ soft: true }))
-              .then(setSoftBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onDemo={(live) => {
-            void PolyBot.pulseUpdate({ soft: true, live })
-              .then(() => PolyBot.pulseState({ soft: true }))
-              .then(setSoftBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onReset={() => {
-            void PolyBot.pulseReset({ soft: true })
-              .then(() => PolyBot.pulseState({ soft: true }))
-              .then(setSoftBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-        />
-      )}
-
-      {botOpen && botTab === 'pulse' && pulseBot && (
-        <PulseCard
-          state={pulseBot}
-          seen={botLive}
-          onBank={(usd) => {
-            if (!Number.isFinite(usd) || usd < 0) return;
-            void PolyBot.pulseUpdate({ bankUsd: usd })
-              .then(() => PolyBot.pulseState())
-              .then(setPulseBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onStake={(usdAmount, pct) => {
-            void PolyBot.pulseUpdate({ stakeUsd: usdAmount, stakePct: pct })
-              .then(() => PolyBot.pulseState())
-              .then(setPulseBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onDemo={(live) => {
-            void PolyBot.pulseUpdate({ live })
-              .then(() => PolyBot.pulseState())
-              .then(setPulseBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-          onReset={() => {
-            void PolyBot.pulseReset()
-              .then(() => PolyBot.pulseState())
-              .then(setPulseBot)
-              .catch((e) => setNote(e instanceof Error ? e.message : String(e)));
-          }}
-        />
-      )}
 
       {tab !== 'settings' && (
           <div className="card tight">
@@ -1849,26 +1699,6 @@ export function Manual({
           </div>
         )}
         {/*
-          Tapping the price opens a wheel rather than the keyboard. A limit
-          price here is two digits chosen in a second, and a numeric keypad
-          covers half the screen to enter them.
-        */}
-        {pickingPrice && (
-          <PriceWheel
-            center={wheelCenter}
-            max={Math.round(ceiling * 100)}
-            value={
-              Number.isFinite(limitPriceNum) && limitPriceNum > 0
-                ? Math.round(limitPriceNum * 100)
-                : null
-            }
-            onPick={(c) => {
-              setLimitPrice(String(c));
-              setPickingPrice(false);
-            }}
-          />
-        )}
-        {/*
           Price and size, and nothing else. Which side and whether to send it
           are the two quotes up by the charts — this one is only the terms,
           left under the thumb where they are edited.
@@ -1891,13 +1721,45 @@ export function Manual({
               <button className="step" onClick={() => nudgeLimit(-1)}>
                 −
               </button>
+              {/*
+                A cent either side, or hold it and type.
+
+                The wheel that used to open on a tap is gone: it covered the
+                book it was pricing against, and the price wanted is nearly
+                always a cent or two from the one already in the field. A hold
+                empties the field and opens the keyboard, which is the case the
+                steps are bad at — a price several cents away, known exactly.
+              */}
               <input
+                className={typingPrice ? 'typed' : undefined}
                 type="text"
-                inputMode="none"
-                readOnly
+                inputMode={typingPrice ? 'decimal' : 'none'}
+                readOnly={!typingPrice}
+                autoFocus={typingPrice}
                 placeholder={askUp != null ? String(Math.round(askUp * 100)) : '¢'}
                 value={limitPrice}
-                onClick={() => setPickingPrice((v) => !v)}
+                onPointerDown={() => {
+                  if (typingPrice) return;
+                  heldRef.current = false;
+                  holdRef.current = window.setTimeout(() => {
+                    heldRef.current = true;
+                    // Cleared, not selected: a hold is "I know the number",
+                    // and the old one is in the way of typing it.
+                    setLimitPrice('');
+                    setTypingPrice(true);
+                  }, HOLD_MS);
+                }}
+                onPointerUp={() => clearHold()}
+                onPointerLeave={() => clearHold()}
+                onPointerCancel={() => clearHold()}
+                onContextMenu={(e) => e.preventDefault()}
+                onChange={(e) =>
+                  setLimitPrice(e.target.value.replace(',', '.').slice(0, 3))
+                }
+                onBlur={() => setTypingPrice(false)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                }}
               />
               <button className="step" onClick={() => nudgeLimit(1)}>
                 +
@@ -1915,7 +1777,6 @@ export function Manual({
                 inputMode="decimal"
                 autoFocus
                 value={limitSize}
-                onFocus={(e) => e.target.select()}
                 onChange={(e) => {
                   setSizePct(null);
                   setLimitSize(e.target.value.replace(',', '.'));
@@ -1933,6 +1794,9 @@ export function Manual({
                   holdRef.current = window.setTimeout(() => {
                     heldRef.current = true;
                     setSizePct(null);
+                    // Emptied, like the price: a hold means the number is
+                    // known and the old one is only in the way.
+                    setLimitSize('');
                     setTypingSize(true);
                   }, HOLD_MS);
                 }}
@@ -1991,7 +1855,7 @@ export function Manual({
                 // which is the only way to close them.
                 if (which === side) {
                   setSide(null);
-                  setPickingPrice(false);
+                  setTypingPrice(false);
                   setSizingLimit(false);
                   return;
                 }
@@ -2366,157 +2230,6 @@ function NumField({
 }
 
 /**
- * The one button every bot's explanation lives behind.
- *
- * Each of these panels had a paragraph across the top saying what the rule
- * does. It is worth having and worth reading once; it is not worth the height
- * every time the panel is opened to look at a number. So it folds away behind
- * a question mark, which is where an explanation belongs once it has been
- * read.
- */
-function WhyButton({
-  open,
-  onClick,
-}: {
-  open: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={`rulehint${open ? ' on' : ''}`}
-      onClick={onClick}
-      aria-label="Как это работает"
-      aria-expanded={open}
-    >
-      ?
-    </button>
-  );
-}
-
-
-
-/**
- * One closed window in a pulse's record, and what it looks like opened.
- *
- * Shut it is a line: when, which side, the size, the result. That answers
- * "how did it go" and nothing else — and the questions that follow are always
- * the same two, what it cost and where the money came from, because a round
- * that made forty cents on settlement is a different round from one that made
- * forty cents on a sale even though the line is identical. So the row opens.
- */
-function PulseRow({ round: r }: { round: PulseRound }) {
-  const [open, setOpen] = useState(false);
-  const spent = r.spent && r.spent > 0 ? r.spent : r.shares * r.price;
-  const avg = r.shares > 0 ? spent / r.shares : r.price;
-  // What the sales themselves went at, which is not the ask they were placed
-  // at once a bid jumped past it.
-  const soldShares = r.settled > 0 ? r.shares - r.settled : r.shares;
-  const soldAt = soldShares > 0.01 && r.proceeds > 0 ? r.proceeds / soldShares : null;
-
-  return (
-    <>
-      <div
-        className={`probesum${open ? ' on' : ''}`}
-        onClick={() => setOpen((v) => !v)}
-      >
-        {/* The window is a five-minute box; where in it the entry landed is
-            the thing worth reading, so the seconds are shown. */}
-        <span className="muted">
-          {r.boughtAt
-            ? new Date(r.boughtAt).toLocaleTimeString('ru-RU', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-              })
-            : clockOf(r.windowStart)}
-        </span>
-        <b className={r.outcome === 'Up' ? 'up' : 'down'}>{r.outcome}</b>
-        <span className="muted">
-          {r.shares.toFixed(1)} × {cents(r.price)}
-        </span>
-        <b className={r.pnl >= 0 ? 'up pushright' : 'down pushright'}>
-          {signedUsd(r.pnl)}
-        </b>
-        <em className="muted">{open ? '−' : '+'}</em>
-      </div>
-      {open && (
-        <div className="probedetail">
-          <div>
-            <span className="muted">вход</span>
-            <b>{cents(r.price)}</b>
-          </div>
-          {r.boughtAt != null && r.boughtAt > 0 && (
-            <div>
-              <span className="muted">куплено</span>
-              <b>
-                {new Date(r.boughtAt).toLocaleTimeString('ru-RU', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                })}
-                <span className="muted">
-                  {' '}
-                  · {Math.max(0, Math.round(r.boughtAt / 1000 - r.windowStart))} с
-                </span>
-              </b>
-            </div>
-          )}
-          {/* Only when a bid under the entry filled and moved it. */}
-          {Math.abs(avg - r.price) > 0.005 && (
-            <div>
-              <span className="muted">средняя</span>
-              <b>{cents(avg)}</b>
-            </div>
-          )}
-          <div>
-            <span className="muted">доли</span>
-            <b>{r.shares.toFixed(1)}</b>
-          </div>
-          <div>
-            <span className="muted">вложено</span>
-            <b>{usd(spent)}</b>
-          </div>
-          {soldAt != null && (
-            <div>
-              <span className="muted">продано по</span>
-              <b>{cents(soldAt)}</b>
-            </div>
-          )}
-          {r.proceeds > 0 && (
-            <div>
-              <span className="muted">с продаж</span>
-              <b>{usd(r.proceeds)}</b>
-            </div>
-          )}
-          {r.settled > 0 && (
-            <div>
-              <span className="muted">расчёт</span>
-              <b>{usd(r.settled)}</b>
-            </div>
-          )}
-          <div>
-            <span className="muted">закрытие</span>
-            <b className={r.winner === 'Up' ? 'up' : r.winner === 'Down' ? 'down' : undefined}>
-              {r.winner || '—'}
-            </b>
-          </div>
-          <div>
-            <span className="muted">итог</span>
-            <b className={r.pnl >= 0 ? 'up' : 'down'}>{signedUsd(r.pnl)}</b>
-          </div>
-          {r.note && (
-            <div className="wide">
-              <span className="muted">как вышли</span>
-              <b>{r.note}</b>
-            </div>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
-/**
  * One five-minute candle, opened.
  *
  * A candle and a window are the same thing seen two ways, so tapping one asks
@@ -2577,329 +2290,6 @@ function WindowRead({
   );
 }
 
-
-
-function PulseCard({
-  state,
-  seen,
-  soft = false,
-  onBank,
-  onStake,
-  onDemo,
-  onReset,
-}: {
-  state: PulseState;
-  /** Which account is on screen — and, for this rule, the one it runs on. */
-  seen: boolean;
-  /** The variant with its gates opened up, which is a different rule's card. */
-  soft?: boolean;
-  onBank: (usd: number) => void;
-  /** What one entry puts in: a sum, or a share of what is free. Never both. */
-  onStake: (usd: number, pct: number) => void;
-  onDemo: (demo: boolean) => void;
-  onReset: () => void;
-}) {
-  const [why, setWhy] = useState(false);
-  /**
-   * Whether the entry is being said as a share of the free balance rather
-   * than as a sum. Seeded from what is set, held here so switching to the
-   * empty one shows its empty field.
-   */
-  const [inPct, setInPct] = useState(state.stakePct > 0);
-  /**
-   * Whose record is on screen. Both accounts run on the same reads and the
-   * same windows, so everything above this line is shared and everything
-   * below it — the lot, the totals, the money — belongs to one of them.
-   */
-  const book = seen
-    ? {
-        pnl: state.livePnl,
-        rounds: state.liveRounds,
-        wins: state.liveWins,
-        losses: state.liveLosses,
-      }
-    : {
-        pnl: state.pnl,
-        rounds: state.rounds,
-        wins: state.wins,
-        losses: state.losses,
-      };
-  const tone = book.pnl > 0 ? 'up' : book.pnl < 0 ? 'down' : 'muted';
-  const history = (seen ? state.liveRoundList : state.roundList) ?? [];
-  const read = state.read;
-  const lot = seen ? state.liveLot : state.lot;
-  // Which side each reading is pointing at, so a glance says "three of four".
-  const side = read ? (read.lead >= 0 ? 'up' : 'down') : 'muted';
-
-  return (
-    <div className="card tight">
-      <div className="counterhead">
-        <span>{soft ? 'Пульс 2' : 'Пульс'}</span>
-        <WhyButton open={why} onClick={() => setWhy((v) => !v)} />
-        {/*
-          The switch is real money, and there is none on the paper page: this
-          rule always runs, on its own bank, whatever the wallet is doing.
-        */}
-        {seen ? (
-          <button
-            className={`switch ${state.live ? 'on' : ''}`}
-            onClick={() => onDemo(!state.live)}
-          />
-        ) : (
-          <b className="muted small">всегда считает</b>
-        )}
-      </div>
-
-      {why && (
-      <div className="counterrule muted">
-        Берёт на{' '}
-        {state.stakePct > 0
-          ? `${Math.round(state.stakePct * 100)}% свободного счёта`
-          : usd(state.stakeUsd)}{' '}
-        ту сторону, за которую разом
-        высказались четыре вещи: ход окна от его открытия, импульс минуток,
-        объём под ним и перевес в стакане Binance. Выходит по{' '}
-        {state.ladder
-          ? 'лесенке продаж — той же, на которую настроен стол: цена начинается ' +
-            'высоко и идёт вниз по часам, так что берётся то, что окно на ' +
-            'самом деле даёт, а не то, на что рассчитывал вход. Фиксированная ' +
-            'цель ждёт одну цену и выигрывает целиком, когда стакан до неё ' +
-            'дошёл, и ничего, когда он остановился в центре от неё; правилу, ' +
-            'которое входит часто и на тонком, ступени подходят больше — у ' +
-            'него почти все позиции это небольшие ходы, а не один крупный. '
-          : `+${Math.round(state.takePct * 100)}% лимиткой — и это пол, а не
-        пожелание: правило переходит спред, чтобы взять сторону, за которую
-        высказались четверо, то есть уже заплатило за это согласие в аске, и
-        дешевле пятнадцати процентов круг превращается в подброс монеты с
-        комиссией. `}
-        И это единственный
-        выход: ничего не продаётся дешевле этой цены. А в последние 65 секунд
-        не продаётся дешевле 90¢ вообще, какой бы ни была эта цена: сторона,
-        которая ведёт за минуту до конца, почти рассчитана, а расчёт платит
-        целый доллар и не берёт комиссии — отдать её за 80¢ значит подарить
-        двадцать центов почти уже своих денег, а лесенка, дошедшая к этому
-        моменту до 77¢, просит именно этого. Сторона, которая проигрывает, до
-        90¢ и не дойдёт и доедет до расчёта, как и собиралась. Раньше позицию сбрасывали
-        в стакан по рынку, как только перевес разворачивался на пару долларов,
-        — и это каждый раз была худшая цена окна, потому что сторону метят вниз
-        сильнее всего именно тогда, когда движение против неё: доли по 70¢
-        уходили по 27¢. Не дошло до своей цены — доезжает до расчёта, а он
-        платит доллар или ноль и комиссию не берёт ни в ту, ни в другую
-        сторону. Потерять ставку на неудачном окне — это форма самой ставки;
-        платить стакану за досрочный выход было потерять почти всё и спред
-        сверху.
-        {' Потолок цены входа поднимается к концу окна: до 83¢ в последние две' +
-          ' минуты и до 86¢ в последнюю. Цена и оставшееся время двигаются' +
-          ' вместе — сторона за 80¢ с четырьмя минутами впереди берёт почти' +
-          ' доллар за ход, который ещё не случился, а с одной минутой та же' +
-          ' цена берёт за ход, который уже почти закончен. Обе прибавки' +
-          ' включаются на 15 секунд позже минутной отметки: там открывается' +
-          ' новая свеча, и первые её секунды ещё ничего не значат.'}
-        Дошедшая до цены позиция при этом не продаётся сразу: правило смотрит
-        за стаканом, а не стоит в нём лимиткой, поэтому момент перехода выбирает
-        оно — а бид, только что дошедший до цели, чаще всего идёт мимо неё
-        дальше, и продать в этот момент значит отдать остаток хода той стороне.
-        Пока бид ставит новые максимумы, продажи нет; она случается, когда он
-        2.5 секунды не ставил ни одного — так выглядит закончившийся ход. Бид,
-        который пошёл вниз, новых максимумов тоже не ставит, поэтому то же
-        ожидание ограничивает, сколько хода можно отдать обратно. Исключение
-        одно: 96¢ и выше берутся на том же тике, не дожидаясь паузы, — оттуда
-        до доллара четыре цента, и дойти до него можно только расчётом, до
-        которого минуты; ждать там окончания хода значит рисковать всей
-        прибылью ради округления.{' '}
-        Первые полторы минуты окна не смотрит вовсе: там каждое из четырёх
-        чтений берётся с отрезка, слишком короткого, чтобы значить то, что оно
-        говорит — импульс это одна минутная свеча, объём это та же свеча против
-        средней, а стакан ещё ничем не проверен, — и согласие четверых там это
-        четыре способа описать один и тот же шум. Дальше входит в любую секунду
-        окна, включая последнюю минуту: поздней покупке
-        уже не дойти до своей цели, но выигрывающая сторона доезжает до
-        расчёта, а он платит целый доллар.
-        {soft &&
-          ' Это тот же вопрос, заданный четырежды, но ответы засчитываются' +
-            ' раньше: половина перевеса, стакан, который просто не против' +
-            ' стороны, а не за неё, объём, который просто не мёртвый, и шире' +
-            ' полоса котировок. Строгое правило редко проходит все четыре' +
-            ' ворота, а когда проходит — сторону уже переоценили; это входит в' +
-            ' разы чаще на доказательствах в разы тоньше. Начало окна при этом' +
-            ' не смягчается вовсе — первые 75 секунд оно не смотрит совсем:' +
-            ' мягче должны быть требования к доказательствам, а не готовность' +
-            ' читать окно, которого ещё не было. Какое из двух право, спорить' +
-            ' незачем: они идут по одним и тем же окнам на своих деньгах, и' +
-            ' через несколько дней записи ответят.'}
-        {' Ставка — это потолок, а не пожелание: доли считаются по цене' +
-          ' взятого предложения, комиссию включая, и если ставки не хватает' +
-          ' даже на минимальный ордер биржи, окно пропускается. Раньше' +
-          ' минимум биржи поднимал размер до себя — то есть тратил деньги,' +
-          ' которых у ставки не было, а при заданном блоке это были деньги' +
-          ' блока.'}
-        {' Покупка одна на окно: заявок под входом больше нет. Усреднение' +
-          ' удваивало ставку ровно на тех окнах, где правило ошиблось, — а' +
-          ' ошибку оно и так не режет, позиция едет до расчёта, — так что' +
-          ' платой за среднюю получше был вдвое больший проигрыш там, где' +
-          ' проигрывали.'}
-        {!seen &&
-          ' Лесенка продаж отсюда убрана: её ступени абсолютные — 77¢ в начале' +
-            ' окна, сколько бы доли ни стоили, — и на стороне, взятой по 85¢,' +
-            ' она просила 77¢, то есть продавала в убыток нарочно. Позиция,' +
-            ' не дошедшая до своей цены, теперь доезжает до расчёта.'}
-        {seen &&
-          ' Реальный счёт идёт рядом с бумажным на тех же чтениях и тех же' +
-            ' окнах: одно решение, две покупки, две записи. Расходятся они там,' +
-            ' где расходится исполнение — бумага берёт предложение всегда, а' +
-            ' здесь ещё должна налиться заявка.'}
-      </div>
-      )}
-
-      {seen && !state.live && (
-        <div className="botbar">
-          <b className="muted small">
-            на реальные не запущен — бумажный счёт считает своё
-          </b>
-        </div>
-      )}
-
-      <div className="botbar">
-        {seen ? (
-          <b className="muted">
-            кошелёк<em> {usd(state.liveCash)}</em>
-          </b>
-        ) : (
-          <b className={state.cash >= state.bankUsd ? 'up' : 'down'}>
-            {usd(state.cash)}
-            <em> / {usd(state.bankUsd)}</em>
-          </b>
-        )}
-        <b className={tone}>{signedUsd(book.pnl)}</b>
-        <em className="muted">
-          {book.rounds} кругов · {book.wins}/{book.losses}
-        </em>
-      </div>
-
-      {/*
-        Window by window, for the account on screen. The totals above answer
-        "how has it done"; a run of forty rounds that nets a dollar looks the
-        same there whether it was steady or wild, and only one of those is
-        worth stopping.
-      */}
-      {history.length > 0 && (
-        <>
-          <div className="listhead second">
-            <span>По пятиминуткам</span>
-            <span className="muted">свежие сверху</span>
-          </div>
-          <div className="probelist">
-            {history.slice(0, 40).map((r) => (
-              <PulseRow key={`${r.windowStart}-${r.outcome}`} round={r} />
-            ))}
-          </div>
-        </>
-      )}
-
-      {read && (
-        <div className="botreads">
-          <div>
-            <span>ход</span>
-            <b className={side}>
-              {read.lead >= 0 ? '+' : '−'}
-              {Math.abs(read.lead).toFixed(0)}$
-            </b>
-          </div>
-          <div>
-            <span>импульс</span>
-            <b className={read.momentum >= 0 ? 'up' : 'down'}>
-              {read.momentum >= 0 ? '+' : '−'}
-              {Math.abs(read.momentum).toFixed(0)}$
-            </b>
-          </div>
-          <div>
-            <span>объём</span>
-            <b className={read.volume >= 1 ? 'up' : 'muted'}>
-              ×{read.volume.toFixed(2)}
-            </b>
-          </div>
-          <div>
-            <span>стакан</span>
-            <b className={read.lean >= 0.5 ? 'up' : 'down'}>
-              {Math.round(read.lean * 100)}%
-            </b>
-          </div>
-        </div>
-      )}
-
-      <div className="fields botfields">
-        <NumField
-          label="контейнер, $"
-          value={state.bankUsd}
-          onCommit={(n) => onBank(n)}
-        />
-        {/*
-          What one entry puts in. A count of shares was the wrong unit: five
-          of a side at eight cents is forty cents at risk and five at eighty
-          is four dollars, and this rule takes both — so the same setting
-          meant ten times the money depending on what the market happened to
-          be charging.
-        */}
-        <NumField
-          key={inPct ? 'pct' : 'usd'}
-          label={inPct ? 'вход, % счёта' : 'вход, $'}
-          value={inPct ? Math.round(state.stakePct * 100) : state.stakeUsd}
-          onCommit={(n) =>
-            inPct ? onStake(0, n / 100) : onStake(n, 0)
-          }
-        />
-        {/*
-          Which of the two the number is. Switching does not carry the value
-          across — three dollars and three percent are different amounts.
-        */}
-        <div className="pcts stakemode">
-          <button
-            className={!inPct ? 'on' : undefined}
-            onClick={() => {
-              setInPct(false);
-              onStake(state.stakeUsd, 0);
-            }}
-          >
-            $
-          </button>
-          <button
-            className={inPct ? 'on' : undefined}
-            onClick={() => {
-              setInPct(true);
-              onStake(0, state.stakePct);
-            }}
-          >
-            %
-          </button>
-        </div>
-      </div>
-
-      {/* What it holds, or why it holds nothing — and the way to start over. */}
-      <div className="botbar">
-        {lot ? (
-          <>
-            <span className={lot.outcome === 'Up' ? 'up' : 'down'}>
-              {lot.outcome}
-            </span>
-            <b>
-              {lot.shares.toFixed(1)} · {cents(lot.price)}
-              {lot.sellPrice > 0 ? ` → ${cents(lot.sellPrice)}` : ''}
-            </b>
-            {lot.note && <em className="muted">{lot.note}</em>}
-          </>
-        ) : (
-          <b className="muted">{state.note ?? 'ждёт совпадения'}</b>
-        )}
-        <button className="linkbtn pushright" onClick={onReset}>
-          обнулить
-        </button>
-      </div>
-
-      {state.lastFault && <div className="banner warn">{state.lastFault}</div>}
-    </div>
-  );
-}
-
 /**
  * Every order that went through one event, as it happened.
  *
@@ -2926,7 +2316,19 @@ function OrderHistory({
   realised: number;
 }) {
   const [open, setOpen] = useState(false);
-  const rows = [...orders].sort((a, b) => b.placedAt - a.placedAt);
+  /*
+    Only what happened and what is still happening.
+
+    A pulled order moved no money and holds no risk — it is the record of a
+    price that was asked for and then was not. The ladder pulls and re-places
+    on every rung it climbs, so those rows are most of the list, and reading
+    the list for "what did this window actually do" meant reading past them.
+    A part-filled order that was then pulled is not one of them: it traded, so
+    it stays.
+  */
+  const rows = [...orders]
+    .filter((o) => stateOf(o, live) !== 'cancelled' || o.matched > 1e-9)
+    .sort((a, b) => b.placedAt - a.placedAt);
   if (rows.length === 0) return null;
 
   return (
@@ -3142,6 +2544,8 @@ function RuleBar({
         closeFloor: next.autoSellCloseFloor,
         lateFloor: next.autoSellLateFloor,
         lateBandSec: next.autoSellLateBandSec,
+        ride: next.autoSellRide,
+        rideWaitMs: next.autoSellRideMs,
       }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
     },
     [onChange, onNote],
@@ -3224,6 +2628,29 @@ function RuleBar({
           </i>
         </button>
 
+        {/*
+          What happens when the book reaches the rung: sell it, or follow it.
+
+          Resting an offer on the rung is what the ladder has always done, and
+          it is also what caps the run at the rung. Riding watches the bid
+          instead and sells once the climb has stopped — the slider below is
+          how long "stopped" is.
+        */}
+        <button
+          className={`ruletile${settings.autoSellRide ? ' on' : ''}`}
+          onClick={() =>
+            push({ ...settings, autoSellRide: !settings.autoSellRide })
+          }
+        >
+          <span className={`switch mini ${settings.autoSellRide ? 'on' : ''}`} />
+          <b>веду цену</b>
+          <i>
+            {settings.autoSellRide
+              ? `пауза ${(settings.autoSellRideMs / 1000).toFixed(1)} с`
+              : 'лимиткой на ступени'}
+          </i>
+        </button>
+
         <button
           className={`ruletile${settings.exposureGuard ? ' on' : ''}`}
           onClick={() =>
@@ -3242,6 +2669,38 @@ function RuleBar({
         </button>
 
       </div>
+
+      {/*
+        How long the climb has to stand still before it counts as over.
+
+        A slider because the right answer is not a fact about the market but a
+        taste: half a second sells into every pause in the tape, ten seconds
+        holds through the pause that was the top. The two prices that override
+        it are not adjustable — ninety-eight is taken at once, and ninety-three
+        while there is still more than half a minute to lose it in.
+      */}
+      {settings.autoSellRide && (
+        <label className="rideslider">
+          <span className="muted">
+            держу, пока растёт · пауза {(settings.autoSellRideMs / 1000).toFixed(1)} с
+          </span>
+          <input
+            type="range"
+            min={500}
+            max={10000}
+            step={250}
+            value={settings.autoSellRideMs}
+            onChange={(e) =>
+              push({ ...settings, autoSellRideMs: Number(e.target.value) })
+            }
+          />
+          <span className="muted rideends">
+            <i>0,5</i>
+            <i>98¢ сразу · 93¢ если больше 35 с</i>
+            <i>10</i>
+          </span>
+        </label>
+      )}
 
       {/* The sell rule is the one that can be quietly stuck, so it still talks. */}
       {settings.autoSellEnabled && (
@@ -3509,99 +2968,6 @@ function PositionPair({
   );
 }
 
-/**
- * A wheel of cents, opening where the next order probably belongs.
- *
- * Every price here is a whole number between one and ninety-nine, which is a
- * list — so it is shown as one and flicked through, rather than typed on a
- * keypad that covers the book you are pricing against.
- *
- * It opens three cents under whichever side is currently dearer. A limit here
- * is nearly always a bid just under the favourite, so that is the number under
- * the thumb when the wheel appears; fifty was the middle of the range and
- * almost never the middle of the decision.
- */
-function PriceWheel({
-  value,
-  center,
-  max,
-  onPick,
-}: {
-  value: number | null;
-  /** Where the wheel lands when it opens, in cents. */
-  center: number;
-  /** The dearest cent the wheel will offer — the early ceiling, when buying. */
-  max: number;
-  onPick: (cents: number) => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  /** Bring a price to the middle of the strip. */
-  const scrollTo = (cents: number, smooth: boolean) => {
-    const el = ref.current;
-    if (!el) return;
-    const at = el.querySelector<HTMLElement>(`[data-cents="${cents}"]`);
-    if (!at) return;
-    const left = at.offsetLeft - el.clientWidth / 2 + at.offsetWidth / 2;
-    if (smooth) el.scrollTo({ left, behavior: 'smooth' });
-    else el.scrollLeft = left;
-  };
-
-  useEffect(() => {
-    scrollTo(Math.min(center, max), false);
-    // Opening is the only time it is positioned; after that it is the user's.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (
-    /*
-      Two ends pinned to the sides. Ninety-nine prices is a long strip to flick
-      through, and the two worth reaching in one tap are the cheap end you buy
-      a dip at and the dear end you sell a decided window at — so they stay put
-      and carry the wheel to themselves.
-    */
-    <div className="wheelwrap">
-      <button
-        className="wheeljump"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => scrollTo(WHEEL_LOW, true)}
-      >
-        {WHEEL_LOW}
-      </button>
-
-      <div className="wheel" ref={ref}>
-        <div className="wheelpad" />
-        {Array.from({ length: Math.max(1, max) }, (_, i) => i + 1).map((c) => (
-          <button
-            key={c}
-            data-cents={c}
-            className={`wheelnum${c === value ? ' on' : ''}${
-              c === center ? ' half' : ''
-            }`}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => onPick(c)}
-          >
-            {c}
-          </button>
-        ))}
-        <div className="wheelpad" />
-      </div>
-
-      <button
-        className="wheeljump"
-        onMouseDown={(e) => e.preventDefault()}
-        onClick={() => scrollTo(Math.min(WHEEL_HIGH, max), true)}
-      >
-        {Math.min(WHEEL_HIGH, max)}
-      </button>
-    </div>
-  );
-}
-
-/** The two ends of the strip that are worth one tap. */
-const WHEEL_LOW = 15;
-const WHEEL_HIGH = 85;
-
 function ManualSettingsForm({
   settings,
   onChange,
@@ -3630,6 +2996,8 @@ function ManualSettingsForm({
       closeFloor: next.autoSellCloseFloor,
       lateFloor: next.autoSellLateFloor,
       lateBandSec: next.autoSellLateBandSec,
+      ride: next.autoSellRide,
+      rideWaitMs: next.autoSellRideMs,
     }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
   };
 

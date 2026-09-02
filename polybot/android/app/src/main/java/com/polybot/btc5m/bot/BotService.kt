@@ -81,13 +81,6 @@ class BotService : Service() {
         // The engine is process-wide and long-lived; the service only drives its
         // foreground lifecycle.
         EngineHolder.get(this)
-        // The rules that were left switched on start themselves when they are
-        // first built, and until something asks for them they are never built.
-        // The screen used to be the only thing that asked — so a rule the user
-        // had turned on did nothing at all until they next opened the panel it
-        // lives on. Ask here, where the process comes up.
-        EngineHolder.pulse(this)
-        EngineHolder.pulseSoft(this)
         stateHook = { updateNotification() }
         EngineHolder.onServiceState = stateHook
     }

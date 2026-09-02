@@ -45,16 +45,6 @@ class BotPlugin : Plugin() {
     /** Standing sell rule for the manual desk. */
     private val autoSell: AutoSell get() = EngineHolder.autoSell(context)
 
-    /** The bot that buys the favourite while it is under its own exit. */
-    private val pulseBot: PulseBot get() = EngineHolder.pulse(context)
-
-    /** The same rule with its gates opened up, on its own money. */
-    private val softPulse: PulseBot get() = EngineHolder.pulseSoft(context)
-
-    /** Which of the two a call is about. */
-    private fun pulseFor(call: PluginCall): PulseBot =
-        if (call.getBoolean("soft") == true) softPulse else pulseBot
-
     override fun load() {
         EngineHolder.onState = { notifyState() }
         EngineHolder.onLogEntry = { entry -> notifyLog(entry) }
@@ -867,6 +857,50 @@ class BotPlugin : Plugin() {
     }
 
     /**
+     * Which way the window is leaning, as a hint and nothing more.
+     *
+     * The four readings the pulse rule used to trade on, with no rule behind
+     * them any more: the lead off the window's own open, the last few minutes
+     * of momentum, whether the last minute traded, and which way the book
+     * leans. Everything it needs is already in memory, so the screen can ask
+     * as often as it likes.
+     */
+    @PluginMethod
+    fun signal(call: PluginCall) {
+        val nowSec = Clock.nowSec()
+        val windowStart = nowSec - SellLadder.elapsedInWindow(nowSec)
+        val open = WindowOpen.of(windowStart, engine.feed)
+        val live = (engine.feed.twap60 ?: engine.feed.twap)?.value
+
+        val depth = BinanceBook.depth()
+        val bid = depth?.bids?.sum() ?: 0.0
+        val ask = depth?.asks?.sum() ?: 0.0
+
+        val read = Signal.Read(
+            elapsedSec = nowSec - windowStart,
+            lead = if (open != null && live != null) live - open else 0.0,
+            momentum = BinanceCandles.oneMinute.momentum(),
+            volume = BinanceCandles.oneMinute.volumeRatio(),
+            lean = if (bid + ask > 0.0) bid / (bid + ask) else 0.5,
+            price = open ?: live ?: BinanceTrades.last,
+        )
+        val hint = Signal.of(read)
+
+        call.resolve(
+            JSObject()
+                .put("side", hint.side)
+                .put("agree", hint.agree)
+                .put("against", hint.against)
+                .put("ready", open != null && live != null)
+                .put("elapsedSec", read.elapsedSec)
+                .put("lead", read.lead)
+                .put("momentum", read.momentum)
+                .put("volume", read.volume)
+                .put("lean", read.lean),
+        )
+    }
+
+    /**
      * The day's support and resistance, as the rule holds them.
      *
      * Read from memory: the levels are merged into a kept set once a minute
@@ -1237,6 +1271,9 @@ class BotPlugin : Plugin() {
             closeFloor = call.getDouble("closeFloor") ?: defaults.closeFloor,
             lateFloor = call.getDouble("lateFloor") ?: defaults.lateFloor,
             lateBandSec = call.getInt("lateBandSec") ?: defaults.lateBandSec,
+            ride = call.getBoolean("ride") ?: defaults.ride,
+            rideWaitMs = call.getInt("rideWaitMs")?.toLong() ?: defaults.rideWaitMs,
+            anyProfit = call.getBoolean("anyProfit") ?: defaults.anyProfit,
         )
         if (next.enabled && !engine.isConfigured()) {
             call.reject("Сначала подключите кошелёк")
@@ -1303,6 +1340,12 @@ class BotPlugin : Plugin() {
                 .put("lastFault", bot.lastFault)
                 .put("watching", bot.watchingCount)
                 .put("watchSec", bot.settings.watchSec)
+                .put("ride", bot.settings.ride)
+                .put("rideWaitMs", bot.settings.rideWaitMs)
+                // The one-shot switch, read back rather than remembered by the
+                // screen: it takes itself off when it fires, and the screen has
+                // to see that.
+                .put("anyProfit", bot.settings.anyProfit)
                 .put("chime", bot.settings.chime)
                 .put("dipRescue", bot.settings.dipRescue)
                 .put("percentMode", bot.settings.percentMode)
@@ -1354,131 +1397,6 @@ class BotPlugin : Plugin() {
                 call.reject(e.message ?: "Binance недоступен")
             }
         }.start()
-    }
-
-    // -------------------------------------------------------------- the bots
-
-    @PluginMethod
-    fun pulseUpdate(call: PluginCall) {
-        val bot = pulseFor(call)
-        val d = bot.settings
-        bot.update(
-            PulsePlan.Settings(
-                enabled = call.getBoolean("enabled") ?: d.enabled,
-                bankUsd = call.getDouble("bankUsd") ?: d.bankUsd,
-                // Either a sum or a share, never both: the desk sets one and
-                // clears the other, the same way the reserve does.
-                stakeUsd = call.getDouble("stakeUsd") ?: d.stakeUsd,
-                stakePct = call.getDouble("stakePct") ?: d.stakePct,
-                fromSec = d.fromSec,
-                untilSec = d.untilSec,
-                rideSec = d.rideSec,
-                minEdge = call.getDouble("minEdge") ?: d.minEdge,
-                minLean = call.getDouble("minLean") ?: d.minLean,
-                minVolume = call.getDouble("minVolume") ?: d.minVolume,
-                minPrice = d.minPrice,
-                maxPrice = d.maxPrice,
-                takePct = call.getDouble("takePct") ?: d.takePct,
-                live = call.getBoolean("live") ?: d.live,
-            ),
-        )
-        call.resolve()
-    }
-
-    @PluginMethod
-    fun pulseReset(call: PluginCall) {
-        pulseFor(call).resetBank()
-        call.resolve()
-    }
-
-    /** What the pulse bot holds, what it is looking at, and how it has done. */
-    @PluginMethod
-    fun pulseState(call: PluginCall) {
-        val bot = pulseFor(call)
-        val t = bot.paper.totals
-        val rt = bot.real.totals
-        val read = bot.read
-
-        fun roundsOf(book: PulseBot.Book): JSArray {
-            val out = JSArray()
-            // Newest first: the report is read from the top.
-            book.rounds.asReversed().forEach {
-                out.put(
-                    JSObject()
-                        .put("windowStart", it.windowStart)
-                        .put("boughtAt", it.boughtAt)
-                        .put("outcome", it.outcome)
-                        .put("shares", it.shares)
-                        .put("price", it.price)
-                        .put("spent", it.spent)
-                        .put("proceeds", it.proceeds)
-                        .put("settled", it.settled)
-                        .put("winner", it.winner)
-                        .put("pnl", it.pnl)
-                        .put("note", it.note),
-                )
-            }
-            return out
-        }
-
-        fun lotOf(lot: PulseBot.Lot?) = lot?.let {
-            JSObject()
-                .put("outcome", it.outcome)
-                .put("shares", it.open)
-                .put("price", it.price)
-                .put("sellPrice", it.sellPrice)
-                .put("note", it.note)
-        }
-
-        call.resolve(
-            JSObject()
-                .put("enabled", bot.settings.enabled)
-                .put("running", bot.running)
-                .put("bankUsd", bot.settings.bankUsd)
-                .put("stakeUsd", bot.settings.stakeUsd)
-                .put("stakePct", bot.settings.stakePct)
-                .put("minEdge", bot.settings.minEdge)
-                // What is actually asked for, floor included, rather than
-                // what happens to be stored under it.
-                .put("takePct", PulsePlan.takeOf(bot.settings))
-                // Paper always runs, so what is left to say is whether the
-                // wallet runs beside it.
-                .put("live", bot.settings.live)
-                // Which exit it uses, so the card describes the rule it is.
-                .put("ladder", bot.settings.ladder)
-                .put("cash", bot.cash(bot.paper))
-                .put("note", bot.note)
-                .put("lastFault", bot.lastFault)
-                .put("rounds", t.rounds)
-                .put("wins", t.wins)
-                .put("losses", t.losses)
-                .put("spent", t.spent)
-                .put("got", t.got)
-                .put("settled", t.settled)
-                .put("pnl", t.pnl)
-                // And the same record for the wallet, kept apart from it.
-                .put("liveCash", bot.cash(bot.real))
-                .put("liveRounds", rt.rounds)
-                .put("liveWins", rt.wins)
-                .put("liveLosses", rt.losses)
-                .put("liveSpent", rt.spent)
-                .put("liveGot", rt.got)
-                .put("liveSettled", rt.settled)
-                .put("livePnl", rt.pnl)
-                .put("read", read?.let {
-                    JSObject()
-                        .put("lead", it.lead)
-                        .put("momentum", it.momentum)
-                        .put("volume", it.volume)
-                        .put("lean", it.lean)
-                        .put("upAsk", it.upAsk)
-                        .put("downAsk", it.downAsk)
-                })
-                .put("lot", lotOf(bot.paper.lot))
-                .put("liveLot", lotOf(bot.real.lot))
-                .put("roundList", roundsOf(bot.paper))
-                .put("liveRoundList", roundsOf(bot.real)),
-        )
     }
 
     /**

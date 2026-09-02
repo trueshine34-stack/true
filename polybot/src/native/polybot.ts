@@ -286,25 +286,16 @@ export interface PolyBotPlugin {
     closeFloor?: number;
     lateFloor?: number;
     lateBandSec?: number;
+    /** Ride the rung — watch the bid instead of resting an offer on it. */
+    ride?: boolean;
+    /** How long without a new high ends the ride, in milliseconds. */
+    rideWaitMs?: number;
+    /** Sell everything at the first price that is a profit, once. */
+    anyProfit?: boolean;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
-  pulseUpdate(args: {
-    /** Which of the two: the strict rule, or the one with its gates opened. */
-    soft?: boolean;
-    enabled?: boolean;
-    bankUsd?: number;
-    /** Either a sum or a share of what is free. The desk sets one, clears the other. */
-    stakeUsd?: number;
-    stakePct?: number;
-    minEdge?: number;
-    minLean?: number;
-    minVolume?: number;
-    takePct?: number;
-    /** Whether the wallet trades it too. Paper always does. */
-    live?: boolean;
-  }): Promise<void>;
-  pulseReset(args?: { soft?: boolean }): Promise<void>;
-  pulseState(args?: { soft?: boolean }): Promise<PulseState>;
+  /** Which way the window is leaning, as a hint. Nothing acts on it. */
+  signal(): Promise<SignalHint>;
   /**
    * What one address holds off the venue: USDT on BSC and USDC on Polygon.
    * Read-only — the app has no key for BSC and never sends there.
@@ -468,83 +459,6 @@ export type PulseLot = {
   note?: string | null;
 };
 
-/** One window a pulse account closed, and what it came to. */
-export type PulseRound = {
-  windowStart: number;
-  /** When the shares were bought, to the second — paper rounds included. */
-  boughtAt?: number;
-  outcome: string;
-  shares: number;
-  price: number;
-  /** What the shares cost, fee included. */
-  spent?: number;
-  proceeds: number;
-  settled: number;
-  winner: string;
-  pnl: number;
-  note?: string | null;
-};
-
-export type PulseState = {
-  enabled: boolean;
-  running: boolean;
-  bankUsd: number;
-  /** What one entry puts in: a sum, or a share of what is free to trade. */
-  stakeUsd: number;
-  stakePct: number;
-  minEdge: number;
-  takePct: number;
-  /**
-   * Whether the wallet trades this rule too.
-   *
-   * Paper is not a mode: it always runs, on its own bank, and everything
-   * without a `live` prefix below is that account's. This says whether a
-   * second account is running beside it on real money.
-   */
-  live: boolean;
-  /** Exits by the desk's sell ladder rather than by one fixed margin. */
-  ladder?: boolean;
-  cash: number;
-  /** Why it is not buying, in its own words. */
-  note?: string | null;
-  lastFault?: string | null;
-  rounds: number;
-  wins: number;
-  losses: number;
-  spent: number;
-  got: number;
-  settled: number;
-  pnl: number;
-  read?: PulseRead | null;
-  lot?: PulseLot | null;
-  /** And the wallet's own record, kept apart from the paper one. */
-  liveCash: number;
-  liveRounds: number;
-  liveWins: number;
-  liveLosses: number;
-  liveSpent: number;
-  liveGot: number;
-  liveSettled: number;
-  livePnl: number;
-  liveLot?: PulseLot | null;
-  /** Window by window, per account. Totals cannot tell a steady run from a wild one. */
-  roundList: PulseRound[];
-  liveRoundList: PulseRound[];
-};
-
-/** A position the take rule is watching, and what closing it would pay. */
-export type TakeWatch = {
-  outcome: string;
-  shares: number;
-  /** What the shares cost, from the app's own record of the buys. */
-  cost: number;
-  bid: number;
-  /** How far above cost the bid is paying, after the fee. */
-  gain: number;
-};
-
-
-
 /** What the app has timed for itself about the venue's own delays. */
 export type Timings = {
   /** Buy to the first sell the venue accepts. */
@@ -554,6 +468,27 @@ export type Timings = {
   cashMs?: number | null;
   cashSamples?: number;
   cashPending?: boolean;
+};
+
+/**
+ * Which way the window is leaning, and how much of the desk agrees.
+ *
+ * The four readings the pulse rule used to trade on, with no rule behind them:
+ * a side as soon as the lead names one, and a count of how many of the four
+ * are behind it. `against` names the one that is not.
+ */
+export type SignalHint = {
+  side?: string | null;
+  /** One to four. One is a lead with everything else arguing. */
+  agree: number;
+  against?: string | null;
+  /** False until the window's open and a live price are both known. */
+  ready: boolean;
+  elapsedSec: number;
+  lead: number;
+  momentum: number;
+  volume: number;
+  lean: number;
 };
 
 export type AutoSellState = {
@@ -571,6 +506,11 @@ export type AutoSellState = {
   chime?: boolean;
   /** Whether the ladder stops climbing over a side that was written off. */
   dipRescue?: boolean;
+  /** Whether the rung is ridden rather than rested on. */
+  ride?: boolean;
+  rideWaitMs?: number;
+  /** The one-shot "any profit" exit, read back because it turns itself off. */
+  anyProfit?: boolean;
   rebuys: AutoSellRebuy[];
   rebuysDone?: AutoSellRebuyDone[];
   timings?: Timings;
@@ -661,35 +601,14 @@ const webStub: PolyBotPlugin = {
   withdraw: async () => {
     throw new Error('Вывод доступен только в приложении Android');
   },
-  pulseUpdate: async () => {},
-  pulseReset: async () => {},
-  pulseState: async () => ({
-    enabled: false,
-    running: false,
-    bankUsd: 100,
-    stakeUsd: 5,
-    stakePct: 0,
-    minEdge: 6,
-    takePct: 0.12,
-    live: false,
-    cash: 100,
-    rounds: 0,
-    wins: 0,
-    losses: 0,
-    spent: 0,
-    got: 0,
-    settled: 0,
-    pnl: 0,
-    liveCash: 0,
-    liveRounds: 0,
-    liveWins: 0,
-    liveLosses: 0,
-    liveSpent: 0,
-    liveGot: 0,
-    liveSettled: 0,
-    livePnl: 0,
-    roundList: [],
-    liveRoundList: [],
+  signal: async () => ({
+    agree: 0,
+    ready: false,
+    elapsedSec: 0,
+    lead: 0,
+    momentum: 0,
+    volume: 0,
+    lean: 0.5,
   }),
   addListener: async () => ({ remove: async () => {} }) as PluginListenerHandle,
 };
