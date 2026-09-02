@@ -515,7 +515,12 @@ export function CandleFace({
         */}
         {interval === '5m' &&
           shape?.bars.map((bar, i) => {
-            const won = settled?.[String(candles[i]?.[0])];
+            // By the bar's own time, never by its position. The bars are
+            // whatever the zoom is showing and the series is everything held,
+            // so the two indexes stopped agreeing the moment a pinch dropped
+            // a candle off the left — and every arrow moved to another candle
+            // and, half the time, changed colour with it.
+            const won = settled?.[String(bar.time)];
             if (!won) return null;
             const up = won === 'Up';
             // Just over the wick, and pushed back inside at the ceiling.
@@ -540,11 +545,11 @@ export function CandleFace({
         {interval === '5m' &&
           results &&
           shape?.bars.map((bar, i) => {
-            const pnl = results[String(candles[i]?.[0])];
+            const pnl = results[String(bar.time)];
             if (pnl == null) return null;
             const won = pnl >= 0;
             // Over the settlement arrow, which sits just over the wick.
-            const tip = Math.max(5, bar.high - (settled?.[String(candles[i]?.[0])] ? 14 : 4));
+            const tip = Math.max(5, bar.high - (settled?.[String(bar.time)] ? 14 : 4));
             return (
               <text
                 key={`pnl-${i}`}

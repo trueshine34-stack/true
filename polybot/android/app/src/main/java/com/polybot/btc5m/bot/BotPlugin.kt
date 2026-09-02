@@ -60,6 +60,24 @@ class BotPlugin : Plugin() {
                 prefs.edit().putString(key, value).apply()
             }
         }
+
+        // And which way each of the last day's windows settled. The chart asks
+        // for a few hours of them on every launch; without this it asks the
+        // venue, one window at a time, for answers that were settled before
+        // the app was last closed.
+        WindowResults.store = object : WindowResults.Store {
+            private val prefs = context.applicationContext
+                .getSharedPreferences("polybot_results", android.content.Context.MODE_PRIVATE)
+
+            override fun read(key: String): String? = prefs.getString(key, null)
+            override fun write(key: String, value: String) {
+                prefs.edit().putString(key, value).apply()
+            }
+        }
+        // The coin is settled by the time the engine exists, and it is what
+        // decides which file to read.
+        engine
+        WindowResults.reload()
     }
 
     override fun handleOnDestroy() {
