@@ -997,7 +997,11 @@ class BotPlugin : Plugin() {
     @PluginMethod
     fun binanceCandles(call: PluginCall) {
         val rows = JSArray()
-        BinanceCandles.of(call.getString("interval") ?: "5m").list().forEach {
+        val series = BinanceCandles.of(call.getString("interval") ?: "5m")
+        // More than the chart draws, when it asks: the screen can be pinched
+        // out to more candles than fit at rest, and the extra ones are already
+        // in memory.
+        series.list(call.getInt("limit") ?: series.limit).forEach {
             rows.put(
                 JSArray().apply {
                     put(it.time)
@@ -1005,6 +1009,9 @@ class BotPlugin : Plugin() {
                     put(it.high)
                     put(it.low)
                     put(it.close)
+                    // What traded in it, which is what says where a move will
+                    // have to push through something and where it will not.
+                    put(it.volume)
                 },
             )
         }

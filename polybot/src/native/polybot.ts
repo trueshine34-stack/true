@@ -245,7 +245,9 @@ export interface PolyBotPlugin {
   /** Binance's candles for one interval: open time in seconds, then o/h/l/c. */
   binanceCandles(args?: {
     interval?: string;
-  }): Promise<{ candles: [number, number, number, number, number][] }>;
+    /** More than the chart shows at rest, for a chart that has been pinched out. */
+    limit?: number;
+  }): Promise<{ candles: [number, number, number, number, number, number][] }>;
   /** Binance's book as a depth curve, from the locally kept order book. */
   binanceDepth(): Promise<{
     ready: boolean;

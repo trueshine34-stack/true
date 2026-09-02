@@ -3225,6 +3225,27 @@ button.wide {
 .candles {
   border-bottom: 1px solid var(--line);
   background: var(--surface);
+  /*
+    Two fingers on the chart are the chart's, one finger is the page's: the
+    list still scrolls under a thumb, and a pinch zooms instead of doing
+    nothing.
+  */
+  touch-action: pan-y;
+}
+
+/*
+  Where the session's volume went, drawn under everything else.
+
+  Many, thin and faint on purpose — these are not levels and must never be
+  mistaken for them. A level is a price the market turned at and is drawn as a
+  band with a number; this is a price a lot of trading went through, and all
+  it says is that a move will have something to push through here. Opacity
+  carries the strength, so the picture is read at a glance without a legend.
+*/
+.volnode {
+  stroke: var(--text);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
 }
 
 /*

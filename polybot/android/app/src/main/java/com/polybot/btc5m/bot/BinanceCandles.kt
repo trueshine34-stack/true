@@ -218,9 +218,14 @@ class BinanceCandles(
         return rows.last().close - rows[rows.size - 1 - over].close
     }
 
-    /** Oldest first — a chart is drawn left to right. */
-    fun list(): List<Candle> = synchronized(lock) {
-        candles.values.toList().takeLast(limit)
+    /**
+     * Oldest first — a chart is drawn left to right.
+     *
+     * As many as asked for, up to everything held: the store keeps twice what
+     * the chart shows at rest, which is what a pinch to zoom out reaches into.
+     */
+    fun list(max: Int = limit): List<Candle> = synchronized(lock) {
+        candles.values.toList().takeLast(max.coerceAtLeast(1))
     }
 
     private fun history() {
@@ -229,7 +234,7 @@ class BinanceCandles(
             JSONArray(
                 Http.get(
                     "$REST/api/v3/klines?symbol=${Coins.current.pair}" +
-                        "&interval=$interval&limit=$limit",
+                        "&interval=$interval&limit=${limit * 2}",
                 ),
             )
         } catch (e: Exception) {

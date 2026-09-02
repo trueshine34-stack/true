@@ -8,8 +8,14 @@
  * as nothing at all.
  */
 
-/** Open time in seconds, then open, high, low, close. */
-export type Candle = [number, number, number, number, number];
+/**
+ * Open time in seconds, then open, high, low, close — and what traded in it.
+ *
+ * The volume is last and optional because most of the drawing has no use for
+ * it: only the profile down the side of the chart, which is about where the
+ * trading happened rather than about the shape.
+ */
+export type Candle = [number, number, number, number, number, number?];
 
 export interface Bar {
   /** The interval's open time, in seconds — what the candle *is*. */

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PolyBot } from '../native/polybot';
 import { candleShape, signedPct, type Candle } from '../core/candles';
+import { volumeNodes } from '../core/profile';
 import { findLevels } from '../core/levels';
 import {
   NEAR_MINUTES,
@@ -22,6 +23,18 @@ function intervalSec(interval: string): number {
 
 /** Chart width in chart units, scaled to whatever the screen gives it. */
 const W = 360;
+
+/** Pinched all the way in, this many candles still have to be readable. */
+const MIN_BARS = 8;
+
+/**
+ * How many candles each chart shows at rest.
+ *
+ * Four hours of context on the five-minute chart, the last half hour close up
+ * on the minute one — the same two views the desk has always had. A pinch goes
+ * either way from here, as far as twice this and as close as [MIN_BARS].
+ */
+const BARS: Record<string, number> = { '5m': 48, '1m': 30 };
 
 /**
  * The candle in progress follows the tape rather than an interval, so the
@@ -95,7 +108,9 @@ export function CandlePanel({
   useEffect(() => {
     let alive = true;
     const pull = () => {
-      void PolyBot.binanceCandles({ interval })
+      // Twice what is drawn, so a pinch outwards has somewhere to go. The
+      // native side keeps that much and answers out of memory.
+      void PolyBot.binanceCandles({ interval, limit: (BARS[interval] ?? 48) * 2 })
         .then((r) => {
           if (alive) setCandles((r.candles ?? []) as Candle[]);
         })
@@ -164,6 +179,7 @@ export function CandlePanel({
     <CandleFace
       candles={candles}
       interval={interval}
+      bars={BARS[interval] ?? 48}
       height={height}
       onPick={onPick}
       picked={picked}
@@ -195,9 +211,12 @@ export function CandleFace({
   settled,
   results,
   digits = 0,
+  bars,
 }: {
   candles: Candle[];
   interval?: string;
+  /** How many candles are drawn before anything is pinched. */
+  bars?: number;
   height?: number;
   /** Called with a candle's open time when it is tapped. */
   onPick?: (time: number) => void;
@@ -211,7 +230,53 @@ export function CandleFace({
   /** How finely this coin's prices are printed on the labels. */
   digits?: number;
 }) {
-  const shape = candleShape(candles, W, H);
+  /**
+   * How many candles are on screen, when the chart has been pinched.
+   *
+   * Null is "as many as came", which is the default and what every frame is
+   * until two fingers say otherwise. Held here rather than in the panel above
+   * because it is a property of the drawing, and the panel keeps refetching
+   * the same series underneath it.
+   */
+  const [shown, setShown] = useState<number | null>(null);
+  const pinch = useRef<{ gap: number; from: number } | null>(null);
+  /** When the last pinch ended, so its release is not read as a tap. */
+  const pinchedAt = useRef(0);
+
+  // The panel asks for more candles than it draws, so that pinching out has
+  // something to reach into; this is how many of them are on screen at rest.
+  const atRest = Math.min(bars ?? candles.length, candles.length);
+  const visible = candles.slice(-Math.min(shown ?? atRest, candles.length));
+
+  const gapOf = (touches: React.TouchList) => {
+    const [a, b] = [touches[0], touches[1]];
+    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  };
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 2) return;
+    pinch.current = { gap: gapOf(e.touches), from: visible.length };
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    const start = pinch.current;
+    if (!start || e.touches.length !== 2) return;
+    const gap = gapOf(e.touches);
+    if (!(gap > 0) || !(start.gap > 0)) return;
+    // Fingers apart shows fewer candles, which is what "zoom in" means on a
+    // chart: the same width spent on less time.
+    const next = Math.round(start.from * (start.gap / gap));
+    setShown(Math.max(MIN_BARS, Math.min(candles.length, next)));
+  };
+
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2 && pinch.current) {
+      pinch.current = null;
+      pinchedAt.current = Date.now();
+    }
+  };
+
+  const shape = candleShape(visible, W, H);
   // The rule's own levels when they are to hand, so the line under the candle
   // is the line a window was refused at. The chart's own reading is the
   // fallback for a frame drawn before the first answer arrives.
@@ -219,7 +284,7 @@ export function CandleFace({
     held && held.length > 0
       ? held
       : shape
-        ? findLevels(candles, shape.last)
+        ? findLevels(visible, shape.last)
         : [];
 
   /*
@@ -231,7 +296,7 @@ export function CandleFace({
   // The same windows the rules fit their lines over, so the line on the
   // screen is the line the bot is reading — half an hour on the five-minute
   // chart, a quarter of an hour on the minute one.
-  const trend = trendOf(candles, interval === '5m' ? WIDE_MINUTES : NEAR_MINUTES);
+  const trend = trendOf(visible, interval === '5m' ? WIDE_MINUTES : NEAR_MINUTES);
   const ahead = shape && trend ? levelAhead(levels, shape.last, trend.way) : null;
 
   /*
@@ -280,6 +345,8 @@ export function CandleFace({
   */
   const pick = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!onPick || !shape) return;
+    // The fingers coming off a pinch are not a tap on a candle.
+    if (pinch.current || Date.now() - pinchedAt.current < 400) return;
     const box = e.currentTarget.getBoundingClientRect();
     if (box.width <= 0) return;
     const at = ((e.clientX - box.left) / box.width) * W;
@@ -292,10 +359,23 @@ export function CandleFace({
 
   const lit = shape?.bars.find((b) => b.time === picked);
 
+  /*
+    Where the trading happened, over the span on screen.
+
+    Recomputed with the zoom on purpose: pinched in, the bands are finer and
+    the lines say where the last twenty minutes were fought over; pinched out,
+    they are the shelves of the whole session.
+  */
+  const nodes = volumeNodes(visible);
+
   return (
     <div
       className={`candles${onPick ? ' tappable' : ''}`}
       onPointerUp={onPick ? pick : undefined}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
     >
       <svg className="candles-svg" viewBox={`0 0 ${W} ${H}`} aria-hidden>
         {/* The candle being read, marked behind everything else. */}
@@ -312,6 +392,25 @@ export function CandleFace({
           Levels first, under the candles: they are the background the price is
           working against, not marks on top of it.
         */}
+        {/*
+          And under those, where the volume was.
+
+          Not levels and not drawn like them: these are the prices the session
+          traded through, faint and many, and what they are for is knowing
+          where a move will have something to push through. The strongest is
+          the plainest; the rest fade with what went through them.
+        */}
+        {nodes.map((node) => (
+          <line
+            key={node.price}
+            className="volnode"
+            x1={0}
+            x2={W}
+            y1={y(node.price).toFixed(1)}
+            y2={y(node.price).toFixed(1)}
+            strokeOpacity={(0.10 + node.weight * 0.28).toFixed(2)}
+          />
+        ))}
         {/*
           The fitted line, over the span it was fitted to. Flat is drawn too:
           "no direction" is an answer, and an empty chart looks like a missing
