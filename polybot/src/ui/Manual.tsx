@@ -270,6 +270,17 @@ export function Manual({
     void loadManualSettings().then((stored) => {
       setSettings(stored);
       loadedRef.current = true;
+      // The countdown lives in the service and is stored there too, so this
+      // is only the screen catching up with what it is already doing — and
+      // the answer is read back, not assumed.
+      void PolyBot.setCountdown()
+        .then((r) => {
+          if (r.enabled !== stored.countdownChime) {
+            void saveManualSettings({ ...stored, countdownChime: r.enabled });
+            setSettings((s) => ({ ...s, countdownChime: r.enabled }));
+          }
+        })
+        .catch(() => {});
       // The rules live in the native service, which starts every process with
       // them off. Without this the switch would read as on from the store while
       // nothing was actually sweeping — the toggle looked armed and was not.
@@ -2734,6 +2745,26 @@ function RuleBar({
           <span className={`switch mini ${settings.chime ? 'on' : ''}`} />
           <b>звук</b>
           <i>вверх · вниз · монета</i>
+        </button>
+
+        {/*
+          The clock, out loud. Its own switch rather than a part of the one
+          above: the sounds up there say something happened, this says
+          something is about to — and wanting one is not wanting the other.
+        */}
+        <button
+          className={`ruletile${settings.countdownChime ? ' on' : ''}`}
+          onClick={() => {
+            const next = !settings.countdownChime;
+            push({ ...settings, countdownChime: next });
+            void PolyBot.setCountdown({ enabled: next }).catch(() => {});
+          }}
+        >
+          <span
+            className={`switch mini ${settings.countdownChime ? 'on' : ''}`}
+          />
+          <b>отсчёт</b>
+          <i>25 с · 10 с ×2</i>
         </button>
 
         <button

@@ -584,6 +584,26 @@ class BotPlugin : Plugin() {
         }.start()
     }
 
+    /**
+     * The cue before each window opens: on, off, or as it stands.
+     *
+     * Answering with the state it is in either way means the switch on the
+     * screen is drawn from the rule rather than from what was last pressed.
+     */
+    @PluginMethod
+    fun setCountdown(call: PluginCall) {
+        call.getBoolean("enabled")?.let {
+            Countdown.set(it)
+            CueStore(context).save(it)
+            // The cue exists for a phone in a pocket, which is a phone whose
+            // WebView Android has stopped running. So it holds the service up
+            // while it is on — and lets it go again without touching the sell
+            // rule, which may be working a position.
+            if (it) BotService.start(context) else BotService.stopDesk(context)
+        }
+        call.resolve(JSObject().put("enabled", Countdown.on))
+    }
+
     @PluginMethod
     fun getLogs(call: PluginCall) {
         val array = JSArray()

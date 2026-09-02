@@ -299,6 +299,11 @@ export interface PolyBotPlugin {
   /** Which way the window is leaning, as a hint. Nothing acts on it. */
   signal(): Promise<SignalHint>;
   /**
+   * The cue before each window opens: once at twenty-five seconds, twice at
+   * ten. Answers with the state it is in, whether or not it was asked to change.
+   */
+  setCountdown(args?: { enabled?: boolean }): Promise<{ enabled: boolean }>;
+  /**
    * What one address holds off the venue: USDT on BSC and USDC on Polygon.
    * Read-only — the app has no key for BSC and never sends there.
    */
@@ -603,6 +608,7 @@ const webStub: PolyBotPlugin = {
   withdraw: async () => {
     throw new Error('Вывод доступен только в приложении Android');
   },
+  setCountdown: async () => ({ enabled: false }),
   signal: async () => ({
     agree: 0,
     ready: false,

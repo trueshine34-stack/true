@@ -100,6 +100,14 @@ export type ManualSettings = {
   autoSellRide: boolean;
   /** How long without a new high counts as the run being over, in ms. */
   autoSellRideMs: number;
+  /**
+   * A cue in the headphones before each window opens.
+   *
+   * Once at twenty-five seconds and twice at ten, so that the seconds the
+   * decision is actually made in can be caught without watching a clock for
+   * the four minutes before them.
+   */
+  countdownChime: boolean;
 };
 
 /**
@@ -170,6 +178,7 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   exposureGuard: true,
   autoSellRide: true,
   autoSellRideMs: 2000,
+  countdownChime: false,
 };
 
 /** Never spend the last of the balance, whatever the fee works out to. */

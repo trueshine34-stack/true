@@ -48,6 +48,9 @@ object EngineHolder {
                 val (lockedUsd, lockedPct) = LockStore(context).load()
                 it.lockedUsd = lockedUsd
                 it.lockedPct = lockedPct
+                // And the clock's own cue, which runs whether or not the
+                // screen is ever opened.
+                Countdown.set(CueStore(context).load())
                 // Quotes, positions and the price feed are screen data: they
                 // must flow from the moment the app opens.
                 it.startFeed()

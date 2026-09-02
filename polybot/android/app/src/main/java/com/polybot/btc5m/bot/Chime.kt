@@ -88,6 +88,8 @@ object Chime {
             when (kind) {
                 "up" -> boughtUp()
                 "down" -> boughtDown()
+                "tick" -> tick()
+                "tick2" -> tick(2)
                 else -> sold()
             }
         } finally {
@@ -110,6 +112,21 @@ object Chime {
             // pure sine has none of.
             Note(2638.0, 70, 240, level = 0.28),
         ),
+    )
+
+    /**
+     * The window is about to turn.
+     *
+     * One short high tick, and nothing like the three above it: those say
+     * something happened, this says something is about to. It has to be
+     * recognisable through music with the phone in a pocket, so it is short,
+     * bright and single — and the double at ten seconds is this same tick
+     * twice, which is how "closer" is said without a second sound to learn.
+     */
+    fun tick(times: Int = 1) = play(
+        (0 until times.coerceIn(1, 3)).flatMap { i ->
+            listOf(Note(1568.0, i * 180, 70, level = 0.9))
+        },
     )
 
     private fun play(notes: List<Note>) {

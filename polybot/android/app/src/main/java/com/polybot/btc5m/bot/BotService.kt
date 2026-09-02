@@ -35,6 +35,15 @@ class BotService : Service() {
         const val ACTION_START_AUTOSELL = "com.polybot.btc5m.START_AUTOSELL"
         const val ACTION_STOP_AUTOSELL = "com.polybot.btc5m.STOP_AUTOSELL"
 
+        /**
+         * Stands the desk down without touching the sell rule.
+         *
+         * [ACTION_STOP] stops both, which is right for "close the desk" and
+         * wrong for "I no longer want the clock in my ear": a rule that is
+         * working a position must not be switched off by a cue setting.
+         */
+        const val ACTION_STOP_DESK = "com.polybot.btc5m.STOP_DESK"
+
         private const val CHANNEL_ID = "polybot_engine"
         private const val NOTIFICATION_ID = 4201
 
@@ -50,6 +59,8 @@ class BotService : Service() {
 
         fun stopAutoSell(context: Context) =
             send(context, ACTION_STOP_AUTOSELL, foreground = false)
+
+        fun stopDesk(context: Context) = send(context, ACTION_STOP_DESK, foreground = false)
 
         private fun send(context: Context, action: String, foreground: Boolean) {
             val intent = Intent(context, BotService::class.java).setAction(action)
@@ -96,6 +107,12 @@ class BotService : Service() {
 
             ACTION_STOP_AUTOSELL -> {
                 EngineHolder.peekAutoSell()?.stop()
+                releaseUnlessBusy()
+                return START_NOT_STICKY
+            }
+
+            ACTION_STOP_DESK -> {
+                deskWanted = false
                 releaseUnlessBusy()
                 return START_NOT_STICKY
             }
