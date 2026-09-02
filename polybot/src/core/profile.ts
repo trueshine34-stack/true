@@ -25,8 +25,15 @@ export type Node = {
   weight: number;
 };
 
-/** Bands across the range. Forty is about two pixels apiece on a phone. */
-const BANDS = 40;
+/**
+ * Bands across the range.
+ *
+ * Sixty rather than forty because the profile is taken over everything held
+ * and read at any zoom: coarse bands are enough for the whole session on
+ * screen and leave a close-up view with one line in it, which is not a
+ * picture of anything.
+ */
+const BANDS = 60;
 
 /** Below this share of the busiest band a line says nothing. */
 const FLOOR = 0.35;
@@ -39,7 +46,7 @@ const FLOOR = 0.35;
  * when it holds more than both of its neighbours, so what is left is the
  * middle of each shelf.
  */
-export function volumeNodes(candles: Candle[], keep = 8): Node[] {
+export function volumeNodes(candles: Candle[], keep = 12): Node[] {
   const clean = candles.filter(
     ([, , h, l, , v]) =>
       Number.isFinite(h) && Number.isFinite(l) && h >= l && h > 0 && (v ?? 0) > 0,

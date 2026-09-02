@@ -6,6 +6,20 @@ import type { Candle } from '../candles';
 const bar = (l: number, h: number, v: number): Candle => [0, l, h, l, h, v];
 
 describe('volume nodes', () => {
+  it('does not depend on how much of the series is drawn', () => {
+    // The same profile read over a hundred candles and over the last forty of
+    // them is a different picture — which is why the chart takes it over
+    // everything it holds and never over what is on screen. This is that
+    // contract, stated: the answer is a function of the candles given.
+    const many: Candle[] = Array.from({ length: 100 }, (_, i) =>
+      i % 10 === 0 ? bar(149.9, 150.1, 50) : bar(100, 200, 1),
+    );
+    const first = volumeNodes(many);
+    expect(volumeNodes(many)).toEqual(first);
+    expect(first[0].price).toBeGreaterThan(140);
+    expect(first[0].price).toBeLessThan(160);
+  });
+
   it('finds the price everything traded at', () => {
     const candles: Candle[] = [
       bar(100, 110, 1),
@@ -48,7 +62,7 @@ describe('volume nodes', () => {
     ];
     const nodes = volumeNodes(candles, 2);
     expect(nodes).toHaveLength(2);
-    const band = (200 - 100) / 40;
+    const band = (200 - 100) / 60;
     expect(Math.abs(nodes[0].price - 140.5)).toBeLessThan(band);
     expect(Math.abs(nodes[1].price - 160.5)).toBeLessThan(band);
     expect(nodes[0].weight).toBeGreaterThanOrEqual(nodes[1].weight);

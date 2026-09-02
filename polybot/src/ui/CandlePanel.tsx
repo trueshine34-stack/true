@@ -360,13 +360,18 @@ export function CandleFace({
   const lit = shape?.bars.find((b) => b.time === picked);
 
   /*
-    Where the trading happened, over the span on screen.
+    Where the trading happened, over the whole series rather than the part of
+    it on screen.
 
-    Recomputed with the zoom on purpose: pinched in, the bands are finer and
-    the lines say where the last twenty minutes were fought over; pinched out,
-    they are the shelves of the whole session.
+    Zooming must not move these lines or make them come and go: a price that
+    a lot traded at is a fact about the session, not about how many candles
+    happen to be drawn — and a band that vanishes when you look closer is
+    worse than no band at all. So they are worked out once from everything
+    held, and the chart draws the ones that fall inside what it is showing.
   */
-  const nodes = volumeNodes(visible);
+  const nodes = volumeNodes(candles).filter(
+    (node) => !shape || (node.price >= shape.floor && node.price <= shape.top),
+  );
 
   return (
     <div
