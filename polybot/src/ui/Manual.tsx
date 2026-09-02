@@ -2078,6 +2078,9 @@ function SellSheet({
   const [cents_, setCents] = useState(opened);
 
   const nudge = (d: number) => setCents((c) => Math.min(99, Math.max(1, c + d)));
+  /** The price, typed out. Empty while it is being typed, as a hold is. */
+  const [typing, setTyping] = useState(false);
+  const [typed, setTyped] = useState('');
 
   // What the chosen price would pay, less the fee the venue takes out of it.
   const pays = netSellPrice(cents_ / 100) * size;
@@ -2116,54 +2119,96 @@ function SellSheet({
           <b>{clock(Math.max(0, secondsLeft))}</b>
         </div>
 
-        {/* The price, and nothing beside it competing for the eye. */}
-        <div className="sellprice">
-          <div className="pricepick">
-            <button className="step big" onClick={() => nudge(-step)}>
-              −
-            </button>
-            <div className="pricepick-now">
-              <PriceSpinner value={cents_} onPick={setCents} />
-            </div>
-            <button className="step big" onClick={() => nudge(step)}>
-              +
-            </button>
-          </div>
-          {/* What that price pays, and what it makes on what it cost. */}
-          <div className="sellpays">
-            <span className="muted">получишь</span>
-            <b>{usd(pays)}</b>
+        {/*
+          The two ways out, one shape and one size. Each says what it does,
+          what it pays after the fee, and what that is against what the shares
+          cost — the whole of the decision, twice, at two prices.
+        */}
+        <button className="sellgo" disabled={busy} onClick={() => onSell(cents_ / 100)}>
+          <b>
+            Продать {size.toFixed(size % 1 ? 1 : 0)} по {cents_}¢
+          </b>
+          <i>
+            {usd(pays)}
             {cost > 0 && (
-              <i className={pays >= cost ? 'up' : 'down'}>
+              <em className={pays >= cost ? 'up' : 'down'}>
                 {signedUsd(pays - cost)}
-              </i>
+              </em>
             )}
-          </div>
-        </div>
-
-        <button
-          className="primary wide"
-          disabled={busy}
-          onClick={() => onSell(cents_ / 100)}
-        >
-          Продать {size.toFixed(size % 1 ? 1 : 0)} по {cents_}¢
+          </i>
         </button>
 
         {/*
-          And the other kind of exit: not a price at all, but out — through the
-          book, past our own resting offers, whatever it takes. The price it
-          would go at is on the button, because that is the only thing anyone
-          wants to know before pressing it.
+          The other kind of exit: not a price at all, but out — through the
+          book, past our own resting offers, whatever it takes. What it goes at
+          and what it comes to are both on it, because those are the only
+          things anyone wants to know before pressing it.
         */}
         <button
-          className="sellmarket wide"
+          className="sellgo market"
           disabled={busy || bid == null}
           onClick={onMarket}
         >
-          <span>По рынку</span>
-          <b>{bid != null ? cents(bid) : '—'}</b>
-          {bid != null && <i className="muted">{usd(marketPays)}</i>}
+          <b>По рынку {bid != null ? cents(bid) : '—'}</b>
+          {bid != null && (
+            <i>
+              {usd(marketPays)}
+              {cost > 0 && (
+                <em className={marketPays >= cost ? 'up' : 'down'}>
+                  {signedUsd(marketPays - cost)}
+                </em>
+              )}
+            </i>
+          )}
         </button>
+
+        {/*
+          And the price itself, last and smallest: a cent either side and the
+          number between them, which opens a keyboard when it is tapped. It is
+          the thing being adjusted rather than the thing being decided, so it
+          sits under the two decisions rather than over them.
+        */}
+        <div className="sellsteps">
+          <button className="step" onClick={() => nudge(-step)}>
+            −
+          </button>
+          {typing ? (
+            <input
+              className="sellcents typed"
+              type="text"
+              inputMode="numeric"
+              autoFocus
+              placeholder={String(cents_)}
+              value={typed}
+              onChange={(e) =>
+                setTyped(e.target.value.replace(/[^0-9]/g, '').slice(0, 2))
+              }
+              onBlur={() => {
+                const value = Number(typed);
+                if (Number.isFinite(value) && value > 0) {
+                  setCents(Math.min(99, Math.max(1, value)));
+                }
+                setTyping(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur();
+              }}
+            />
+          ) : (
+            <button
+              className="sellcents"
+              onClick={() => {
+                setTyped('');
+                setTyping(true);
+              }}
+            >
+              {cents_}¢
+            </button>
+          )}
+          <button className="step" onClick={() => nudge(step)}>
+            +
+          </button>
+        </div>
       </div>
     </div>
   );

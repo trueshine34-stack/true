@@ -3569,33 +3569,124 @@ button.wide {
   color: var(--down);
 }
 
-/* The price and what it pays, framed as the one thing being decided. */
-.sellprice {
-  margin: 8px 0 12px;
-  padding: 6px 10px 10px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-2);
-}
+/*
+  The two ways out, one shape and one size.
 
-/* What the sale pays, and what that is against what it cost. */
-.sellpays {
+  Each carries what it does over what it comes to, so the two are compared by
+  reading down one column rather than by remembering the first while looking
+  at the second. Asking a price is the ordinary trade and is lit; the book's
+  own price is the one taken in a hurry and is outlined.
+*/
+.sellgo {
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 6px;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
+  gap: 1px;
+  width: 100%;
+  min-height: 54px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  font-family: inherit;
+  cursor: pointer;
 }
 
-.sellpays b {
+.sellgo b {
   font-size: 16px;
   font-weight: 700;
 }
 
-.sellpays i {
+.sellgo i {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+.sellgo em {
   font-style: normal;
   font-weight: 700;
+}
+
+.sellgo.market {
+  border-color: var(--line);
+  background: none;
+  color: var(--text);
+}
+
+/*
+  On the lit button both figures are white — a green number on blue is a
+  number nobody can read — and on the outlined one they take their colour.
+*/
+.sellgo:not(.market) em.up,
+.sellgo:not(.market) em.down {
+  color: #fff;
+}
+
+.sellgo.market em.up {
+  color: var(--up);
+}
+
+.sellgo.market em.down {
+  color: var(--down);
+}
+
+.sellgo:disabled {
+  opacity: 0.45;
+}
+
+/*
+  The price, under the two decisions and smaller than them.
+
+  A cent either side and the number between, which opens the keyboard when it
+  is tapped. It used to be a wheel across the top of the panel — sixty-eight
+  points of height for a number that is nearly always one or two cents from
+  where it opened.
+*/
+.sellsteps {
+  display: grid;
+  grid-template-columns: 54px 1fr 54px;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sellsteps .step {
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.sellcents {
+  height: 42px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  cursor: pointer;
+}
+
+input.sellcents.typed {
+  border-color: var(--accent);
+  cursor: text;
 }
 
 /*
