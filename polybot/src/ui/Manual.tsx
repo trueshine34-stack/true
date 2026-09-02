@@ -2756,7 +2756,7 @@ function RuleBar({
           />
           <span className="muted rideends">
             <i>0,5</i>
-            <i>98¢ сразу · 93¢ если больше 35 с</i>
+            <i>98¢ сразу · 93¢ если больше 35 с · дешёвые без паузы</i>
             <i>10</i>
           </span>
         </label>

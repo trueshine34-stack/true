@@ -52,6 +52,33 @@ object Ride {
     const val MIN_WAIT_MS = 500L
     const val MAX_WAIT_MS = 10_000L
 
+    /**
+     * A buy under this price is not ridden at all.
+     *
+     * Riding is a bet that a run has more in it. A side bought at a quarter is
+     * not a run — it is a side the market has written off, and what happens
+     * when it comes back is that it comes back once. The rung it reaches is
+     * the price it reaches, and waiting two seconds for a better one is how
+     * the whole recovery is given back.
+     */
+    const val CHEAP = 0.30
+
+    /** And neither is one that has been worth half of what it cost. */
+    const val HALVED = 0.5
+
+    /**
+     * Whether this position is one to take the rung on rather than ride.
+     *
+     * Cheap when it was bought, or cheap since: a position that has traded at
+     * half its own cost has already shown that the book will not hold it up,
+     * and the rung it climbs back to is a price that was there for a moment.
+     */
+    fun fragile(cost: Double, lowWater: Double): Boolean {
+        if (!cost.isFinite() || cost <= 0.0) return false
+        if (cost < CHEAP) return true
+        return lowWater.isFinite() && lowWater > 0.0 && lowWater < cost * HALVED
+    }
+
     enum class Act {
         /** The rung has not been reached; nothing to do but watch. */
         WAIT,
@@ -81,6 +108,8 @@ object Ride {
         secondsLeft: Long,
         sinceHighMs: Long,
         waitMs: Long = DEFAULT_WAIT_MS,
+        /** False for a position that takes its rung the moment it is reached. */
+        patient: Boolean = true,
     ): Act {
         // The close outranks every price: seconds from settlement there is
         // nothing worth selling into.
@@ -89,6 +118,8 @@ object Ride {
         if (bid >= TAKE_NOW - 1e-9) return Act.TAKE
         if (bid >= TAKE_HIGH - 1e-9 && secondsLeft > PATIENT_SEC) return Act.TAKE
         if (bid < rung - 1e-9) return Act.WAIT
+        // Nothing to ride: the rung is the price, and it is here now.
+        if (!patient) return Act.TAKE
         return if (sinceHighMs >= waitMs) Act.TAKE else Act.RIDE
     }
 

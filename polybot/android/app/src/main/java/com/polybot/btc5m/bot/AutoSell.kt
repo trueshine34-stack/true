@@ -1205,11 +1205,32 @@ class AutoSell(
             rung.rideHigh = bid
             rung.rideAtMs = nowMs
         }
+        // The worst it has been bid, off the book rather than off the data
+        // API's price — that one is a minute behind, and a dip that lasted
+        // twenty seconds never appeared in it at all. Both the rules that ask
+        // "how cheap has this been" read this.
+        if (bid != null && bid > 0.0 && bid < rung.lowWater) rung.lowWater = bid
         // A high that has never been set is not a run that has stood still for
         // ever: until the bid has printed once, there is nothing to time.
         val sinceHigh = if (rung.rideAtMs > 0L) nowMs - rung.rideAtMs else 0L
 
-        return when (Ride.act(bid, target, secondsLeft, sinceHigh, Ride.waitOf(settings.rideWaitMs))) {
+        // What it cost, which is what says whether this is a run at all. The
+        // app's own record first: it is true the instant the buy fills, where
+        // the data API's average can be a minute behind.
+        val cost = OrderLog.heldLots(position.asset).firstOrNull()?.price
+            ?: position.avgPrice
+        val patient = !Ride.fragile(cost, rung.lowWater)
+
+        return when (
+            Ride.act(
+                bid,
+                target,
+                secondsLeft,
+                sinceHigh,
+                Ride.waitOf(settings.rideWaitMs),
+                patient,
+            )
+        ) {
             Ride.Act.SETTLE -> "жду расчёт"
             Ride.Act.WAIT -> "веду до " + (target * 100).toInt() + "¢"
             Ride.Act.RIDE -> "иду за ценой " + ((bid ?: 0.0) * 100).toInt() + "¢"

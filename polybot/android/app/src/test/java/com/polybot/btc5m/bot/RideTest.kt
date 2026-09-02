@@ -1,6 +1,7 @@
 package com.polybot.btc5m.bot
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RideTest {
@@ -97,6 +98,54 @@ class RideCloseTest {
         assertEquals(
             Ride.Act.TAKE,
             Ride.act(0.99, rung = 0.90, secondsLeft = 7, sinceHighMs = 0),
+        )
+    }
+}
+
+/**
+ * Some positions are not runs, and waiting on them gives the recovery back.
+ */
+class RideFragileTest {
+
+    @Test
+    fun `a cheap buy is not ridden`() {
+        assertEquals(0.30, Ride.CHEAP, 1e-9)
+        assertTrue(Ride.fragile(cost = 0.24, lowWater = 0.24))
+        assertTrue(!Ride.fragile(cost = 0.30, lowWater = 0.30))
+    }
+
+    @Test
+    fun `nor is one that has been worth half of what it cost`() {
+        // Bought at eighty, seen at thirty-nine: the book has already said
+        // what it thinks of this side.
+        assertTrue(Ride.fragile(cost = 0.80, lowWater = 0.39))
+        assertTrue(!Ride.fragile(cost = 0.80, lowWater = 0.41))
+        // Nothing seen yet is not the same as having been cheap.
+        assertTrue(!Ride.fragile(cost = 0.80, lowWater = 0.0))
+        assertTrue(!Ride.fragile(cost = 0.0, lowWater = 0.1))
+    }
+
+    @Test
+    fun `such a position takes its rung the moment it is reached`() {
+        // Still climbing, and it does not matter.
+        assertEquals(
+            Ride.Act.TAKE,
+            Ride.act(0.86, rung = 0.86, secondsLeft = 200, sinceHighMs = 0, patient = false),
+        )
+        // Under the rung there is still nothing to do.
+        assertEquals(
+            Ride.Act.WAIT,
+            Ride.act(0.85, rung = 0.86, secondsLeft = 200, sinceHighMs = 0, patient = false),
+        )
+        // And the close still outranks it.
+        assertEquals(
+            Ride.Act.SETTLE,
+            Ride.act(0.99, rung = 0.86, secondsLeft = 3, sinceHighMs = 0, patient = false),
+        )
+        // A patient one waits, as before.
+        assertEquals(
+            Ride.Act.RIDE,
+            Ride.act(0.86, rung = 0.86, secondsLeft = 200, sinceHighMs = 0),
         )
     }
 }
