@@ -412,7 +412,6 @@ export function App() {
               .catch(() => {});
           }}
           day={day}
-          dayLock={dayLock}
           onDayBaseline={setDayBaseline}
           savings={savings}
           savingsAddress={savingsAddress}

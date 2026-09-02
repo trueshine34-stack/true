@@ -634,12 +634,16 @@ export function Manual({
         .catch(() => {});
     };
     read();
-    const timer = window.setInterval(read, 30_000);
+    // Ten seconds rather than thirty, and again the moment the window turns:
+    // the reserve is a share per event, so what is free changes at every
+    // boundary — and inside the last seconds of a losing window it changes
+    // again, when the money held against a side that has lost is let go.
+    const timer = window.setInterval(read, 10_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [windowStart, coin]);
 
   // The desk's own book: what is held and what is working.
   useEffect(() => {
@@ -905,12 +909,22 @@ export function Manual({
         // with its ✕ now rather than on the next four-second beat. The venue's
         // listing may not have indexed it yet; the app's own log has.
         if (r.success) {
-          const [fresh, log] = await Promise.all([
+          const [fresh, log, cash] = await Promise.all([
             PolyBot.getOpenOrders().catch(() => null),
             PolyBot.getOrderLog({ windowStart: deskWindow }).catch(() => null),
+            // And what is free now. A sale releases its share of the reserve
+            // the moment it fills — the native side counts the proceeds as
+            // the run's while the venue is still transferring them — and the
+            // size of the next entry is worked out from this number, so it
+            // has to be this sale's number rather than the last poll's.
+            PolyBot.getBalance().catch(() => null),
           ]);
           if (fresh) setOrders(fresh.orders);
           if (log) setLogged(log.orders);
+          if (cash) {
+            setBalance(cash.usdc);
+            setReserve(cash.locked ?? 0);
+          }
         }
       } catch (e) {
         setNote(e instanceof Error ? e.message : String(e));
@@ -1141,6 +1155,26 @@ export function Manual({
     const shares = stakeShares(limitBasis, sizeBudget, sizePct / 100, minSize);
     if (shares != null) setLimitSize(String(shares));
   }, [sizePct, limitBasis, sizeBudget, minSize]);
+
+  /**
+   * What the order in the field would cost, and whether there is that much.
+   *
+   * The reserve is taken out of the balance before the desk ever sees it, so
+   * this is the same money the native side will check against — but it is
+   * checked here as well, because a button that sends an order the app is
+   * going to refuse is a button that lies. Resting buys are already out of
+   * [freeCash]: their money is spoken for even though nothing has filled.
+   */
+  const limitCost =
+    Number.isFinite(limitPriceNum) &&
+    limitPriceNum > 0 &&
+    Number.isFinite(limitSizeNum) &&
+    limitSizeNum > 0
+      ? orderCost(limitSizeNum, limitPriceNum)
+      : 0;
+
+  /** Whether the terms in the field can actually be paid for. */
+  const affordable = limitCost > 0 && limitCost <= freeCash + 1e-9;
 
   /** Whether the price in the field is one the early rule will not buy at. */
   const limitBarred =
@@ -1709,11 +1743,26 @@ export function Manual({
             nothing to send and the button says so by being dead.
           */}
           <button
-            className={`buygo${side ? ` on ${side === 'Up' ? 'up' : 'down'}` : ''}`}
-            disabled={busy || locked || limitBarred || side == null}
+            className={`buygo${
+              side && affordable ? ` on ${side === 'Up' ? 'up' : 'down'}` : ''
+            }`}
+            disabled={busy || locked || limitBarred || side == null || !affordable}
             onClick={() => side && void placeLimit(side)}
           >
-            Купить
+            {/*
+              Dead, and saying why. Without a side there is nothing to send;
+              without the money there is nothing to send it with — and the
+              second of those used to look identical to a working button, so
+              an order went out against a balance that was entirely reserved
+              and came back refused.
+            */}
+            {side == null
+              ? 'Купить'
+              : limitCost <= 0
+                ? 'цена и объём'
+                : affordable
+                  ? 'Купить'
+                  : `нет ${usd(limitCost - freeCash)}`}
           </button>
           <div className="limitmid">
             <div className="limitprice">

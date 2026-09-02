@@ -89,6 +89,9 @@ class BotEngine(
 
     private companion object {
         const val MAX_LOGS = 400
+
+        /** What the venue takes to pay a sale in, until it has been measured. */
+        const val DEFAULT_CASH_MS = 25_000L
     }
 
     fun log(level: String, message: String) {
@@ -357,6 +360,21 @@ class BotEngine(
         if (side == "BUY") {
             val elapsed = BuyCap.elapsedFor(meta.windowStart)
             if (BuyCap.blocked(price, elapsed)) error(BuyCap.reason(elapsed))
+
+            // And the reserve, on the same one path. It is enforced where the
+            // balance is read — every size in the app is worked out from a
+            // figure that already has it taken out — but nothing stopped an
+            // order being *sent* for more than that: a size typed by hand, or
+            // a ladder rung, could reach past the reserve into money the app
+            // is not allowed to touch. This is the door.
+            val free = usdcRecent() ?: usdcBalance()
+            val cost = Reserve.buyCost(size, price)
+            if (cost > free + 1e-9) {
+                error(
+                    "Свободно " + String.format("%.2f", free) +
+                        " $, ордер на " + String.format("%.2f", cost) + " $",
+                )
+            }
         }
 
         val cfg = Orders.roundConfigFor(meta.tickSize)
@@ -490,18 +508,93 @@ class BotEngine(
      * Against the run's own size it is one amount that stays that amount until
      * the position is closed, which is what locking a sum for one event means.
      */
-    fun lockedAgainst(wallet: Double): Double {
-        val held = try {
-            // This window's positions, and the last one's only while its
-            // settlement is still on its way. A window that has been paid out
-            // is money in the wallet, and counting it in both places at once
-            // is a reserve of more than the account holds.
-            OrderLog.heldCost(Reserve.heldSince(Clock.nowSec(), WINDOW_SECONDS))
+    fun lockedAgainst(wallet: Double): Double =
+        Reserve.lockedOf(wallet + heldNow() + pendingNow(), lockedUsd, lockedPct)
+
+    /**
+     * What is in the market right now, at what it cost.
+     *
+     * This window's positions, and the last window's only while its settlement
+     * is still on its way — a window that has been paid out is money in the
+     * wallet, and counting it in both places at once reserves more than the
+     * account holds. A side the window has already decided against is dropped
+     * even before that: it is a receipt, not a position.
+     */
+    private fun heldNow(): Double {
+        val nowSec = Clock.nowSec()
+        val window = nowSec - (nowSec % WINDOW_SECONDS)
+
+        // Read off the oracle the market settles on, out of memory: the
+        // window's own open against the sixty-second average.
+        val lead = WindowOpen.of(window, feed)?.let { open ->
+            (feed.twap60 ?: feed.twap)?.value?.minus(open)
+        }
+        Reserve.losingSide(lead, window + WINDOW_SECONDS - nowSec)?.let {
+            doomedWindow = window
+            doomedSide = it
+        }
+
+        // Only this window's. What is left of the one before it has settled:
+        // it is money on its way rather than a position, and it is counted as
+        // that, in [settlingNow].
+        return try {
+            OrderLog.heldCost(window, doomedSide.takeIf { doomedWindow == window })
         } catch (e: Exception) {
             0.0
         }
-        return Reserve.lockedOf(wallet + held, lockedUsd, lockedPct)
     }
+
+    /**
+     * What the window that just closed is about to pay.
+     *
+     * A dollar a share for the side that won, nothing for the side that lost,
+     * landing a few seconds after the boundary. Counted as the run's money
+     * from the moment the window closes rather than from the moment the
+     * transfer arrives: the reserve is a share per event, and an event that
+     * has ended should hand the next one its share at once.
+     *
+     * Only where the app worked out which side lost, which it does in the last
+     * seconds of every window it is running through. Without that it counts
+     * nothing and the money simply appears in the balance a moment later.
+     */
+    private fun settlingNow(): Double {
+        val nowSec = Clock.nowSec()
+        val window = nowSec - (nowSec % WINDOW_SECONDS)
+        if (nowSec - window > Reserve.SETTLE_GRACE_SEC) return 0.0
+        val previous = window - WINDOW_SECONDS
+        val loser = doomedSide.takeIf { doomedWindow == previous } ?: return 0.0
+        val winner = if (loser == "Up") "Down" else "Up"
+        return try {
+            OrderLog.heldShares(previous, winner)
+        } catch (e: Exception) {
+            0.0
+        }
+    }
+
+    /**
+     * Money from sales that has been made but has not landed yet.
+     *
+     * Counted as part of the run for as long as the app has measured the venue
+     * taking to pay it — a sale that has filled is money whatever the balance
+     * says, and a run that has just closed a winner should be able to size the
+     * next entry off it rather than waiting out the transfer.
+     */
+    private fun pendingNow(): Double {
+        val horizon = (Timings.cashMs() ?: DEFAULT_CASH_MS).coerceIn(5_000L, 45_000L)
+        val sold = try {
+            OrderLog.pendingProceeds(System.currentTimeMillis() - horizon)
+        } catch (e: Exception) {
+            0.0
+        }
+        return sold + settlingNow()
+    }
+
+    /** The side a window's last seconds decided against, and which window. */
+    @Volatile
+    private var doomedWindow: Long = 0L
+
+    @Volatile
+    private var doomedSide: String? = null
 
     /** The wallet itself, which is what the balance sheet is about. */
     fun usdcWallet(): Double {
@@ -516,7 +609,17 @@ class BotEngine(
     /** And the same reading with the locked money taken out of it. */
     fun usdcBalance(): Double = free(usdcWallet())
 
-    private fun free(wallet: Double): Double = Reserve.free(wallet, lockedAgainst(wallet))
+    /**
+     * The wallet, less what is locked — plus what a sale is about to add.
+     *
+     * The pending half is on both sides of this on purpose: it is part of what
+     * the reserve is a share of, and part of what may be spent. That is what
+     * makes the share behave per event rather than per transfer — close a
+     * position and the next entry can be sized at once, out of the same share
+     * of a run that is now bigger.
+     */
+    private fun free(wallet: Double): Double =
+        Reserve.free(wallet + pendingNow(), lockedAgainst(wallet))
 
     @Volatile
     private var cash: Double = 0.0

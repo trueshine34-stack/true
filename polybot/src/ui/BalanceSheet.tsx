@@ -35,7 +35,6 @@ export function BalanceSheet({
   lockedPct,
   onLocked,
   day,
-  dayLock,
   onDayBaseline,
   savings,
   savingsAddress,
@@ -56,8 +55,6 @@ export function BalanceSheet({
   onLocked: (usd: number, pct: number) => void;
   /** The day's goal, whose number is edited here rather than in settings. */
   day: DayGoal | null;
-  /** Whether reaching it actually stops buying, which is a setting. */
-  dayLock: boolean;
   onDayBaseline: (amount: number) => void;
   /** USDT held off the venue, where profit is withdrawn to. */
   savings: number;
@@ -162,10 +159,16 @@ export function BalanceSheet({
               <b>{balance === null ? '—' : usd(balance)}</b>
             </div>
             {locked > 0 && (
-              <div>
-                <span className="muted">в торговле</span>
-                <b>{free === null ? '—' : usd(free)}</b>
-              </div>
+              <>
+                <div>
+                  <span className="muted">заблокировано</span>
+                  <b>{usd(locked)}</b>
+                </div>
+                <div>
+                  <span className="muted">в торговле</span>
+                  <b>{free === null ? '—' : usd(free)}</b>
+                </div>
+              </>
             )}
             {savings > 0 && (
               <div>
@@ -240,17 +243,6 @@ export function BalanceSheet({
             {dirty ? 'Сохранить' : 'Сохранено'}
           </button>
         </div>
-        <div className="muted balhint">
-          Эти деньги не участвуют в покупках вообще: и боты, и ручные ордера
-          считают размер от остатка, а не от баланса. Уже открытые позиции и
-          продажи это не трогает.
-          {inPct &&
-            ` Доля берётся от всего, что есть у прогона: свободных денег плюс` +
-              ` того, что уже в рынке, по цене входа. Поэтому после покупки` +
-              ` блок не пересчитывается вниз — сумма держится всё событие, а` +
-              ` растёт вместе со счётом. Сейчас это ${usd(locked)}.`}
-        </div>
-
         {/*
           The day's goal, which is one number: what the day is counted from.
           The target is ten times it and the stop follows it, so the number
@@ -281,16 +273,6 @@ export function BalanceSheet({
             <b>{day != null ? usd(dayTarget(day)) : '—'}</b>
           </div>
         </div>
-        <div className="muted balhint">
-          {dayLock
-            ? 'Когда счёт доходит до цели, покупки блокируются до полуночи —' +
-              ' продажи и выход по лесенке продолжают работать. Выключается в' +
-              ' настройках.'
-            : 'Блокировка по цели выключена в настройках: цель только' +
-              ' считается и показывается, покупки не останавливаются.'}
-          {day?.hitAt != null && ' Цель на сегодня уже взята.'}
-        </div>
-
         {/*
           The address money is taken out to, and the button that takes it.
           Watched on both chains; sent to only on Polygon, which is the one the

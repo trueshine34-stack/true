@@ -11,32 +11,65 @@ package com.polybot.btc5m.bot
 object Reserve {
 
     /**
-     * How long after a window closes its shares still count as money in flight.
+     * How long after a window closes its settlement counts as money in flight.
      *
-     * A share-based reserve is taken of everything the run is worth: the cash
-     * plus what is in the market at what it cost. At the boundary the market's
-     * half settles — the winning side pays a dollar, the losing side pays
-     * nothing — and the payout lands in the wallet a few seconds later. Inside
-     * that gap the money is in neither place, so the position keeps counting.
+     * A share reserve is taken of everything the run is worth: the cash, what
+     * is in the market at what it cost, and what a closed window is about to
+     * pay. The payout lands in the wallet a few seconds after the boundary,
+     * and inside that gap the money is in neither place — so it is counted
+     * here, and stops being counted once the balance is showing it.
      *
-     * After it, it must stop. Counting a settled window for a further five
-     * minutes was adding its cost to a wallet that had already been paid it:
-     * on a twelve-dollar wallet with three dollars of settled shares, a
-     * seventy-five percent reserve was taken of fifteen and left eighty-seven
-     * cents to trade with instead of three dollars.
+     * Counting a settled window's *cost* for a further five minutes was the
+     * bug this replaced: it added the cost to a wallet that had already been
+     * paid, so on a twelve-dollar wallet with three dollars of settled shares
+     * a seventy-five percent reserve was taken of fifteen and left eighty-
+     * seven cents to trade with instead of three dollars nineteen.
      */
     const val SETTLE_GRACE_SEC = 30L
 
+    /** Polymarket's taker fee, charged on top of what an order is worth. */
+    private const val FEE_RATE = 0.07
+
     /**
-     * The earliest window whose positions still count as held.
+     * What a buy actually takes out of the wallet.
      *
-     * The window running now, always — and the one before it while its
-     * settlement is still on its way.
+     * The fee is charged on top of the order rather than out of it, so an
+     * order for exactly the free balance cannot be paid for and is refused by
+     * the venue — and a reserve sized to the cent has to know that too.
      */
-    fun heldSince(nowSec: Long, windowSec: Long): Long {
-        val window = nowSec - (nowSec % windowSec)
-        return if (nowSec - window <= SETTLE_GRACE_SEC) window - windowSec else window
+    fun buyCost(shares: Double, price: Double): Double {
+        if (!shares.isFinite() || !price.isFinite() || shares <= 0.0 || price <= 0.0) {
+            return 0.0
+        }
+        val fee = if (price >= 1.0) 0.0 else FEE_RATE * price * (1 - price)
+        return shares * (price + fee)
     }
+
+    /**
+     * The side the last seconds of a window have already decided against.
+     *
+     * At five seconds from the close the price has said what the window is:
+     * whichever side is behind is not coming back, and the money in it is
+     * spent whatever happens next. A share reserve counts open positions at
+     * what they cost so that opening one does not free a fresh slice — but a
+     * position that has already lost is not a position any more, it is a
+     * receipt, and holding money against it locks away money twice over.
+     *
+     * Null while the window is still a question: no lead, no reading, or the
+     * two sides level.
+     */
+    fun losingSide(lead: Double?, secondsLeft: Long, lastSec: Long = DOOMED_SEC): String? {
+        if (lead == null || !lead.isFinite()) return null
+        if (secondsLeft !in 0..lastSec) return null
+        return when {
+            lead > 0.0 -> "Down"
+            lead < 0.0 -> "Up"
+            else -> null
+        }
+    }
+
+    /** How near the close a losing side stops being counted as money held. */
+    const val DOOMED_SEC = 5L
 
     /**
      * How much of [wallet] is locked away, given the two ways of saying it.

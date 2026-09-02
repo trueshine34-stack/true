@@ -365,14 +365,62 @@ object OrderLog {
      * once it is old enough, at which point its money is back in the wallet
      * and counted there instead.
      */
-    fun heldCost(sinceWindow: Long): Double {
+    fun heldCost(sinceWindow: Long, skipOutcome: String? = null): Double {
         val assets = entries.filter { it.windowStart >= sinceWindow }
+            // A side the window has already decided against is money spent,
+            // not money held: counting it would hold the account against a
+            // position that is on its way to nothing.
+            .filter { skipOutcome == null || !it.outcome.equals(skipOutcome, true) }
             .map { it.asset }
             .toSet()
         return assets.sumOf { asset ->
             heldLots(asset).sumOf { it.shares * it.price }
         }
     }
+
+    /**
+     * Shares still held from one window, on one side of it.
+     *
+     * For the moment a window closes: the winning side is about to be paid a
+     * dollar a share and the losing side is paid nothing, and until the
+     * transfer lands neither is in the balance. What is being asked here is
+     * "how much is on its way", so it is shares rather than what they cost.
+     */
+    fun heldShares(window: Long, outcome: String): Double {
+        val assets = entries
+            .filter { it.windowStart == window && it.outcome.equals(outcome, true) }
+            .map { it.asset }
+            .toSet()
+        return assets.sumOf { asset -> heldLots(asset).sumOf { it.shares } }
+    }
+
+    /**
+     * Money from sales that has been made but has not landed yet.
+     *
+     * A sale is money the moment it fills — the shares are gone and the price
+     * is agreed — but the venue credits the wallet a good twenty seconds
+     * later. Between those two moments the balance shows neither the shares
+     * nor the money, so a reserve taken of the balance holds back a run that
+     * has just closed a winner, and the next entry cannot be sized until the
+     * transfer catches up. This is that money, counted for as long as it can
+     * still be in the air.
+     *
+     * Net of the fee, because that is what actually arrives.
+     */
+    fun pendingProceeds(sinceMs: Long, nowMs: Long = System.currentTimeMillis()): Double =
+        entries
+            .filter { it.action == "SELL" && it.placedAt in sinceMs..nowMs }
+            .sumOf { entry ->
+                val price = entry.realPrice
+                if (entry.matched <= 1e-9 || price <= 0.0 || price >= 1.0) {
+                    0.0
+                } else {
+                    entry.matched * (price - FEE_RATE * price * (1 - price))
+                }
+            }
+
+    /** Polymarket's taker fee, which is charged on a sale as well as on a buy. */
+    private const val FEE_RATE = 0.07
 
     /**
      * Was this order's price chosen by hand?

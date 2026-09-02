@@ -86,25 +86,7 @@ class ReserveTest {
  * A share of the run is a share of the run, not of the run plus a window that
  * has already been paid out.
  */
-class ReserveHeldWindowTest {
-
-    private val window = 300L
-
-    @Test
-    fun `the window running now always counts`() {
-        // A minute in: the last window is long settled and paid.
-        assertEquals(3_000L, Reserve.heldSince(3_060L, window))
-    }
-
-    @Test
-    fun `and the one before it while the payout is still on its way`() {
-        // Five seconds past the boundary: the shares have settled and the
-        // money has not landed, so they still count as held.
-        assertEquals(2_700L, Reserve.heldSince(3_005L, window))
-        assertEquals(2_700L, Reserve.heldSince(3_030L, window))
-        // A second past the grace, it is cash and counted as cash.
-        assertEquals(3_000L, Reserve.heldSince(3_031L, window))
-    }
+class ReserveShareTest {
 
     @Test
     fun `a settled window counted twice takes the account with it`() {
@@ -116,5 +98,56 @@ class ReserveHeldWindowTest {
         // is there to trade with.
         val right = Reserve.lockedOf(12.76, 0.0, 0.75)
         assertEquals(3.19, Reserve.free(12.76, right), 0.01)
+    }
+
+    @Test
+    fun `money on its way is on both sides of the sum`() {
+        // Ten dollars of the run is in a sale the venue has not paid yet. The
+        // share is taken of the whole run, and what is free counts it too —
+        // which is what lets the next entry be sized the moment a position is
+        // closed rather than twenty seconds later.
+        val wallet = 2.0
+        val pending = 10.0
+        val locked = Reserve.lockedOf(wallet + pending, 0.0, 0.75)
+        assertEquals(9.0, locked, 1e-9)
+        assertEquals(3.0, Reserve.free(wallet + pending, locked), 1e-9)
+    }
+}
+
+/**
+ * A losing side stops being money held before the window has even closed.
+ */
+class ReserveDoomedTest {
+
+    @Test
+    fun `the last five seconds name the side that has lost`() {
+        assertEquals(5L, Reserve.DOOMED_SEC)
+        // Price above the open: Down is not coming back.
+        assertEquals("Down", Reserve.losingSide(12.0, 5))
+        assertEquals("Up", Reserve.losingSide(-12.0, 0))
+    }
+
+    @Test
+    fun `earlier in the window nothing has lost`() {
+        assertEquals(null, Reserve.losingSide(12.0, 6))
+        assertEquals(null, Reserve.losingSide(-40.0, 120))
+    }
+
+    @Test
+    fun `level, or unknown, decides nothing`() {
+        assertEquals(null, Reserve.losingSide(0.0, 2))
+        assertEquals(null, Reserve.losingSide(null, 2))
+    }
+}
+
+/** What a buy really takes: the order, plus the fee charged on top of it. */
+class ReserveCostTest {
+
+    @Test
+    fun `the fee is on top, not out of it`() {
+        // Ten shares at eighty cents: eight dollars, plus 7% x 0.8 x 0.2 each.
+        assertEquals(8.112, Reserve.buyCost(10.0, 0.80), 1e-9)
+        assertEquals(0.0, Reserve.buyCost(0.0, 0.80), 1e-9)
+        assertEquals(0.0, Reserve.buyCost(10.0, 0.0), 1e-9)
     }
 }
