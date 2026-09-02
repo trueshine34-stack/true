@@ -11,6 +11,34 @@ package com.polybot.btc5m.bot
 object Reserve {
 
     /**
+     * How long after a window closes its shares still count as money in flight.
+     *
+     * A share-based reserve is taken of everything the run is worth: the cash
+     * plus what is in the market at what it cost. At the boundary the market's
+     * half settles — the winning side pays a dollar, the losing side pays
+     * nothing — and the payout lands in the wallet a few seconds later. Inside
+     * that gap the money is in neither place, so the position keeps counting.
+     *
+     * After it, it must stop. Counting a settled window for a further five
+     * minutes was adding its cost to a wallet that had already been paid it:
+     * on a twelve-dollar wallet with three dollars of settled shares, a
+     * seventy-five percent reserve was taken of fifteen and left eighty-seven
+     * cents to trade with instead of three dollars.
+     */
+    const val SETTLE_GRACE_SEC = 30L
+
+    /**
+     * The earliest window whose positions still count as held.
+     *
+     * The window running now, always — and the one before it while its
+     * settlement is still on its way.
+     */
+    fun heldSince(nowSec: Long, windowSec: Long): Long {
+        val window = nowSec - (nowSec % windowSec)
+        return if (nowSec - window <= SETTLE_GRACE_SEC) window - windowSec else window
+    }
+
+    /**
      * How much of [wallet] is locked away, given the two ways of saying it.
      *
      * A share is not the same setting as a sum, and which one is wanted

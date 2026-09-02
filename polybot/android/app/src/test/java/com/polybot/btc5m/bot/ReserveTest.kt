@@ -81,3 +81,40 @@ class ReserveTest {
         assertEquals(0.0, Reserve.lockedOf(Double.NaN, 40.0, 0.25), 1e-9)
     }
 }
+
+/**
+ * A share of the run is a share of the run, not of the run plus a window that
+ * has already been paid out.
+ */
+class ReserveHeldWindowTest {
+
+    private val window = 300L
+
+    @Test
+    fun `the window running now always counts`() {
+        // A minute in: the last window is long settled and paid.
+        assertEquals(3_000L, Reserve.heldSince(3_060L, window))
+    }
+
+    @Test
+    fun `and the one before it while the payout is still on its way`() {
+        // Five seconds past the boundary: the shares have settled and the
+        // money has not landed, so they still count as held.
+        assertEquals(2_700L, Reserve.heldSince(3_005L, window))
+        assertEquals(2_700L, Reserve.heldSince(3_030L, window))
+        // A second past the grace, it is cash and counted as cash.
+        assertEquals(3_000L, Reserve.heldSince(3_031L, window))
+    }
+
+    @Test
+    fun `a settled window counted twice takes the account with it`() {
+        // Twelve dollars in the wallet, three of settled shares, three
+        // quarters locked. Counting both is a reserve of nearly twelve.
+        val wrong = Reserve.lockedOf(12.76 + 3.11, 0.0, 0.75)
+        assertEquals(0.86, Reserve.free(12.76, wrong), 0.01)
+        // Counted once, three quarters of the wallet is locked and a quarter
+        // is there to trade with.
+        val right = Reserve.lockedOf(12.76, 0.0, 0.75)
+        assertEquals(3.19, Reserve.free(12.76, right), 0.01)
+    }
+}

@@ -77,6 +77,44 @@ export function BalanceSheet({
    */
   const [inPct, setInPct] = useState(lockedPct > 0);
 
+  /**
+   * What is being typed, in each unit, held here and nowhere else.
+   *
+   * Seeded from what is stored when the sheet opens and then never written to
+   * again from the outside. This is the whole of "it must not reset itself":
+   * the balance is re-read every half minute and the reserve travels with it,
+   * so a field that mirrored the props would blank or jump under the thumb
+   * every time a reading landed — and a number typed and not yet saved would
+   * be gone.
+   *
+   * Two drafts rather than one, because twenty dollars and twenty percent are
+   * different amounts. Switching the unit shows the other draft; it writes
+   * nothing. It used to write immediately, which meant tapping % with no
+   * share set cleared the sum that was set — the reserve wiping itself on a
+   * tap that was only meant to change the unit.
+   */
+  const [usdDraft, setUsdDraft] = useState(lockedUsd > 0 ? String(lockedUsd) : '');
+  const [pctDraft, setPctDraft] = useState(
+    lockedPct > 0 ? String(Math.round(lockedPct * 100)) : '',
+  );
+  const draft = inPct ? pctDraft : usdDraft;
+
+  /** What the draft would set, in the units the engine keeps. */
+  const wanted = (() => {
+    const value = Number(draft.replace(',', '.'));
+    if (!Number.isFinite(value) || value <= 0) return { usd: 0, pct: 0 };
+    return inPct
+      ? { usd: 0, pct: Math.min(1, value / 100) }
+      : { usd: value, pct: 0 };
+  })();
+
+  /** Whether saving would change anything, which is what the button says. */
+  const dirty =
+    Math.abs(wanted.usd - lockedUsd) > 1e-9 ||
+    Math.abs(wanted.pct - lockedPct) > 1e-9;
+
+  const save = () => onLocked(wanted.usd, wanted.pct);
+
   // Carry withdrawals back into the line: taking profit out is not a loss, and
   // a chart that reads it as one says the run gave back everything it made.
   const points = useMemo(
@@ -151,55 +189,56 @@ export function BalanceSheet({
           <label className="field ballock">
             <span>заблокировано</span>
             <input
-              key={inPct ? 'pct' : 'usd'}
               type="number"
               inputMode="decimal"
               min={0}
               max={inPct ? 100 : undefined}
               step={inPct ? '5' : '1'}
               placeholder="0"
-              defaultValue={
+              value={draft}
+              onChange={(e) =>
                 inPct
-                  ? lockedPct > 0
-                    ? String(Math.round(lockedPct * 100))
-                    : ''
-                  : lockedUsd > 0
-                    ? String(lockedUsd)
-                    : ''
+                  ? setPctDraft(e.target.value)
+                  : setUsdDraft(e.target.value)
               }
-              onBlur={(e) => {
-                const value = Number(e.target.value);
-                if (inPct) onLocked(0, value / 100);
-                else onLocked(value, 0);
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.currentTarget.blur();
+                  save();
+                }
               }}
             />
           </label>
           {/*
-            Which of the two the number is. Switching does not carry the value
-            across — 20 dollars and 20 percent are different amounts, and
-            quietly reinterpreting one as the other is how a reserve becomes
-            the whole account.
+            Which of the two the number is, and the button that applies it.
+
+            Saving is its own tap rather than something that happens when the
+            field loses focus: a reserve is the one number here that must be
+            exactly what was meant, and "it applied when I touched something
+            else" is not a thing anyone can rely on. The button says whether
+            there is anything to apply.
           */}
           <div className="pcts lockmode">
             <button
               className={!inPct ? 'on' : undefined}
-              onClick={() => {
-                setInPct(false);
-                onLocked(lockedUsd, 0);
-              }}
+              onClick={() => setInPct(false)}
             >
               $
             </button>
             <button
               className={inPct ? 'on' : undefined}
-              onClick={() => {
-                setInPct(true);
-                onLocked(0, lockedPct);
-              }}
+              onClick={() => setInPct(true)}
             >
               %
             </button>
           </div>
+          <button
+            className={`locksave${dirty ? ' on' : ''}`}
+            disabled={!dirty}
+            onClick={save}
+          >
+            {dirty ? 'Сохранить' : 'Сохранено'}
+          </button>
         </div>
         <div className="muted balhint">
           Эти деньги не участвуют в покупках вообще: и боты, и ручные ордера

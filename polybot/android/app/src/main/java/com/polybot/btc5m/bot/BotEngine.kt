@@ -491,12 +491,12 @@ class BotEngine(
      * the position is closed, which is what locking a sum for one event means.
      */
     fun lockedAgainst(wallet: Double): Double {
-        val nowSec = Clock.nowSec()
-        val window = nowSec - (nowSec % WINDOW_SECONDS)
         val held = try {
-            // The window before this one can still be holding something the
-            // settlement has not paid out yet; anything older is cash again.
-            OrderLog.heldCost(window - WINDOW_SECONDS)
+            // This window's positions, and the last one's only while its
+            // settlement is still on its way. A window that has been paid out
+            // is money in the wallet, and counting it in both places at once
+            // is a reserve of more than the account holds.
+            OrderLog.heldCost(Reserve.heldSince(Clock.nowSec(), WINDOW_SECONDS))
         } catch (e: Exception) {
             0.0
         }

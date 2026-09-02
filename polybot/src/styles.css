@@ -2771,6 +2771,38 @@ button.step.big {
   gap: 8px;
 }
 
+/*
+  The button that applies the reserve.
+
+  Its own row under the field, spanning it, because a reserve is applied on
+  purpose: it used to be written when the field lost focus, which is a moment
+  nobody chooses, and switching $ / % wrote as well — so tapping % with no
+  share set quietly cleared the sum that was set. Now nothing is written until
+  this is pressed, and it says whether there is anything to press it for.
+*/
+.locksave {
+  grid-column: 1 / -1;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.locksave.on {
+  border-color: var(--accent);
+  background: rgba(76, 141, 255, 0.16);
+  color: var(--accent);
+}
+
+.locksave:disabled {
+  cursor: default;
+}
+
 .lockmode {
   display: grid;
   grid-template-columns: repeat(2, 44px);
