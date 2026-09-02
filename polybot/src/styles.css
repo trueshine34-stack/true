@@ -2930,7 +2930,7 @@ button.step.big {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin: 4px 0 10px;
+  margin: 4px 0 8px;
 }
 
 .pricepick-now {
@@ -3452,35 +3452,116 @@ button.wide {
 /*
   The way out of a position: three prices worth a tap, then the wheel.
 */
-.sellpicks {
+/*
+  The way out of a position: a clock, a price, and two buttons.
+
+  The panel is one decision, so it is one column with the eye led down it —
+  how long is left, what price, what that pays, send it. The two chips that
+  used to sit on top ("в ноль", "+25%") were answers to a question nobody was
+  asking at this moment: the price is chosen on the wheel, and the only other
+  price that matters is the book's, which is now on its own button.
+*/
+.sellsheet {
   display: flex;
-  gap: 6px;
-  margin-bottom: 10px;
+  flex-direction: column;
 }
 
-.sellpicks button {
-  flex: 1;
-  padding: 9px 4px;
-  font-size: 13px;
-  color: var(--text);
+/* How long the window has left, over the price it is being sold at. */
+.sellclock {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 0 2px;
+  font-size: 12px;
 }
 
-.sellpicks button:disabled {
-  opacity: 0.4;
+.sellclock b {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.sellclock.up b {
+  color: var(--up);
+}
+
+.sellclock.warn b {
+  color: var(--warn);
+}
+
+.sellclock.down b {
+  color: var(--down);
+}
+
+/* The price and what it pays, framed as the one thing being decided. */
+.sellprice {
+  margin: 8px 0 12px;
+  padding: 6px 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-2);
 }
 
 /* What the sale pays, and what that is against what it cost. */
 .sellpays {
-  text-align: center;
-  font-size: 12px;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
-  margin-top: 6px;
-  margin-bottom: 8px;
 }
 
 .sellpays b {
+  font-size: 16px;
   font-weight: 700;
-  margin-left: 4px;
+}
+
+.sellpays i {
+  font-style: normal;
+  font-weight: 700;
+}
+
+/*
+  Out at the book's price, on one button that says what that price is.
+
+  It is not the primary action — an asked price is nearly always the better
+  trade — but it is the one pressed in a hurry, so it is a full-width row with
+  the price large enough to read without stopping.
+*/
+.sellmarket {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sellmarket b {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sellmarket i {
+  font-style: normal;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sellmarket:disabled {
+  opacity: 0.45;
 }
 
 .sheet-head h2 em {

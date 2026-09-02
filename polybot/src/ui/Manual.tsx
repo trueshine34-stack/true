@@ -30,13 +30,11 @@ import {
   type TradeRow,
 } from '../core/trades';
 import {
-  breakEvenPrice,
   limitLadder,
   netSellPrice,
   positionPnl,
   potentialProfit,
   signedUsd,
-  targetPrice,
   usd,
 } from '../core/money';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
@@ -1546,6 +1544,7 @@ export function Manual({
           }
           tick={market?.tickSize ?? 0.01}
           busy={busy}
+          secondsLeft={secondsLeft}
           onClose={() => setClosing(null)}
           onSell={(price) => {
             const which: 'Up' | 'Down' = closing.outcome === 'Up' ? 'Up' : 'Down';
@@ -1988,14 +1987,17 @@ function OrderEditor({
  * The way out of a position, priced.
  *
  * Everything behind it is dimmed, because this is the one decision on the
- * screen while it is open. The bid is already under the thumb — that is where
- * a sale almost always goes — and the row of prices above it is the two other
- * answers anyone actually wants: out at cost, or out at a gain. The wheel is
- * for everything else.
+ * screen while it is open — and it is a decision with a clock on it, so the
+ * clock is in the sheet rather than behind it. Five minutes is short enough
+ * that "how long have I got" is half of "what price should I ask".
  *
- * The button says what it will do and what it will pay, after the taker fee,
- * because the fee on a sale is charged in money and a number that ignores it
- * is not the number arriving in the wallet.
+ * Two ways out, in the order they are wanted. A price, which is the whole
+ * point of the panel: chosen on the spinner, with what it pays after the fee
+ * written under it, because the fee is charged in money and a number that
+ * ignores it is not the number arriving in the wallet. And under that, out at
+ * the book's own price, on one button that says what that price is — it used
+ * to be two controls, a chip that loaded the bid into the field and a button
+ * that crossed the book, which are the same intention twice.
  */
 function SellSheet({
   position,
@@ -2003,6 +2005,7 @@ function SellSheet({
   avg,
   tick,
   busy,
+  secondsLeft,
   onClose,
   onSell,
   onMarket,
@@ -2014,6 +2017,8 @@ function SellSheet({
   avg: number;
   tick: number;
   busy: boolean;
+  /** How long this window has left, which is how long the price has. */
+  secondsLeft: number;
   onClose: () => void;
   onSell: (price: number) => void;
   onMarket: () => void;
@@ -2024,16 +2029,18 @@ function SellSheet({
   const [cents_, setCents] = useState(opened);
 
   const nudge = (d: number) => setCents((c) => Math.min(99, Math.max(1, c + d)));
-  const at = (price: number) =>
-    setCents(Math.min(99, Math.max(1, Math.round(price * 100))));
 
   // What the chosen price would pay, less the fee the venue takes out of it.
   const pays = netSellPrice(cents_ / 100) * size;
   const cost = avg > 0 ? avg * size : 0;
 
+  // What the book would actually pay for the lot right now, fee taken out —
+  // the market button's own number, which is not the same as the asked price's.
+  const marketPays = bid != null ? netSellPrice(bid) * size : 0;
+
   return (
     <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet sellsheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <h2>
             <span className={position.outcome === 'Up' ? 'up' : 'down'}>
@@ -2048,37 +2055,41 @@ function SellSheet({
         </div>
 
         {/*
-          The three prices worth one tap: what the book is bidding, what gets
-          the money back, and what the round was opened for.
+          How long the window has left.
+
+          The price being chosen here is only worth what it is worth for as
+          long as the market is open, and inside the last minute the whole
+          question changes — so the clock is in the panel, coloured the way it
+          is coloured on the desk.
         */}
-        <div className="pcts sellpicks">
-          <button disabled={bid == null} onClick={() => bid != null && at(bid)}>
-            рынок {bid != null ? cents(bid) : '—'}
-          </button>
-          <button
-            disabled={!(avg > 0)}
-            onClick={() => avg > 0 && at(breakEvenPrice(avg, tick))}
-          >
-            в ноль
-          </button>
-          <button
-            disabled={!(avg > 0)}
-            onClick={() => avg > 0 && at(targetPrice(avg, 0.25, tick))}
-          >
-            +25%
-          </button>
+        <div className={`sellclock ${clockTone(secondsLeft, false)}`}>
+          <span className="muted">до конца события</span>
+          <b>{clock(Math.max(0, secondsLeft))}</b>
         </div>
 
-        <div className="pricepick">
-          <button className="step big" onClick={() => nudge(-step)}>
-            −
-          </button>
-          <div className="pricepick-now">
-            <PriceSpinner value={cents_} onPick={setCents} />
+        {/* The price, and nothing beside it competing for the eye. */}
+        <div className="sellprice">
+          <div className="pricepick">
+            <button className="step big" onClick={() => nudge(-step)}>
+              −
+            </button>
+            <div className="pricepick-now">
+              <PriceSpinner value={cents_} onPick={setCents} />
+            </div>
+            <button className="step big" onClick={() => nudge(step)}>
+              +
+            </button>
           </div>
-          <button className="step big" onClick={() => nudge(step)}>
-            +
-          </button>
+          {/* What that price pays, and what it makes on what it cost. */}
+          <div className="sellpays">
+            <span className="muted">получишь</span>
+            <b>{usd(pays)}</b>
+            {cost > 0 && (
+              <i className={pays >= cost ? 'up' : 'down'}>
+                {signedUsd(pays - cost)}
+              </i>
+            )}
+          </div>
         </div>
 
         <button
@@ -2088,21 +2099,21 @@ function SellSheet({
         >
           Продать {size.toFixed(size % 1 ? 1 : 0)} по {cents_}¢
         </button>
-        <div className="sellpays muted">
-          {usd(pays)}
-          {cost > 0 && <b className={pays >= cost ? 'up' : 'down'}> {signedUsd(pays - cost)}</b>}
-        </div>
 
         {/*
           And the other kind of exit: not a price at all, but out — through the
-          book, past our own resting offers, whatever it takes.
+          book, past our own resting offers, whatever it takes. The price it
+          would go at is on the button, because that is the only thing anyone
+          wants to know before pressing it.
         */}
         <button
-          className="ghost wide"
+          className="sellmarket wide"
           disabled={busy || bid == null}
           onClick={onMarket}
         >
-          продать по рынку
+          <span>По рынку</span>
+          <b>{bid != null ? cents(bid) : '—'}</b>
+          {bid != null && <i className="muted">{usd(marketPays)}</i>}
         </button>
       </div>
     </div>
