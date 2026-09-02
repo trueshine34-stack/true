@@ -2459,8 +2459,22 @@ function OrderHistory({
             <span className={o.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
               {o.outcome || '—'}
             </span>
+            {/*
+              What it went at, not what it was asked at.
+
+              A marketable limit is filled at whatever the book was offering,
+              which on a moving market is a different number from the one that
+              was tapped — and the record of a round is what it cost, not what
+              was hoped for. The asked price is kept beside it when the two
+              differ, because "asked 41, paid 23" is the useful sentence and
+              either number alone is half of it.
+            */}
             <span className={o.action === 'BUY' ? 'hist-buy' : 'hist-sell'}>
-              {cents(o.price)}
+              {cents(o.fillPrice ?? o.price)}
+              {o.fillPrice != null &&
+                Math.abs(o.fillPrice - o.price) > 0.0005 && (
+                  <em className="histasked">{cents(o.price)}</em>
+                )}
               <i>×</i>
               {(o.matched > 0 ? o.matched : o.size).toFixed(1)}
             </span>
