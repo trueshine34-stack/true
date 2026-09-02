@@ -21,7 +21,6 @@ import org.json.JSONObject
 object BinanceTrades {
 
     private const val STREAM = "wss://data-stream.binance.vision"
-    private const val SYMBOL = "btcusdt"
     private const val STALE_MS = 60_000L
     private const val MAX_BACKOFF_SEC = 20L
 
@@ -32,6 +31,9 @@ object BinanceTrades {
 
     @Volatile
     private var stopped = true
+
+    /** Whether the stall guard is already scheduled. */
+    private var watching = false
 
     @Volatile
     private var socket: WebSocket? = null
@@ -47,13 +49,28 @@ object BinanceTrades {
         if (!stopped) return
         stopped = false
         connect()
-        scheduler.scheduleWithFixedDelay({ checkStall() }, 15, 15, TimeUnit.SECONDS)
+        // Scheduled once per process; a coin switch restarts the socket, not
+        // the guard that watches it.
+        if (!watching) {
+            watching = true
+            scheduler.scheduleWithFixedDelay({ checkStall() }, 15, 15, TimeUnit.SECONDS)
+        }
     }
 
     fun stop() {
         stopped = true
         socket?.close(1000, null)
         socket = null
+        // The last print belonged to the coin that just went away.
+        last = 0.0
+        touchedAt = 0L
+    }
+
+    /** Follow the desk onto another coin. */
+    fun switchCoin() {
+        val wasRunning = !stopped
+        stop()
+        if (wasRunning) start()
     }
 
     /**
@@ -72,7 +89,9 @@ object BinanceTrades {
 
     private fun connect() {
         if (stopped) return
-        val request = Request.Builder().url("$STREAM/ws/$SYMBOL@aggTrade").build()
+        val request = Request.Builder()
+            .url("$STREAM/ws/${Coins.current.stream}@aggTrade")
+            .build()
         socket = Http.client.newWebSocket(
             request,
             object : WebSocketListener() {

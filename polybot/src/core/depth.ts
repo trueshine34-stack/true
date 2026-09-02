@@ -88,7 +88,16 @@ export function btc(size: number): string {
   return size.toFixed(2);
 }
 
-/** A dollar price, whole, spaced as the desk shows every other price. */
-export function priceLabel(value: number): string {
-  return Math.round(value).toLocaleString('ru-RU');
+/**
+ * A dollar price, spaced as the desk shows every other price.
+ *
+ * Whole dollars by default, which is bitcoin; a coin whose whole move fits
+ * inside a dollar asks for the decimals it moves in, or every label on its
+ * chart is the same number.
+ */
+export function priceLabel(value: number, digits = 0): string {
+  return value.toLocaleString('ru-RU', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
 }

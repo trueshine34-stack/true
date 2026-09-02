@@ -28,10 +28,24 @@ export interface Book {
  * Updated seven times a second off a book kept in the app from Binance's
  * hundred-millisecond diff stream: nothing here is a network round trip.
  */
-export function DepthPanel() {
+export function DepthPanel({
+  digits = 0,
+  coin,
+}: {
+  /** How finely this coin's price is printed under the curve. */
+  digits?: number;
+  /** Watched so the book is dropped rather than redrawn on a switch. */
+  coin?: string;
+}) {
   const [book, setBook] = useState<Book | null>(null);
   /** Where the running five minutes opened, for the move under the price. */
   const [open, setOpen] = useState(0);
+
+  // Both numbers below belong to the coin that is leaving.
+  useEffect(() => {
+    setBook(null);
+    setOpen(0);
+  }, [coin]);
 
   useEffect(() => {
     let alive = true;
@@ -61,7 +75,9 @@ export function DepthPanel() {
       alive = false;
       window.clearInterval(timer);
     };
-  }, []);
+    // The book is one coin's; on a switch the native side is syncing another
+    // and answers "not ready", which empties this by itself.
+  }, [coin]);
 
   // The five-minute candle in progress opens where the window opened, and the
   // distance from it is what the bet is about — so it belongs on the price
@@ -82,9 +98,9 @@ export function DepthPanel() {
       alive = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [coin]);
 
-  return <DepthFace book={book} open={open} />;
+  return <DepthFace book={book} open={open} digits={digits} />;
 }
 
 /**
@@ -94,10 +110,13 @@ export function DepthPanel() {
 export function DepthFace({
   book,
   open = 0,
+  digits = 0,
 }: {
   book: Book | null;
   /** Where the current five minutes opened, or nothing when it is unknown. */
   open?: number;
+  /** How finely to print the prices under the curve. */
+  digits?: number;
 }) {
   const shape = book ? depthShape(book.bids, book.asks, W, H) : null;
   const mid = book ? (book.bid + book.ask) / 2 : 0;
@@ -121,17 +140,17 @@ export function DepthFace({
       */}
       <div className="depth-foot">
         <span className="up">{shape ? btc(shape.bidTotal) : '—'}</span>
-        <i>{mid > 0 ? priceLabel(mid * (1 - book!.span)) : ''}</i>
+        <i>{mid > 0 ? priceLabel(mid * (1 - book!.span), digits) : ''}</i>
         <b>
-          {mid > 0 ? priceLabel(mid) : 'стакан грузится'}
+          {mid > 0 ? priceLabel(mid, digits) : 'стакан грузится'}
           {mid > 0 && open > 0 && (
             <em className={mid >= open ? 'up' : 'down'}>
               {mid >= open ? '+' : '−'}
-              {Math.round(Math.abs(mid - open)).toLocaleString('ru-RU')}$
+              {priceLabel(Math.abs(mid - open), digits)}$
             </em>
           )}
         </b>
-        <i>{mid > 0 ? priceLabel(mid * (1 + book!.span)) : ''}</i>
+        <i>{mid > 0 ? priceLabel(mid * (1 + book!.span), digits) : ''}</i>
         <span className="down">{shape ? btc(shape.askTotal) : '—'}</span>
       </div>
     </div>

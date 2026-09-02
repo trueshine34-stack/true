@@ -2660,6 +2660,13 @@ button.step.big {
   display: flex;
   align-items: center;
   gap: 8px;
+  /*
+    A four-figure balance on a narrow phone leaves no room for the coins, the
+    bots and the gear on one line. Wrapping drops the coin chips to a second
+    row there instead of pushing the gear off the edge — which is the one
+    outcome that cannot be recovered from, since the gear is how you get back.
+  */
+  flex-wrap: wrap;
 }
 
 /*
@@ -2804,6 +2811,44 @@ button.step.big {
  * on the rail those numbers only competed with the balance, which is the one
  * here always worth reading.
  */
+/*
+  Which coin, in the rail.
+
+  Three chips where a title used to be: the desk trades one market at a time
+  and this says which one, so it is lit rather than labelled. Small on purpose
+  — it is read once a session and then only glanced at.
+*/
+.railcoins {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.railcoins button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.railcoins button.on {
+  border-color: var(--accent);
+  background: rgba(76, 141, 255, 0.16);
+  color: var(--accent);
+}
+
+.railcoins button:disabled {
+  opacity: 0.5;
+}
+
 .railmark {
   position: relative;
   display: flex;

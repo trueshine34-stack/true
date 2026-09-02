@@ -51,6 +51,7 @@ import {
   type AutoSellRebuyDone,
   type EventSummary,
   type LoggedOrder,
+  type NativeCoin,
   type NativeMarket,
   type PulseRound,
   type PulseState,
@@ -201,6 +202,19 @@ export function Manual({
    * is actually made; the button between them then only has to say "buy".
    */
   const [side, setSide] = useState<'Up' | 'Down' | null>(null);
+  /**
+   * Which coin the desk is on, and which it could be on.
+   *
+   * The same five-minute Up/Down runs on bitcoin, ether and solana, settling
+   * the same way against the same oracle — so this is one desk pointed at one
+   * of them, not three desks. The native side owns the answer (the service
+   * trades whatever it was left on, screen or no screen); this is a copy of
+   * it, kept so the row of buttons can light the right one.
+   */
+  const [coin, setCoin] = useState('btc');
+  const [coins, setCoins] = useState<NativeCoin[]>([]);
+  /** True while the feeds are being pointed somewhere else. */
+  const [coinBusy, setCoinBusy] = useState(false);
   const [pulseBot, setPulseBot] = useState<PulseState | null>(null);
   /** The same rule with its gates opened up, on its own money. */
   const [softBot, setSoftBot] = useState<PulseState | null>(null);
@@ -295,6 +309,69 @@ export function Manual({
     return () => window.clearInterval(timer);
   }, []);
 
+  // What the service is trading, which after a restart is whatever it was left
+  // on rather than whatever this screen defaults to.
+  useEffect(() => {
+    void PolyBot.getCoins()
+      .then((r) => {
+        setCoins(r.coins);
+        setCoin(r.current);
+      })
+      .catch(() => {});
+  }, []);
+
+  /**
+   * Point the desk at another coin.
+   *
+   * Everything on the screen belongs to the market that is going away — its
+   * book, its positions, its orders, its history — so it is cleared here
+   * rather than left to be overwritten one poll at a time. A window drawn half
+   * in one coin and half in another is the one state this screen must never
+   * be in: every number on it is a price, and none of them say what they are
+   * a price of.
+   */
+  const pickCoin = useCallback(
+    (id: string) => {
+      if (id === coin || coinBusy) return;
+      const was = coins.find((c) => c.id === coin)?.label ?? coin.toUpperCase();
+      // Only this market's: the count is about what is being left behind on
+      // the coin going away, not about everything the wallet has ever held.
+      const tokens = [market?.upTokenId, market?.downTokenId].filter(Boolean);
+      const leaving =
+        positions.filter((p) => tokens.includes(p.asset)).length +
+        orders.filter((o) => tokens.includes(o.assetId)).length;
+      setCoinBusy(true);
+      setMarket(null);
+      setBooks({ Up: { bids: [], asks: [] }, Down: { bids: [], asks: [] } });
+      setPositions([]);
+      setOrders([]);
+      setLogged([]);
+      setEvents([]);
+      setSide(null);
+      setLimitPrice('');
+      setLimitSize('');
+      setLookAhead(false);
+      // What is left behind is not cancelled and not closed: a five-minute
+      // binary settles itself, the sell rule keeps working its ladder on the
+      // token it holds, and a resting limit stays on the book. It does stop
+      // being visible until the desk comes back, so it is said out loud.
+      const left = leaving;
+      void PolyBot.setCoin({ id })
+        .then((r) => {
+          setCoin(r.id);
+          if (left > 0) {
+            setNote(
+              `На ${was} осталось открытым: ${left}. Продажа и лимитки` +
+                ' работают, окно досчитается само.',
+            );
+          }
+        })
+        .catch(() => setNote('Не вышло сменить монету'))
+        .finally(() => setCoinBusy(false));
+    },
+    [coin, coinBusy, coins, market, positions, orders],
+  );
+
   /** Which five-minute window the clock is in. Changes on the boundary. */
   const windowStart = Math.floor(now / 1000 / WINDOW_SEC) * WINDOW_SEC;
 
@@ -325,7 +402,7 @@ export function Manual({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [windowStart]);
+  }, [windowStart, coin]);
 
   /**
    * What each five-minute event made, keyed the way the chart holds a candle.
@@ -369,7 +446,7 @@ export function Manual({
     return () => {
       cancelled = true;
     };
-  }, [readWindow]);
+  }, [readWindow, coin]);
 
   /** The window's orders, paired into trades: a buy and the sell that closed it. */
   const trades = useMemo(() => pairOrders(logged), [logged]);
@@ -444,6 +521,15 @@ export function Manual({
   }, [trades, orders, sideOfToken]);
   const realisedPnl = useMemo(() => realised(trades), [trades]);
 
+  /**
+   * How finely this coin's price is worth printing.
+   *
+   * Bitcoin in whole dollars, ether to a tenth, solana to a cent — the same
+   * readouts at the resolution each of them actually moves at. Zero until the
+   * list has loaded, which is bitcoin's answer anyway.
+   */
+  const coinDigits = coins.find((c) => c.id === coin)?.digits ?? 0;
+
   /** The window the desk is trading: this one, or the one after it. */
   const deskWindow = lookAhead ? windowStart + WINDOW_SEC : windowStart;
 
@@ -475,7 +561,7 @@ export function Manual({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [deskWindow, lookAhead, marketStale]);
+  }, [deskWindow, lookAhead, marketStale, coin]);
 
   // A look-ahead is only meaningful until that window becomes the current one.
   useEffect(() => {
@@ -538,7 +624,10 @@ export function Manual({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, []);
+    // Each coin's rules are their own, with their own money and their own
+    // record, so a switch is a different pair of bots — not the same pair
+    // with different numbers.
+  }, [coin]);
 
   // Sizing off the wallet needs the wallet. It only moves when an order fills,
   // so a slow poll is enough. What comes back is already net of the reserve —
@@ -589,7 +678,7 @@ export function Manual({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [deskWindow]);
+  }, [deskWindow, coin]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1184,6 +1273,30 @@ export function Manual({
         </button>
 
         {/*
+          Which coin. Three letters each, because the row has to sit next to
+          the balance and the gear without pushing either off — and because
+          the label is only there to say which of the three is lit.
+
+          It is disabled while the switch is in flight: the feeds are being
+          torn down and rebuilt behind it, and a second tap in that second
+          would ask for a third coin the first switch has not finished leaving.
+        */}
+        {coins.length > 1 && (
+          <div className="railcoins">
+            {coins.map((c) => (
+              <button
+                key={c.id}
+                className={c.id === coin ? 'on' : undefined}
+                disabled={coinBusy}
+                onClick={() => pickCoin(c.id)}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/*
           The session used to be a mark here, opening a strip of chips — one
           per event, each with its result. The chart below is already a row of
           five-minute events in the same order, so the strip was the same list
@@ -1391,6 +1504,8 @@ export function Manual({
               height={150}
               picked={readWindow}
               results={results}
+              digits={coinDigits}
+              coin={coin}
               onPick={(t) => setReadWindow((v) => (v === t ? null : t))}
             />
 
@@ -1414,9 +1529,14 @@ export function Manual({
               which on a bet that lasts five minutes is the half that decides
               the side.
             */}
-            <CandlePanel interval="1m" height={110} />
+            <CandlePanel
+              interval="1m"
+              height={110}
+              digits={coinDigits}
+              coin={coin}
+            />
 
-            <DepthPanel />
+            <DepthPanel digits={coinDigits} coin={coin} />
 
             {/*
               Only what is still working. A round that has closed is history and
@@ -1860,6 +1980,7 @@ export function Manual({
               localAvg={localAvg}
               secondsLeft={secondsLeft}
               windowStart={windowStart}
+              digits={coinDigits}
               lookAhead={lookAhead}
               onLookAhead={() => setLookAhead((v) => !v)}
               elapsed={elapsed}
@@ -3186,7 +3307,14 @@ function RuleBar({
  * so asking this often costs nothing and the readout never lags the tick by
  * more than a quarter of a second.
  */
-function WindowMark({ windowStart }: { windowStart: number }) {
+function WindowMark({
+  windowStart,
+  digits = 0,
+}: {
+  windowStart: number;
+  /** How finely this coin's price is printed. */
+  digits?: number;
+}) {
   const [mark, setMark] = useState<{
     target?: number | null;
     price?: number | null;
@@ -3209,12 +3337,12 @@ function WindowMark({ windowStart }: { windowStart: number }) {
     };
   }, [windowStart]);
 
-  const move = openMark(mark?.target, mark?.price);
+  const move = openMark(mark?.target, mark?.price, digits);
 
   return (
     <div className="pairmark">
       <span className="pairmarkline">
-        {bigPrice(mark?.target)} → {bigPrice(mark?.price)}
+        {bigPrice(mark?.target, digits)} → {bigPrice(mark?.price, digits)}
       </span>
       <span className={`pairmarkmove ${move ? move.way : 'muted'}`}>
         {move ? `${move.arrow} ${move.text}` : '—'}
@@ -3230,6 +3358,7 @@ function PositionPair({
   localAvg,
   secondsLeft,
   windowStart,
+  digits,
   lookAhead,
   onLookAhead,
   elapsed,
@@ -3248,6 +3377,8 @@ function PositionPair({
   secondsLeft: number;
   /** The live window, which is the one the readout above the clock is about. */
   windowStart: number;
+  /** How finely this coin's price is printed over the clock. */
+  digits: number;
   lookAhead: boolean;
   onLookAhead: () => void;
   /** How far into the window the desk is trading, for the early ceiling. */
@@ -3351,7 +3482,7 @@ function PositionPair({
         actually made: this side or that one, and how long have I got.
       */}
       <div className="pairmid">
-        <WindowMark windowStart={windowStart} />
+        <WindowMark windowStart={windowStart} digits={digits} />
         {/*
           The clock is the switch between this window and the next. They are
           the same question — which five minutes am I trading — so it is one

@@ -41,6 +41,24 @@ object PolyPriceApi {
     private val cache = ConcurrentHashMap<Long, List<Point>>()
 
     /**
+     * Everything remembered here belongs to one coin.
+     *
+     * The cache is keyed by window because a finished window is finished — but
+     * only for the coin it was read for. Switching coins makes every stored
+     * series wrong rather than stale, so it is thrown away rather than aged
+     * out: bitcoin's opening price on solana's chart is not a delay, it is a
+     * different number entirely.
+     */
+    fun forget() {
+        cache.clear()
+        synchronized(this) {
+            liveKey = 0L
+            liveAt = 0L
+            livePoints = emptyList()
+        }
+    }
+
+    /**
      * The running window's last answer.
      *
      * A window still open answers with a series that is downsampled and half a
@@ -52,7 +70,7 @@ object PolyPriceApi {
     private var liveAt = 0L
     private var livePoints: List<Point> = emptyList()
 
-    fun window(windowStart: Long, symbol: String = "BTC"): List<Point> {
+    fun window(windowStart: Long, symbol: String = Coins.current.poly): List<Point> {
         cache[windowStart]?.let { return it }
         synchronized(this) {
             if (liveKey == windowStart &&
@@ -99,7 +117,7 @@ object PolyPriceApi {
      * as that spans. A window that fails to load is skipped rather than
      * aborting the chart — a gap in the middle beats no chart at all.
      */
-    fun candles(minutes: Int, symbol: String = "BTC"): List<Candle> {
+    fun candles(minutes: Int, symbol: String = Coins.current.poly): List<Candle> {
         val now = Clock.nowSec()
         val currentWindow = now - (now % WINDOW_SECONDS)
         val windows = ((minutes * 60 + WINDOW_SECONDS - 1) / WINDOW_SECONDS).coerceAtLeast(1)

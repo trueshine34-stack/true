@@ -49,6 +49,8 @@ export function CandlePanel({
   picked,
   height = 150,
   results,
+  digits = 0,
+  coin,
 }: {
   interval?: string;
   /** Called with a candle's open time when it is tapped. */
@@ -65,10 +67,30 @@ export function CandlePanel({
    * time, one tap away from the chart that was already showing them.
    */
   results?: Record<string, number>;
+  /** How finely this coin's price is printed on the labels. */
+  digits?: number;
+  /**
+   * Which coin these candles are of.
+   *
+   * Only to be watched: the series itself comes from the native side, which
+   * is already pointed at one coin — this is what tells the panel to drop the
+   * bars it is holding and ask again rather than draw one coin's shape under
+   * another coin's prices for the next few seconds.
+   */
+  coin?: string;
 }) {
   const [candles, setCandles] = useState<Candle[]>([]);
   const [levels, setLevels] = useState<DayLevel[]>([]);
   const [settled, setSettled] = useState<Record<string, 'Up' | 'Down'>>({});
+
+  // Nothing here belongs to the new coin, and a chart of bitcoin's bars with
+  // solana's levels drawn over it is worse than an empty frame for the second
+  // it takes to answer.
+  useEffect(() => {
+    setCandles([]);
+    setLevels([]);
+    setSettled({});
+  }, [coin]);
 
   useEffect(() => {
     let alive = true;
@@ -87,7 +109,7 @@ export function CandlePanel({
       alive = false;
       window.clearInterval(timer);
     };
-  }, [interval]);
+  }, [interval, coin]);
 
   /*
     The levels the rule actually holds, rather than a second set computed here
@@ -110,7 +132,7 @@ export function CandlePanel({
       alive = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [coin]);
 
   /*
     And how each window on screen settled. Only the five-minute chart has one
@@ -136,7 +158,7 @@ export function CandlePanel({
       alive = false;
       window.clearInterval(timer);
     };
-  }, [interval, times]);
+  }, [interval, times, coin]);
 
   return (
     <CandleFace
@@ -148,6 +170,7 @@ export function CandlePanel({
       levels={levels}
       settled={settled}
       results={results}
+      digits={digits}
     />
   );
 }
@@ -171,6 +194,7 @@ export function CandleFace({
   levels: held,
   settled,
   results,
+  digits = 0,
 }: {
   candles: Candle[];
   interval?: string;
@@ -184,6 +208,8 @@ export function CandleFace({
   settled?: Record<string, 'Up' | 'Down'>;
   /** And what each window made, keyed the same way. */
   results?: Record<string, number>;
+  /** How finely this coin's prices are printed on the labels. */
+  digits?: number;
 }) {
   const shape = candleShape(candles, W, H);
   // The rule's own levels when they are to hand, so the line under the candle
@@ -449,7 +475,7 @@ export function CandleFace({
             ).toFixed(1)}
             textAnchor="start"
           >
-            {priceLabel(level.price)}
+            {priceLabel(level.price, digits)}
           </text>
         ))}
       </svg>
@@ -461,7 +487,7 @@ export function CandleFace({
       */}
       <div className="candles-foot">
         <span className="muted">{interval.replace('m', 'м')}</span>
-        <b>{shape ? priceLabel(shape.open) : '—'}</b>
+        <b>{shape ? priceLabel(shape.open, digits) : '—'}</b>
         <span className={shape && shape.sinceOpen >= 0 ? 'up' : 'down'}>
           {shape ? signedPct(shape.sinceOpen) : ''}
         </span>

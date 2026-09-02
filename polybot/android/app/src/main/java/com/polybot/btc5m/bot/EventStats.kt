@@ -58,7 +58,9 @@ object EventStats {
      * money and belongs in neither column.
      */
     fun recent(limit: Int = 12, nowSec: Long = Clock.nowSec()): List<Event> {
-        val byWindow = OrderLog.all()
+        // One coin's windows. A five-minute event is an event on a market,
+        // and two coins' rounds added together score neither of them.
+        val byWindow = OrderLog.allOn()
             .filter { it.matched > 1e-9 }
             .groupBy { it.windowStart }
 

@@ -329,7 +329,9 @@ class BotService : Service() {
                 addAll(resting)
             }
             if (isEmpty()) add("Ни позиций, ни лимиток")
-            left?.let { add("до конца окна $it") }
+            // Which market this is about. From the notification there is
+            // nothing else to tell three identical five-minute desks apart.
+            left?.let { add("${Coins.current.label} · до конца окна $it") }
         }.joinToString("\n")
 
         val manager = getSystemService(NotificationManager::class.java)

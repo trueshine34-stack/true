@@ -30,7 +30,6 @@ object BinanceBook {
 
     private const val REST = "https://data-api.binance.vision"
     private const val STREAM = "wss://data-stream.binance.vision"
-    private const val SYMBOL = "btcusdt"
 
     /** How far either side of the mid the curve reaches: eight hundredths of a percent. */
     const val SPAN = 0.0008
@@ -66,6 +65,9 @@ object BinanceBook {
     @Volatile
     private var stopped = true
 
+    /** Whether the stall guard is already scheduled. */
+    private var watching = false
+
     @Volatile
     private var socket: WebSocket? = null
 
@@ -77,14 +79,28 @@ object BinanceBook {
         if (!stopped) return
         stopped = false
         connect()
-        scheduler.scheduleWithFixedDelay({ checkStall() }, 5, 5, TimeUnit.SECONDS)
+        // Once per process: the guard outlives any one coin's socket.
+        if (!watching) {
+            watching = true
+            scheduler.scheduleWithFixedDelay({ checkStall() }, 5, 5, TimeUnit.SECONDS)
+        }
+    }
+
+    /** Follow the desk onto another coin, book and all. */
+    fun switchCoin() {
+        val wasRunning = !stopped
+        stop()
+        if (wasRunning) start()
     }
 
     fun stop() {
         stopped = true
         socket?.close(1000, null)
         socket = null
-        synchronized(lock) { reset() }
+        synchronized(lock) {
+            reset()
+            touchedAt = 0L
+        }
     }
 
     /**
@@ -150,7 +166,7 @@ object BinanceBook {
         synchronized(lock) { reset() }
 
         val request = Request.Builder()
-            .url("$STREAM/ws/$SYMBOL@depth@100ms")
+            .url("$STREAM/ws/${Coins.current.stream}@depth@100ms")
             .build()
         socket = Http.client.newWebSocket(
             request,
@@ -194,7 +210,12 @@ object BinanceBook {
     private fun snapshot(owner: WebSocket) {
         if (stopped) return
         val json = try {
-            JSONObject(Http.get("$REST/api/v3/depth?symbol=BTCUSDT&limit=$SNAPSHOT_LIMIT"))
+            JSONObject(
+                Http.get(
+                    "$REST/api/v3/depth?symbol=${Coins.current.pair}" +
+                        "&limit=$SNAPSHOT_LIMIT",
+                ),
+            )
         } catch (e: Exception) {
             scheduleReconnect()
             return

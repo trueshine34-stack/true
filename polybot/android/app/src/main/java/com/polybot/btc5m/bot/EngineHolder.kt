@@ -17,11 +17,15 @@ object EngineHolder {
     @Volatile
     private var autoSell: AutoSell? = null
 
-    @Volatile
-    private var pulseBot: PulseBot? = null
-
-    @Volatile
-    private var softPulse: PulseBot? = null
+    /**
+     * The pulses, one pair per coin.
+     *
+     * Each coin's rule keeps its own money, its own record and its own
+     * settings, because a record that mixes two markets answers no question
+     * about either. Only the coin on the screen runs: the rules read the live
+     * feeds, and there is one set of those.
+     */
+    private val pulses = HashMap<String, PulseBot>()
 
     @Volatile
     var onState: (() -> Unit)? = null
@@ -36,6 +40,10 @@ object EngineHolder {
     fun get(context: Context): BotEngine {
         engine?.let { return it }
         return synchronized(this) {
+            // Before the engine exists, because its feeds read the coin as
+            // they start: an engine built on bitcoin and switched a moment
+            // later opens two sets of sockets to arrive where it was told.
+            Coins.select(CoinStore(context).load().id)
             engine ?: BotEngine(
                 journal = Journal(context).also { it.prune() },
                 onStateChanged = {
@@ -68,8 +76,9 @@ object EngineHolder {
                 // itself, and two rules pulling each other's orders would leave
                 // the position naked between them.
                 botShares = { asset ->
-                    (pulseBot?.takeIf { it.running }?.heldShares(asset) ?: 0.0) +
-                        (softPulse?.takeIf { it.running }?.heldShares(asset) ?: 0.0)
+                    synchronized(this) { pulses.values.toList() }
+                        .filter { it.running }
+                        .sumOf { it.heldShares(asset) }
                 },
                 onStateChanged = {
                     onState?.invoke()
@@ -89,26 +98,7 @@ object EngineHolder {
      * about. Created on first ask rather than only when switched on, so the
      * panel shows its books whether it is running or not.
      */
-    fun pulse(context: Context): PulseBot {
-        pulseBot?.let { return it }
-        val host = get(context)
-        return synchronized(this) {
-            pulseBot ?: PulseBot(
-                engine = host,
-                store = PulseStore(context),
-                exit = { autoSell?.settings ?: AutoSell.Settings() },
-                onStateChanged = {
-                    onState?.invoke()
-                    onServiceState?.invoke()
-                },
-            ).also {
-                pulseBot = it
-                if (it.settings.enabled) it.start()
-            }
-        }
-    }
-
-    fun peekPulse(): PulseBot? = pulseBot
+    fun pulse(context: Context): PulseBot = pulseFor(context, soft = false)
 
     /**
      * The same rule with its gates opened up, on its own money.
@@ -118,16 +108,20 @@ object EngineHolder {
      * by side, each with its own paper bank and its own record, and in a few
      * days the records answer it.
      */
-    fun pulseSoft(context: Context): PulseBot {
-        softPulse?.let { return it }
+    fun pulseSoft(context: Context): PulseBot = pulseFor(context, soft = true)
+
+    private fun pulseFor(context: Context, soft: Boolean): PulseBot {
+        val coin = Coins.current.id
+        val key = key(soft, coin)
+        pulses[key]?.let { return it }
         val host = get(context)
         return synchronized(this) {
-            softPulse ?: PulseBot(
+            pulses[key] ?: PulseBot(
                 engine = host,
                 store = PulseStore(
                     context,
-                    name = "polybot_pulse2",
-                    fallback = PulsePlan.soft(),
+                    name = storeName(soft, coin),
+                    fallback = if (soft) PulsePlan.soft() else PulsePlan.Settings(),
                 ),
                 exit = { autoSell?.settings ?: AutoSell.Settings() },
                 onStateChanged = {
@@ -135,13 +129,60 @@ object EngineHolder {
                     onServiceState?.invoke()
                 },
             ).also {
-                softPulse = it
-                if (it.settings.enabled) it.start()
+                pulses[key] = it
+                if (it.settings.enabled && coin == Coins.current.id) it.start()
             }
         }
     }
 
-    fun peekSoftPulse(): PulseBot? = softPulse
+    private fun key(soft: Boolean, coin: String) = (if (soft) "soft." else "hard.") + coin
+
+    /**
+     * Where a rule's record is kept.
+     *
+     * Bitcoin keeps the file it has always had, so nothing that was traded
+     * before there was a choice of coin is lost to a rename; the coins added
+     * afterwards get a file each.
+     */
+    private fun storeName(soft: Boolean, coin: String): String {
+        val base = if (soft) "polybot_pulse2" else "polybot_pulse"
+        return if (coin == Coins.BTC.id) base else "$base.$coin"
+    }
+
+    fun peekPulse(): PulseBot? = pulses[key(soft = false, coin = Coins.current.id)]
+
+    fun peekSoftPulse(): PulseBot? = pulses[key(soft = true, coin = Coins.current.id)]
+
+    /**
+     * Move the desk to another coin.
+     *
+     * Everything that is about the coin follows: the market, the charts, the
+     * oracle, the book — and the rules, which are per coin and of which only
+     * the ones on the screen run. False when it was already there.
+     *
+     * A rule stopped holding shares is not abandoned: the position is a
+     * five-minute binary that settles itself at the close, and until then the
+     * desk's own sell rule can see it like any other holding.
+     */
+    fun selectCoin(context: Context, id: String?): Boolean {
+        if (!Coins.select(id)) return false
+        CoinStore(context).save(Coins.current)
+
+        // Whatever was running belonged to the coin that just left.
+        val leaving = synchronized(this) { pulses.entries.toList() }
+        for ((key, bot) in leaving) {
+            if (!key.endsWith(".${Coins.current.id}") && bot.running) bot.stop()
+        }
+
+        peek()?.switchCoin()
+
+        // And the new coin's rules pick up where their own record left off.
+        pulse(context)
+        pulseSoft(context)
+        onState?.invoke()
+        onServiceState?.invoke()
+        return true
+    }
 
     /** Null when nothing has touched the engine yet this process. */
     fun peek(): BotEngine? = engine

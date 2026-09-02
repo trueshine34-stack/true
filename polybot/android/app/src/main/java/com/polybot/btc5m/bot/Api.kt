@@ -168,7 +168,7 @@ object ClobApi {
         val outcomes: Map<String, String>,
     )
 
-    /** `btc-updown-5m-1787640600` — the slug carries the window it belongs to. */
+    /** `btc-updown-5m-1787640600` — the coin, then the window it belongs to. */
     private fun windowFromSlug(slug: String): Long =
         slug.substringAfterLast('-').toLongOrNull() ?: 0L
 
@@ -504,7 +504,7 @@ object GammaApi {
      * these markets out.
      */
     fun marketForWindow(windowStart: Long): Market? {
-        val slug = "btc-updown-5m-$windowStart"
+        val slug = "${Coins.current.slugPrefix}$windowStart"
         val events = JSONArray(Http.get("${Endpoints.GAMMA}/events?slug=$slug"))
         if (events.length() == 0) return null
 

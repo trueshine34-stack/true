@@ -21,6 +21,15 @@ object OrderLog {
         val id: Long,
         val orderId: String?,
         val asset: String,
+        /**
+         * Which coin's market this went to.
+         *
+         * The log is one list for the whole wallet — money is money — but the
+         * desk shows one coin at a time, and a bitcoin order under solana's
+         * window is not history, it is a wrong number in the middle of the
+         * screen. Stamped once, at the moment it is sent.
+         */
+        val coin: String,
         val conditionId: String,
         val outcome: String,
         val action: String,
@@ -99,6 +108,7 @@ object OrderLog {
             id = ids.incrementAndGet(),
             orderId = orderId,
             asset = asset,
+            coin = Coins.current.id,
             conditionId = conditionId,
             outcome = outcome,
             action = action,
@@ -528,6 +538,11 @@ object OrderLog {
             orderId = null,
             asset = asset,
             conditionId = conditionId,
+            // The coin the token belongs to, not the one on the screen: a
+            // fill can land minutes after the desk was pointed elsewhere, and
+            // it belongs to the market it traded on. Anything already filed
+            // against this token knows which that was.
+            coin = entries.firstOrNull { it.asset == asset }?.coin ?: Coins.current.id,
             // The feed does not always name the side. The token id does, and
             // anything already filed against it knows the name.
             outcome = outcome.ifEmpty {
@@ -564,11 +579,24 @@ object OrderLog {
         .filter { it.action == "BUY" && it.asset == asset && it.size > 0.0 }
         .minOfOrNull { it.size }
 
-    fun forWindow(windowStart: Long): List<Entry> =
-        entries.filter { it.windowStart == windowStart }.sortedByDescending { it.placedAt }
+    /**
+     * One window's orders on one coin — the desk's own view.
+     *
+     * The coin defaults to the one being traded rather than being optional:
+     * every caller that draws this on the screen wants the screen's coin, and
+     * the one place that wants the lot asks [all].
+     */
+    fun forWindow(windowStart: Long, coin: String? = Coins.current.id): List<Entry> =
+        entries
+            .filter { it.windowStart == windowStart && (coin == null || it.coin == coin) }
+            .sortedByDescending { it.placedAt }
 
     /** Everything still remembered, for scoring windows that have closed. */
     fun all(): List<Entry> = entries.toList()
+
+    /** The same, narrowed to one coin — what a coin's own history is made of. */
+    fun allOn(coin: String = Coins.current.id): List<Entry> =
+        entries.filter { it.coin == coin }
 
     fun clear() = entries.clear()
 }

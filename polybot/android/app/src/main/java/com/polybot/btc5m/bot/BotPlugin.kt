@@ -531,6 +531,51 @@ class BotPlugin : Plugin() {
         call.resolve(buildState())
     }
 
+    /**
+     * The coins this desk can be pointed at, and the one it is on.
+     *
+     * The list comes from the native side rather than being written twice:
+     * a coin is a slug prefix and three stream names, and the screen only
+     * needs its label and how finely to print its price.
+     */
+    @PluginMethod
+    fun getCoins(call: PluginCall) {
+        val array = JSArray()
+        Coins.all.forEach {
+            array.put(
+                JSObject()
+                    .put("id", it.id)
+                    .put("label", it.label)
+                    .put("digits", it.digits),
+            )
+        }
+        call.resolve(JSObject().put("coins", array).put("current", Coins.current.id))
+    }
+
+    /**
+     * Move the desk to another coin.
+     *
+     * Off the main thread: this closes four sockets and opens four more, and
+     * the answer is only sent once the desk is actually pointed there — the
+     * screen redraws off it, and redrawing early shows the new coin's name
+     * over the old coin's numbers.
+     */
+    @PluginMethod
+    fun setCoin(call: PluginCall) {
+        val id = call.getString("id")
+        Thread {
+            val changed = try {
+                EngineHolder.selectCoin(context, id)
+            } catch (e: Exception) {
+                call.reject(e.message ?: "Не вышло сменить монету")
+                return@Thread
+            }
+            call.resolve(
+                JSObject().put("id", Coins.current.id).put("changed", changed),
+            )
+        }.start()
+    }
+
     @PluginMethod
     fun getLogs(call: PluginCall) {
         val array = JSArray()
@@ -593,6 +638,10 @@ class BotPlugin : Plugin() {
             .put("serviceAlive", bot.isConfigured())
             .put("feedStatus", bot.feed.status.name.lowercase())
             .put("clockOffsetSec", Clock.offset())
+            // Which market everything else in here is about. The screen can be
+            // switched from the screen, but the service can also come back on
+            // another coin after a restart, and the two have to agree.
+            .put("coin", Coins.current.id)
 
         bot.quotes?.let { q ->
             fun quoteJson(quote: Quote?) = quote?.let {

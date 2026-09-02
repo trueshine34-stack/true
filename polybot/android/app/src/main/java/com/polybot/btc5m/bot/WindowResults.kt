@@ -55,6 +55,19 @@ object WindowResults {
         return known()
     }
 
+    /**
+     * Forget every answer.
+     *
+     * A window's winner is the winner of that window *on one coin*. Kept by
+     * window alone, the arrows over the chart would say what bitcoin did over
+     * solana's candles — so the whole map goes when the desk switches.
+     */
+    fun forget() {
+        known.clear()
+        wanted.clear()
+        asking.clear()
+    }
+
     private fun drain() {
         val windowStart = wanted.pollFirst() ?: return
         try {

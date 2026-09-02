@@ -27,7 +27,20 @@ class BotEngine(
     private val onStateChanged: () -> Unit,
     private val onLog: (LogEntry) -> Unit,
 ) {
-    val feed = ChainlinkFeed()
+    /**
+     * The oracle socket, which is per coin.
+     *
+     * A property rather than a constant because switching coins replaces it:
+     * the stream filters by symbol on the way in, and the history it holds is
+     * the old coin's. Everything reads `engine.feed` at the moment it needs
+     * it, so the swap is seen by all of it at once.
+     */
+    @Volatile
+    var feed: ChainlinkFeed = ChainlinkFeed(
+        Coins.current.oracle,
+        Coins.current.spot,
+    )
+        private set
 
     /** Told when this engine buys, so a sell rule can start watching it. */
     @Volatile
@@ -172,6 +185,45 @@ class BotEngine(
         val creds = this.creds ?: return
         resting = ClobApi.openOrders(creds, acct.signerAddress)
         restingAt = System.currentTimeMillis()
+    }
+
+    /**
+     * Point the whole desk at another coin.
+     *
+     * Everything here that is coin-shaped is thrown away rather than left to
+     * expire: the market for this window, every market looked up for another,
+     * the oracle socket and its history, the price series behind the chart and
+     * the opening prices read off it. What is left — the session, the balance,
+     * the order log — is money and is the same money whatever is traded with
+     * it.
+     *
+     * The feeds are restarted only if they were running, so a switch before
+     * the desk has opened does not start sockets nobody asked for.
+     */
+    fun switchCoin() {
+        cachedMarket = null
+        markets.clear()
+        quotes = null
+
+        val previous = feed
+        val running = previous.status != ChainlinkFeed.Status.CLOSED
+        previous.stop()
+        feed = ChainlinkFeed(Coins.current.oracle, Coins.current.spot)
+        if (running) feed.start()
+
+        PolyPriceApi.forget()
+        WindowOpen.forget()
+        // A day of shelves read at eighty thousand dollars says nothing about
+        // a coin trading at a hundred, and merging the two would draw both
+        // sets on one chart forever.
+        DayLevels.forget()
+        WindowResults.forget()
+        BinanceBook.switchCoin()
+        BinanceCandles.switchCoin()
+        BinanceTrades.switchCoin()
+
+        log("info", "Монета: ${Coins.current.label}")
+        onStateChanged()
     }
 
     fun currentMarket(): Market? {

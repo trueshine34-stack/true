@@ -487,27 +487,46 @@ export interface OpenMark {
 export function openMark(
   target: number | null | undefined,
   price: number | null | undefined,
+  /**
+   * How finely this coin's price is worth reading.
+   *
+   * Bitcoin's five minutes are worth tens of dollars and the cents in them are
+   * noise; solana's are worth a few cents, and rounding them to the dollar
+   * says "flat" about every window it ever has. The same readout, at the
+   * resolution the coin actually moves at.
+   */
+  digits = 0,
 ): OpenMark | null {
   if (target == null || price == null) return null;
   if (!Number.isFinite(target) || !Number.isFinite(price)) return null;
   if (target <= 0 || price <= 0) return null;
 
   const change = price - target;
-  const whole = Math.round(Math.abs(change));
-  // Under half a dollar the venue shows nothing either way, and an arrow on a
-  // change that rounds to zero would claim a direction the price has not
-  // taken.
-  const way = whole === 0 ? 'flat' : change > 0 ? 'up' : 'down';
+  const step = Math.pow(10, -digits);
+  const shown = Math.round(Math.abs(change) / step) * step;
+  // Under half of the last digit shown the venue shows nothing either way, and
+  // an arrow on a change that rounds to zero would claim a direction the price
+  // has not taken.
+  const way = shown < step / 2 ? 'flat' : change > 0 ? 'up' : 'down';
   return {
     way,
     arrow: way === 'up' ? '▲' : way === 'down' ? '▼' : '–',
-    text: `$${whole.toLocaleString('ru-RU')}`,
+    text: `$${shown.toLocaleString('ru-RU', {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    })}`,
     change,
   };
 }
 
 /** A dollar price with the thousands grouped, as the venue prints it. */
-export function bigPrice(value: number | null | undefined): string {
+export function bigPrice(
+  value: number | null | undefined,
+  digits = 0,
+): string {
   if (value == null || !Number.isFinite(value) || value <= 0) return '—';
-  return value.toLocaleString('ru-RU', { maximumFractionDigits: 0 });
+  return value.toLocaleString('ru-RU', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
 }

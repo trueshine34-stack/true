@@ -35,7 +35,7 @@ object BinanceApi {
         val at: Long,
     )
 
-    fun current(symbol: String = "BTCUSDT", interval: String = "5m"): Candle {
+    fun current(symbol: String = Coins.current.pair, interval: String = "5m"): Candle {
         var last: Exception? = null
         for (host in HOSTS) {
             try {

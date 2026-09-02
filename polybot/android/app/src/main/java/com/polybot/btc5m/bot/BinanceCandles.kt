@@ -35,7 +35,6 @@ class BinanceCandles(
     companion object {
         private const val REST = "https://data-api.binance.vision"
         private const val STREAM = "wss://data-stream.binance.vision"
-        private const val SYMBOL = "btcusdt"
 
         private const val STALE_MS = 30_000L
         private const val RESYNC_SEC = 600L
@@ -72,6 +71,22 @@ class BinanceCandles(
 
         fun of(interval: String): BinanceCandles =
             all.firstOrNull { it.interval == interval } ?: fiveMinute
+
+        /**
+         * Point every series at another coin.
+         *
+         * Stopping clears the candles, which is the point: a chart that keeps
+         * bitcoin's bars while the numbers under it are solana's is worse than
+         * an empty chart, and the history request that follows fills it in a
+         * second anyway.
+         */
+        fun switchCoin() {
+            all.forEach {
+                val wasRunning = !it.stopped
+                it.stop()
+                if (wasRunning) it.start()
+            }
+        }
     }
 
     data class Candle(
@@ -96,6 +111,9 @@ class BinanceCandles(
     @Volatile
     private var stopped = true
 
+    /** Whether the repeating guards are already scheduled. */
+    private var watching = false
+
     @Volatile
     private var socket: WebSocket? = null
 
@@ -108,17 +126,31 @@ class BinanceCandles(
         stopped = false
         scheduler.execute { history() }
         connect()
-        scheduler.scheduleWithFixedDelay({ checkStall() }, 10, 10, TimeUnit.SECONDS)
-        // The stream opens each new candle itself, so this is only a guard
-        // against a slow drift away from what Binance would say.
-        scheduler.scheduleWithFixedDelay({ history() }, RESYNC_SEC, RESYNC_SEC, TimeUnit.SECONDS)
+        // Once per process, not once per start: a coin switched five times
+        // would otherwise leave five stall checks and five resyncs running.
+        if (!watching) {
+            watching = true
+            scheduler.scheduleWithFixedDelay({ checkStall() }, 10, 10, TimeUnit.SECONDS)
+            // The stream opens each new candle itself, so this is only a guard
+            // against a slow drift away from what Binance would say.
+            scheduler.scheduleWithFixedDelay(
+                { history() },
+                RESYNC_SEC,
+                RESYNC_SEC,
+                TimeUnit.SECONDS,
+            )
+        }
     }
 
     fun stop() {
         stopped = true
         socket?.close(1000, null)
         socket = null
-        synchronized(lock) { candles.clear() }
+        synchronized(lock) {
+            candles.clear()
+            streamTime = 0L
+            touchedAt = 0L
+        }
     }
 
     /**
@@ -195,7 +227,10 @@ class BinanceCandles(
         if (stopped) return
         val rows = try {
             JSONArray(
-                Http.get("$REST/api/v3/klines?symbol=BTCUSDT&interval=$interval&limit=$limit"),
+                Http.get(
+                    "$REST/api/v3/klines?symbol=${Coins.current.pair}" +
+                        "&interval=$interval&limit=$limit",
+                ),
             )
         } catch (e: Exception) {
             return
@@ -234,7 +269,7 @@ class BinanceCandles(
     private fun connect() {
         if (stopped) return
         val request = Request.Builder()
-            .url("$STREAM/ws/$SYMBOL@kline_$interval")
+            .url("$STREAM/ws/${Coins.current.stream}@kline_$interval")
             .build()
         socket = Http.client.newWebSocket(
             request,

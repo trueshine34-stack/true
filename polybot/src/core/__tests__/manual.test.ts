@@ -397,6 +397,35 @@ describe('openMark', () => {
   it('keeps the signed change for whoever needs the number', () => {
     expect(openMark(100, 90)!.change).toBeCloseTo(-10, 9);
   });
+
+  it('reads a cheap coin at the resolution it moves in', () => {
+    // Five cents on a hundred-dollar coin is the move the whole window is
+    // about; rounded to the dollar it is "flat", which is what every solana
+    // window would have said.
+    const m = openMark(99.89, 99.94, 2)!;
+    expect(m.way).toBe('up');
+    expect(m.text).toBe('$0,05');
+
+    const flat = openMark(99.89, 99.892, 2)!;
+    expect(flat.way).toBe('flat');
+    expect(flat.text).toBe('$0,00');
+  });
+
+  it('says ether to a tenth', () => {
+    expect(openMark(2411.8, 2413.2, 1)!.text).toBe('$1,4');
+  });
+});
+
+describe('bigPrice', () => {
+  /** The locale groups with a non-breaking space; the test reads either. */
+  const plain = (text: string) => text.replace(/[\u00a0\u202f]/g, ' ');
+
+  it('prints whole dollars by default and decimals when asked', () => {
+    expect(plain(bigPrice(108_240.61))).toBe('108 241');
+    expect(plain(bigPrice(99.891, 2))).toBe('99,89');
+    expect(plain(bigPrice(2411.84, 1))).toBe('2 411,8');
+    expect(bigPrice(null, 2)).toBe('—');
+  });
 });
 
 describe('bigPrice', () => {

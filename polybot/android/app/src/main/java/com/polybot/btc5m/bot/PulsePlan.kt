@@ -310,7 +310,31 @@ object PulsePlan {
         /** The desk's own early ceiling, which this bot is bound by too. */
         val ceiling: Double,
         val cashUsd: Double,
+        /**
+         * What the coin itself costs, which is what a dollar of edge is worth.
+         *
+         * Six dollars of lead is a real move on bitcoin and an impossible one
+         * on solana, where the whole price is a hundred dollars — the same
+         * rule read on three coins with one dollar figure would enter every
+         * window on one of them and none on another. Zero means "do not
+         * scale", which is what every test and every old caller means.
+         */
+        val price: Double = 0.0,
     )
+
+    /**
+     * What one dollar of the edge setting means: bitcoin at a hundred thousand.
+     *
+     * The setting stays a number of dollars because that is how it is read on
+     * the screen — "enter at six dollars of lead" — and what it is scaled by
+     * is the price of the coin in front of it. So the same setting asks for
+     * the same *move*, whichever of the three is being traded.
+     */
+    const val EDGE_REFERENCE = 100_000.0
+
+    /** The edge this setting actually asks for on a coin trading at [price]. */
+    fun edgeFor(minEdge: Double, price: Double): Double =
+        if (price > 0.0) minEdge * (price / EDGE_REFERENCE) else minEdge
 
     /** Which side the window is currently winning, if either. */
     fun leader(lead: Double, minEdge: Double): String? = when {
@@ -349,8 +373,9 @@ object PulsePlan {
             return "поздно"
         }
 
-        val side = leader(read.lead, settings.minEdge)
-            ?: return "нет перевеса " + money(abs(read.lead)) + " из " + money(settings.minEdge)
+        val edge = edgeFor(settings.minEdge, read.price)
+        val side = leader(read.lead, edge)
+            ?: return "нет перевеса " + money(abs(read.lead)) + " из " + money(edge)
 
         val up = side == "Up"
         if (up && read.momentum < 0.0 || !up && read.momentum > 0.0) return "импульс против"
@@ -407,7 +432,8 @@ object PulsePlan {
      */
     fun exitFor(side: String, read: Read, settings: Settings): Exit {
         val ahead = if (side == "Up") read.lead else -read.lead
-        if (read.elapsedSec >= settings.rideSec && ahead >= settings.minEdge) return Exit.RIDE
+        val edge = edgeFor(settings.minEdge, read.price)
+        if (read.elapsedSec >= settings.rideSec && ahead >= edge) return Exit.RIDE
         return Exit.HOLD
     }
 

@@ -106,10 +106,20 @@ export type PlaceOrderResult = {
   error?: string | null;
 };
 
+/** One of the coins the same five-minute market is run on. */
+export type NativeCoin = {
+  id: string;
+  label: string;
+  /** How many decimals of price are worth printing for it. */
+  digits: number;
+};
+
 export type NativeState = {
   serviceAlive: boolean;
   feedStatus: 'live' | 'connecting' | 'stalled' | 'closed';
   clockOffsetSec: number;
+  /** Which coin everything else in this state is about. */
+  coin?: string;
   lastTick?: NativeTick;
   spotTick?: NativeTick;
   /** Thirty-second TWAP — the number Polymarket shows and settles on. */
@@ -155,6 +165,9 @@ export interface PolyBotPlugin {
   start(): Promise<void>;
   stop(): Promise<void>;
   getState(): Promise<NativeState>;
+  getCoins(): Promise<{ coins: NativeCoin[]; current: string }>;
+  /** Points the whole desk — market, charts, feeds and rules — at one coin. */
+  setCoin(args: { id: string }): Promise<{ id: string; changed: boolean }>;
   getLogs(): Promise<{ entries: NativeLog[] }>;
   /**
    * What may be spent, what the wallet holds, and what is locked away.
@@ -610,6 +623,8 @@ const webStub: PolyBotPlugin = {
   polyCandles: async () => {
     throw new Error('График доступен только в приложении Android');
   },
+  getCoins: async () => ({ coins: [{ id: 'btc', label: 'BTC', digits: 0 }], current: 'btc' }),
+  setCoin: async () => ({ id: 'btc', changed: false }),
   binanceCandles: async () => ({ candles: [] }),
   dayLevels: async () => ({ levels: [], price: 0 }),
   windowResults: async () => ({ results: {} }),

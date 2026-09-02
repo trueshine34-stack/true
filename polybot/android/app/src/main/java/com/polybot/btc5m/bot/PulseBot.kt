@@ -406,6 +406,10 @@ class PulseBot(
             downAsk = null,
             ceiling = BuyCap.ceiling(elapsed),
             cashUsd = cash(paper),
+            // What the coin costs, so the dollar gates mean the same move on
+            // each of them. The window's own open is the honest figure here:
+            // it is the price this whole window is being judged against.
+            price = if (openStamp == windowStart) openPrice else BinanceTrades.last,
         )
     }
 
