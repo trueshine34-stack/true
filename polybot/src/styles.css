@@ -2418,9 +2418,29 @@ button.step.big {
   color: var(--muted);
 }
 
+/*
+  What the position comes to: the money first, the change after it.
+
+  Two numbers on one line, because they are two halves of one answer — how
+  much is there, and whether it is more or less than it cost. The money is in
+  the ordinary text colour; only the change is coloured, or the row reads as
+  green money rather than as a green change.
+*/
 .pairpnl {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 5px;
   font-size: 14px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pairpnl i {
+  color: var(--text);
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .pairpnl.up {

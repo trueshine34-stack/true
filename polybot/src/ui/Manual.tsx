@@ -2926,13 +2926,19 @@ function PositionPair({
     // position it did not place itself.
     const avg = cost > 0 ? cost / size : (localAvg[name] ?? 0);
 
+    const standing = positionPnl(size, avg, now);
+
     return {
       position: mine[0],
       size,
       avg,
       // What selling it right now would pay, less the taker fee — the money,
       // not the mark the exchange shows.
-      pnl: positionPnl(size, avg, now).pnl,
+      pnl: standing.pnl,
+      // And the money itself. The change alone answers "how is it going" and
+      // not "how much is there", which is the number a decision to close is
+      // actually made on.
+      net: standing.net,
       // The cost is the half that cannot be guessed; without it there is no
       // profit to show, only a price. No bid is not the same as no answer:
       // nothing bid means closing pays nothing, and that is the answer.
@@ -2982,8 +2988,9 @@ function PositionPair({
             <span className="pairhold">
               {held.size.toFixed(1)} · {held.avg > 0 ? cents(held.avg) : '…'}
             </span>
-            {/* What it is worth to close at the price on the screen. */}
+            {/* What closing it pays, and what that is against what it cost. */}
             <span className={`pairpnl ${held.pnl >= 0 ? 'up' : 'down'}`}>
+              <i>{usd(held.net)}</i>
               {held.priced ? signedUsd(held.pnl) : '…'}
             </span>
           </button>
