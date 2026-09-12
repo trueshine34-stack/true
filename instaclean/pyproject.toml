@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "instaclean"
+version = "1.0.0"
+description = "Чистка подписок в Instagram: отписка от тех, кто ни разу не лайкал ваши публикации"
+requires-python = ">=3.10"
+dependencies = ["instagrapi>=2.1.2", "pydantic>=2.6", "Pillow>=10.0"]
+
+[project.scripts]
+instaclean = "instaclean.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["instaclean*"]
