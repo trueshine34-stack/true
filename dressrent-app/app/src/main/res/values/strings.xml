@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">DressRent Studio</string>
+    <string name="brief_channel_name">Утренняя сводка</string>
+    <string name="brief_channel_desc">План дня: выдачи, возвраты и задачи, которые приносят выручку.</string>
+</resources>
