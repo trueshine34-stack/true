@@ -13,6 +13,7 @@ import {
   exposureFor,
   DEFAULT_CLICK_SHARES,
   LIMIT_LADDER_COUNT,
+  affordablePrice,
   orderCost,
   sellableShares,
   bigPrice,
@@ -1187,6 +1188,21 @@ export function Manual({
   /** Whether the terms in the field can actually be paid for. */
   const affordable = limitCost > 0 && limitCost <= freeCash + 1e-9;
 
+  /**
+   * And, when they cannot, the dearest price this size still fits at.
+   *
+   * A dead button says "not this", which leaves the next question — "then
+   * what" — to be worked out by tapping the minus until it goes green, a cent
+   * a tap, against a clock. This is the answer to it, and one tap takes it.
+   * Null when no price works: at that point it is the size that has to change,
+   * and offering a price would be a promise the venue's own minimum order
+   * will not keep.
+   */
+  const fits =
+    side != null && !affordable && limitSizeNum > 0
+      ? affordablePrice(limitSizeNum, freeCash, minSize)
+      : null;
+
   /** Whether the price in the field is one the early rule will not buy at. */
   const limitBarred =
     Number.isFinite(limitPriceNum) &&
@@ -1742,6 +1758,24 @@ export function Manual({
             })}
           </div>
         )}
+        {/*
+          What the money in hand does reach, over the button that says it does
+          not reach the price in the field. One tap takes it.
+        */}
+        {fits != null && (
+          <button
+            className="buyfits"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              setSizePct(null);
+              setLimitPrice(String(fits));
+            }}
+          >
+            хватает на {fits}¢
+            <i>{usd(orderCost(limitSizeNum, fits / 100))}</i>
+          </button>
+        )}
+
         {/*
           Price and size, and nothing else. Which side and whether to send it
           are the two quotes up by the charts — this one is only the terms,

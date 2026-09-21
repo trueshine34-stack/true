@@ -453,6 +453,36 @@ export function orderCost(shares: number, price: number): number {
 }
 
 /**
+ * The dearest price this size can still be bought at with the money there is.
+ *
+ * The button goes dead when the terms in the field cost more than is free,
+ * which answers "can I send this" and not "then what can I send". This is the
+ * other half: the highest whole cent at which the same number of shares still
+ * fits — and null when none does, because at that point the size is the thing
+ * that has to change and a price would be a false promise.
+ *
+ * The venue's own minimum is part of the arithmetic, not an afterthought: five
+ * shares and a dollar of notional, so a cheap price can be refused for being
+ * too cheap to make an order out of. Walking down from the top finds the first
+ * price that satisfies both, which is the dearest one that works.
+ */
+export function affordablePrice(
+  shares: number,
+  cash: number,
+  minimumOrderSize = 5,
+): number | null {
+  if (!Number.isFinite(shares) || shares <= 0) return null;
+  if (!Number.isFinite(cash) || cash <= 0) return null;
+
+  for (let cents = 99; cents >= 1; cents--) {
+    const price = cents / 100;
+    if (shares < minShares(price, minimumOrderSize) - 1e-9) continue;
+    if (orderCost(shares, price) <= cash + 1e-9) return cents;
+  }
+  return null;
+}
+
+/**
  * The dearest a buy may be this early in the window.
  *
  * A side that already costs most of a dollar in the first minute is paid for a move

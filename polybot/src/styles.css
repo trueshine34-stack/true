@@ -948,6 +948,40 @@ input.limitsize.typed {
   user-select: text;
 }
 
+/*
+  What the money does reach, over the button that says the price does not.
+
+  A full-width strip rather than a chip: it is read in the second after a tap
+  came back dead, which is the second before the window turns — and it is the
+  one thing on the dock that is an offer rather than a control, so it is
+  quieter than the row under it and still impossible to miss.
+*/
+.buyfits {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: rgba(76, 141, 255, 0.14);
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.buyfits i {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
 /* Wide enough to hit without looking at it. */
 .limitprice button.step {
   flex: 0 0 34px;

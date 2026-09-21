@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_MANUAL_SETTINGS,
   MIN_ROOM_USD,
+  affordablePrice,
   bigPrice,
   buyBarred,
   buyCeiling,
@@ -536,5 +537,31 @@ describe('openingSize', () => {
 
   it('has nothing to offer without a price', () => {
     expect(openingSize(0, 100).shares).toBeNull();
+  });
+});
+
+describe('affordablePrice', () => {
+  it('finds the dearest cent the size still fits at', () => {
+    // Five shares with three dollars: sixty cents costs 3.07 with the fee,
+    // fifty-nine costs 3.02, fifty-eight fits.
+    expect(affordablePrice(5, 3)).toBe(58);
+    expect(orderCost(5, 0.58)).toBeLessThanOrEqual(3);
+    expect(orderCost(5, 0.59)).toBeGreaterThan(3);
+  });
+
+  it('will not suggest a price the venue would refuse the size at', () => {
+    // Five shares under twenty cents is under a dollar of notional, which the
+    // venue rejects — so with forty cents there is no price for five shares.
+    expect(affordablePrice(5, 0.4)).toBeNull();
+    // Twenty shares need five cents to be a dollar of notional, and a dollar
+    // twenty covers exactly that and no more.
+    expect(affordablePrice(20, 1.2)).toBe(5);
+    expect(affordablePrice(20, 1.0)).toBeNull();
+  });
+
+  it('has nothing to say without shares or money', () => {
+    expect(affordablePrice(0, 10)).toBeNull();
+    expect(affordablePrice(5, 0)).toBeNull();
+    expect(affordablePrice(5, Number.NaN)).toBeNull();
   });
 });
