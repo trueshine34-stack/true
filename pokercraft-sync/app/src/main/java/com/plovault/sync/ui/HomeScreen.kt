@@ -78,7 +78,7 @@ fun HomeScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        PortalLinkCard(state) { msg ->
+        PortalLinkCard(state, onOpenPortal = onOpenPortal) { msg ->
             status = msg
             scope.launch { snackbar.showSnackbar(msg) }
         }
@@ -103,8 +103,9 @@ fun HomeScreen(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Как включить автовыгрузку", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "1. Вставьте ссылку PokerCraft из клиента GGPoker (поле выше).\n" +
-                            "2. Нажмите «Открыть PokerCraft» — откроется ваш кабинет.\n" +
+                        "1. Передайте свежую ссылку PokerCraft из клиента GGPoker — через " +
+                            "«Поделиться → PLO Vault» или кнопкой «Вставить и открыть» выше.\n" +
+                            "2. Откроется ваш кабинет PokerCraft.\n" +
                             "3. Режим «Обучение» уже включён: зайдите в историю рук, выберите " +
                             "Rush & Cash / PLO и скачайте выгрузку как обычно.\n" +
                             "4. Нажмите «Сохранить рецепт» — дальше приложение повторяет этот " +

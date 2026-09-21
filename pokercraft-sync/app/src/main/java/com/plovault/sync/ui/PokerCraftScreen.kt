@@ -29,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.plovault.sync.data.ExportRecipe
@@ -52,6 +53,25 @@ fun PokerCraftScreen(state: AppState, onClose: () -> Unit) {
     var info by remember { mutableStateOf("") }
     var captured by remember { mutableStateOf(0) }
     var webView by remember { mutableStateOf<WebView?>(null) }
+    var denied by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+
+    /** Берёт свежую ссылку из буфера обмена и открывает её. */
+    fun pasteAndOpen(resetCookies: Boolean) {
+        val text = clipboard.getText()?.text?.trim()
+        if (text.isNullOrBlank() || !text.startsWith("http")) {
+            info = "В буфере нет ссылки. Скопируйте адрес PokerCraft из клиента GGPoker."
+            return
+        }
+        if (resetCookies) {
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+        }
+        state.prefs.portalUrl = text
+        denied = false
+        info = "Открываю свежую ссылку…"
+        webView?.loadUrl(text)
+    }
 
     DisposableEffect(Unit) {
         CaptureStore.clear()
@@ -85,6 +105,7 @@ fun PokerCraftScreen(state: AppState, onClose: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedButton(onClick = onClose) { Text("Готово") }
+                    OutlinedButton(onClick = { pasteAndOpen(resetCookies = false) }) { Text("Ссылка") }
                     Text("Обучение", style = MaterialTheme.typography.bodyMedium)
                     Switch(checked = training, onCheckedChange = { training = it })
                     Text(
@@ -133,6 +154,28 @@ fun PokerCraftScreen(state: AppState, onClose: () -> Unit) {
                         }
                     }
                 }
+                if (denied) {
+                    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                        Text(
+                            "PokerCraft отказал в доступе — токен в ссылке протух. " +
+                                "Откройте PokerCraft в клиенте GGPoker, скопируйте свежий адрес " +
+                                "и нажмите «Вставить и открыть» (лучше сразу, токен живёт недолго).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(onClick = { pasteAndOpen(resetCookies = false) }) {
+                                Text("Вставить и открыть")
+                            }
+                            OutlinedButton(onClick = { pasteAndOpen(resetCookies = true) }) {
+                                Text("Сбросить куки и открыть")
+                            }
+                        }
+                    }
+                }
                 if (info.isNotBlank()) {
                     Text(
                         info,
@@ -176,6 +219,16 @@ fun PokerCraftScreen(state: AppState, onClose: () -> Unit) {
                             super.onPageFinished(view, url)
                             view?.evaluateJavascript(CaptureScript.JS, null)
                             CookieManager.getInstance().flush()
+                            // Страница «отказано в доступе» означает протухший токен.
+                            view?.evaluateJavascript(
+                                "(document.body ? document.body.innerText : '').slice(0,1500)"
+                            ) { result ->
+                                val text = result.orEmpty().lowercase()
+                                denied = text.contains("not authorized") ||
+                                    text.contains("session has expired") ||
+                                    text.contains("отказано в доступе") ||
+                                    text.contains("please login again")
+                            }
                         }
 
                         override fun shouldOverrideUrlLoading(

@@ -27,7 +27,11 @@ import com.plovault.sync.data.Prefs
  * Токен из неё сохраняется локально и подставляется в автоматические выгрузки.
  */
 @Composable
-fun PortalLinkCard(state: AppState, onSaved: (String) -> Unit = {}) {
+fun PortalLinkCard(
+    state: AppState,
+    onOpenPortal: (() -> Unit)? = null,
+    onSaved: (String) -> Unit = {}
+) {
     val clipboard = LocalClipboardManager.current
     var link by remember { mutableStateOf(state.prefs.portalUrl) }
     var token by remember { mutableStateOf(state.prefs.authToken) }
@@ -50,8 +54,11 @@ fun PortalLinkCard(state: AppState, onSaved: (String) -> Unit = {}) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Ссылка PokerCraft", style = MaterialTheme.typography.titleSmall)
             Text(
-                "Откройте PokerCraft в клиенте GGPoker, скопируйте адрес вида " +
-                    "my.pokercraft.com/?token=… и вставьте сюда. Ссылка остаётся только на телефоне.",
+                "Токен в ссылке живёт недолго, поэтому открывать её надо сразу после копирования. " +
+                    "Самый быстрый путь: в клиенте GGPoker у PokerCraft выберите «Поделиться» или " +
+                    "«Открыть в браузере» и в списке приложений укажите PLO Vault — ссылка придёт " +
+                    "сюда сама. Либо скопируйте адрес вида my.pokercraft.com/?token=… и нажмите " +
+                    "«Вставить и открыть». Ссылка остаётся только на телефоне.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -65,11 +72,22 @@ fun PortalLinkCard(state: AppState, onSaved: (String) -> Unit = {}) {
                 modifier = Modifier.fillMaxWidth()
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onOpenPortal != null) {
+                    Button(onClick = {
+                        val text = clipboard.getText()?.text?.trim()
+                        if (!text.isNullOrBlank()) {
+                            save(text)
+                            onOpenPortal()
+                        } else {
+                            onSaved("Буфер обмена пуст")
+                        }
+                    }) { Text("Вставить и открыть") }
+                }
                 OutlinedButton(onClick = {
                     val text = clipboard.getText()?.text?.trim()
                     if (!text.isNullOrBlank()) save(text) else onSaved("Буфер обмена пуст")
                 }) { Text("Вставить") }
-                Button(onClick = { save(link) }) { Text("Сохранить") }
+                OutlinedButton(onClick = { save(link) }) { Text("Сохранить") }
             }
             StatLine("Токен", Prefs.maskToken(token))
             StatLine("Обновлён", ago(savedAt))
