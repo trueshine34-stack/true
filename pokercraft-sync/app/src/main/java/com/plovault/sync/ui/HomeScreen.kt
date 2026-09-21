@@ -19,6 +19,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.plovault.sync.data.FolderImporter
 import com.plovault.sync.sync.SyncEngine
 import com.plovault.sync.sync.SyncWorker
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +47,18 @@ fun HomeScreen(
     var autoSync by remember { mutableStateOf(state.prefs.autoSync) }
     var status by remember { mutableStateOf(state.prefs.lastSyncStatus) }
     val hasRecipe = state.prefs.recipeJson != null
+
+    // При открытии приложения молча проверяем папку загрузок.
+    LaunchedEffect(Unit) {
+        if (state.prefs.watchFolderUri != null) {
+            val res = withContext(Dispatchers.IO) { FolderImporter(state.context).scan() }
+            if (res.newHands > 0) {
+                status = res.message
+                state.refresh()
+                snackbar.showSnackbar(res.message)
+            }
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -116,6 +130,11 @@ fun HomeScreen(
             }
         }
 
+        FolderCard(state) { msg ->
+            status = msg
+            scope.launch { snackbar.showSnackbar(msg) }
+        }
+
         Button(onClick = onOpenPortal, Modifier.fillMaxWidth()) { Text("Открыть PokerCraft") }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -169,7 +188,7 @@ fun HomeScreen(
                     }
                     Switch(
                         checked = autoSync,
-                        enabled = hasRecipe,
+                        enabled = hasRecipe || state.prefs.watchFolderUri != null,
                         onCheckedChange = {
                             autoSync = it
                             state.prefs.autoSync = it
@@ -177,9 +196,9 @@ fun HomeScreen(
                         }
                     )
                 }
-                if (!hasRecipe) {
+                if (!hasRecipe && state.prefs.watchFolderUri == null) {
                     Text(
-                        "Доступно после записи рецепта выгрузки",
+                        "Доступно после выбора папки загрузок или записи рецепта",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

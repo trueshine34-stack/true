@@ -2,6 +2,7 @@ package com.plovault.sync.sync
 
 import android.content.Context
 import com.plovault.sync.data.ExportRecipe
+import com.plovault.sync.data.FolderImporter
 import com.plovault.sync.data.HandRepository
 import com.plovault.sync.data.ImportPipeline
 import com.plovault.sync.data.Prefs
@@ -22,10 +23,26 @@ class SyncEngine(private val context: Context) {
     private val repo = HandRepository(context)
     private val pipeline = ImportPipeline(context)
     private val downloader = Downloader(context)
+    private val folder = FolderImporter(context)
 
     fun sync(): SyncOutcome {
+        // 1. Папка загрузок — работает без токена и без рецепта.
+        val folderResult = if (prefs.watchFolderUri != null) folder.scan() else null
+
         val json = prefs.recipeJson
-            ?: return fail("Рецепт выгрузки не записан. Откройте PokerCraft, включите «Обучение» и выгрузите руки вручную один раз.")
+        if (json == null) {
+            return if (folderResult != null) {
+                prefs.lastSyncTs = System.currentTimeMillis()
+                prefs.lastSyncStatus = folderResult.message
+                SyncOutcome(true, folderResult.newHands, folderResult.message)
+            } else {
+                fail(
+                    "Нечего синхронизировать: не записан рецепт выгрузки и не выбрана папка загрузок. " +
+                        "Проще всего выбрать папку — тогда скачанные из PokerCraft файлы будут " +
+                        "разбираться автоматически."
+                )
+            }
+        }
         val recipe = ExportRecipe.fromJson(json)
             ?: return fail("Рецепт повреждён — запишите его заново в режиме обучения.")
 
@@ -36,6 +53,11 @@ class SyncEngine(private val context: Context) {
         val to = now
 
         if (recipe.usesToken && prefs.authToken.isNullOrBlank()) {
+            if (folderResult != null && folderResult.newHands > 0) {
+                prefs.lastSyncTs = System.currentTimeMillis()
+                prefs.lastSyncStatus = folderResult.message + " (рецепту не хватает токена)"
+                return SyncOutcome(true, folderResult.newHands, prefs.lastSyncStatus)
+            }
             return fail(
                 "В рецепте нужен токен, а он не сохранён. Откройте PokerCraft в клиенте GGPoker, " +
                     "скопируйте ссылку и вставьте её в настройках приложения."
@@ -44,6 +66,11 @@ class SyncEngine(private val context: Context) {
 
         val res = downloader.run(recipe, from, to)
         if (!res.ok) {
+            if (folderResult != null && folderResult.newHands > 0) {
+                prefs.lastSyncTs = System.currentTimeMillis()
+                prefs.lastSyncStatus = folderResult.message + " (выгрузка по рецепту не прошла: HTTP ${res.status})"
+                return SyncOutcome(true, folderResult.newHands, prefs.lastSyncStatus)
+            }
             val expired = res.status == 401 || res.status == 403
             return fail(
                 if (expired) {
@@ -56,7 +83,7 @@ class SyncEngine(private val context: Context) {
             )
         }
 
-        var newHands = 0
+        var newHands = folderResult?.newHands ?: 0
         val first = pipeline.importBytes(res.bytes, res.fileName, "auto")
         newHands += first.handsNew
         val messages = ArrayList<String>()

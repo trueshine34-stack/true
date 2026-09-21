@@ -51,6 +51,7 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier, snackbar: Sna
     val prefs = state.prefs
     var hero by remember { mutableStateOf(prefs.heroName) }
     var desktopUa by remember { mutableStateOf(prefs.desktopUa) }
+    var customUa by remember { mutableStateOf(prefs.customUa ?: "") }
     var onlyPlo4 by remember { mutableStateOf(prefs.onlyPlo4Rush) }
     var interval by remember { mutableStateOf(prefs.syncIntervalHours.toString()) }
     var window by remember { mutableStateOf(prefs.syncWindowDays.toString()) }
@@ -62,6 +63,8 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier, snackbar: Sna
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         PortalLinkCard(state) { msg -> scope.launch { snackbar.showSnackbar(msg) } }
+
+        FolderCard(state) { msg -> scope.launch { snackbar.showSnackbar(msg) } }
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -76,6 +79,14 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier, snackbar: Sna
                 SwitchRow("Десктопный User-Agent", desktopUa) {
                     desktopUa = it; prefs.desktopUa = it
                 }
+                OutlinedTextField(
+                    value = customUa,
+                    onValueChange = { customUa = it; prefs.customUa = it },
+                    label = { Text("Свой User-Agent (необязательно)") },
+                    singleLine = false,
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 OutlinedButton(onClick = {
                     CookieManager.getInstance().removeAllCookies(null)
                     CookieManager.getInstance().flush()

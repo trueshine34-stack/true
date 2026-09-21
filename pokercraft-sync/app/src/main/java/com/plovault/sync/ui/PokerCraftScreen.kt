@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.plovault.sync.data.ExportRecipe
@@ -55,6 +56,20 @@ fun PokerCraftScreen(state: AppState, onClose: () -> Unit) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     var denied by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+    val localContext = LocalContext.current
+
+    /** Открывает ту же ссылку во внешнем браузере — проверка, дело ли в приложении. */
+    fun openExternally() {
+        val url = state.prefs.portalUrl
+        runCatching {
+            localContext.startActivity(
+                android.content.Intent.createChooser(
+                    android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)),
+                    "Открыть ссылку в браузере"
+                ).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
+            )
+        }.onFailure { info = "Не удалось открыть браузер: ${it.message}" }
+    }
 
     /** Берёт свежую ссылку из буфера обмена и открывает её. */
     fun pasteAndOpen(resetCookies: Boolean) {
@@ -159,7 +174,9 @@ fun PokerCraftScreen(state: AppState, onClose: () -> Unit) {
                         Text(
                             "PokerCraft отказал в доступе — токен в ссылке протух. " +
                                 "Откройте PokerCraft в клиенте GGPoker, скопируйте свежий адрес " +
-                                "и нажмите «Вставить и открыть» (лучше сразу, токен живёт недолго).",
+                                "и нажмите «Вставить и открыть». Если и свежая ссылка даёт отказ — " +
+                                "нажмите «В браузере»: тот же отказ в Chrome означает, что токен " +
+                                "привязан к клиенту GGPoker, и работать надо через папку загрузок.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -171,7 +188,10 @@ fun PokerCraftScreen(state: AppState, onClose: () -> Unit) {
                                 Text("Вставить и открыть")
                             }
                             OutlinedButton(onClick = { pasteAndOpen(resetCookies = true) }) {
-                                Text("Сбросить куки и открыть")
+                                Text("Сбросить куки")
+                            }
+                            OutlinedButton(onClick = { openExternally() }) {
+                                Text("В браузере")
                             }
                         }
                     }
@@ -201,7 +221,11 @@ fun PokerCraftScreen(state: AppState, onClose: () -> Unit) {
                     settings.displayZoomControls = false
                     settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                     settings.mediaPlaybackRequiresUserGesture = true
-                    if (state.prefs.desktopUa) settings.userAgentString = com.plovault.sync.data.Prefs.DESKTOP_UA
+                    val custom = state.prefs.customUa
+                    when {
+                        custom != null -> settings.userAgentString = custom
+                        state.prefs.desktopUa -> settings.userAgentString = com.plovault.sync.data.Prefs.DESKTOP_UA
+                    }
                     state.prefs.userAgent = settings.userAgentString
 
                     CookieManager.getInstance().setAcceptCookie(true)

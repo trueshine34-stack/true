@@ -59,6 +59,29 @@ class Prefs(context: Context) {
         get() = sp.getString("last_status", "Синхронизаций ещё не было")!!
         set(v) = sp.edit().putString("last_status", v).apply()
 
+    /** Папка (SAF), из которой приложение само подхватывает скачанные выгрузки. */
+    var watchFolderUri: String?
+        get() = sp.getString("watch_folder", null)
+        set(v) = sp.edit().putString("watch_folder", v).apply()
+
+    var lastFolderScanTs: Long
+        get() = sp.getLong("last_folder_scan", 0L)
+        set(v) = sp.edit().putLong("last_folder_scan", v).apply()
+
+    /** Уже проверенные файлы папки — "имя:размер", чтобы не читать их повторно. */
+    var seenFolderFiles: Set<String>
+        get() = sp.getStringSet("seen_files", emptySet()) ?: emptySet()
+        set(v) = sp.edit().putStringSet("seen_files", v.toList().takeLast(800).toSet()).apply()
+
+    fun markFolderFileSeen(key: String) {
+        seenFolderFiles = seenFolderFiles + key
+    }
+
+    /** Свой User-Agent для WebView — если PokerCraft капризничает. */
+    var customUa: String?
+        get() = sp.getString("custom_ua", null)?.takeIf { it.isNotBlank() }
+        set(v) = sp.edit().putString("custom_ua", v).apply()
+
     /** Десктопный User-Agent — часть страниц PokerCraft заточена под ПК. */
     var desktopUa: Boolean
         get() = sp.getBoolean("desktop_ua", false)
