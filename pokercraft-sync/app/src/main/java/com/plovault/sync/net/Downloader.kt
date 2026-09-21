@@ -37,9 +37,10 @@ class Downloader(context: Context) {
     )
 
     fun run(recipe: ExportRecipe, fromMillis: Long, toMillis: Long): DownloadResult {
-        val url = recipe.urlFor(fromMillis, toMillis)
-        val body = recipe.bodyFor(fromMillis, toMillis)
-        return execute(url, recipe.method, recipe.headers, body)
+        val token = prefs.authToken
+        val url = recipe.urlFor(fromMillis, toMillis, token)
+        val body = recipe.bodyFor(fromMillis, toMillis, token)
+        return execute(url, recipe.method, recipe.headersFor(token), body)
     }
 
     fun get(url: String): DownloadResult = execute(url, "GET", emptyMap(), "")

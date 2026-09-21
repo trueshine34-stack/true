@@ -105,16 +105,24 @@ fun PokerCraftScreen(state: AppState, onClose: () -> Unit) {
                                 info = "Подходящий запрос не найден. Скачайте историю рук на сайте — " +
                                     "приложение поймает запрос автоматически."
                             } else {
-                                val (tpl, found) = ExportRecipe.templatize(best.url, best.body)
+                                val token = state.prefs.authToken
+                                val (tpl, found) = ExportRecipe.templatize(best.url, best.body, token)
                                 val recipe = ExportRecipe(
                                     url = tpl.first,
                                     method = best.method,
-                                    headers = best.headers,
+                                    headers = ExportRecipe.templatizeHeaders(best.headers, token),
                                     body = tpl.second,
                                     dateFormat = tpl.third,
                                     capturedAt = System.currentTimeMillis(),
-                                    note = if (found) "даты распознаны (${tpl.third})"
-                                    else "даты не найдены — запрос будет повторяться без подстановки"
+                                    note = buildString {
+                                        append(
+                                            if (found) "даты распознаны (${tpl.third})"
+                                            else "даты не найдены — запрос будет повторяться без подстановки"
+                                        )
+                                        if (tpl.first.contains(ExportRecipe.TOKEN) ||
+                                            tpl.second.contains(ExportRecipe.TOKEN)
+                                        ) append("; токен вынесен в плейсхолдер")
+                                    }
                                 )
                                 state.prefs.recipeJson = recipe.toJson()
                                 info = "Рецепт сохранён: ${recipe.method} ${recipe.url.take(90)}\n${recipe.note}"

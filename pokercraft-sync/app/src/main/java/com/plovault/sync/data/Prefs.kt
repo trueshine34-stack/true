@@ -6,9 +6,23 @@ import android.content.Context
 class Prefs(context: Context) {
     private val sp = context.applicationContext.getSharedPreferences("plovault", Context.MODE_PRIVATE)
 
+    /**
+     * Полная ссылка на PokerCraft — та, что открывается из клиента GGPoker,
+     * вместе с персональным токеном. Хранится только на этом устройстве.
+     */
     var portalUrl: String
         get() = sp.getString("portal_url", DEFAULT_PORTAL)!!
-        set(v) = sp.edit().putString("portal_url", v).apply()
+        set(v) {
+            sp.edit().putString("portal_url", v).apply()
+            extractToken(v)?.let { authToken = it }
+        }
+
+    /** Токен доступа из ссылки PokerCraft. Подставляется в запрос выгрузки при автосинхронизации. */
+    var authToken: String?
+        get() = sp.getString("auth_token", null)
+        set(v) = sp.edit().putString("auth_token", v).putLong("token_saved_at", System.currentTimeMillis()).apply()
+
+    val tokenSavedAt: Long get() = sp.getLong("token_saved_at", 0L)
 
     var heroName: String
         get() = sp.getString("hero", "Hero")!!
@@ -55,17 +69,31 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putBoolean("only_plo4_rush", v).apply()
 
     companion object {
-        const val DEFAULT_PORTAL = "https://pokercraft.gg/"
+        const val DEFAULT_PORTAL = "https://my.pokercraft.com/?lang=ru"
+
+        private val TOKEN_PARAMS = listOf("token", "access_token", "accessToken", "authToken", "sessionToken")
+
+        /** Достаёт токен из ссылки PokerCraft. */
+        fun extractToken(url: String): String? {
+            for (name in TOKEN_PARAMS) {
+                val m = Regex("""[?&]$name=([^&#\s]+)""", RegexOption.IGNORE_CASE).find(url)
+                if (m != null) return m.groupValues[1]
+            }
+            return null
+        }
+
+        /** Короткий вид токена для интерфейса — целиком его показывать незачем. */
+        fun maskToken(token: String?): String =
+            if (token.isNullOrBlank()) "нет"
+            else token.take(4) + "…" + token.takeLast(4) + " (${token.length} симв.)"
         const val DESKTOP_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
                 "Chrome/126.0.0.0 Safari/537.36"
 
         val PORTAL_PRESETS = listOf(
-            "https://pokercraft.gg/",
-            "https://play.ggpoker.com/",
-            "https://www.ggpoker.com/",
-            "https://www.ggpoker.co.uk/",
-            "https://ggpoker.ca/"
+            "https://my.pokercraft.com/?lang=ru",
+            "https://my.pokercraft.com/",
+            "https://pokercraft.gg/"
         )
     }
 }

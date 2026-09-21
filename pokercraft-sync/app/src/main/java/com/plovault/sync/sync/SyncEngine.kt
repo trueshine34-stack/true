@@ -35,11 +35,24 @@ class SyncEngine(private val context: Context) {
         val from = if (lastHand > 0) maxOf(lastHand - windowMs, 0L) else now - windowMs
         val to = now
 
+        if (recipe.usesToken && prefs.authToken.isNullOrBlank()) {
+            return fail(
+                "В рецепте нужен токен, а он не сохранён. Откройте PokerCraft в клиенте GGPoker, " +
+                    "скопируйте ссылку и вставьте её в настройках приложения."
+            )
+        }
+
         val res = downloader.run(recipe, from, to)
         if (!res.ok) {
+            val expired = res.status == 401 || res.status == 403
             return fail(
-                "Не удалось скачать выгрузку (${res.error ?: "пустой ответ"}). " +
-                    "Скорее всего, истекла сессия — откройте PokerCraft в приложении и войдите заново."
+                if (expired) {
+                    "Токен PokerCraft истёк (HTTP ${res.status}). Откройте PokerCraft в клиенте GGPoker, " +
+                        "скопируйте свежую ссылку и вставьте её на вкладке «Синхро» — обучать заново не нужно."
+                } else {
+                    "Не удалось скачать выгрузку (${res.error ?: "пустой ответ"}). " +
+                        "Проверьте связь или откройте PokerCraft в приложении."
+                }
             )
         }
 

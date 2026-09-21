@@ -49,7 +49,6 @@ import java.util.zip.ZipOutputStream
 fun SettingsScreen(state: AppState, modifier: Modifier = Modifier, snackbar: SnackbarHostState) {
     val scope = rememberCoroutineScope()
     val prefs = state.prefs
-    var portal by remember { mutableStateOf(prefs.portalUrl) }
     var hero by remember { mutableStateOf(prefs.heroName) }
     var desktopUa by remember { mutableStateOf(prefs.desktopUa) }
     var onlyPlo4 by remember { mutableStateOf(prefs.onlyPlo4Rush) }
@@ -62,28 +61,11 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier, snackbar: Sna
         modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        PortalLinkCard(state) { msg -> scope.launch { snackbar.showSnackbar(msg) } }
+
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Подключение", style = MaterialTheme.typography.titleSmall)
-                OutlinedTextField(
-                    value = portal,
-                    onValueChange = { portal = it; prefs.portalUrl = it },
-                    label = { Text("Адрес PokerCraft / GGPoker") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Prefs.PORTAL_PRESETS.forEach { p ->
-                        FilterChip(
-                            selected = portal == p,
-                            onClick = { portal = p; prefs.portalUrl = p },
-                            label = { Text(p.removePrefix("https://").trimEnd('/')) }
-                        )
-                    }
-                }
                 OutlinedTextField(
                     value = hero,
                     onValueChange = { hero = it; prefs.heroName = it },
@@ -97,8 +79,8 @@ fun SettingsScreen(state: AppState, modifier: Modifier = Modifier, snackbar: Sna
                 OutlinedButton(onClick = {
                     CookieManager.getInstance().removeAllCookies(null)
                     CookieManager.getInstance().flush()
-                    scope.launch { snackbar.showSnackbar("Куки очищены — при следующем открытии нужно войти заново") }
-                }) { Text("Выйти из аккаунта (очистить куки)") }
+                    scope.launch { snackbar.showSnackbar("Куки очищены — откройте PokerCraft по ссылке заново") }
+                }) { Text("Очистить куки") }
             }
         }
 

@@ -78,6 +78,11 @@ fun HomeScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
+        PortalLinkCard(state) { msg ->
+            status = msg
+            scope.launch { snackbar.showSnackbar(msg) }
+        }
+
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 StatLine("Раздач в базе", state.totalHands.toString())
@@ -98,11 +103,12 @@ fun HomeScreen(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Как включить автовыгрузку", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "1. Нажмите «Открыть PokerCraft» и войдите в аккаунт GGPoker.\n" +
-                            "2. Режим «Обучение» уже включён — зайдите в историю рук, выберите " +
+                        "1. Вставьте ссылку PokerCraft из клиента GGPoker (поле выше).\n" +
+                            "2. Нажмите «Открыть PokerCraft» — откроется ваш кабинет.\n" +
+                            "3. Режим «Обучение» уже включён: зайдите в историю рук, выберите " +
                             "Rush & Cash / PLO и скачайте выгрузку как обычно.\n" +
-                            "3. Приложение запомнит этот запрос и дальше будет повторять его само " +
-                            "с новыми датами.",
+                            "4. Нажмите «Сохранить рецепт» — дальше приложение повторяет этот " +
+                            "запрос само, с новыми датами и свежим токеном.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }

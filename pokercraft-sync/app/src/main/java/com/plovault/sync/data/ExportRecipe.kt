@@ -21,11 +21,23 @@ data class ExportRecipe(
     val capturedAt: Long,
     val note: String = ""
 ) {
-    fun urlFor(from: Long, to: Long): String = substitute(url, from, to)
-    fun bodyFor(from: Long, to: Long): String = substitute(body, from, to)
+    fun urlFor(from: Long, to: Long, token: String? = null): String = substitute(url, from, to, token)
 
-    private fun substitute(s: String, from: Long, to: Long): String =
-        s.replace(FROM, render(from)).replace(TO, render(to))
+    fun bodyFor(from: Long, to: Long, token: String? = null): String = substitute(body, from, to, token)
+
+    /** Заголовки с подставленным свежим токеном (он мог быть в Authorization). */
+    fun headersFor(token: String? = null): Map<String, String> =
+        headers.mapValues { (_, v) -> if (token != null) v.replace(TOKEN, token) else v }
+
+    /** Нужен ли рецепту токен — то есть протухнет ли он вместе со ссылкой из клиента. */
+    val usesToken: Boolean
+        get() = url.contains(TOKEN) || body.contains(TOKEN) || headers.values.any { it.contains(TOKEN) }
+
+    private fun substitute(s: String, from: Long, to: Long, token: String?): String {
+        var r = s.replace(FROM, render(from)).replace(TO, render(to))
+        if (token != null) r = r.replace(TOKEN, token)
+        return r
+    }
 
     private fun render(ts: Long): String = when (dateFormat) {
         "EPOCH_MS" -> ts.toString()
@@ -51,6 +63,7 @@ data class ExportRecipe(
     companion object {
         const val FROM = "{{FROM}}"
         const val TO = "{{TO}}"
+        const val TOKEN = "{{TOKEN}}"
 
         fun fromJson(json: String): ExportRecipe? = try {
             val o = JSONObject(json)
@@ -75,7 +88,24 @@ data class ExportRecipe(
          * Подставляет плейсхолдеры вместо дат в записанном запросе.
          * Первая найденная дата → {{FROM}}, вторая → {{TO}}.
          */
-        fun templatize(url: String, body: String): Pair<Triple<String, String, String>, Boolean> {
+        fun templatize(
+            url: String,
+            body: String,
+            token: String? = null
+        ): Pair<Triple<String, String, String>, Boolean> {
+            // Токен живёт недолго, поэтому в рецепте он заменяется на плейсхолдер
+            // и при каждой синхронизации подставляется свежий.
+            val u0 = if (!token.isNullOrBlank()) url.replace(token, TOKEN) else url
+            val b0 = if (!token.isNullOrBlank()) body.replace(token, TOKEN) else body
+            return templatizeDates(u0, b0)
+        }
+
+        /** Подставляет токен в записанные заголовки. */
+        fun templatizeHeaders(headers: Map<String, String>, token: String?): Map<String, String> =
+            if (token.isNullOrBlank()) headers
+            else headers.mapValues { (_, v) -> v.replace(token, TOKEN) }
+
+        private fun templatizeDates(url: String, body: String): Pair<Triple<String, String, String>, Boolean> {
             val patterns = listOf(
                 "DASH" to Regex("""\d{4}-\d{2}-\d{2}"""),
                 "SLASH" to Regex("""\d{4}/\d{2}/\d{2}"""),
