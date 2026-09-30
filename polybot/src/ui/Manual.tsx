@@ -80,6 +80,31 @@ const NOTE_MS = 5_000;
 /** A press this long is a hold, not a tap. Android's own threshold is 500 ms. */
 const HOLD_MS = 450;
 
+/** How long a pulled order is kept out of the venue's listing by hand. */
+const PULLED_MS = 15_000;
+
+/**
+ * How hard a buy is pressed when the only problem is money in transit.
+ *
+ * Four more goes, half a second apart: two and a half seconds, which covers
+ * the venue releasing a cancelled order's collateral and most of a sale being
+ * credited, and stops well short of the window it was meant for.
+ */
+const FUNDS_TRIES = 4;
+const FUNDS_GAP_MS = 500;
+
+/** Whether a refusal is about money that is on its way rather than about terms. */
+function shortOfMoney(error?: string | null): boolean {
+  if (!error) return false;
+  const text = error.toLowerCase();
+  return (
+    text.includes('balance') ||
+    text.includes('allowance') ||
+    text.includes('не хватает') ||
+    text.includes('свободно')
+  );
+}
+
 /**
  * The window's phase, as a colour on its clock.
  *
@@ -149,6 +174,23 @@ export function Manual({
   });
   const [positions, setPositions] = useState<NativePosition[]>([]);
   const [orders, setOrders] = useState<OpenOrder[]>([]);
+  /**
+   * Orders pulled from here that the venue's listing has not caught up with.
+   *
+   * The listing lags a cancel by a poll or two, and a cancelled order that is
+   * still in it is money this screen believes is spoken for. Ids age out after
+   * a few seconds, by which time the listing is the authority again.
+   */
+  const pulledRef = useRef(new Map<string, number>());
+
+  /** The venue's listing, less what was pulled here a moment ago. */
+  const takeOrders = useCallback((live: OpenOrder[]) => {
+    const now = Date.now();
+    for (const [id, at] of pulledRef.current) {
+      if (now - at > PULLED_MS) pulledRef.current.delete(id);
+    }
+    setOrders(live.filter((o) => !pulledRef.current.has(o.id)));
+  }, []);
   const [logged, setLogged] = useState<LoggedOrder[]>([]);
   const [lookAhead, setLookAhead] = useState(false);
   const [events, setEvents] = useState<EventSummary[]>([]);
@@ -668,7 +710,7 @@ export function Manual({
         .catch(() => {});
       void PolyBot.getOpenOrders()
         .then((r) => {
-          if (!cancelled) setOrders(r.orders);
+          if (!cancelled) takeOrders(r.orders);
         })
         .catch(() => {});
       void PolyBot.getOrderLog({ windowStart: deskWindow })
@@ -898,11 +940,23 @@ export function Manual({
           }
           if (mine.length > 0) {
             const fresh = await PolyBot.getOpenOrders().catch(() => null);
-            if (fresh) setOrders(fresh.orders);
+            if (fresh) takeOrders(fresh.orders);
           }
         }
 
-        const r = await PolyBot.placeOrder({
+        /*
+          Sent, and sent again while the only thing wrong is that the money
+          has not arrived yet.
+
+          A cancel frees its collateral at the venue in its own time, and the
+          same is true of a sale's proceeds: for a second or two after either,
+          a buy the balance can obviously afford comes back refused. On a
+          five-minute clock that second is the trade — so the tap stands, at
+          the price it was tapped at, and is retried for as long as that is
+          plausibly the reason. Anything else — a refused price, a closed
+          market, a bad size — comes back on the first answer and stays.
+        */
+        let r = await PolyBot.placeOrder({
           tokenId,
           conditionId: market.conditionId,
           side: action,
@@ -910,6 +964,19 @@ export function Manual({
           size: shares,
           orderType: 'GTC',
         });
+        for (let again = 0; again < FUNDS_TRIES && !r.success; again++) {
+          if (!shortOfMoney(r.error)) break;
+          setNote('Деньги ещё не зачислены — повторяю…');
+          await new Promise((wake) => setTimeout(wake, FUNDS_GAP_MS));
+          r = await PolyBot.placeOrder({
+            tokenId,
+            conditionId: market.conditionId,
+            side: action,
+            price,
+            size: shares,
+            orderType: 'GTC',
+          });
+        }
         setNote(
           r.success
             ? `${action === 'BUY' ? 'Куплено' : 'Продано'} ${which}: ${shares.toFixed(
@@ -931,7 +998,7 @@ export function Manual({
             // has to be this sale's number rather than the last poll's.
             PolyBot.getBalance().catch(() => null),
           ]);
-          if (fresh) setOrders(fresh.orders);
+          if (fresh) takeOrders(fresh.orders);
           if (log) setLogged(log.orders);
           if (cash) {
             setBalance(cash.usdc);
@@ -1054,7 +1121,7 @@ export function Manual({
           : `Снято ${done} из ${restingLimits.length} — остальные уже неактивны`,
       );
       const fresh = await PolyBot.getOpenOrders().catch(() => null);
-      if (fresh) setOrders(fresh.orders);
+      if (fresh) takeOrders(fresh.orders);
     } finally {
       setBusy(false);
     }
@@ -1103,7 +1170,7 @@ export function Manual({
         });
         setNote(r.success ? `Изменено: ${shares} × ${cents(price)}` : r.error ?? 'Не вышло');
         const fresh = await PolyBot.getOpenOrders().catch(() => null);
-        if (fresh) setOrders(fresh.orders);
+        if (fresh) takeOrders(fresh.orders);
       } catch (e) {
         setNote(e instanceof Error ? e.message : String(e));
       } finally {
@@ -1114,11 +1181,34 @@ export function Manual({
     [market],
   );
 
+  /**
+   * Pull an order, and give its money back at once.
+   *
+   * The venue's listing is polled every few seconds and keeps showing a
+   * cancelled order for a beat afterwards. The desk sizes the next order from
+   * the balance *less* what resting buys have promised, so for those few
+   * seconds the money that was just freed was still spoken for — and the whole
+   * reason for pulling an order on a five-minute clock is to spend it now. So
+   * the order leaves this screen's arithmetic on the acknowledgement, not on
+   * the next poll, and a listing that still carries it is ignored until it
+   * catches up.
+   */
   const cancel = useCallback(async (orderId: string) => {
     setBusy(true);
     try {
       const r = await PolyBot.cancelOrder({ orderId });
+      if (r.cancelled) {
+        pulledRef.current.set(orderId, Date.now());
+        setOrders((live) => live.filter((o) => o.id !== orderId));
+      }
       setNote(r.cancelled ? 'Ордер снят' : 'Ордер уже неактивен');
+      // And the wallet, which the venue frees the moment it acknowledges.
+      void PolyBot.getBalance()
+        .then((cash) => {
+          setBalance(cash.usdc);
+          setReserve(cash.locked ?? 0);
+        })
+        .catch(() => {});
     } catch (e) {
       setNote(e instanceof Error ? e.message : String(e));
     } finally {
@@ -1320,7 +1410,7 @@ export function Manual({
           torn down and rebuilt behind it, and a second tap in that second
           would ask for a third coin the first switch has not finished leaving.
         */}
-        {coins.length > 1 && (
+        {settings.allCoins && coins.length > 1 && (
           <div className="railcoins">
             {coins.map((c) => (
               <button
@@ -1408,6 +1498,23 @@ export function Manual({
               them, and what each window made written over its own candle.
               Under it the book: what the next few dollars would cost.
             */}
+            {/*
+              The session, at a quarter-hour a candle.
+
+              Off by default and switched on in the settings: it answers a
+              slower question than this desk asks — what the day has been
+              doing — and on a phone it is the height of the two charts that
+              actually decide a five-minute bet.
+            */}
+            {settings.chart15m && (
+              <CandlePanel
+                interval="15m"
+                height={110}
+                digits={coinDigits}
+                coin={coin}
+              />
+            )}
+
             <CandlePanel
               interval="5m"
               height={150}
@@ -1635,6 +1742,7 @@ export function Manual({
             The side comes from the live order's own token, not from the row's
             printed label — those agree on this market and only on this one.
           */
+          secondsLeft={secondsLeft}
           marketPrice={(() => {
             const side = sideForEdit(editing);
             if (side == null) return null;
@@ -1994,6 +2102,7 @@ function OrderEditor({
   tick,
   busy,
   marketPrice,
+  secondsLeft,
   onSave,
   onCancelOrder,
   onClose,
@@ -2003,6 +2112,8 @@ function OrderEditor({
   busy: boolean;
   /** Where the book is for this order's side, in cents, if it is known. */
   marketPrice: number | null;
+  /** How long this window has left, which is how long the price has. */
+  secondsLeft: number;
   onSave: (price: number, shares: number) => void;
   onCancelOrder: () => void;
   onClose: () => void;
@@ -2027,6 +2138,18 @@ function OrderEditor({
           <button className="xbtn" onClick={onClose} aria-label="Закрыть">
             ✕
           </button>
+        </div>
+
+        {/*
+          How long the window has left.
+
+          A price being moved is a price for this window and no other, and the
+          panel covers the clock it is being moved against — so the clock is in
+          it, coloured as it is on the desk.
+        */}
+        <div className={`sellclock ${clockTone(secondsLeft, false)}`}>
+          <span className="muted">до конца события</span>
+          <b>{clock(Math.max(0, secondsLeft))}</b>
         </div>
 
         <div className="pricepick">
@@ -2786,6 +2909,24 @@ function RuleBar({
           above: the sounds up there say something happened, this says
           something is about to — and wanting one is not wanting the other.
         */}
+        <button
+          className={`ruletile${settings.chart15m ? ' on' : ''}`}
+          onClick={() => push({ ...settings, chart15m: !settings.chart15m })}
+        >
+          <span className={`switch mini ${settings.chart15m ? 'on' : ''}`} />
+          <b>15м</b>
+          <i>график сверху</i>
+        </button>
+
+        <button
+          className={`ruletile${settings.allCoins ? ' on' : ''}`}
+          onClick={() => push({ ...settings, allCoins: !settings.allCoins })}
+        >
+          <span className={`switch mini ${settings.allCoins ? 'on' : ''}`} />
+          <b>монеты</b>
+          <i>{settings.allCoins ? 'BTC · ETH · SOL' : 'только BTC'}</i>
+        </button>
+
         <button
           className={`ruletile${settings.countdownChime ? ' on' : ''}`}
           onClick={() => {

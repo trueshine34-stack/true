@@ -320,6 +320,11 @@ class BotEngine(
         val acct = account ?: error("кошелёк не подключён")
         val creds = this.creds ?: error("нет ключей CLOB")
         val ok = ClobApi.cancelOrder(creds, acct.signerAddress, orderId)
+        // The collateral behind it is free the instant this comes back, and
+        // the next order is usually the reason it was pulled — so the cached
+        // balance goes with it rather than standing for another twenty
+        // seconds and refusing a buy the money is there for.
+        if (ok) forgetCash()
         log("info", if (ok) "Ордер отменён" else "Ордер уже неактивен")
         onStateChanged()
         return ok
@@ -329,6 +334,7 @@ class BotEngine(
         val acct = account ?: error("кошелёк не подключён")
         val creds = this.creds ?: error("нет ключей CLOB")
         val n = ClobApi.cancelMarketOrders(creds, acct.signerAddress, conditionId)
+        if (n > 0) forgetCash()
         log("info", "Отменено ордеров: $n")
         onStateChanged()
         return n
@@ -367,8 +373,14 @@ class BotEngine(
             // order being *sent* for more than that: a size typed by hand, or
             // a ladder rung, could reach past the reserve into money the app
             // is not allowed to touch. This is the door.
-            val free = usdcRecent() ?: usdcBalance()
+            // The cached reading first, and the venue's own if that says no:
+            // a refusal is worth one round trip, because the money may have
+            // come back since — a cancel, a sale, a settlement — and a buy
+            // refused by a stale number is the one thing this guard must not
+            // do.
             val cost = Reserve.buyCost(size, price)
+            var free = usdcRecent() ?: usdcBalance()
+            if (cost > free + 1e-9) free = usdcBalance()
             if (cost > free + 1e-9) {
                 error(
                     "Свободно " + String.format("%.2f", free) +
@@ -640,5 +652,19 @@ class BotEngine(
     /** The same cached reading, before the reserve is taken out. */
     fun walletRecent(freshMs: Long = 20_000L): Double? =
         cash.takeIf { cashAt > 0L && System.currentTimeMillis() - cashAt < freshMs }
+
+    /**
+     * Throw the cached balance away.
+     *
+     * Called when this app has just changed what the balance is — a cancel
+     * frees its order's collateral the moment the venue acknowledges it — so
+     * that the next thing to ask sees the money rather than a reading from
+     * before it came back. Twenty seconds of cache is nothing on a balance
+     * that only moves when we move it, and everything when we have just moved
+     * it and want to spend it.
+     */
+    fun forgetCash() {
+        cashAt = 0L
+    }
 
 }

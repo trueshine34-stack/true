@@ -108,6 +108,17 @@ export type ManualSettings = {
    * the four minutes before them.
    */
   countdownChime: boolean;
+  /**
+   * Whether the other coins are offered at all.
+   *
+   * Off, the rail shows nothing to switch to and the desk is bitcoin's. The
+   * coins do not cost anything while they are not selected — only the one
+   * being traded holds sockets open — but a row of buttons that can be hit by
+   * accident on a five-minute clock is its own kind of cost.
+   */
+  allCoins: boolean;
+  /** A quarter-hour chart over the other two, for the shape of the session. */
+  chart15m: boolean;
 };
 
 /**
@@ -179,6 +190,8 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellRide: true,
   autoSellRideMs: 2000,
   countdownChime: false,
+  allCoins: false,
+  chart15m: false,
 };
 
 /** Never spend the last of the balance, whatever the fee works out to. */

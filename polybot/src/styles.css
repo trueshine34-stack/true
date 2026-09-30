@@ -3292,6 +3292,22 @@ button.wide {
   it says is that a move will have something to push through here. Opacity
   carries the strength, so the picture is read at a glance without a legend.
 */
+/*
+  The edge of what has happened.
+
+  Drawn only when the chart has been dragged along to leave room ahead: a
+  dashed hairline between the last candle and the minutes that have not been
+  traded, so that the lines running on past it read as a question rather than
+  as data.
+*/
+.nowline {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+
 .volnode {
   stroke: var(--text);
   stroke-width: 1;

@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { PolyBot } from '../native/polybot';
-import { candleShape, signedPct, type Candle } from '../core/candles';
+import { candleShape, type Candle } from '../core/candles';
 import { volumeNodes } from '../core/profile';
 import { findLevels } from '../core/levels';
 import {
   NEAR_MINUTES,
   WIDE_MINUTES,
   levelAhead,
-  ratePerHour,
   trendOf,
 } from '../core/trend';
 import { priceLabel } from '../core/depth';
@@ -27,6 +26,9 @@ const W = 360;
 /** Pinched all the way in, this many candles still have to be readable. */
 const MIN_BARS = 8;
 
+/** The most of the chart that may be given over to the minutes not yet traded. */
+const MAX_AHEAD = 0.45;
+
 /**
  * How many candles each chart shows at rest.
  *
@@ -34,7 +36,7 @@ const MIN_BARS = 8;
  * on the minute one — the same two views the desk has always had. A pinch goes
  * either way from here, as far as twice this and as close as [MIN_BARS].
  */
-const BARS: Record<string, number> = { '5m': 48, '1m': 30 };
+const BARS: Record<string, number> = { '15m': 48, '5m': 48, '1m': 30 };
 
 /**
  * The candle in progress follows the tape rather than an interval, so the
@@ -242,6 +244,21 @@ export function CandleFace({
   const pinch = useRef<{ gap: number; from: number } | null>(null);
   /** When the last pinch ended, so its release is not read as a tap. */
   const pinchedAt = useRef(0);
+  /** Whether the finger that is down has moved the chart rather than tapped it. */
+  const dragged = useRef(false);
+
+  /**
+   * How much of the width is left empty ahead of the last candle.
+   *
+   * Dragging the chart to the left pushes the candles off the right-hand edge
+   * and leaves the levels, the volume bands and the trend line running on into
+   * nothing — which is the point of it: the next few minutes have no candles
+   * yet, and the question being asked of the picture is where they would have
+   * to go. Nought is the chart as it has always been, and it never gives up
+   * more than [MAX_AHEAD] of itself.
+   */
+  const [room, setRoom] = useState(0);
+  const drag = useRef<{ x: number; from: number } | null>(null);
 
   // The panel asks for more candles than it draws, so that pinching out has
   // something to reach into; this is how many of them are on screen at rest.
@@ -254,11 +271,29 @@ export function CandleFace({
   };
 
   const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      drag.current = { x: e.touches[0].clientX, from: room };
+      return;
+    }
     if (e.touches.length !== 2) return;
+    drag.current = null;
     pinch.current = { gap: gapOf(e.touches), from: visible.length };
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
+    // One finger across the chart makes room ahead of it; the page still
+    // scrolls under the same finger going up and down, which is what the
+    // element's own touch-action leaves to the browser.
+    if (e.touches.length === 1 && drag.current) {
+      const box = e.currentTarget.getBoundingClientRect();
+      if (box.width <= 0) return;
+      const moved = (drag.current.x - e.touches[0].clientX) / box.width;
+      const next = drag.current.from + moved;
+      setRoom(Math.max(0, Math.min(MAX_AHEAD, next)));
+      if (Math.abs(next - drag.current.from) > 0.02) dragged.current = true;
+      return;
+    }
+
     const start = pinch.current;
     if (!start || e.touches.length !== 2) return;
     const gap = gapOf(e.touches);
@@ -274,9 +309,18 @@ export function CandleFace({
       pinch.current = null;
       pinchedAt.current = Date.now();
     }
+    if (e.touches.length === 0) {
+      drag.current = null;
+      if (dragged.current) {
+        dragged.current = false;
+        pinchedAt.current = Date.now();
+      }
+    }
   };
 
-  const shape = candleShape(visible, W, H);
+  /** Where the candles stop and the room ahead begins. */
+  const drawW = W * (1 - room);
+  const shape = candleShape(visible, drawW, H);
   // The rule's own levels when they are to hand, so the line under the candle
   // is the line a window was refused at. The chart's own reading is the
   // fallback for a frame drawn before the first answer arrives.
@@ -393,6 +437,22 @@ export function CandleFace({
             height={H}
           />
         )}
+        {/*
+          Where the traded part of the chart ends, when it has been pushed
+          along to make room. Everything left of it happened; everything right
+          of it is the levels and the bands carried on into minutes that have
+          not been traded yet, which is the whole use of the empty space.
+        */}
+        {room > 0.01 && (
+          <line
+            className="nowline"
+            x1={drawW.toFixed(1)}
+            x2={drawW.toFixed(1)}
+            y1={0}
+            y2={H}
+          />
+        )}
+
         {/*
           Levels first, under the candles: they are the background the price is
           working against, not marks on top of it.
@@ -589,24 +649,6 @@ export function CandleFace({
         ))}
       </svg>
 
-      {/*
-        Where this interval opened, and how far it has come from there. On the
-        five-minute chart that is the window's own open — the price the bet is
-        settled against — and the number beside it is the whole question.
-      */}
-      <div className="candles-foot">
-        <span className="muted">{interval.replace('m', 'м')}</span>
-        <b>{shape ? priceLabel(shape.open, digits) : '—'}</b>
-        <span className={shape && shape.sinceOpen >= 0 ? 'up' : 'down'}>
-          {shape ? signedPct(shape.sinceOpen) : ''}
-        </span>
-        {trend && (
-          <em className={`trendrate ${trend.way}`}>
-            {trend.way === 'up' ? '↗' : trend.way === 'down' ? '↘' : '→'}{' '}
-            {trend.way === 'flat' ? 'вбок' : ratePerHour(trend.perHour)}
-          </em>
-        )}
-      </div>
     </div>
   );
 }
