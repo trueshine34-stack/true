@@ -118,6 +118,28 @@ export function targetPrice(avgPrice: number, gain: number, tick = 0.01): number
   return ceilToTick(price, tick);
 }
 
+/**
+ * The price one of the exit chips is holding out for.
+ *
+ * The chips are armed before the price is anywhere near them, and "+25%" on
+ * its own does not say what has to happen for it to fire — so the chip prints
+ * the number it is waiting for, and this is that number. It mirrors the rule
+ * in the service exactly, including the tick it adds at nought (where the
+ * target is break-even and the first price that is actually a profit is one
+ * step over it) and the ceiling a cent under a dollar, which is the dearest
+ * the book can quote.
+ */
+export function exitWaitPrice(
+  cost: number | null | undefined,
+  gain: number,
+  tick = 0.01,
+): number | null {
+  if (cost == null || !Number.isFinite(cost) || cost <= 0) return null;
+  const want = Math.min(Math.max(gain, 0), 10);
+  const target = targetPrice(cost, want, tick);
+  return Math.min(1 - tick, want > 0 ? target : target + tick);
+}
+
 /** The cheapest price that still comes out ahead once the fee is paid. */
 export function breakEvenPrice(avgPrice: number, tick = 0.01): number {
   const price = targetPrice(avgPrice, 0, tick);

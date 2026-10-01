@@ -31,6 +31,7 @@ import {
   type TradeRow,
 } from '../core/trades';
 import {
+  exitWaitPrice,
   limitLadder,
   netSellPrice,
   positionPnl,
@@ -58,6 +59,16 @@ import {
 } from '../native/polybot';
 
 const cents = (p: number) => `${Math.round(p * 100)}¢`;
+
+/**
+ * The standing exit's two numbers, as the service holds them.
+ *
+ * It only ever covers a side bought under thirty cents, and it asks half again
+ * over what that side cost. Mirrored here so the chip can print the price it
+ * is waiting for rather than only the percentage it is named after.
+ */
+const CHEAP_MARK = 0.3;
+const CHEAP_GAIN = 0.5;
 
 /** A window's opening time, which is how an event is named on this screen. */
 const clockOf = (windowStart: number) =>
@@ -394,6 +405,16 @@ export function Manual({
           cheapTake: stored.autoSellCheapTake,
           takeWatchMs: stored.autoSellTakeWaitMs,
           cheapWatchMs: stored.autoSellCheapWaitMs,
+          // The third chip is a standing instruction, so it comes back armed.
+          // The two beside it are one-shots and do not: an exit that armed
+          // itself on a launch would sell a window nobody had looked at yet.
+          ...(stored.autoSellCustomArmed
+            ? {
+                anyProfit: true,
+                anyProfitGain: stored.autoSellCustomGain,
+                anyProfitStanding: true,
+              }
+            : {}),
         }).catch(() => {});
       }
     });
@@ -598,6 +619,30 @@ export function Manual({
       acc[side] && acc[side].shares > 0 ? acc[side].cost / acc[side].shares : null;
     return { Up: avg('Up'), Down: avg('Down') };
   }, [trades]);
+
+  /*
+    What the side in hand cost, which is what every percentage is measured from.
+
+    Both sides are rarely held at once and the rules work one position at a
+    time, so the bigger holding is the one the exits are about. Priced the way
+    the tile beside them prices it: the app's own record of this window's buys,
+    with the exchange's average behind it for a position it did not place.
+  */
+  const heldAvg = (() => {
+    const leg = (name: 'Up' | 'Down') => {
+      const mine = livePositions.filter((p) => p.outcome === name);
+      const size = mine.reduce((a, p) => a + p.size, 0);
+      if (size <= 1e-6) return null;
+      const cost = mine.reduce((a, p) => a + p.size * p.avgPrice, 0);
+      const avg = cost > 0 ? cost / size : (localAvg[name] ?? 0);
+      return avg > 0 ? { size, avg } : null;
+    };
+    const up = leg('Up');
+    const down = leg('Down');
+    if (up == null) return down?.avg ?? null;
+    if (down == null) return up.avg;
+    return (up.size >= down.size ? up : down).avg;
+  })();
 
   /**
    * What is still working — from the log, and from the venue over the top.
@@ -1480,6 +1525,26 @@ export function Manual({
             />
 
             {/*
+              And under it, the number the window is settled against.
+
+              It is on the dock too, beside the countdown, but the dock is at
+              the foot of the screen now and the charts are at the top — and
+              the question the charts are being asked is "where is this
+              against the open", which cannot be answered a screen away. The
+              live price is left off: the chart is the live price, drawn. What
+              it cannot draw is the number the window is settled against, and
+              how far the last candle is from it.
+            */}
+            <div className="chartmark">
+              <WindowMark
+                windowStart={windowStart}
+                digits={coinDigits}
+                everyMs={500}
+                showNow={false}
+              />
+            </div>
+
+            {/*
               The book, and a way to put it away.
 
               Two taps on it fold it to a line and two more bring it back. It
@@ -2230,7 +2295,18 @@ export function Manual({
                 aria-label="Выход +50% для входов дешевле 30¢"
                 aria-pressed={settings.autoSellCheapTake}
               >
-                +50%
+                <span className="railanyname">+50%</span>
+                {/* What it is waiting for, once there is something to wait
+                    with. This one only ever covers a side bought under thirty
+                    cents, so over that it says so rather than printing a price
+                    it would never ask for. */}
+                {heldAvg != null && (
+                  <em className="railanyat">
+                    {heldAvg < CHEAP_MARK
+                      ? `от ${cents(exitWaitPrice(heldAvg, CHEAP_GAIN) ?? 0)}`
+                      : 'вход дорогой'}
+                  </em>
+                )}
               </button>
 
               {[
@@ -2251,6 +2327,10 @@ export function Manual({
                 const armed =
                   (autoSell.anyProfit ?? false) &&
                   Math.abs((autoSell.anyProfitGain ?? 0) - gain) < 1e-9;
+                // The price this chip is holding out for, worked out the same
+                // way the rule works it out: the cost plus the gain, with the
+                // fee on both sides already in it.
+                const at = exitWaitPrice(heldAvg, gain);
                 return (
                   <button
                     key={holds + label}
@@ -2271,11 +2351,21 @@ export function Manual({
                         anyProfit: next,
                         anyProfitGain: gain,
                       });
+                      // The two fixed chips fire once and put themselves back;
+                      // this one is a standing instruction and stays where it
+                      // was put, through its own firing and through the next
+                      // window. The ladder gets the position back only in the
+                      // last minute, and even then the chip stays lit.
+                      const standing = holds === 'custom';
+                      if (standing || settings.autoSellCustomArmed) {
+                        apply({ ...settings, autoSellCustomArmed: standing && next });
+                      }
                       // The watch goes with the gain: each chip has its own, and the
                       // rule only ever holds one of them at a time.
                       void PolyBot.autoSellUpdate({
                         anyProfit: next,
                         anyProfitGain: gain,
+                        anyProfitStanding: standing && next,
                         takeWatchMs: waitMs,
                       })
                         .then(() => PolyBot.autoSellState())
@@ -2285,7 +2375,8 @@ export function Manual({
                     aria-label={`Выход при ${label}`}
                     aria-pressed={armed}
                   >
-                    {label}
+                    <span className="railanyname">{label}</span>
+                    {at != null && <em className="railanyat">от {cents(at)}</em>}
                   </button>
                 );
               })}
@@ -3410,10 +3501,19 @@ function RuleBar({
 function WindowMark({
   windowStart,
   digits = 0,
+  everyMs = 250,
+  showNow = true,
 }: {
   windowStart: number;
   /** How finely this coin's price is printed. */
   digits?: number;
+  /** How often to re-read it. Quarter-second where it is traded off, half a
+      second under the chart, where it is only being watched. */
+  everyMs?: number;
+  /** Whether the live price is printed beside the open. Under the chart it is
+      not: the chart is the live price, drawn — what it cannot show is the
+      number this window is settled against and how far off it is. */
+  showNow?: boolean;
 }) {
   const [mark, setMark] = useState<{
     target?: number | null;
@@ -3430,19 +3530,20 @@ function WindowMark({
         .catch(() => {});
     };
     read();
-    const timer = window.setInterval(read, 250);
+    const timer = window.setInterval(read, everyMs);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [windowStart]);
+  }, [windowStart, everyMs]);
 
   const move = openMark(mark?.target, mark?.price, digits);
 
   return (
     <div className="pairmark">
       <span className="pairmarkline">
-        {bigPrice(mark?.target, digits)} → {bigPrice(mark?.price, digits)}
+        {bigPrice(mark?.target, digits)}
+        {showNow ? ` → ${bigPrice(mark?.price, digits)}` : ''}
       </span>
       <span className={`pairmarkmove ${move ? move.way : 'muted'}`}>
         {move ? `${move.arrow} ${move.text}` : '—'}

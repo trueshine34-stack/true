@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   breakEvenPrice,
+  exitWaitPrice,
   ceilToTick,
   feePerShare,
   limitLadder,
@@ -200,5 +201,38 @@ describe('standingOf', () => {
     const s = standingOf([held('Up', 5, 0.2, 0.5), held('Up', 5, 0.6, 0.5)]);
     expect(s.cost).toBeCloseTo(4, 6);
     expect(s.ifUp).toBeCloseTo(6, 6);
+  });
+});
+
+describe('what an exit chip is waiting for', () => {
+  it('is a tick over break-even when any profit will do', () => {
+    // 53c cost: the price whose net is 53c is 57c, and the first price that is
+    // actually a profit is the tick above it.
+    const target = targetPrice(0.53, 0, 0.01);
+    expect(exitWaitPrice(0.53, 0)).toBeCloseTo(target + 0.01, 6);
+  });
+
+  it('is the target itself once a gain is asked for', () => {
+    expect(exitWaitPrice(0.53, 0.25)).toBeCloseTo(targetPrice(0.53, 0.25, 0.01), 6);
+    expect(exitWaitPrice(0.2, 0.5)).toBeCloseTo(targetPrice(0.2, 0.5, 0.01), 6);
+  });
+
+  it('asks more for more', () => {
+    const little = exitWaitPrice(0.3, 0.1) ?? 0;
+    const lot = exitWaitPrice(0.3, 0.5) ?? 0;
+    expect(lot).toBeGreaterThan(little);
+  });
+
+  it('never asks for more than the book can quote', () => {
+    // 80c looking for half again is past a dollar; a cent under one is the most
+    // anyone can bid, so that is where it waits.
+    expect(exitWaitPrice(0.8, 0.5)).toBeCloseTo(0.99, 6);
+    expect(exitWaitPrice(0.97, 0)).toBeCloseTo(0.99, 6);
+  });
+
+  it('has nothing to say without a position', () => {
+    expect(exitWaitPrice(null, 0.25)).toBeNull();
+    expect(exitWaitPrice(0, 0.25)).toBeNull();
+    expect(exitWaitPrice(Number.NaN, 0.25)).toBeNull();
   });
 });

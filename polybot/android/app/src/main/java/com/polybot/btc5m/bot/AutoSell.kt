@@ -112,6 +112,18 @@ class AutoSell(
          */
         val anyProfitGain: Double = 0.0,
         /**
+         * Whether that switch stays where it was put.
+         *
+         * Two of the three chips that arm it are one-shots: pressed for a
+         * moment, for that moment, and off again once they have fired. The
+         * third is a standing instruction — a margin chosen for how the day is
+         * going, meant to hold for every window until it is changed — so
+         * firing does not disarm it, and the ladder only gets the position
+         * back in the last minute, where there is no time left to hold out for
+         * a margin and the floor is what matters.
+         */
+        val anyProfitStanding: Boolean = false,
+        /**
          * The standing exit for a side that was bought cheap.
          *
          * A position opened under thirty cents is a different trade from the
@@ -660,8 +672,13 @@ class AutoSell(
                     reconcilePercent(position, open, meta, percentPrice, mine)
                 // Any profit at all, and out: the switch is for a window that
                 // has gone wrong and come back, and it beats every price the
-                // rules below would hold out for.
-                settings.anyProfit ->
+                // rules below would hold out for. Standing, it gives the
+                // position back to the ladder for the last minute — by then
+                // the window has picked a side and a margin over cost is the
+                // wrong question — but it stays armed through that and through
+                // the window after it. Only the user takes it off.
+                settings.anyProfit &&
+                    (!settings.anyProfitStanding || closesAt - now > CHEAP_UNTIL_SEC) ->
                     reconcileAnyProfit(position, open, meta, mine, lotAt, rung)
                 // A side bought cheap leaves by its own door, and the ladder
                 // never sees it: half over cost, asked rather than taken.
@@ -1542,12 +1559,15 @@ class AutoSell(
         if (!status.startsWith("не ") && status != "нет сессии") {
             rung.takeAtMs = 0L
             rung.takeHigh = 0.0
-            update(settings.copy(anyProfit = false))
+            // A standing one is not a button pressed once: it was set as the
+            // way out of every window, so it fires and stays. Only the two
+            // fixed chips put themselves back.
+            if (!settings.anyProfitStanding) update(settings.copy(anyProfit = false))
             engine.log(
                 "info",
                 "Выход по " +
                     (if (gain > 0.0) "+" + (gain * 100).toInt() + "%" else "любому плюсу") +
-                    " сработал — выключаю",
+                    " сработал" + (if (settings.anyProfitStanding) "" else " — выключаю"),
             )
         }
         return status

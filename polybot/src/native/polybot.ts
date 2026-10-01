@@ -296,6 +296,15 @@ export interface PolyBotPlugin {
     anyProfit?: boolean;
     /** How much of a profit that waits for: 0 for any, 0.1 for ten percent. */
     anyProfitGain?: number;
+    /**
+     * Whether that exit stays where it was put.
+     *
+     * The two fixed chips are one-shots — pressed for a moment, and off again
+     * once they have fired. The third is a standing instruction, so it holds
+     * through its own firing and through the windows after it, and the ladder
+     * only gets the position back in the last minute.
+     */
+    anyProfitStanding?: boolean;
     /** The standing exit for sides bought under thirty cents: +50%, by limit. */
     cheapTake?: boolean;
     /** How long each exit watches the book once its price is reached, in ms. */
@@ -527,6 +536,8 @@ export type AutoSellState = {
   anyProfit?: boolean;
   /** And what it is holding out for: 0 for any profit, 0.1 for ten percent. */
   anyProfitGain?: number;
+  /** Whether it stays armed after it fires, which the third chip does. */
+  anyProfitStanding?: boolean;
   /** Whether cheap entries leave by their own door rather than by the ladder. */
   cheapTake?: boolean;
   /** How long each exit watches once its price is reached, in milliseconds. */

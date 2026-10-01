@@ -3072,8 +3072,39 @@ button.step.big {
 
 .dockexits .railany {
   flex: 1 1 0;
-  height: 34px;
   min-width: 0;
+  height: auto;
+  min-height: 34px;
+  padding: 3px 4px;
+}
+
+/*
+  A chip's name, and under it the price it is waiting for.
+
+  "+25%" on its own does not say what has to happen — it is a percentage over a
+  number that is somewhere else on the screen. The price underneath is the
+  answer, in the same units the book is quoted in, so arming one of these is a
+  decision made against a figure rather than against a feeling.
+*/
+.railanyname {
+  line-height: 1.1;
+}
+
+.railanyat {
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Lit, the sub-line follows the chip rather than staying grey behind it. */
+.railany.on .railanyat,
+.railany.standing.on .railanyat {
+  color: inherit;
+  opacity: 0.85;
 }
 
 /*
@@ -4108,6 +4139,34 @@ input.sellcents.typed {
 .pairmarkmove.flat,
 .pairmarkmove.muted {
   color: var(--muted);
+}
+
+/*
+  The same readout under the minute chart, laid along a line instead of stacked.
+
+  There it is one of three things in a column and wants the height; here it is a
+  caption on a chart and wants none, so the open and the distance sit side by
+  side on a single row the chart can carry without growing.
+*/
+.chartmark {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 5px;
+}
+
+.chartmark .pairmark {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.chartmark .pairmarkline {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chartmark .pairmarkmove {
+  font-size: 13px;
 }
 
 /*

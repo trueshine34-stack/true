@@ -147,6 +147,17 @@ export type ManualSettings = {
   autoSellCustomGain: number;
   autoSellCustomWaitMs: number;
   /**
+   * And whether it is armed, which this one keeps.
+   *
+   * The two fixed chips are one-shots: they are pressed at a moment, for that
+   * moment, and they put themselves back once they have fired. This one is a
+   * standing instruction — a number chosen for how the day is going, meant to
+   * hold for every window until it is changed — so firing does not disarm it
+   * and neither does a restart. The ladder sells nothing it has not been given
+   * back, which it only is in the last minute.
+   */
+  autoSellCustomArmed: boolean;
+  /**
    * Whether the depth curve is folded away.
    *
    * Not a setting anyone goes looking for: it is set by double-tapping the
@@ -233,6 +244,7 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellCheapWaitMs: 1500,
   autoSellCustomGain: 0.25,
   autoSellCustomWaitMs: 5000,
+  autoSellCustomArmed: false,
   depthHidden: false,
 };
 
