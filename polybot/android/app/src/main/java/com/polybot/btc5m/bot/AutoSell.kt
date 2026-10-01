@@ -128,6 +128,17 @@ class AutoSell(
          * side that got there from a quarter.
          */
         val cheapTake: Boolean = true,
+        /**
+         * How long each exit watches the book once its price is reached.
+         *
+         * The one-shots and the standing rule keep their own: five seconds
+         * suits a position being let go deliberately, a second and a half
+         * suits a cheap side that spikes and gives it back inside that. Both
+         * are here rather than in the code because the right answer depends on
+         * how the book behaves, which is not a thing this file knows.
+         */
+        val takeWatchMs: Long = TAKE_WATCH_MS,
+        val cheapWatchMs: Long = CHEAP_WATCH_MS,
     )
 
     /** One position and what the rule has managed to do about it. */
@@ -324,6 +335,10 @@ class AutoSell(
          * — which is the ladder's question, and it has rungs for it.
          */
         const val CHEAP_UNTIL_SEC = 60L
+
+        /** What a watch may be set to. Under half a second it is not a watch. */
+        const val MIN_WATCH_MS = 500L
+        const val MAX_WATCH_MS = 15_000L
 
         /** How often to look at the balance while a sale's money is awaited. */
         const val CASH_PROBE_MS = 2_000L
@@ -1412,7 +1427,7 @@ class AutoSell(
         }
         if (bid > rung.cheapHigh) rung.cheapHigh = bid
         val waited = nowMs - rung.cheapAtMs
-        if (waited < CHEAP_WATCH_MS) {
+        if (waited < settings.cheapWatchMs.coerceIn(MIN_WATCH_MS, MAX_WATCH_MS)) {
             return "смотрю · лучшее " + (rung.cheapHigh * 100).toInt() + "¢"
         }
 
@@ -1509,8 +1524,9 @@ class AutoSell(
         }
         if (bid > rung.takeHigh) rung.takeHigh = bid
         val waited = nowMs - rung.takeAtMs
-        if (waited < TAKE_WATCH_MS) {
-            return "смотрю ${(TAKE_WATCH_MS - waited + 999) / 1000} с · " +
+        val watch = settings.takeWatchMs.coerceIn(MIN_WATCH_MS, MAX_WATCH_MS)
+        if (waited < watch) {
+            return "смотрю ${(watch - waited + 999) / 1000} с · " +
                 "лучшее " + (rung.takeHigh * 100).toInt() + "¢"
         }
 

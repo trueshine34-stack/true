@@ -298,6 +298,9 @@ export interface PolyBotPlugin {
     anyProfitGain?: number;
     /** The standing exit for sides bought under thirty cents: +50%, by limit. */
     cheapTake?: boolean;
+    /** How long each exit watches the book once its price is reached, in ms. */
+    takeWatchMs?: number;
+    cheapWatchMs?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
   /** Which way the window is leaning, as a hint. Nothing acts on it. */
@@ -526,6 +529,9 @@ export type AutoSellState = {
   anyProfitGain?: number;
   /** Whether cheap entries leave by their own door rather than by the ladder. */
   cheapTake?: boolean;
+  /** How long each exit watches once its price is reached, in milliseconds. */
+  takeWatchMs?: number;
+  cheapWatchMs?: number;
   rebuys: AutoSellRebuy[];
   rebuysDone?: AutoSellRebuyDone[];
   timings?: Timings;

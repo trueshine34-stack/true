@@ -1321,6 +1321,8 @@ class BotPlugin : Plugin() {
             anyProfit = call.getBoolean("anyProfit") ?: defaults.anyProfit,
             anyProfitGain = call.getDouble("anyProfitGain") ?: defaults.anyProfitGain,
             cheapTake = call.getBoolean("cheapTake") ?: defaults.cheapTake,
+            takeWatchMs = call.getInt("takeWatchMs")?.toLong() ?: defaults.takeWatchMs,
+            cheapWatchMs = call.getInt("cheapWatchMs")?.toLong() ?: defaults.cheapWatchMs,
         )
         if (next.enabled && !engine.isConfigured()) {
             call.reject("Сначала подключите кошелёк")
@@ -1395,6 +1397,8 @@ class BotPlugin : Plugin() {
                 .put("anyProfit", bot.settings.anyProfit)
                 .put("anyProfitGain", bot.settings.anyProfitGain)
                 .put("cheapTake", bot.settings.cheapTake)
+                .put("takeWatchMs", bot.settings.takeWatchMs)
+                .put("cheapWatchMs", bot.settings.cheapWatchMs)
                 .put("chime", bot.settings.chime)
                 .put("dipRescue", bot.settings.dipRescue)
                 .put("percentMode", bot.settings.percentMode)

@@ -77,6 +77,9 @@ const WINDOW_SEC = 300;
 /** How long a banner stays up before it clears itself. */
 const NOTE_MS = 5_000;
 
+/** A press this long on a rail chip opens what it is holding out for. */
+const HOLD_MS = 450;
+
 /**
  * Two taps closer together than this are one gesture.
  *
@@ -97,7 +100,7 @@ function doubleTap(last: { current: number }): boolean {
 /** How long a pulled order is kept out of the venue's listing by hand. */
 const PULLED_MS = 15_000;
 
-/** The one-shot exits in the rail: the gain each holds out for, and its label. */
+/** The two fixed one-shot exits: the gain each holds out for, and its label. */
 const EXITS: ReadonlyArray<readonly [number, string]> = [
   [0, '+1¢'],
   [0.1, '+10%'],
@@ -249,6 +252,34 @@ export function Manual({
   /** When each field was last tapped, for telling a double tap from a single. */
   const priceTapRef = useRef(0);
   const sizeTapRef = useRef(0);
+
+  /**
+   * Which exit's watch is open for setting, if any.
+   *
+   * A press and hold on one of the three chips in the rail: a tap arms or
+   * disarms it, and the thing anyone wants to change after watching it work
+   * twice is how long it looks before it asks. Holding is the right gesture
+   * for it — it must not be reachable by the finger that is trying to arm the
+   * rule with a window running.
+   */
+  const [watchFor, setWatchFor] = useState<'take' | 'cheap' | 'custom' | null>(
+    null,
+  );
+  const holdRef = useRef<number | null>(null);
+  const heldRef = useRef(false);
+  const holdWatch = useCallback((which: 'take' | 'cheap' | 'custom') => {
+    heldRef.current = false;
+    holdRef.current = window.setTimeout(() => {
+      heldRef.current = true;
+      setWatchFor(which);
+    }, HOLD_MS);
+  }, []);
+  const dropHold = useCallback(() => {
+    if (holdRef.current != null) {
+      window.clearTimeout(holdRef.current);
+      holdRef.current = null;
+    }
+  }, []);
   /**
    * The side the dock is about to buy.
    *
@@ -360,6 +391,8 @@ export function Manual({
           ride: stored.autoSellRide,
           rideWaitMs: stored.autoSellRideMs,
           cheapTake: stored.autoSellCheapTake,
+          takeWatchMs: stored.autoSellTakeWaitMs,
+          cheapWatchMs: stored.autoSellCheapWaitMs,
         }).catch(() => {});
       }
     });
@@ -779,6 +812,8 @@ export function Manual({
               ride: settingsRef.current.autoSellRide,
               rideWaitMs: settingsRef.current.autoSellRideMs,
               cheapTake: settingsRef.current.autoSellCheapTake,
+              takeWatchMs: settingsRef.current.autoSellTakeWaitMs,
+              cheapWatchMs: settingsRef.current.autoSellCheapWaitMs,
             }).catch(() => {});
           }
         })
@@ -1492,7 +1527,18 @@ export function Manual({
         */}
         <button
           className={`railany standing${settings.autoSellCheapTake ? ' on' : ''}`}
+          onPointerDown={() => holdWatch('cheap')}
+          onPointerUp={dropHold}
+          onPointerLeave={dropHold}
+          onPointerCancel={dropHold}
+          onContextMenu={(e) => e.preventDefault()}
           onClick={() => {
+            // The hold has already opened the delay; the tap that ends it must
+            // not also switch the rule off.
+            if (heldRef.current) {
+              heldRef.current = false;
+              return;
+            }
             const next = {
               ...settings,
               autoSellCheapTake: !settings.autoSellCheapTake,
@@ -1508,30 +1554,56 @@ export function Manual({
           +50%
         </button>
 
-        {EXITS.map(([gain, label]) => {
+        {[
+          ...EXITS.map(([gain, label]) => ({
+            gain,
+            label,
+            waitMs: settings.autoSellTakeWaitMs,
+            holds: 'take' as const,
+          })),
+          // And the one whose number is a setting rather than a fact.
+          {
+            gain: settings.autoSellCustomGain,
+            label: `+${Math.round(settings.autoSellCustomGain * 100)}%`,
+            waitMs: settings.autoSellCustomWaitMs,
+            holds: 'custom' as const,
+          },
+        ].map(({ gain, label, waitMs, holds }) => {
           const armed =
             (autoSell.anyProfit ?? false) &&
             Math.abs((autoSell.anyProfitGain ?? 0) - gain) < 1e-9;
           return (
             <button
-              key={label}
+              key={holds + label}
               className={`railany${armed ? ' on' : ''}`}
+              onPointerDown={() => holdWatch(holds)}
+              onPointerUp={dropHold}
+              onPointerLeave={dropHold}
+              onPointerCancel={dropHold}
+              onContextMenu={(e) => e.preventDefault()}
               onClick={() => {
+                if (heldRef.current) {
+                  heldRef.current = false;
+                  return;
+                }
                 const next = !armed;
                 setAutoSell({
                   ...autoSell,
                   anyProfit: next,
                   anyProfitGain: gain,
                 });
+                // The watch goes with the gain: each chip has its own, and the
+                // rule only ever holds one of them at a time.
                 void PolyBot.autoSellUpdate({
                   anyProfit: next,
                   anyProfitGain: gain,
+                  takeWatchMs: waitMs,
                 })
                   .then(() => PolyBot.autoSellState())
                   .then(setAutoSell)
                   .catch(() => {});
               }}
-              aria-label={gain > 0 ? 'Выход при +10%' : 'Выход при любом плюсе'}
+              aria-label={`Выход при ${label}`}
               aria-pressed={armed}
             >
               {label}
@@ -1786,6 +1858,54 @@ export function Manual({
             setClosing(null);
             void marketSell(which, size);
           }}
+        />
+      )}
+
+      {/*
+        How long the exit that was held watches the book. One number, the two
+        prices it cannot argue with written under it, and nothing else: this is
+        opened once, set, and not looked at again.
+      */}
+      {watchFor && (
+        <WatchSheet
+          which={watchFor}
+          ms={
+            watchFor === 'cheap'
+              ? settings.autoSellCheapWaitMs
+              : watchFor === 'custom'
+                ? settings.autoSellCustomWaitMs
+                : settings.autoSellTakeWaitMs
+          }
+          gain={watchFor === 'custom' ? settings.autoSellCustomGain : null}
+          onMs={(ms) => {
+            const next =
+              watchFor === 'cheap'
+                ? { ...settings, autoSellCheapWaitMs: ms }
+                : watchFor === 'custom'
+                  ? { ...settings, autoSellCustomWaitMs: ms }
+                  : { ...settings, autoSellTakeWaitMs: ms };
+            apply(next);
+            void PolyBot.autoSellUpdate(
+              watchFor === 'cheap' ? { cheapWatchMs: ms } : { takeWatchMs: ms },
+            ).catch(() => {});
+          }}
+          onGain={(gain) => {
+            apply({ ...settings, autoSellCustomGain: gain });
+            // Only while it is the armed one: changing a number on a chip that
+            // is not running must not re-point the rule that is.
+            if (
+              autoSell.anyProfit &&
+              Math.abs(
+                (autoSell.anyProfitGain ?? 0) - settings.autoSellCustomGain,
+              ) < 1e-9
+            ) {
+              void PolyBot.autoSellUpdate({ anyProfitGain: gain })
+                .then(() => PolyBot.autoSellState())
+                .then(setAutoSell)
+                .catch(() => {});
+            }
+          }}
+          onClose={() => setWatchFor(null)}
         />
       )}
 
@@ -2132,6 +2252,98 @@ export function Manual({
             />
       </div>
     </>
+  );
+}
+
+/**
+ * What one of the exits waits for, as a slider.
+ *
+ * Reaching a price starts a watch rather than a sale: the first tick through
+ * it is rarely the best of it, and what gets asked for is the best the book
+ * showed while it was being watched. How long that is depends on how the book
+ * behaves, which is a thing to be felt rather than reasoned out — so it is a
+ * slider, opened by holding the chip it belongs to.
+ */
+function WatchSheet({
+  which,
+  ms,
+  gain,
+  onMs,
+  onGain,
+  onClose,
+}: {
+  which: 'take' | 'cheap' | 'custom';
+  ms: number;
+  /** The gain this chip holds out for, where that is a setting too. */
+  gain: number | null;
+  onMs: (ms: number) => void;
+  onGain: (gain: number) => void;
+  onClose: () => void;
+}) {
+  const cheap = which === 'cheap';
+  return (
+    <div className="sheet-scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <h2>
+            {cheap
+              ? 'Выход +50%'
+              : gain != null
+                ? `Выход +${Math.round(gain * 100)}%`
+                : 'Выходы +1¢ и +10%'}
+          </h2>
+          <button className="xbtn" onClick={onClose} aria-label="Закрыть">
+            ✕
+          </button>
+        </div>
+
+        {/* The number this one holds out for, where it is not a fixed one. */}
+        {gain != null && (
+          <label className="rideslider">
+            <span className="muted">
+              жду +{Math.round(gain * 100)}% к цене входа
+            </span>
+            <input
+              type="range"
+              min={1}
+              max={200}
+              step={1}
+              value={Math.round(gain * 100)}
+              onChange={(e) => onGain(Number(e.target.value) / 100)}
+            />
+            <span className="muted rideends">
+              <i>+1%</i>
+              <i>комиссия с обеих сторон учтена</i>
+              <i>+200%</i>
+            </span>
+          </label>
+        )}
+
+        <label className="rideslider">
+          <span className="muted">
+            смотрю книгу {(ms / 1000).toFixed(1)} с и ставлю лимитку по лучшей
+            цене из них
+          </span>
+          <input
+            type="range"
+            min={500}
+            max={15000}
+            step={250}
+            value={ms}
+            onChange={(e) => onMs(Number(e.target.value))}
+          />
+          <span className="muted rideends">
+            <i>0,5</i>
+            <i>
+              {cheap
+                ? 'вход дешевле 30¢ · последняя минута лесенке'
+                : 'срабатывает один раз'}
+            </i>
+            <i>15</i>
+          </span>
+        </label>
+      </div>
+    </div>
   );
 }
 
@@ -2889,6 +3101,8 @@ function RuleBar({
         ride: next.autoSellRide,
         rideWaitMs: next.autoSellRideMs,
         cheapTake: next.autoSellCheapTake,
+        takeWatchMs: next.autoSellTakeWaitMs,
+        cheapWatchMs: next.autoSellCheapWaitMs,
       }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
     },
     [onChange, onNote],
@@ -3387,6 +3601,8 @@ function ManualSettingsForm({
       ride: next.autoSellRide,
       rideWaitMs: next.autoSellRideMs,
       cheapTake: next.autoSellCheapTake,
+      takeWatchMs: next.autoSellTakeWaitMs,
+      cheapWatchMs: next.autoSellCheapWaitMs,
     }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
   };
 

@@ -127,6 +127,25 @@ export type ManualSettings = {
    * On unless it is switched off.
    */
   autoSellCheapTake: boolean;
+  /**
+   * How long each of the three exits watches the book once it is reached.
+   *
+   * The one-shots share one figure and the standing rule has its own, because
+   * they are watching for different things: a position being let go on purpose
+   * can afford five seconds of looking, and a cheap side that spikes cannot.
+   */
+  autoSellTakeWaitMs: number;
+  autoSellCheapWaitMs: number;
+  /**
+   * The third one-shot: whatever gain is wanted, and its own watch.
+   *
+   * The two beside it are fixed because they answer fixed questions — out at
+   * break-even, out at a tenth. This one is the rest of the answers: a figure
+   * for a particular window, set on the sheet behind its own chip and kept
+   * until it is set again.
+   */
+  autoSellCustomGain: number;
+  autoSellCustomWaitMs: number;
 };
 
 /**
@@ -201,6 +220,10 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   allCoins: false,
   chart15m: false,
   autoSellCheapTake: true,
+  autoSellTakeWaitMs: 5000,
+  autoSellCheapWaitMs: 1500,
+  autoSellCustomGain: 0.25,
+  autoSellCustomWaitMs: 5000,
 };
 
 /** Never spend the last of the balance, whatever the fee works out to. */
