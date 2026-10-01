@@ -171,6 +171,12 @@ class AutoSell(
         var rideHigh: Double = 0.0,
         var rideAtMs: Long = 0L,
         /**
+         * The one-shot exit's watch: when the asked price was first reached,
+         * and the best bid seen since.
+         */
+        var takeAtMs: Long = 0L,
+        var takeHigh: Double = 0.0,
+        /**
          * Whether the bid has ever given back six cents of its best. Until it
          * has, the move is one clean run and the ask is held at ninety rather
          * than at whatever rung the clock has reached.
@@ -260,6 +266,16 @@ class AutoSell(
          * window, which is how a rate limit is earned.
          */
         const val RIDE_GAP_MS = 2_000L
+
+        /**
+         * How long the one-shot exits watch a price once it is reached.
+         *
+         * Five seconds. The first tick through a price is rarely the best of
+         * it, and the switch is pressed by someone who wants out at a good
+         * number rather than at the next number — so the book is watched for
+         * that long and the best of it is what gets asked for.
+         */
+        const val TAKE_WATCH_MS = 5_000L
 
         /** How often to look at the balance while a sale's money is awaited. */
         const val CASH_PROBE_MS = 2_000L
@@ -583,7 +599,7 @@ class AutoSell(
                 // has gone wrong and come back, and it beats every price the
                 // rules below would hold out for.
                 settings.anyProfit ->
-                    reconcileAnyProfit(position, open, meta, mine, lotAt)
+                    reconcileAnyProfit(position, open, meta, mine, lotAt, rung)
                 // Riding: nothing rests on the rung, the bid is watched, and
                 // the position is crossed out once the climb stops — or at
                 // once at the prices where there is nothing left to ride for.
@@ -1269,6 +1285,7 @@ class AutoSell(
         meta: ClobApi.MarketMeta,
         mine: Double,
         lotAt: Long,
+        rung: Rung,
     ): String {
         val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
         val (pinned, ours) = sells.partition { held(it) }
@@ -1307,17 +1324,44 @@ class AutoSell(
             return "цена недоступна"
         }
         if (bid == null || bid < wanted - 1e-9) {
+            // Not there yet, and a watch that was running is over: the price
+            // has to be reached and *held* to be worth asking for again.
+            rung.takeAtMs = 0L
+            rung.takeHigh = 0.0
             return "жду " + (if (gain > 0.0) "+" + (gain * 100).toInt() + "% " else "плюс ") +
                 "от " + (wanted * 100).toInt() + "¢"
         }
 
-        val price = maxOf(meta.tickSize, snapToTick(bid - meta.tickSize, meta.tickSize))
-        val status = tryPlace(position, free, price, lotAt)
+        // Reached. Now watch it for a few seconds and remember the best the
+        // book showed, because the first tick past a price is rarely the best
+        // one — and then ask for exactly that, as an offer on the book rather
+        // than a sale into it. Selling at market here would take whatever is
+        // bid at the moment the rule happens to look; this takes the number
+        // that was actually seen.
+        val nowMs = System.currentTimeMillis()
+        if (rung.takeAtMs == 0L) {
+            rung.takeAtMs = nowMs
+            rung.takeHigh = bid
+        }
+        if (bid > rung.takeHigh) rung.takeHigh = bid
+        val waited = nowMs - rung.takeAtMs
+        if (waited < TAKE_WATCH_MS) {
+            return "смотрю ${(TAKE_WATCH_MS - waited + 999) / 1000} с · " +
+                "лучшее " + (rung.takeHigh * 100).toInt() + "¢"
+        }
+
+        // The best of those seconds, as a limit sitting on the book. Not a
+        // tick under the bid: this is an offer at a price, and if the book has
+        // slipped since, it waits there rather than chasing.
+        val price = maxOf(meta.tickSize, snapToTick(rung.takeHigh, meta.tickSize))
+        val status = tryPlace(position, free, price, lotAt, auto = false)
         // One occasion, one firing. Whether or not the order came back filled,
         // the ask has been sent at a price the book was showing — leaving the
         // switch on would have it sell the next position too, which is not
         // what a button pressed once means.
         if (!status.startsWith("не ") && status != "нет сессии") {
+            rung.takeAtMs = 0L
+            rung.takeHigh = 0.0
             update(settings.copy(anyProfit = false))
             engine.log(
                 "info",
@@ -1442,6 +1486,16 @@ class AutoSell(
         size: Double,
         price: Double,
         lotAt: Long,
+        /**
+         * Whether the rules may move this order again.
+         *
+         * Everything the ladder places is its own and is re-priced on the next
+         * rung. An offer the one-shot exits leave behind is not: it is a price
+         * a person asked for, at the best the book showed while it was being
+         * watched, and the ladder cancelling it a second later would be the
+         * rules overruling the person.
+         */
+        auto: Boolean = true,
     ): String {
         attempts[position.asset] = (attempts[position.asset] ?: 0) + 1
         val startedAt = System.currentTimeMillis()
@@ -1456,7 +1510,7 @@ class AutoSell(
                 price = price,
                 size = size,
                 orderType = "GTC",
-                auto = true,
+                auto = auto,
             )
             if (result.success) {
                 attempts.remove(position.asset)

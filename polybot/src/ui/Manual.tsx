@@ -77,8 +77,22 @@ const WINDOW_SEC = 300;
 /** How long a banner stays up before it clears itself. */
 const NOTE_MS = 5_000;
 
-/** A press this long is a hold, not a tap. Android's own threshold is 500 ms. */
-const HOLD_MS = 450;
+/**
+ * Two taps closer together than this are one gesture.
+ *
+ * Three hundred milliseconds is what the platforms use and what a hand that
+ * means it manages without thinking; it also sits clear of the pause between
+ * two separate decisions on the same button.
+ */
+const DOUBLE_MS = 300;
+
+/** True on the second of two quick taps, and arms the next pair. */
+function doubleTap(last: { current: number }): boolean {
+  const now = Date.now();
+  const quick = now - last.current < DOUBLE_MS;
+  last.current = quick ? 0 : now;
+  return quick;
+}
 
 /** How long a pulled order is kept out of the venue's listing by hand. */
 const PULLED_MS = 15_000;
@@ -223,25 +237,18 @@ export function Manual({
    */
   const [sizePct, setSizePct] = useState<number | null>(null);
   /**
-   * Typing the size out by hand, which is what a long press on it asks for.
+   * Typing the size out by hand, which is what two quick taps on it ask for.
    *
    * The chips answer "a quarter, half, all of it" and that is the size nearly
-   * every time — but not the time you want eleven shares, and until now there
-   * was no way to say eleven at all. A press and hold turns the number into a
-   * field; a tap still opens the chips.
+   * every time — but not the time you want eleven shares. Two taps turn the
+   * number into a field; one still opens the chips.
    */
   const [typingSize, setTypingSize] = useState(false);
   /** And the same for the price, which lost its wheel to the same gesture. */
   const [typingPrice, setTypingPrice] = useState(false);
-  /** The hold timer, and whether it fired — a fired hold eats the tap after it. */
-  const holdRef = useRef<number | null>(null);
-  const heldRef = useRef(false);
-  const clearHold = useCallback(() => {
-    if (holdRef.current != null) {
-      window.clearTimeout(holdRef.current);
-      holdRef.current = null;
-    }
-  }, []);
+  /** When each field was last tapped, for telling a double tap from a single. */
+  const priceTapRef = useRef(0);
+  const sizeTapRef = useRef(0);
   /**
    * The side the dock is about to buy.
    *
@@ -1955,9 +1962,11 @@ export function Manual({
 
                 The wheel that used to open on a tap is gone: it covered the
                 book it was pricing against, and the price wanted is nearly
-                always a cent or two from the one already in the field. A hold
-                empties the field and opens the keyboard, which is the case the
-                steps are bad at — a price several cents away, known exactly.
+                always a cent or two from the one already in the field. Two
+                quick taps empty the field and open the keyboard, which is the
+                case the steps are bad at — a price several cents away, known
+                exactly. Two taps rather than a hold: a hold is half a second
+                of waiting, and this is pressed with a window running.
               */}
               <input
                 className={typingPrice ? 'typed' : undefined}
@@ -1967,20 +1976,14 @@ export function Manual({
                 autoFocus={typingPrice}
                 placeholder={askUp != null ? String(Math.round(askUp * 100)) : '¢'}
                 value={limitPrice}
-                onPointerDown={() => {
+                onClick={() => {
                   if (typingPrice) return;
-                  heldRef.current = false;
-                  holdRef.current = window.setTimeout(() => {
-                    heldRef.current = true;
-                    // Cleared, not selected: a hold is "I know the number",
-                    // and the old one is in the way of typing it.
-                    setLimitPrice('');
-                    setTypingPrice(true);
-                  }, HOLD_MS);
+                  if (!doubleTap(priceTapRef)) return;
+                  // Cleared, not selected: asking to type is "I know the
+                  // number", and the old one is in the way of typing it.
+                  setLimitPrice('');
+                  setTypingPrice(true);
                 }}
-                onPointerUp={() => clearHold()}
-                onPointerLeave={() => clearHold()}
-                onPointerCancel={() => clearHold()}
                 onContextMenu={(e) => e.preventDefault()}
                 onChange={(e) =>
                   setLimitPrice(e.target.value.replace(',', '.').slice(0, 3))
@@ -2018,26 +2021,18 @@ export function Manual({
             ) : (
               <button
                 className="limitsize"
-                onPointerDown={() => {
-                  heldRef.current = false;
-                  holdRef.current = window.setTimeout(() => {
-                    heldRef.current = true;
-                    setSizePct(null);
-                    // Emptied, like the price: a hold means the number is
-                    // known and the old one is only in the way.
-                    setLimitSize('');
-                    setTypingSize(true);
-                  }, HOLD_MS);
-                }}
-                onPointerUp={() => clearHold()}
-                onPointerLeave={() => clearHold()}
-                onPointerCancel={() => clearHold()}
                 onContextMenu={(e) => e.preventDefault()}
                 onClick={() => {
-                  // The hold already did something; the tap it ends with must
-                  // not also toggle the chips underneath.
-                  if (heldRef.current) {
-                    heldRef.current = false;
+                  // One tap shows the share chips, two open the keyboard — and
+                  // the second one puts the chips back, because the first tap
+                  // of a double tap was never meant to do anything.
+                  if (doubleTap(sizeTapRef)) {
+                    setSizingLimit((v) => !v);
+                    setSizePct(null);
+                    // Emptied, like the price: asking to type means the number
+                    // is known and the old one is only in the way.
+                    setLimitSize('');
+                    setTypingSize(true);
                     return;
                   }
                   setSizingLimit((v) => !v);
