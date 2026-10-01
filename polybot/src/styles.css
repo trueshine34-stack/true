@@ -860,9 +860,13 @@ button.compact.narrow {
   border-top: 1px solid var(--line);
 }
 
-/* On the settings screen there is nothing to trade against. */
-.dock.away {
-  display: none;
+/*
+  On the settings screen the dock keeps only its top row — the balance and the
+  gear that gets back out of it — so the bar stays a bar rather than vanishing
+  and taking the way back with it.
+*/
+.dock .rail {
+  padding-bottom: 2px;
 }
 
 /*
@@ -872,6 +876,11 @@ button.compact.narrow {
  */
 .dockgap {
   height: 190px;
+}
+
+/* And on the settings screen it is one row, so the page ends just clear of it. */
+.dockgap.bare {
+  height: 64px;
 }
 
 /*
@@ -3021,6 +3030,26 @@ button.step.big {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: -0.02em;
+}
+
+/*
+  The book, folded away.
+
+  Two taps put it down to a line and two bring it back, so the line has to be
+  worth tapping and impossible to mistake for a chart that failed to load —
+  hence the words on it.
+*/
+.depthshut {
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.depthfold {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /*

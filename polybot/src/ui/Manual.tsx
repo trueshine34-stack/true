@@ -252,6 +252,7 @@ export function Manual({
   /** When each field was last tapped, for telling a double tap from a single. */
   const priceTapRef = useRef(0);
   const sizeTapRef = useRef(0);
+  const depthTapRef = useRef(0);
 
   /**
    * Which exit's watch is open for setting, if any.
@@ -1416,105 +1417,6 @@ export function Manual({
       */}
       <div className="deck">
 
-      {/*
-        One rail of collapsed things: the session on the left, the bot on the
-        right. Both are read a few times an hour and neither is worth a
-        permanent row — but both want to be one tap away, so they fold rather
-        than hide.
-      */}
-      <div className="rail">
-        {/*
-          The balance, and after the slash what the container is holding out of
-          it. Two cells for one fact read as two facts; the slash says what it
-          is — this much money, that much of it spoken for.
-        */}
-        {/*
-          The balance, and after the slash what is still open to this five
-          minutes. What has been spent can be read off the difference; what is
-          left is the number a size is actually decided from.
-        */}
-        <button className="railbal" onClick={onOpenBalance}>
-          <b>{balance === null ? '—' : balance.toFixed(2)}</b>
-          <span className={exposure.full ? 'warn' : 'muted'}>
-            /{exposure.room.toFixed(2)}
-          </span>
-          {/*
-            And everything the run is worth, including what has been taken off
-            the venue. The two numbers before it are what can be traded and
-            what this window may still take; this one is the score.
-          */}
-          {savings > 0 && balance !== null && (
-            <i className="railall">Σ{(balance + savings).toFixed(2)}</i>
-          )}
-          {/* And what is being held back, so a balance smaller than the
-              wallet reads as a decision rather than as a missing sum. */}
-          {reserve > 0 && <i className="raillock">🔒{Math.round(reserve)}</i>}
-        </button>
-
-        {/*
-          Which coin. Three letters each, because the row has to sit next to
-          the balance and the gear without pushing either off — and because
-          the label is only there to say which of the three is lit.
-
-          It is disabled while the switch is in flight: the feeds are being
-          torn down and rebuilt behind it, and a second tap in that second
-          would ask for a third coin the first switch has not finished leaving.
-        */}
-        {settings.allCoins && coins.length > 1 && (
-          <div className="railcoins">
-            {coins.map((c) => (
-              <button
-                key={c.id}
-                className={c.id === coin ? 'on' : undefined}
-                disabled={coinBusy}
-                onClick={() => pickCoin(c.id)}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/*
-          Which way the window is leaning, and how much of the desk agrees.
-
-          A hint, not an instruction: nothing on the desk acts on it. Four
-          readings behind one arrow, with the count beside it — four out of
-          four is everything agreeing, one is a lead with the rest arguing.
-          Tapping it says which of them is arguing.
-        */}
-        <button
-          className={`railhint ${hint?.side === 'Up' ? 'up' : ''}${
-            hint?.side === 'Down' ? 'down' : ''
-          }`}
-          onClick={() =>
-            setNote(
-              hint?.against
-                ? `${hint.side ?? 'Пока никак'}: ${hint.against}`
-                : hint?.side
-                  ? `${hint.side}: ход, импульс, объём и стакан заодно`
-                  : 'Окно пока ничего не говорит',
-            )
-          }
-          aria-label="Подсказка по окну"
-        >
-          <b>
-            {hint?.side === 'Up' ? '▲' : hint?.side === 'Down' ? '▼' : '–'}
-          </b>
-          <i>{hint?.side ? `${hint.agree}/4` : '—'}</i>
-        </button>
-
-        <div className="deskbtns">
-          <button
-            className={`gear${tab === 'settings' ? ' on' : ''}`}
-            onClick={() => setTab(tab === 'settings' ? 'desk' : 'settings')}
-            aria-label="Настройки"
-          >
-            ⚙
-          </button>
-        </div>
-      </div>
-
       {tab !== 'settings' && (
           <div className="card tight">
             {/*
@@ -1577,7 +1479,28 @@ export function Manual({
               coin={coin}
             />
 
-            <DepthPanel digits={coinDigits} coin={coin} />
+            {/*
+              The book, and a way to put it away.
+
+              Two taps on it fold it to a line and two more bring it back. It
+              is the one panel here that is sometimes in the way — a curve that
+              says what the next few dollars cost, which is either the thing
+              being read or the thing between the two charts — and the gesture
+              is the one anyone tries on something they want gone.
+            */}
+            <div
+              className={`depthfold${settings.depthHidden ? ' shut' : ''}`}
+              onClick={() => {
+                if (!doubleTap(depthTapRef)) return;
+                apply({ ...settings, depthHidden: !settings.depthHidden });
+              }}
+            >
+              {settings.depthHidden ? (
+                <div className="depthshut muted">стакан скрыт · два тапа</div>
+              ) : (
+                <DepthPanel digits={coinDigits} coin={coin} />
+              )}
+            </div>
 
             {/*
               Only what is still working. A round that has closed is history and
@@ -1849,12 +1772,12 @@ export function Manual({
 
       {note && <div className="banner info">{note}</div>}
 
-      {tab !== 'settings' && (
-        <div
-          className={`dockgap${side == null ? ' short' : ''}`}
-          aria-hidden
-        />
-      )}
+      <div
+        className={`dockgap${
+          tab === 'settings' ? ' bare' : side == null ? ' short' : ''
+        }`}
+        aria-hidden
+      />
 
       {/*
         The trading row is pinned to the bottom edge of the screen, not to the
@@ -1862,7 +1785,113 @@ export function Manual({
         read, and a row that drifts up when the window is quiet is a row you
         have to look for.
       */}
-      <div className={`dock${tab === 'settings' ? ' away' : ''}`}>
+      <div className="dock">
+      {/*
+        One rail of collapsed things: the session on the left, the bot on the
+        right. Both are read a few times an hour and neither is worth a
+        permanent row — but both want to be one tap away, so they fold rather
+        than hide.
+      */}
+      <div className="rail">
+        {/*
+          The balance, and after the slash what the container is holding out of
+          it. Two cells for one fact read as two facts; the slash says what it
+          is — this much money, that much of it spoken for.
+        */}
+        {/*
+          The balance, and after the slash what is still open to this five
+          minutes. What has been spent can be read off the difference; what is
+          left is the number a size is actually decided from.
+        */}
+        <button className="railbal" onClick={onOpenBalance}>
+          <b>{balance === null ? '—' : balance.toFixed(2)}</b>
+          <span className={exposure.full ? 'warn' : 'muted'}>
+            /{exposure.room.toFixed(2)}
+          </span>
+          {/*
+            And everything the run is worth, including what has been taken off
+            the venue. The two numbers before it are what can be traded and
+            what this window may still take; this one is the score.
+          */}
+          {savings > 0 && balance !== null && (
+            <i className="railall">Σ{(balance + savings).toFixed(2)}</i>
+          )}
+          {/* And what is being held back, so a balance smaller than the
+              wallet reads as a decision rather than as a missing sum. */}
+          {reserve > 0 && <i className="raillock">🔒{Math.round(reserve)}</i>}
+        </button>
+
+        {/*
+          Which coin. Three letters each, because the row has to sit next to
+          the balance and the gear without pushing either off — and because
+          the label is only there to say which of the three is lit.
+
+          It is disabled while the switch is in flight: the feeds are being
+          torn down and rebuilt behind it, and a second tap in that second
+          would ask for a third coin the first switch has not finished leaving.
+        */}
+        {settings.allCoins && coins.length > 1 && (
+          <div className="railcoins">
+            {coins.map((c) => (
+              <button
+                key={c.id}
+                className={c.id === coin ? 'on' : undefined}
+                disabled={coinBusy}
+                onClick={() => pickCoin(c.id)}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/*
+          Which way the window is leaning, and how much of the desk agrees.
+
+          A hint, not an instruction: nothing on the desk acts on it. Four
+          readings behind one arrow, with the count beside it — four out of
+          four is everything agreeing, one is a lead with the rest arguing.
+          Tapping it says which of them is arguing.
+        */}
+        <button
+          className={`railhint ${hint?.side === 'Up' ? 'up' : ''}${
+            hint?.side === 'Down' ? 'down' : ''
+          }`}
+          onClick={() =>
+            setNote(
+              hint?.against
+                ? `${hint.side ?? 'Пока никак'}: ${hint.against}`
+                : hint?.side
+                  ? `${hint.side}: ход, импульс, объём и стакан заодно`
+                  : 'Окно пока ничего не говорит',
+            )
+          }
+          aria-label="Подсказка по окну"
+        >
+          <b>
+            {hint?.side === 'Up' ? '▲' : hint?.side === 'Down' ? '▼' : '–'}
+          </b>
+          <i>{hint?.side ? `${hint.agree}/4` : '—'}</i>
+        </button>
+
+        <div className="deskbtns">
+          <button
+            className={`gear${tab === 'settings' ? ' on' : ''}`}
+            onClick={() => setTab(tab === 'settings' ? 'desk' : 'settings')}
+            aria-label="Настройки"
+          >
+            ⚙
+          </button>
+        </div>
+      </div>
+
+        {/*
+          Everything below is about a trade, and on the settings screen there
+          is none to make — but the row above it is the balance and the way
+          back, and both are wanted there.
+        */}
+        {tab !== 'settings' && (
+        <>
         {/*
           Nothing to buy with until a side is chosen.
 
@@ -2261,6 +2290,8 @@ export function Manual({
                 );
               })}
             </div>
+        </>
+        )}
       </div>
     </>
   );

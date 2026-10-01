@@ -146,6 +146,15 @@ export type ManualSettings = {
    */
   autoSellCustomGain: number;
   autoSellCustomWaitMs: number;
+  /**
+   * Whether the depth curve is folded away.
+   *
+   * Not a setting anyone goes looking for: it is set by double-tapping the
+   * thing itself, which is how you put away something you can see. Kept here
+   * so that it stays put — a panel hidden on purpose that comes back on the
+   * next launch has not been hidden.
+   */
+  depthHidden: boolean;
 };
 
 /**
@@ -224,6 +233,7 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellCheapWaitMs: 1500,
   autoSellCustomGain: 0.25,
   autoSellCustomWaitMs: 5000,
+  depthHidden: false,
 };
 
 /** Never spend the last of the balance, whatever the fee works out to. */
