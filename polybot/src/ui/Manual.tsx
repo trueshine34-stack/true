@@ -2281,9 +2281,15 @@ export function Manual({
                 a position can only be sold at one price.
               */}
               {/*
-                And the standing one beside them: cheap entries leave at half again,
-                by themselves, until this is switched off. Lit means armed, which
-                here means "every window", not "the next one".
+                And the standing one beside them: half again over cost, by
+                itself, until this is switched off. Lit means armed, which here
+                means "every window", not "the next one".
+              */}
+              {/*
+                Four chips, one at a time. They are four answers to the same
+                question — at what price does this position leave — and a
+                position can only be sold at one price, so lighting any of them
+                puts the other three out.
               */}
               <button
                 className={`railany standing${settings.autoSellCheapTake ? ' on' : ''}`}
@@ -2299,14 +2305,21 @@ export function Manual({
                     heldRef.current = false;
                     return;
                   }
-                  const next = {
+                  const on = !settings.autoSellCheapTake;
+                  apply({
                     ...settings,
-                    autoSellCheapTake: !settings.autoSellCheapTake,
-                  };
-                  apply(next);
-                  void PolyBot.autoSellUpdate({
-                    cheapTake: next.autoSellCheapTake,
-                  }).catch(() => {});
+                    autoSellCheapTake: on,
+                    autoSellCustomArmed: on ? false : settings.autoSellCustomArmed,
+                  });
+                  if (on) setAutoSell({ ...autoSell, anyProfit: false });
+                  void PolyBot.autoSellUpdate(
+                    on
+                      ? { cheapTake: true, anyProfit: false, anyProfitStanding: false }
+                      : { cheapTake: false },
+                  )
+                    .then(() => PolyBot.autoSellState())
+                    .then(setAutoSell)
+                    .catch(() => {});
                 }}
                 aria-label="Выход +50%: первые три минуты всегда, дальше пока включено"
                 aria-pressed={settings.autoSellCheapTake}
@@ -2373,9 +2386,13 @@ export function Manual({
                       // window. The ladder gets the position back only in the
                       // last minute, and even then the chip stays lit.
                       const standing = holds === 'custom';
-                      if (standing || settings.autoSellCustomArmed) {
-                        apply({ ...settings, autoSellCustomArmed: standing && next });
-                      }
+                      apply({
+                        ...settings,
+                        autoSellCustomArmed: standing && next,
+                        // And the standing +50% goes out, the way the other
+                        // two of these three already do.
+                        autoSellCheapTake: next ? false : settings.autoSellCheapTake,
+                      });
                       // The watch goes with the gain: each chip has its own, and the
                       // rule only ever holds one of them at a time.
                       void PolyBot.autoSellUpdate({
@@ -2383,6 +2400,7 @@ export function Manual({
                         anyProfitGain: gain,
                         anyProfitStanding: standing && next,
                         takeWatchMs: waitMs,
+                        ...(next ? { cheapTake: false } : {}),
                       })
                         .then(() => PolyBot.autoSellState())
                         .then(setAutoSell)
