@@ -111,6 +111,23 @@ class AutoSell(
          * a cent over it.
          */
         val anyProfitGain: Double = 0.0,
+        /**
+         * The standing exit for a side that was bought cheap.
+         *
+         * A position opened under thirty cents is a different trade from the
+         * rest: it is bought for the move rather than for the settlement, and
+         * half again on it is a result worth taking rather than a step on the
+         * way to the ladder's top rung. So those, and only those, leave by
+         * their own door — half over cost, asked as an offer on the book after
+         * a second and a half of watching — and the ladder does not price them
+         * at all while this is on.
+         *
+         * Not a one-shot: it stands, window after window, until it is switched
+         * off. On by default because the alternative for a cheap side is the
+         * ladder, which was built for a steady winner and asks ninety-six of a
+         * side that got there from a quarter.
+         */
+        val cheapTake: Boolean = true,
     )
 
     /** One position and what the rule has managed to do about it. */
@@ -176,6 +193,11 @@ class AutoSell(
          */
         var takeAtMs: Long = 0L,
         var takeHigh: Double = 0.0,
+        /** And the same pair for the standing exit on a cheap entry. */
+        var cheapAtMs: Long = 0L,
+        var cheapHigh: Double = 0.0,
+        /** The price that exit asked for, so its own offer is not pulled again. */
+        var cheapAsk: Double = 0.0,
         /**
          * Whether the bid has ever given back six cents of its best. Until it
          * has, the move is one clean run and the ask is held at ninety rather
@@ -276,6 +298,32 @@ class AutoSell(
          * that long and the best of it is what gets asked for.
          */
         const val TAKE_WATCH_MS = 5_000L
+
+        /** Bought under this, a side belongs to the standing exit below. */
+        const val CHEAP_MARK = 0.30
+
+        /** What that exit holds out for: half again over what the shares cost. */
+        const val CHEAP_GAIN = 0.50
+
+        /**
+         * And how long it watches before asking.
+         *
+         * A second and a half rather than five: a cheap side that doubles does
+         * it in a few seconds and gives it back in a few more, so the watch is
+         * long enough to catch the top of a spike and short enough to still be
+         * asking while it is there.
+         */
+        const val CHEAP_WATCH_MS = 1_500L
+
+        /**
+         * And when it hands the position back.
+         *
+         * The last minute is the ladder's, whatever the side cost. By then the
+         * window is nearly decided and the question stops being "what is this
+         * move worth" and becomes "what will the book pay before this settles"
+         * — which is the ladder's question, and it has rungs for it.
+         */
+        const val CHEAP_UNTIL_SEC = 60L
 
         /** How often to look at the balance while a sale's money is awaited. */
         const val CASH_PROBE_MS = 2_000L
@@ -381,7 +429,7 @@ class AutoSell(
                 // A position with nothing resting on it is being ridden, and
                 // the ride is a decision about the last two seconds.
                 val riding = settings.enabled &&
-                    (settings.ride || settings.anyProfit) &&
+                    (settings.ride || settings.anyProfit || settings.cheapTake) &&
                     OrderLog.hasUncovered(windowNow)
                 val gapMs = when {
                     riding -> RIDE_GAP_MS
@@ -600,6 +648,12 @@ class AutoSell(
                 // rules below would hold out for.
                 settings.anyProfit ->
                     reconcileAnyProfit(position, open, meta, mine, lotAt, rung)
+                // A side bought cheap leaves by its own door, and the ladder
+                // never sees it: half over cost, asked rather than taken.
+                settings.cheapTake &&
+                    boughtCheap(position) &&
+                    closesAt - now > CHEAP_UNTIL_SEC ->
+                    reconcileCheap(position, open, meta, mine, lotAt, rung)
                 // Riding: nothing rests on the rung, the bid is watched, and
                 // the position is crossed out once the climb stops — or at
                 // once at the prices where there is nothing left to ride for.
@@ -1268,6 +1322,116 @@ class AutoSell(
                 tryPlace(position, free, price, lotAt)
             }
         }
+    }
+
+    /** What one share of this position cost, as well as the app knows it. */
+    private fun costOf(position: Position): Double =
+        OrderLog.heldLots(position.asset).firstOrNull()?.price
+            ?: OrderLog.uncoveredLots(position.asset).firstOrNull()?.price
+            ?: position.avgPrice
+
+    /** Whether it was bought cheap enough to belong to the standing exit. */
+    private fun boughtCheap(position: Position): Boolean {
+        val cost = costOf(position)
+        return cost > 0.0 && cost < CHEAP_MARK
+    }
+
+    /**
+     * Half again on a side that was bought cheap, asked rather than taken.
+     *
+     * The same shape as the one-shot above — reach the price, watch the book
+     * for a moment, then put the best of what was seen on it as an offer — with
+     * two differences that are the whole point of it being a separate rule. It
+     * watches for a second and a half rather than five, because a cheap side
+     * spikes and gives it back inside that; and it does not switch itself off,
+     * because it is not an instruction for one window but a standing answer to
+     * "what do I do with these".
+     *
+     * The offer goes out as a hand-placed price so that nothing re-prices it,
+     * and while this rule owns a position the ladder is never asked about it.
+     */
+    private fun reconcileCheap(
+        position: Position,
+        open: List<ClobApi.OpenOrder>,
+        meta: ClobApi.MarketMeta,
+        mine: Double,
+        lotAt: Long,
+        rung: Rung,
+    ): String {
+        val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
+        val (pinned, ours) = sells.partition { held(it) }
+
+        // Our own offer from a moment ago is the answer, not a leftover: it is
+        // standing at the price this rule asked for and is waiting to be
+        // taken. Anything else of ours — a rung the ladder put out before this
+        // rule took the position over — is pulled, because two offers on one
+        // position means one of them sells at the wrong price.
+        val stale = ours.filter {
+            rung.cheapAsk <= 0.0 || abs(it.price - rung.cheapAsk) > meta.tickSize / 2
+        }
+        if (stale.isNotEmpty()) {
+            val session = engine.session() ?: return "нет сессии"
+            for (order in stale) {
+                try {
+                    ClobApi.cancelOrder(session.creds, session.account.signerAddress, order.id)
+                } catch (e: Exception) {
+                    return e.message ?: "не снять старый ордер"
+                }
+            }
+            return "дешёвый вход: веду сам"
+        }
+        if (ours.isNotEmpty()) {
+            return "выставлено " + (rung.cheapAsk * 100).toInt() + "¢"
+        }
+
+        val free = mine - pinned.sumOf { it.remaining }
+        if (free < meta.minimumOrderSize - 1e-6) return "покрыто"
+
+        val cost = costOf(position)
+        if (cost <= 0.0) return "нет цены входа"
+        val wanted = minOf(
+            1.0 - meta.tickSize,
+            SellPercent.targetPrice(cost, CHEAP_GAIN, meta.tickSize),
+        )
+
+        val bid = try {
+            ClobApi.bestBid(position.asset)
+        } catch (e: Exception) {
+            return "цена недоступна"
+        }
+        if (bid == null || bid < wanted - 1e-9) {
+            rung.cheapAtMs = 0L
+            rung.cheapHigh = 0.0
+            return "жду +" + (CHEAP_GAIN * 100).toInt() + "% от " + (wanted * 100).toInt() + "¢"
+        }
+
+        val nowMs = System.currentTimeMillis()
+        if (rung.cheapAtMs == 0L) {
+            rung.cheapAtMs = nowMs
+            rung.cheapHigh = bid
+        }
+        if (bid > rung.cheapHigh) rung.cheapHigh = bid
+        val waited = nowMs - rung.cheapAtMs
+        if (waited < CHEAP_WATCH_MS) {
+            return "смотрю · лучшее " + (rung.cheapHigh * 100).toInt() + "¢"
+        }
+
+        val price = maxOf(meta.tickSize, snapToTick(rung.cheapHigh, meta.tickSize))
+        // The rule's own order, not a hand-placed one: in the last minute this
+        // position goes back to the ladder, and the ladder may only re-price
+        // what a rule put out.
+        val status = tryPlace(position, free, price, lotAt)
+        if (!status.startsWith("не ") && status != "нет сессии") {
+            rung.cheapAsk = price
+            rung.cheapAtMs = 0L
+            rung.cheapHigh = 0.0
+            engine.log(
+                "info",
+                "Дешёвый вход " + (cost * 100).toInt() + "¢ → выставил " +
+                    (price * 100).toInt() + "¢",
+            )
+        }
+        return status
     }
 
     /**

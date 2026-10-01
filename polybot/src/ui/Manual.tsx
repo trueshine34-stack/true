@@ -359,6 +359,7 @@ export function Manual({
           lateBandSec: stored.autoSellLateBandSec,
           ride: stored.autoSellRide,
           rideWaitMs: stored.autoSellRideMs,
+          cheapTake: stored.autoSellCheapTake,
         }).catch(() => {});
       }
     });
@@ -777,6 +778,7 @@ export function Manual({
               lateBandSec: settingsRef.current.autoSellLateBandSec,
               ride: settingsRef.current.autoSellRide,
               rideWaitMs: settingsRef.current.autoSellRideMs,
+              cheapTake: settingsRef.current.autoSellCheapTake,
             }).catch(() => {});
           }
         })
@@ -1483,6 +1485,29 @@ export function Manual({
           and putting itself back — and arming either disarms the other, since
           a position can only be sold at one price.
         */}
+        {/*
+          And the standing one beside them: cheap entries leave at half again,
+          by themselves, until this is switched off. Lit means armed, which
+          here means "every window", not "the next one".
+        */}
+        <button
+          className={`railany standing${settings.autoSellCheapTake ? ' on' : ''}`}
+          onClick={() => {
+            const next = {
+              ...settings,
+              autoSellCheapTake: !settings.autoSellCheapTake,
+            };
+            apply(next);
+            void PolyBot.autoSellUpdate({
+              cheapTake: next.autoSellCheapTake,
+            }).catch(() => {});
+          }}
+          aria-label="Выход +50% для входов дешевле 30¢"
+          aria-pressed={settings.autoSellCheapTake}
+        >
+          +50%
+        </button>
+
         {EXITS.map(([gain, label]) => {
           const armed =
             (autoSell.anyProfit ?? false) &&
@@ -2863,6 +2888,7 @@ function RuleBar({
         lateBandSec: next.autoSellLateBandSec,
         ride: next.autoSellRide,
         rideWaitMs: next.autoSellRideMs,
+        cheapTake: next.autoSellCheapTake,
       }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
     },
     [onChange, onNote],
@@ -3360,6 +3386,7 @@ function ManualSettingsForm({
       lateBandSec: next.autoSellLateBandSec,
       ride: next.autoSellRide,
       rideWaitMs: next.autoSellRideMs,
+      cheapTake: next.autoSellCheapTake,
     }).catch((e) => onNote(e instanceof Error ? e.message : String(e)));
   };
 

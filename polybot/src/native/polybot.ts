@@ -296,6 +296,8 @@ export interface PolyBotPlugin {
     anyProfit?: boolean;
     /** How much of a profit that waits for: 0 for any, 0.1 for ten percent. */
     anyProfitGain?: number;
+    /** The standing exit for sides bought under thirty cents: +50%, by limit. */
+    cheapTake?: boolean;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
   /** Which way the window is leaning, as a hint. Nothing acts on it. */
@@ -522,6 +524,8 @@ export type AutoSellState = {
   anyProfit?: boolean;
   /** And what it is holding out for: 0 for any profit, 0.1 for ten percent. */
   anyProfitGain?: number;
+  /** Whether cheap entries leave by their own door rather than by the ladder. */
+  cheapTake?: boolean;
   rebuys: AutoSellRebuy[];
   rebuysDone?: AutoSellRebuyDone[];
   timings?: Timings;

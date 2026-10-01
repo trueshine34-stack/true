@@ -3023,6 +3023,16 @@ button.step.big {
   letter-spacing: -0.02em;
 }
 
+/*
+  The standing one, which is lit for days rather than for a moment: green,
+  because it is a rule that is running and not a thing about to happen.
+*/
+.railany.standing.on {
+  border-color: var(--up);
+  background: rgba(34, 197, 94, 0.14);
+  color: var(--up);
+}
+
 /* Armed. It fires once and then puts itself back, so the lit state is short. */
 .railany.on {
   border-color: var(--warn, #f4b740);

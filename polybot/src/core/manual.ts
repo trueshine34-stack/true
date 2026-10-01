@@ -119,6 +119,14 @@ export type ManualSettings = {
   allCoins: boolean;
   /** A quarter-hour chart over the other two, for the shape of the session. */
   chart15m: boolean;
+  /**
+   * The standing exit for a side bought under thirty cents.
+   *
+   * Half again over what it cost, asked as an offer after a second and a half
+   * of watching the book, and the ladder left out of it until the last minute.
+   * On unless it is switched off.
+   */
+  autoSellCheapTake: boolean;
 };
 
 /**
@@ -192,6 +200,7 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   countdownChime: false,
   allCoins: false,
   chart15m: false,
+  autoSellCheapTake: true,
 };
 
 /** Never spend the last of the balance, whatever the fee works out to. */
