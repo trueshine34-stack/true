@@ -360,6 +360,19 @@ export function CandleFace({
     shape ? ((shape.top - price) / (shape.top - shape.floor)) * H : 0;
 
   /*
+    Where a level's price is printed.
+
+    Not always on its line: one near the ceiling puts its price under the line
+    instead of half off the top of the panel. The shift is worked out here
+    rather than at the <text>, because it is the printed position two labels
+    collide at, and that is what the next block has to measure.
+  */
+  const labelY = (price: number) => {
+    const at = y(price);
+    return at < 11 ? at + 10 : at - 3;
+  };
+
+  /*
     Two levels a few dollars apart put their prices on top of each other and
     neither can be read. The one price is heading into is kept whatever else
     goes; the rest keep their lines and lose the label.
@@ -372,8 +385,8 @@ export function CandleFace({
     ];
     const kept: typeof levels = [];
     for (const level of order) {
-      const at = y(level.price);
-      if (kept.every((k) => Math.abs(y(k.price) - at) >= 9)) kept.push(level);
+      const at = labelY(level.price);
+      if (kept.every((k) => Math.abs(labelY(k.price) - at) >= 12)) kept.push(level);
     }
     return kept;
   })();
@@ -635,13 +648,8 @@ export function CandleFace({
             className={`slevel-tag ${level.kind}${
               level.price === ahead ? ' ahead' : ''
             }`}
-            x={3}
-            /* A level near the ceiling puts its price under the line instead
-               of half off the top of the panel. */
-            y={(y(level.price) < 11
-              ? y(level.price) + 8
-              : y(level.price) - 2.5
-            ).toFixed(1)}
+            x={4}
+            y={labelY(level.price).toFixed(1)}
             textAnchor="start"
           >
             {priceLabel(level.price, digits)}

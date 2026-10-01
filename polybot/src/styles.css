@@ -3486,13 +3486,23 @@ button.wide {
   vector-effect: non-scaling-stroke;
 }
 
+/*
+  The price on a level, at the left edge.
+
+  This is the one number on the chart that gets read rather than glanced at —
+  it is what says where the line actually is — so it is printed large enough
+  to read over candles, with a thick halo of the panel's own colour so the
+  digits survive whatever they land on.
+*/
 .slevel-tag {
-  font-size: 7px;
+  font-size: 9.5px;
+  font-weight: 600;
   font-family: inherit;
   font-variant-numeric: tabular-nums;
   paint-order: stroke;
   stroke: var(--surface);
-  stroke-width: 2.5px;
+  stroke-width: 3.6px;
+  stroke-linejoin: round;
 }
 
 /*
@@ -3605,11 +3615,11 @@ button.wide {
 }
 
 .slevel-tag.resistance {
-  fill: rgba(255, 90, 106, 0.85);
+  fill: #ff6f79;
 }
 
 .slevel-tag.support {
-  fill: rgba(35, 192, 123, 0.85);
+  fill: #2fd98a;
 }
 
 /*
@@ -3961,8 +3971,8 @@ input.sellcents.typed {
 }
 
 .slevel-tag.ahead {
-  font-size: 8px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .slevel-tag.resistance.ahead {

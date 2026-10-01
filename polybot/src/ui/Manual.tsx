@@ -2829,6 +2829,17 @@ function WindowRead({
 }) {
   const done = orders.filter((o) => o.matched > 1e-6);
 
+  /*
+   * An empty window says nothing worth a card.
+   *
+   * Most candles were never traded, and a panel that opens only to report
+   * that covers the chart to tell you what the chart already showed. The
+   * tapped candle stays marked either way, so the tap is not lost — it just
+   * does not take the screen. This also covers the moment before the log
+   * comes back, when there is nothing to show yet.
+   */
+  if (done.length === 0) return null;
+
   return (
     <div className="card tight windowread">
       <div className="counterhead">
@@ -2838,36 +2849,29 @@ function WindowRead({
         </button>
       </div>
 
-      {done.length > 0 ? (
-        <div className="probelist">
-          {done.map((o) => (
-            <div className="proberow" key={o.id}>
-              <span className="probewhen">
-                {/* Milliseconds, as the log stamps them. Multiplying by a
-                    thousand here put every order at an arbitrary hour. */}
-                {new Date(o.placedAt).toLocaleTimeString('ru', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </span>
-              <span className={o.action === 'BUY' ? 'up' : 'down'}>
-                {o.action === 'BUY' ? 'куп' : 'прод'}
-              </span>
-              <span className="muted">
-                {o.outcome} {o.matched.toFixed(1)} ·{' '}
-                {cents(o.fillPrice ?? o.price)}
-              </span>
-              <span className="probemark">·</span>
-              <b className="muted">{o.auto ? 'бот' : 'рука'}</b>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="muted" style={{ fontSize: 11 }}>
-          Сделок в этом окне не было.
-        </div>
-      )}
-
+      <div className="probelist">
+        {done.map((o) => (
+          <div className="proberow" key={o.id}>
+            <span className="probewhen">
+              {/* Milliseconds, as the log stamps them. Multiplying by a
+                  thousand here put every order at an arbitrary hour. */}
+              {new Date(o.placedAt).toLocaleTimeString('ru', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </span>
+            <span className={o.action === 'BUY' ? 'up' : 'down'}>
+              {o.action === 'BUY' ? 'куп' : 'прод'}
+            </span>
+            <span className="muted">
+              {o.outcome} {o.matched.toFixed(1)} ·{' '}
+              {cents(o.fillPrice ?? o.price)}
+            </span>
+            <span className="probemark">·</span>
+            <b className="muted">{o.auto ? 'бот' : 'рука'}</b>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
