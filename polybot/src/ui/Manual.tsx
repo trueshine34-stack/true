@@ -1337,6 +1337,17 @@ export function Manual({
    * it if that is smaller.
    */
   const limitPriceNum = Number(limitPrice.replace(',', '.')) / 100;
+
+  /*
+    The cost the exit chips measure from.
+
+    The position's, while there is one. Before that, the price in the row above
+    them: the chips are being read to decide what to buy at, and "+25%" is not
+    a number until something is subtracted from it — so until there is a
+    position they answer for the price about to be paid. Nothing chosen and
+    nothing held, and they say nothing, which is the honest answer.
+  */
+  const exitFrom = heldAvg ?? (limitPriceNum > 0 ? limitPriceNum : null);
   // Five shares unless the venue's floor is higher at this price — which it is
   // under twenty cents, where five shares is under a dollar and refused.
   const limitDefaultSize = Math.max(
@@ -2329,10 +2340,10 @@ export function Manual({
                     over, who has it instead. The switch only decides the fourth
                     minute: the first three are this rule's whatever it says, and
                     the last is the ladder's whatever it says. */}
-                {heldAvg != null && (
+                {exitFrom != null && (
                   <em className="railanyat">
                     {fiftyHolds
-                      ? `от ${cents(exitWaitPrice(heldAvg, CHEAP_GAIN) ?? 0)}`
+                      ? `от ${cents(exitWaitPrice(exitFrom, CHEAP_GAIN) ?? 0)}`
                       : 'лесенка'}
                   </em>
                 )}
@@ -2358,8 +2369,10 @@ export function Manual({
                   Math.abs((autoSell.anyProfitGain ?? 0) - gain) < 1e-9;
                 // The price this chip is holding out for, worked out the same
                 // way the rule works it out: the cost plus the gain, with the
-                // fee on both sides already in it.
-                const at = exitWaitPrice(heldAvg, gain);
+                // fee on both sides already in it — measured from the position
+                // where there is one, and from the price about to be paid where
+                // there is not.
+                const at = exitWaitPrice(exitFrom, gain);
                 return (
                   <button
                     key={holds + label}
