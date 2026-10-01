@@ -322,10 +322,7 @@ class AutoSell(
          */
         const val TAKE_WATCH_MS = 5_000L
 
-        /** Bought under this, a side belongs to the standing exit below. */
-        const val CHEAP_MARK = 0.30
-
-        /** What that exit holds out for: half again over what the shares cost. */
+        /** What the standing exit holds out for: half again over what the shares cost. */
         const val CHEAP_GAIN = 0.50
 
         /**
@@ -347,6 +344,19 @@ class AutoSell(
          * — which is the ladder's question, and it has rungs for it.
          */
         const val CHEAP_UNTIL_SEC = 60L
+
+        /**
+         * And when it cannot be handed back at all.
+         *
+         * The first three minutes belong to it, whatever the switch says and
+         * whatever the side cost. There is time in them for a move worth half
+         * again, and the ladder's answer to that time is a fixed price that
+         * ignores what was paid — so the ladder does not get a look in while
+         * more than two minutes are left. The switch decides the minute after:
+         * on, the exit keeps the position until the last minute; off, the
+         * ladder takes it from here.
+         */
+        const val EARLY_UNTIL_SEC = 120L
 
         /** What a watch may be set to. Under half a second it is not a watch. */
         const val MIN_WATCH_MS = 500L
@@ -455,9 +465,12 @@ class AutoSell(
                     (Timings.measuring() || OrderLog.hasUncovered(windowNow))
                 // A position with nothing resting on it is being ridden, and
                 // the ride is a decision about the last two seconds.
-                val riding = settings.enabled &&
-                    (settings.ride || settings.anyProfit || settings.cheapTake) &&
-                    OrderLog.hasUncovered(windowNow)
+                // An uncovered position is always being watched by one of
+                // these rules now — the first three minutes belong to the
+                // half-again exit whether or not its switch is on, and that
+                // one watches the book for a second and a half. A seven-second
+                // sweep would miss the whole of it.
+                val riding = settings.enabled && OrderLog.hasUncovered(windowNow)
                 val gapMs = when {
                     riding -> RIDE_GAP_MS
                     chasing -> CHASE_GAP_MS
@@ -680,11 +693,16 @@ class AutoSell(
                 settings.anyProfit &&
                     (!settings.anyProfitStanding || closesAt - now > CHEAP_UNTIL_SEC) ->
                     reconcileAnyProfit(position, open, meta, mine, lotAt, rung)
-                // A side bought cheap leaves by its own door, and the ladder
-                // never sees it: half over cost, asked rather than taken.
-                settings.cheapTake &&
-                    boughtCheap(position) &&
-                    closesAt - now > CHEAP_UNTIL_SEC ->
+                // Half again over cost, asked rather than taken, and the
+                // ladder does not see the position while it holds it. The
+                // first three minutes are its own — the switch cannot take
+                // them away, because a window with that much left in it has
+                // room for the move and the ladder's fixed prices do not care
+                // what was paid. After that the switch decides: on, it keeps
+                // the position until the last minute; off, the ladder gets the
+                // one before it.
+                closesAt - now > EARLY_UNTIL_SEC ||
+                    (settings.cheapTake && closesAt - now > CHEAP_UNTIL_SEC) ->
                     reconcileCheap(position, open, meta, mine, lotAt, rung)
                 // Riding: nothing rests on the rung, the bid is watched, and
                 // the position is crossed out once the climb stops — or at
@@ -1362,25 +1380,27 @@ class AutoSell(
             ?: OrderLog.uncoveredLots(position.asset).firstOrNull()?.price
             ?: position.avgPrice
 
-    /** Whether it was bought cheap enough to belong to the standing exit. */
-    private fun boughtCheap(position: Position): Boolean {
-        val cost = costOf(position)
-        return cost > 0.0 && cost < CHEAP_MARK
-    }
-
     /**
-     * Half again on a side that was bought cheap, asked rather than taken.
+     * Half again over cost, asked rather than taken.
+     *
+     * This is what a window's first three minutes are for. A five-minute bet
+     * bought at any price has room in that time for a move worth fifty percent,
+     * and the ladder's answer — a fixed price at a fixed minute — is an answer
+     * to a different question: it does not know what the shares cost. So while
+     * there is time, the exit is priced off the buy, and only when the time is
+     * gone does the ladder get the position and start asking what the book will
+     * pay before the window settles.
      *
      * The same shape as the one-shot above — reach the price, watch the book
      * for a moment, then put the best of what was seen on it as an offer — with
      * two differences that are the whole point of it being a separate rule. It
-     * watches for a second and a half rather than five, because a cheap side
-     * spikes and gives it back inside that; and it does not switch itself off,
+     * watches for a second and a half rather than five, because a side that
+     * spikes gives it back inside that; and it does not switch itself off,
      * because it is not an instruction for one window but a standing answer to
      * "what do I do with these".
      *
-     * The offer goes out as a hand-placed price so that nothing re-prices it,
-     * and while this rule owns a position the ladder is never asked about it.
+     * The offer goes out as the rule's own so the ladder can re-price it once
+     * the handover comes, and until then the ladder is never asked about it.
      */
     private fun reconcileCheap(
         position: Position,
@@ -1410,7 +1430,7 @@ class AutoSell(
                     return e.message ?: "не снять старый ордер"
                 }
             }
-            return "дешёвый вход: веду сам"
+            return "выход +50%: веду сам"
         }
         if (ours.isNotEmpty()) {
             return "выставлено " + (rung.cheapAsk * 100).toInt() + "¢"
@@ -1459,7 +1479,7 @@ class AutoSell(
             rung.cheapHigh = 0.0
             engine.log(
                 "info",
-                "Дешёвый вход " + (cost * 100).toInt() + "¢ → выставил " +
+                "Выход +50% от " + (cost * 100).toInt() + "¢ → выставил " +
                     (price * 100).toInt() + "¢",
             )
         }

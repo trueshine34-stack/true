@@ -61,14 +61,17 @@ import {
 const cents = (p: number) => `${Math.round(p * 100)}¢`;
 
 /**
- * The standing exit's two numbers, as the service holds them.
+ * The standing exit's numbers, as the service holds them.
  *
- * It only ever covers a side bought under thirty cents, and it asks half again
- * over what that side cost. Mirrored here so the chip can print the price it
- * is waiting for rather than only the percentage it is named after.
+ * It asks half again over what the side cost, and it owns the window's first
+ * three minutes whatever its switch says — the ladder cannot have a position
+ * while more than two minutes are left. After that the switch decides: on, the
+ * exit keeps it to the last minute; off, the ladder takes the one before.
+ * Mirrored here so the chip can say which of those it is doing right now.
  */
-const CHEAP_MARK = 0.3;
 const CHEAP_GAIN = 0.5;
+const EARLY_UNTIL_SEC = 120;
+const CHEAP_UNTIL_SEC = 60;
 
 /** A window's opening time, which is how an event is named on this screen. */
 const clockOf = (windowStart: number) =>
@@ -942,6 +945,19 @@ export function Manual({
   // From the clock, not the market: the countdown must keep running even in the
   // seconds where the new window's market has not loaded yet.
   const secondsLeft = Math.max(0, windowStart + WINDOW_SEC - Math.floor(now / 1000));
+
+  /*
+    Whether the half-again exit has the position at this moment.
+
+    Its switch is not a switch over the whole window: the first three minutes
+    are the rule's whatever the switch says, and the last minute is the
+    ladder's whatever it says. The switch decides only the one in between — so
+    the chip reads the clock as well as itself before it says what it is doing.
+  */
+  const fiftyHolds =
+    secondsLeft > EARLY_UNTIL_SEC ||
+    (settings.autoSellCheapTake && secondsLeft > CHEAP_UNTIL_SEC);
+
 
   /**
    * How far into the window the desk is trading.
@@ -2292,19 +2308,19 @@ export function Manual({
                     cheapTake: next.autoSellCheapTake,
                   }).catch(() => {});
                 }}
-                aria-label="Выход +50% для входов дешевле 30¢"
+                aria-label="Выход +50%: первые три минуты всегда, дальше пока включено"
                 aria-pressed={settings.autoSellCheapTake}
               >
                 <span className="railanyname">+50%</span>
-                {/* What it is waiting for, once there is something to wait
-                    with. This one only ever covers a side bought under thirty
-                    cents, so over that it says so rather than printing a price
-                    it would never ask for. */}
+                {/* What it is waiting for — or, once it has handed the position
+                    over, who has it instead. The switch only decides the fourth
+                    minute: the first three are this rule's whatever it says, and
+                    the last is the ladder's whatever it says. */}
                 {heldAvg != null && (
                   <em className="railanyat">
-                    {heldAvg < CHEAP_MARK
+                    {fiftyHolds
                       ? `от ${cents(exitWaitPrice(heldAvg, CHEAP_GAIN) ?? 0)}`
-                      : 'вход дорогой'}
+                      : 'лесенка'}
                   </em>
                 )}
               </button>
@@ -2469,7 +2485,7 @@ function WatchSheet({
             <i>0,5</i>
             <i>
               {cheap
-                ? 'вход дешевле 30¢ · последняя минута лесенке'
+                ? 'первые 3 мин всегда · последняя лесенке'
                 : 'срабатывает один раз'}
             </i>
             <i>15</i>

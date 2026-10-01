@@ -120,11 +120,15 @@ export type ManualSettings = {
   /** A quarter-hour chart over the other two, for the shape of the session. */
   chart15m: boolean;
   /**
-   * The standing exit for a side bought under thirty cents.
+   * The standing exit at half again over cost — or rather, the half of it that
+   * is a setting at all.
    *
-   * Half again over what it cost, asked as an offer after a second and a half
-   * of watching the book, and the ladder left out of it until the last minute.
-   * On unless it is switched off.
+   * The rule owns the window's first three minutes outright: there is room in
+   * that much time for a move worth fifty percent, and the ladder's fixed
+   * prices do not know what the shares cost. The last minute is the ladder's
+   * for the same reason in reverse. This switch decides only the minute
+   * between them — on, the exit keeps the position; off, the ladder gets it a
+   * minute early. On unless it is switched off.
    */
   autoSellCheapTake: boolean;
   /**
