@@ -83,6 +83,12 @@ const HOLD_MS = 450;
 /** How long a pulled order is kept out of the venue's listing by hand. */
 const PULLED_MS = 15_000;
 
+/** The one-shot exits in the rail: the gain each holds out for, and its label. */
+const EXITS: ReadonlyArray<readonly [number, string]> = [
+  [0, '+1¢'],
+  [0.1, '+10%'],
+];
+
 /**
  * How hard a buy is pressed when the only problem is money in transit.
  *
@@ -1463,21 +1469,43 @@ export function Manual({
           it fires once and takes itself off, and the switch reads its own
           state back from the rule rather than remembering what was pressed.
         */}
-        <button
-          className={`railany${autoSell.anyProfit ? ' on' : ''}`}
-          onClick={() => {
-            const next = !autoSell.anyProfit;
-            setAutoSell({ ...autoSell, anyProfit: next });
-            void PolyBot.autoSellUpdate({ anyProfit: next })
-              .then(() => PolyBot.autoSellState())
-              .then(setAutoSell)
-              .catch(() => {});
-          }}
-          aria-label="Выход при любом плюсе"
-          aria-pressed={autoSell.anyProfit ?? false}
-        >
-          +1¢
-        </button>
+        {/*
+          Two of them, because "get me out" has two meanings: out of a window
+          that went wrong and has come back to level, and out of one that is
+          going right with a tenth in hand. One switch each, each firing once
+          and putting itself back — and arming either disarms the other, since
+          a position can only be sold at one price.
+        */}
+        {EXITS.map(([gain, label]) => {
+          const armed =
+            (autoSell.anyProfit ?? false) &&
+            Math.abs((autoSell.anyProfitGain ?? 0) - gain) < 1e-9;
+          return (
+            <button
+              key={label}
+              className={`railany${armed ? ' on' : ''}`}
+              onClick={() => {
+                const next = !armed;
+                setAutoSell({
+                  ...autoSell,
+                  anyProfit: next,
+                  anyProfitGain: gain,
+                });
+                void PolyBot.autoSellUpdate({
+                  anyProfit: next,
+                  anyProfitGain: gain,
+                })
+                  .then(() => PolyBot.autoSellState())
+                  .then(setAutoSell)
+                  .catch(() => {});
+              }}
+              aria-label={gain > 0 ? 'Выход при +10%' : 'Выход при любом плюсе'}
+              aria-pressed={armed}
+            >
+              {label}
+            </button>
+          );
+        })}
 
         <div className="deskbtns">
           <button
@@ -2062,8 +2090,15 @@ export function Manual({
                 }
                 setSide(which);
                 setLimitPrice(String(Math.round(price * 100)));
-                // And the size the field is about to spend: all of it at an
-                // ordinary price, a dollar of it under a dime. The shares
+                // A share that was chosen is kept. Picking a side is choosing
+                // what to buy, not how much of the account to spend on it —
+                // and the quarter or half that was set a moment ago was set
+                // on purpose. The effect above re-answers it in shares at the
+                // new price, which is the whole reason the share is held as a
+                // share rather than as a number of them.
+                if (sizePct != null) return;
+                // Otherwise the size the field is about to spend: all of it at
+                // an ordinary price, a dollar of it under a dime. The shares
                 // wanted here are what the window still has room for, and
                 // typing that out was the last thing that was typed by hand.
                 const opening =

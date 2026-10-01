@@ -1319,6 +1319,7 @@ class BotPlugin : Plugin() {
             ride = call.getBoolean("ride") ?: defaults.ride,
             rideWaitMs = call.getInt("rideWaitMs")?.toLong() ?: defaults.rideWaitMs,
             anyProfit = call.getBoolean("anyProfit") ?: defaults.anyProfit,
+            anyProfitGain = call.getDouble("anyProfitGain") ?: defaults.anyProfitGain,
         )
         if (next.enabled && !engine.isConfigured()) {
             call.reject("Сначала подключите кошелёк")
@@ -1391,6 +1392,7 @@ class BotPlugin : Plugin() {
                 // screen: it takes itself off when it fires, and the screen has
                 // to see that.
                 .put("anyProfit", bot.settings.anyProfit)
+                .put("anyProfitGain", bot.settings.anyProfitGain)
                 .put("chime", bot.settings.chime)
                 .put("dipRescue", bot.settings.dipRescue)
                 .put("percentMode", bot.settings.percentMode)

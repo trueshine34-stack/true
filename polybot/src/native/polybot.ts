@@ -294,6 +294,8 @@ export interface PolyBotPlugin {
     rideWaitMs?: number;
     /** Sell everything at the first price that is a profit, once. */
     anyProfit?: boolean;
+    /** How much of a profit that waits for: 0 for any, 0.1 for ten percent. */
+    anyProfitGain?: number;
   }): Promise<void>;
   autoSellState(): Promise<AutoSellState>;
   /** Which way the window is leaning, as a hint. Nothing acts on it. */
@@ -518,6 +520,8 @@ export type AutoSellState = {
   rideWaitMs?: number;
   /** The one-shot "any profit" exit, read back because it turns itself off. */
   anyProfit?: boolean;
+  /** And what it is holding out for: 0 for any profit, 0.1 for ten percent. */
+  anyProfitGain?: number;
   rebuys: AutoSellRebuy[];
   rebuysDone?: AutoSellRebuyDone[];
   timings?: Timings;

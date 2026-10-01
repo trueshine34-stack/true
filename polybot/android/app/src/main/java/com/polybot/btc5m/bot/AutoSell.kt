@@ -101,6 +101,16 @@ class AutoSell(
          * what it is for is getting out, not getting a good price.
          */
         val anyProfit: Boolean = false,
+        /**
+         * How much of a profit the switch above is waiting for.
+         *
+         * Nought is "any": the first price whose proceeds beat what the shares
+         * cost, which is for a window that went wrong and came back. A tenth
+         * is for one that is going right and is wanted out of anyway — the
+         * same one-shot, holding out for ten percent over cost rather than for
+         * a cent over it.
+         */
+        val anyProfitGain: Double = 0.0,
     )
 
     /** One position and what the rule has managed to do about it. */
@@ -1280,8 +1290,16 @@ class AutoSell(
         val cost = OrderLog.uncoveredLots(position.asset).firstOrNull()?.price
             ?: position.avgPrice.takeIf { it > 0.0 }
             ?: return "нет цены входа"
-        val even = SellPercent.targetPrice(cost, 0.0, meta.tickSize)
-        val wanted = minOf(1.0 - meta.tickSize, even + meta.tickSize)
+        // The price whose proceeds are the cost plus whatever gain was armed,
+        // the fee on both sides already in it. At nought that is break-even,
+        // and one tick over it is the first price that is actually a profit;
+        // at a tenth the target is itself the answer.
+        val gain = settings.anyProfitGain.coerceIn(0.0, 10.0)
+        val target = SellPercent.targetPrice(cost, gain, meta.tickSize)
+        val wanted = minOf(
+            1.0 - meta.tickSize,
+            if (gain > 0.0) target else target + meta.tickSize,
+        )
 
         val bid = try {
             ClobApi.bestBid(position.asset)
@@ -1289,7 +1307,8 @@ class AutoSell(
             return "цена недоступна"
         }
         if (bid == null || bid < wanted - 1e-9) {
-            return "жду плюс от " + (wanted * 100).toInt() + "¢"
+            return "жду " + (if (gain > 0.0) "+" + (gain * 100).toInt() + "% " else "плюс ") +
+                "от " + (wanted * 100).toInt() + "¢"
         }
 
         val price = maxOf(meta.tickSize, snapToTick(bid - meta.tickSize, meta.tickSize))
@@ -1300,7 +1319,12 @@ class AutoSell(
         // what a button pressed once means.
         if (!status.startsWith("не ") && status != "нет сессии") {
             update(settings.copy(anyProfit = false))
-            engine.log("info", "Выход по любому плюсу сработал — выключаю")
+            engine.log(
+                "info",
+                "Выход по " +
+                    (if (gain > 0.0) "+" + (gain * 100).toInt() + "%" else "любому плюсу") +
+                    " сработал — выключаю",
+            )
         }
         return status
     }

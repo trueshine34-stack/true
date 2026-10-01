@@ -3013,6 +3013,11 @@ button.step.big {
 }
 
 .railany {
+  /* Two labels of different lengths — "+1¢" and "+10%" — so the width is
+     whatever the text needs, with the same floor as the chips beside it. */
+  flex: 0 0 auto;
+  min-width: 34px;
+  padding: 0 5px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: -0.02em;
