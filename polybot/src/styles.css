@@ -3024,6 +3024,30 @@ button.step.big {
 }
 
 /*
+  The row of exits at the foot of the dock.
+
+  Four chips across, each as wide as its own label needs, spread over the
+  width so the thumb that just bought has them where it already is. A hairline
+  over them, because they are a different kind of thing from the row above:
+  that one opens a position, this one closes it.
+*/
+.dockexits {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.dockexits .railany {
+  flex: 1 1 0;
+  height: 34px;
+  min-width: 0;
+}
+
+/*
   The standing one, which is lit for days rather than for a moment: green,
   because it is a rule that is running and not a thing about to happen.
 */

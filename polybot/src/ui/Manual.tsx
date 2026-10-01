@@ -1504,113 +1504,6 @@ export function Manual({
           <i>{hint?.side ? `${hint.agree}/4` : '—'}</i>
         </button>
 
-        {/*
-          The way out of a window that went wrong, on one switch.
-
-          On, the sell rule stops holding out for its rung and takes the first
-          price that is a profit at all. It is for the moment a losing window
-          comes back to break-even, which is a moment that does not last — so
-          it fires once and takes itself off, and the switch reads its own
-          state back from the rule rather than remembering what was pressed.
-        */}
-        {/*
-          Two of them, because "get me out" has two meanings: out of a window
-          that went wrong and has come back to level, and out of one that is
-          going right with a tenth in hand. One switch each, each firing once
-          and putting itself back — and arming either disarms the other, since
-          a position can only be sold at one price.
-        */}
-        {/*
-          And the standing one beside them: cheap entries leave at half again,
-          by themselves, until this is switched off. Lit means armed, which
-          here means "every window", not "the next one".
-        */}
-        <button
-          className={`railany standing${settings.autoSellCheapTake ? ' on' : ''}`}
-          onPointerDown={() => holdWatch('cheap')}
-          onPointerUp={dropHold}
-          onPointerLeave={dropHold}
-          onPointerCancel={dropHold}
-          onContextMenu={(e) => e.preventDefault()}
-          onClick={() => {
-            // The hold has already opened the delay; the tap that ends it must
-            // not also switch the rule off.
-            if (heldRef.current) {
-              heldRef.current = false;
-              return;
-            }
-            const next = {
-              ...settings,
-              autoSellCheapTake: !settings.autoSellCheapTake,
-            };
-            apply(next);
-            void PolyBot.autoSellUpdate({
-              cheapTake: next.autoSellCheapTake,
-            }).catch(() => {});
-          }}
-          aria-label="Выход +50% для входов дешевле 30¢"
-          aria-pressed={settings.autoSellCheapTake}
-        >
-          +50%
-        </button>
-
-        {[
-          ...EXITS.map(([gain, label]) => ({
-            gain,
-            label,
-            waitMs: settings.autoSellTakeWaitMs,
-            holds: 'take' as const,
-          })),
-          // And the one whose number is a setting rather than a fact.
-          {
-            gain: settings.autoSellCustomGain,
-            label: `+${Math.round(settings.autoSellCustomGain * 100)}%`,
-            waitMs: settings.autoSellCustomWaitMs,
-            holds: 'custom' as const,
-          },
-        ].map(({ gain, label, waitMs, holds }) => {
-          const armed =
-            (autoSell.anyProfit ?? false) &&
-            Math.abs((autoSell.anyProfitGain ?? 0) - gain) < 1e-9;
-          return (
-            <button
-              key={holds + label}
-              className={`railany${armed ? ' on' : ''}`}
-              onPointerDown={() => holdWatch(holds)}
-              onPointerUp={dropHold}
-              onPointerLeave={dropHold}
-              onPointerCancel={dropHold}
-              onContextMenu={(e) => e.preventDefault()}
-              onClick={() => {
-                if (heldRef.current) {
-                  heldRef.current = false;
-                  return;
-                }
-                const next = !armed;
-                setAutoSell({
-                  ...autoSell,
-                  anyProfit: next,
-                  anyProfitGain: gain,
-                });
-                // The watch goes with the gain: each chip has its own, and the
-                // rule only ever holds one of them at a time.
-                void PolyBot.autoSellUpdate({
-                  anyProfit: next,
-                  anyProfitGain: gain,
-                  takeWatchMs: waitMs,
-                })
-                  .then(() => PolyBot.autoSellState())
-                  .then(setAutoSell)
-                  .catch(() => {});
-              }}
-              aria-label={`Выход при ${label}`}
-              aria-pressed={armed}
-            >
-              {label}
-            </button>
-          );
-        })}
-
         <div className="deskbtns">
           <button
             className={`gear${tab === 'settings' ? ' on' : ''}`}
@@ -2250,6 +2143,124 @@ export function Manual({
               }}
               onSell={sellPosition}
             />
+
+            {/*
+              The ways out, under the ways in.
+
+              They were in the header, which is where a thing is put when it is
+              read; these are pressed, and pressed with a thumb that is already
+              at the bottom of the screen buying and selling. Nothing else
+              moved: the balance, the hint and the gear are read rather than
+              used, and they stay where the eye goes first.
+            */}
+            <div className="dockexits">
+        {/*
+                The way out of a window that went wrong, on one switch.
+
+                On, the sell rule stops holding out for its rung and takes the first
+                price that is a profit at all. It is for the moment a losing window
+                comes back to break-even, which is a moment that does not last — so
+                it fires once and takes itself off, and the switch reads its own
+                state back from the rule rather than remembering what was pressed.
+              */}
+              {/*
+                Two of them, because "get me out" has two meanings: out of a window
+                that went wrong and has come back to level, and out of one that is
+                going right with a tenth in hand. One switch each, each firing once
+                and putting itself back — and arming either disarms the other, since
+                a position can only be sold at one price.
+              */}
+              {/*
+                And the standing one beside them: cheap entries leave at half again,
+                by themselves, until this is switched off. Lit means armed, which
+                here means "every window", not "the next one".
+              */}
+              <button
+                className={`railany standing${settings.autoSellCheapTake ? ' on' : ''}`}
+                onPointerDown={() => holdWatch('cheap')}
+                onPointerUp={dropHold}
+                onPointerLeave={dropHold}
+                onPointerCancel={dropHold}
+                onContextMenu={(e) => e.preventDefault()}
+                onClick={() => {
+                  // The hold has already opened the delay; the tap that ends it must
+                  // not also switch the rule off.
+                  if (heldRef.current) {
+                    heldRef.current = false;
+                    return;
+                  }
+                  const next = {
+                    ...settings,
+                    autoSellCheapTake: !settings.autoSellCheapTake,
+                  };
+                  apply(next);
+                  void PolyBot.autoSellUpdate({
+                    cheapTake: next.autoSellCheapTake,
+                  }).catch(() => {});
+                }}
+                aria-label="Выход +50% для входов дешевле 30¢"
+                aria-pressed={settings.autoSellCheapTake}
+              >
+                +50%
+              </button>
+
+              {[
+                ...EXITS.map(([gain, label]) => ({
+                  gain,
+                  label,
+                  waitMs: settings.autoSellTakeWaitMs,
+                  holds: 'take' as const,
+                })),
+                // And the one whose number is a setting rather than a fact.
+                {
+                  gain: settings.autoSellCustomGain,
+                  label: `+${Math.round(settings.autoSellCustomGain * 100)}%`,
+                  waitMs: settings.autoSellCustomWaitMs,
+                  holds: 'custom' as const,
+                },
+              ].map(({ gain, label, waitMs, holds }) => {
+                const armed =
+                  (autoSell.anyProfit ?? false) &&
+                  Math.abs((autoSell.anyProfitGain ?? 0) - gain) < 1e-9;
+                return (
+                  <button
+                    key={holds + label}
+                    className={`railany${armed ? ' on' : ''}`}
+                    onPointerDown={() => holdWatch(holds)}
+                    onPointerUp={dropHold}
+                    onPointerLeave={dropHold}
+                    onPointerCancel={dropHold}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onClick={() => {
+                      if (heldRef.current) {
+                        heldRef.current = false;
+                        return;
+                      }
+                      const next = !armed;
+                      setAutoSell({
+                        ...autoSell,
+                        anyProfit: next,
+                        anyProfitGain: gain,
+                      });
+                      // The watch goes with the gain: each chip has its own, and the
+                      // rule only ever holds one of them at a time.
+                      void PolyBot.autoSellUpdate({
+                        anyProfit: next,
+                        anyProfitGain: gain,
+                        takeWatchMs: waitMs,
+                      })
+                        .then(() => PolyBot.autoSellState())
+                        .then(setAutoSell)
+                        .catch(() => {});
+                    }}
+                    aria-label={`Выход при ${label}`}
+                    aria-pressed={armed}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
       </div>
     </>
   );
