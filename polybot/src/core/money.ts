@@ -133,11 +133,20 @@ export function exitWaitPrice(
   cost: number | null | undefined,
   gain: number,
   tick = 0.01,
+  /**
+   * How many ticks over break-even the no-gain chip asks for.
+   *
+   * At a gain of nought the target *is* break-even, and the price that is
+   * actually a profit is some number of steps over it. One by default, which
+   * is what the chip was named after; more where it has been set to more.
+   */
+  steps = 1,
 ): number | null {
   if (cost == null || !Number.isFinite(cost) || cost <= 0) return null;
   const want = Math.min(Math.max(gain, 0), 10);
   const target = targetPrice(cost, want, tick);
-  return Math.min(1 - tick, want > 0 ? target : target + tick);
+  const over = Math.min(Math.max(Math.round(steps), 1), 20);
+  return Math.min(1 - tick, want > 0 ? target : target + tick * over);
 }
 
 /** The cheapest price that still comes out ahead once the fee is paid. */

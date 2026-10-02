@@ -296,6 +296,8 @@ export interface PolyBotPlugin {
     anyProfit?: boolean;
     /** How much of a profit that waits for: 0 for any, 0.1 for ten percent. */
     anyProfitGain?: number;
+    /** How many cents over break-even the no-gain exit asks for. */
+    anyProfitCents?: number;
     /**
      * Whether that exit stays where it was put.
      *
@@ -305,7 +307,7 @@ export interface PolyBotPlugin {
      * only gets the position back in the last minute.
      */
     anyProfitStanding?: boolean;
-    /** The standing exit for sides bought under thirty cents: +50%, by limit. */
+    /** The standing exit at +50% over cost, by limit. */
     cheapTake?: boolean;
     /** How long each exit watches the book once its price is reached, in ms. */
     takeWatchMs?: number;
@@ -536,6 +538,8 @@ export type AutoSellState = {
   anyProfit?: boolean;
   /** And what it is holding out for: 0 for any profit, 0.1 for ten percent. */
   anyProfitGain?: number;
+  /** How many cents over break-even it asks for, where it asks for no gain. */
+  anyProfitCents?: number;
   /** Whether it stays armed after it fires, which the third chip does. */
   anyProfitStanding?: boolean;
   /** Whether cheap entries leave by their own door rather than by the ladder. */

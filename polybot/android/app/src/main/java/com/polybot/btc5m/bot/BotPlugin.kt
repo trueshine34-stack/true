@@ -1320,6 +1320,7 @@ class BotPlugin : Plugin() {
             rideWaitMs = call.getInt("rideWaitMs")?.toLong() ?: defaults.rideWaitMs,
             anyProfit = call.getBoolean("anyProfit") ?: defaults.anyProfit,
             anyProfitGain = call.getDouble("anyProfitGain") ?: defaults.anyProfitGain,
+            anyProfitCents = call.getInt("anyProfitCents") ?: defaults.anyProfitCents,
             anyProfitStanding = call.getBoolean("anyProfitStanding")
                 ?: defaults.anyProfitStanding,
             cheapTake = call.getBoolean("cheapTake") ?: defaults.cheapTake,
@@ -1398,6 +1399,7 @@ class BotPlugin : Plugin() {
                 // to see that.
                 .put("anyProfit", bot.settings.anyProfit)
                 .put("anyProfitGain", bot.settings.anyProfitGain)
+                .put("anyProfitCents", bot.settings.anyProfitCents)
                 .put("anyProfitStanding", bot.settings.anyProfitStanding)
                 .put("cheapTake", bot.settings.cheapTake)
                 .put("takeWatchMs", bot.settings.takeWatchMs)

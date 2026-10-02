@@ -113,11 +113,6 @@ function doubleTap(last: { current: number }): boolean {
 /** How long a pulled order is kept out of the venue's listing by hand. */
 const PULLED_MS = 15_000;
 
-/** The two fixed one-shot exits: the gain each holds out for, and its label. */
-const EXITS: ReadonlyArray<readonly [number, string]> = [
-  [0, '+1¢'],
-  [0.1, '+10%'],
-];
 
 /**
  * How hard a buy is pressed when the only problem is money in transit.
@@ -276,18 +271,21 @@ export function Manual({
    * for it — it must not be reachable by the finger that is trying to arm the
    * rule with a window running.
    */
-  const [watchFor, setWatchFor] = useState<'take' | 'cheap' | 'custom' | null>(
-    null,
-  );
+  const [watchFor, setWatchFor] = useState<
+    'cents' | 'take' | 'cheap' | 'custom' | null
+  >(null);
   const holdRef = useRef<number | null>(null);
   const heldRef = useRef(false);
-  const holdWatch = useCallback((which: 'take' | 'cheap' | 'custom') => {
-    heldRef.current = false;
-    holdRef.current = window.setTimeout(() => {
-      heldRef.current = true;
-      setWatchFor(which);
-    }, HOLD_MS);
-  }, []);
+  const holdWatch = useCallback(
+    (which: 'cents' | 'take' | 'cheap' | 'custom') => {
+      heldRef.current = false;
+      holdRef.current = window.setTimeout(() => {
+        heldRef.current = true;
+        setWatchFor(which);
+      }, HOLD_MS);
+    },
+    [],
+  );
   const dropHold = useCallback(() => {
     if (holdRef.current != null) {
       window.clearTimeout(holdRef.current);
@@ -407,6 +405,7 @@ export function Manual({
           cheapTake: stored.autoSellCheapTake,
           takeWatchMs: stored.autoSellTakeWaitMs,
           cheapWatchMs: stored.autoSellCheapWaitMs,
+          anyProfitCents: stored.autoSellTakeCents,
           // The third chip is a standing instruction, so it comes back armed.
           // The two beside it are one-shots and do not: an exit that armed
           // itself on a launch would sell a window nobody had looked at yet.
@@ -1772,6 +1771,13 @@ export function Manual({
                 : settings.autoSellTakeWaitMs
           }
           gain={watchFor === 'custom' ? settings.autoSellCustomGain : null}
+          cents={watchFor === 'cents' ? settings.autoSellTakeCents : null}
+          onCents={(over) => {
+            apply({ ...settings, autoSellTakeCents: over });
+            // Straight through: unlike the gain, this number belongs to one
+            // chip only, so sending it cannot re-point a rule armed by another.
+            void PolyBot.autoSellUpdate({ anyProfitCents: over }).catch(() => {});
+          }}
           onMs={(ms) => {
             const next =
               watchFor === 'cheap'
@@ -2244,33 +2250,115 @@ export function Manual({
               used, and they stay where the eye goes first.
             */}
             <div className="dockexits">
-        {/*
-                The way out of a window that went wrong, on one switch.
+              {/*
+                The ways out of a window, cheapest first.
 
-                On, the sell rule stops holding out for its rung and takes the first
-                price that is a profit at all. It is for the moment a losing window
-                comes back to break-even, which is a moment that does not last — so
-                it fires once and takes itself off, and the switch reads its own
-                state back from the rule rather than remembering what was pressed.
+                Four answers to one question — at what price does this position
+                leave — so they are one choice: lighting any of them puts the
+                other three out. Left to right is also the order they would fire
+                in, a few cents over cost through half again over it, which is
+                the order a hand reaches for them in when a window is going
+                wrong and then less wrong.
+
+                The three on the left fire once and put themselves back, except
+                the third when it has been armed as a standing one; the +50% on
+                the right is standing by nature, and lit there means "every
+                window" rather than "the next one".
               */}
-              {/*
-                Two of them, because "get me out" has two meanings: out of a window
-                that went wrong and has come back to level, and out of one that is
-                going right with a tenth in hand. One switch each, each firing once
-                and putting itself back — and arming either disarms the other, since
-                a position can only be sold at one price.
-              */}
-              {/*
-                And the standing one beside them: half again over cost, by
-                itself, until this is switched off. Lit means armed, which here
-                means "every window", not "the next one".
-              */}
-              {/*
-                Four chips, one at a time. They are four answers to the same
-                question — at what price does this position leave — and a
-                position can only be sold at one price, so lighting any of them
-                puts the other three out.
-              */}
+              {[
+                // Cheapest first, dearest last, which is also the order they
+                // would fire in: a few cents over cost, a tenth, whatever the
+                // third is set to, half again.
+                {
+                  gain: 0,
+                  label: `+${settings.autoSellTakeCents}¢`,
+                  waitMs: settings.autoSellTakeWaitMs,
+                  holds: 'cents' as const,
+                },
+                {
+                  gain: 0.1,
+                  label: '+10%',
+                  waitMs: settings.autoSellTakeWaitMs,
+                  holds: 'take' as const,
+                },
+                // And the one whose number is a setting rather than a fact.
+                {
+                  gain: settings.autoSellCustomGain,
+                  label: `+${Math.round(settings.autoSellCustomGain * 100)}%`,
+                  waitMs: settings.autoSellCustomWaitMs,
+                  holds: 'custom' as const,
+                },
+              ].map(({ gain, label, waitMs, holds }) => {
+                const armed =
+                  (autoSell.anyProfit ?? false) &&
+                  Math.abs((autoSell.anyProfitGain ?? 0) - gain) < 1e-9;
+                // The price this chip is holding out for, worked out the same
+                // way the rule works it out: the cost plus the gain, with the
+                // fee on both sides already in it — measured from the position
+                // where there is one, and from the price about to be paid where
+                // there is not.
+                const at = exitWaitPrice(
+                  exitFrom,
+                  gain,
+                  0.01,
+                  settings.autoSellTakeCents,
+                );
+                return (
+                  <button
+                    key={holds + label}
+                    className={`railany${armed ? ' on' : ''}`}
+                    onPointerDown={() => holdWatch(holds)}
+                    onPointerUp={dropHold}
+                    onPointerLeave={dropHold}
+                    onPointerCancel={dropHold}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onClick={() => {
+                      if (heldRef.current) {
+                        heldRef.current = false;
+                        return;
+                      }
+                      const next = !armed;
+                      setAutoSell({
+                        ...autoSell,
+                        anyProfit: next,
+                        anyProfitGain: gain,
+                      });
+                      // The two fixed chips fire once and put themselves back;
+                      // this one is a standing instruction and stays where it
+                      // was put, through its own firing and through the next
+                      // window. The ladder gets the position back only in the
+                      // last minute, and even then the chip stays lit.
+                      const standing = holds === 'custom';
+                      apply({
+                        ...settings,
+                        autoSellCustomArmed: standing && next,
+                        // And the standing +50% goes out, the way the other
+                        // two of these three already do.
+                        autoSellCheapTake: next ? false : settings.autoSellCheapTake,
+                      });
+                      // The watch goes with the gain: each chip has its own, and the
+                      // rule only ever holds one of them at a time.
+                      void PolyBot.autoSellUpdate({
+                        anyProfit: next,
+                        anyProfitGain: gain,
+                        anyProfitCents: settings.autoSellTakeCents,
+                        anyProfitStanding: standing && next,
+                        takeWatchMs: waitMs,
+                        ...(next ? { cheapTake: false } : {}),
+                      })
+                        .then(() => PolyBot.autoSellState())
+                        .then(setAutoSell)
+                        .catch(() => {});
+                    }}
+                    aria-label={`Выход при ${label}`}
+                    aria-pressed={armed}
+                  >
+                    <span className="railanyname">{label}</span>
+                    {at != null && <em className="railanyat">от {cents(at)}</em>}
+                  </button>
+                );
+              })}
+
               <button
                 className={`railany standing${settings.autoSellCheapTake ? ' on' : ''}`}
                 onPointerDown={() => holdWatch('cheap')}
@@ -2317,85 +2405,6 @@ export function Manual({
                   </em>
                 )}
               </button>
-
-              {[
-                ...EXITS.map(([gain, label]) => ({
-                  gain,
-                  label,
-                  waitMs: settings.autoSellTakeWaitMs,
-                  holds: 'take' as const,
-                })),
-                // And the one whose number is a setting rather than a fact.
-                {
-                  gain: settings.autoSellCustomGain,
-                  label: `+${Math.round(settings.autoSellCustomGain * 100)}%`,
-                  waitMs: settings.autoSellCustomWaitMs,
-                  holds: 'custom' as const,
-                },
-              ].map(({ gain, label, waitMs, holds }) => {
-                const armed =
-                  (autoSell.anyProfit ?? false) &&
-                  Math.abs((autoSell.anyProfitGain ?? 0) - gain) < 1e-9;
-                // The price this chip is holding out for, worked out the same
-                // way the rule works it out: the cost plus the gain, with the
-                // fee on both sides already in it — measured from the position
-                // where there is one, and from the price about to be paid where
-                // there is not.
-                const at = exitWaitPrice(exitFrom, gain);
-                return (
-                  <button
-                    key={holds + label}
-                    className={`railany${armed ? ' on' : ''}`}
-                    onPointerDown={() => holdWatch(holds)}
-                    onPointerUp={dropHold}
-                    onPointerLeave={dropHold}
-                    onPointerCancel={dropHold}
-                    onContextMenu={(e) => e.preventDefault()}
-                    onClick={() => {
-                      if (heldRef.current) {
-                        heldRef.current = false;
-                        return;
-                      }
-                      const next = !armed;
-                      setAutoSell({
-                        ...autoSell,
-                        anyProfit: next,
-                        anyProfitGain: gain,
-                      });
-                      // The two fixed chips fire once and put themselves back;
-                      // this one is a standing instruction and stays where it
-                      // was put, through its own firing and through the next
-                      // window. The ladder gets the position back only in the
-                      // last minute, and even then the chip stays lit.
-                      const standing = holds === 'custom';
-                      apply({
-                        ...settings,
-                        autoSellCustomArmed: standing && next,
-                        // And the standing +50% goes out, the way the other
-                        // two of these three already do.
-                        autoSellCheapTake: next ? false : settings.autoSellCheapTake,
-                      });
-                      // The watch goes with the gain: each chip has its own, and the
-                      // rule only ever holds one of them at a time.
-                      void PolyBot.autoSellUpdate({
-                        anyProfit: next,
-                        anyProfitGain: gain,
-                        anyProfitStanding: standing && next,
-                        takeWatchMs: waitMs,
-                        ...(next ? { cheapTake: false } : {}),
-                      })
-                        .then(() => PolyBot.autoSellState())
-                        .then(setAutoSell)
-                        .catch(() => {});
-                    }}
-                    aria-label={`Выход при ${label}`}
-                    aria-pressed={armed}
-                  >
-                    <span className="railanyname">{label}</span>
-                    {at != null && <em className="railanyat">от {cents(at)}</em>}
-                  </button>
-                );
-              })}
             </div>
         </>
         )}
@@ -2417,16 +2426,21 @@ function WatchSheet({
   which,
   ms,
   gain,
+  cents: over,
   onMs,
   onGain,
+  onCents,
   onClose,
 }: {
-  which: 'take' | 'cheap' | 'custom';
+  which: 'cents' | 'take' | 'cheap' | 'custom';
   ms: number;
   /** The gain this chip holds out for, where that is a setting too. */
   gain: number | null;
+  /** And the cents over break-even, which is the first chip's whole number. */
+  cents: number | null;
   onMs: (ms: number) => void;
   onGain: (gain: number) => void;
+  onCents: (cents: number) => void;
   onClose: () => void;
 }) {
   const cheap = which === 'cheap';
@@ -2437,14 +2451,40 @@ function WatchSheet({
           <h2>
             {cheap
               ? 'Выход +50%'
-              : gain != null
-                ? `Выход +${Math.round(gain * 100)}%`
-                : 'Выходы +1¢ и +10%'}
+              : over != null
+                ? `Выход +${over}¢`
+                : gain != null
+                  ? `Выход +${Math.round(gain * 100)}%`
+                  : 'Выход +10%'}
           </h2>
           <button className="xbtn" onClick={onClose} aria-label="Закрыть">
             ✕
           </button>
         </div>
+
+        {/*
+          The first chip's number: how far over break-even is worth getting out
+          for. Break-even here already has the fee on both sides in it, so these
+          are cents kept rather than cents quoted.
+        */}
+        {over != null && (
+          <label className="rideslider">
+            <span className="muted">жду +{over}¢ сверх безубытка</span>
+            <input
+              type="range"
+              min={1}
+              max={20}
+              step={1}
+              value={over}
+              onChange={(e) => onCents(Number(e.target.value))}
+            />
+            <span className="muted rideends">
+              <i>+1¢</i>
+              <i>комиссия с обеих сторон учтена</i>
+              <i>+20¢</i>
+            </span>
+          </label>
+        )}
 
         {/* The number this one holds out for, where it is not a fixed one. */}
         {gain != null && (

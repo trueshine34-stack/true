@@ -122,6 +122,15 @@ class AutoSell(
          * back in the last minute, where there is no time left to hold out for
          * a margin and the floor is what matters.
          */
+        /**
+         * How many cents over break-even the no-gain chip asks for.
+         *
+         * At a gain of nought the target is break-even itself, and the first
+         * price that is actually a profit is a step over it. One step was the
+         * whole of it, which on a position of a few dollars is change — so the
+         * number of steps is a setting, and the chip is named after it.
+         */
+        val anyProfitCents: Int = 1,
         val anyProfitStanding: Boolean = false,
         /**
          * The standing exit for a side that was bought cheap.
@@ -1529,9 +1538,10 @@ class AutoSell(
         // at a tenth the target is itself the answer.
         val gain = settings.anyProfitGain.coerceIn(0.0, 10.0)
         val target = SellPercent.targetPrice(cost, gain, meta.tickSize)
+        val over = settings.anyProfitCents.coerceIn(1, 20)
         val wanted = minOf(
             1.0 - meta.tickSize,
-            if (gain > 0.0) target else target + meta.tickSize,
+            if (gain > 0.0) target else target + meta.tickSize * over,
         )
 
         val bid = try {
@@ -1544,7 +1554,7 @@ class AutoSell(
             // has to be reached and *held* to be worth asking for again.
             rung.takeAtMs = 0L
             rung.takeHigh = 0.0
-            return "жду " + (if (gain > 0.0) "+" + (gain * 100).toInt() + "% " else "плюс ") +
+            return "жду " + (if (gain > 0.0) "+" + (gain * 100).toInt() + "% " else "+$over¢ ") +
                 "от " + (wanted * 100).toInt() + "¢"
         }
 
@@ -1586,7 +1596,7 @@ class AutoSell(
             engine.log(
                 "info",
                 "Выход по " +
-                    (if (gain > 0.0) "+" + (gain * 100).toInt() + "%" else "любому плюсу") +
+                    (if (gain > 0.0) "+" + (gain * 100).toInt() + "%" else "+$over¢") +
                     " сработал" + (if (settings.anyProfitStanding) "" else " — выключаю"),
             )
         }

@@ -212,6 +212,22 @@ describe('what an exit chip is waiting for', () => {
     expect(exitWaitPrice(0.53, 0)).toBeCloseTo(target + 0.01, 6);
   });
 
+  it('counts as many cents over break-even as it was asked for', () => {
+    const target = targetPrice(0.53, 0, 0.01);
+    expect(exitWaitPrice(0.53, 0, 0.01, 5)).toBeCloseTo(target + 0.05, 6);
+    // Out of range or nonsense falls back to the one cent it was named after.
+    expect(exitWaitPrice(0.53, 0, 0.01, 0)).toBeCloseTo(target + 0.01, 6);
+    expect(exitWaitPrice(0.53, 0, 0.01, 99)).toBeCloseTo(target + 0.2, 6);
+  });
+
+  it('leaves the cents alone once a gain is asked for', () => {
+    // The two are not added: a percentage chip is a percentage chip.
+    expect(exitWaitPrice(0.3, 0.1, 0.01, 9)).toBeCloseTo(
+      exitWaitPrice(0.3, 0.1) ?? 0,
+      6,
+    );
+  });
+
   it('is the target itself once a gain is asked for', () => {
     expect(exitWaitPrice(0.53, 0.25)).toBeCloseTo(targetPrice(0.53, 0.25, 0.01), 6);
     expect(exitWaitPrice(0.2, 0.5)).toBeCloseTo(targetPrice(0.2, 0.5, 0.01), 6);

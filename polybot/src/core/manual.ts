@@ -141,6 +141,15 @@ export type ManualSettings = {
   autoSellTakeWaitMs: number;
   autoSellCheapWaitMs: number;
   /**
+   * How many cents over break-even the first chip asks for.
+   *
+   * It was fixed at one, which is the smallest profit the venue can price and
+   * not always a profit worth taking: a cent on a position of a few dollars is
+   * change. The chip is named after whatever this is set to, and break-even
+   * here already has the fee on both sides in it, so the cents are cents kept.
+   */
+  autoSellTakeCents: number;
+  /**
    * The third one-shot: whatever gain is wanted, and its own watch.
    *
    * The two beside it are fixed because they answer fixed questions — out at
@@ -246,6 +255,7 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellCheapTake: true,
   autoSellTakeWaitMs: 5000,
   autoSellCheapWaitMs: 1500,
+  autoSellTakeCents: 1,
   autoSellCustomGain: 0.25,
   autoSellCustomWaitMs: 5000,
   autoSellCustomArmed: false,
