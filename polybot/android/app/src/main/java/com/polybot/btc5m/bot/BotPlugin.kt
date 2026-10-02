@@ -130,8 +130,13 @@ class BotPlugin : Plugin() {
                     creds,
                 )
 
+                // This slot is connected now, and which address it is can be
+                // read without unsealing the key again.
+                Wallets.setAddress(context, engine.slot, keyPair.address)
+
                 val result = JSObject()
                     .put("address", keyPair.address)
+                    .put("slot", engine.slot)
                     .put("clockOffsetSec", Clock.offset())
                 // A balance read is the cheapest proof that signer, funder and
                 // wallet type line up; a mismatch shows here, not on the first
@@ -239,11 +244,36 @@ class BotPlugin : Plugin() {
                 // Every reading is also the baseline the next sale is timed
                 // against, so the desk's own poll feeds the checker too. The
                 // reserve does not move, so either figure tracks a sale.
-                Timings.balanceRead(usdc, System.currentTimeMillis())
+                engine.clock.balanceRead(usdc, System.currentTimeMillis())
+                /*
+                  And every wallet's together.
+
+                  The row at the top of the desk leads with what the whole run
+                  is worth, which with two accounts connected is the two added
+                  up — so the sum is taken here, where the balances are, rather
+                  than by asking the screen to poll a wallet it is not on. A
+                  slot that will not answer is left out rather than counted as
+                  nothing: a total that quietly drops half of itself is worse
+                  than one that is a moment stale.
+                */
+                var every = 0.0
+                for (slot in Wallets.connected(context)) {
+                    val bot = EngineHolder.get(context, slot)
+                    every += if (slot == Wallets.current) {
+                        wallet
+                    } else {
+                        try {
+                            bot.usdcWallet()
+                        } catch (e: Exception) {
+                            0.0
+                        }
+                    }
+                }
                 call.resolve(
                     JSObject()
                         .put("usdc", usdc)
                         .put("wallet", wallet)
+                        .put("every", if (every > 0.0) every else wallet)
                         .put("locked", locked)
                         .put("lockedUsd", engine.lockedUsd)
                         .put("lockedPct", engine.lockedPct),
@@ -738,7 +768,7 @@ class BotPlugin : Plugin() {
             return
         }
         try {
-            KeyVault.store(context, privateKey)
+            KeyVault.store(context, privateKey, call.getInt("slot") ?: Wallets.current)
             call.resolve()
         } catch (e: Exception) {
             call.reject(e.message ?: "не удалось сохранить ключ")
@@ -747,12 +777,80 @@ class BotPlugin : Plugin() {
 
     @PluginMethod
     fun vaultLoad(call: PluginCall) {
-        call.resolve(JSObject().put("privateKey", KeyVault.load(context)))
+        call.resolve(
+            JSObject().put(
+                "privateKey",
+                KeyVault.load(context, call.getInt("slot") ?: Wallets.current),
+            ),
+        )
     }
 
     @PluginMethod
     fun vaultClear(call: PluginCall) {
-        KeyVault.clear(context)
+        KeyVault.clear(context, call.getInt("slot") ?: Wallets.current)
+        call.resolve()
+    }
+
+    // -------------------------------------------------------------- wallets
+
+    /**
+     * The accounts the desk knows about, and which of them it is on.
+     *
+     * A slot with no key is still listed: it is the empty chair the second
+     * wallet gets connected into, and hiding it would leave nowhere to do that.
+     */
+    @PluginMethod
+    fun walletList(call: PluginCall) {
+        val slots = JSArray()
+        for (slot in Wallets.all(context)) {
+            slots.put(
+                JSObject()
+                    .put("index", slot.index)
+                    .put("name", slot.name)
+                    .put("label", slot.label)
+                    .put("accent", slot.accent)
+                    .put("address", slot.address)
+                    .put("connected", slot.connected),
+            )
+        }
+        call.resolve(
+            JSObject()
+                .put("slots", slots)
+                .put("current", Wallets.current),
+        )
+    }
+
+    /** Move the screen to another wallet. Both go on trading either way. */
+    @PluginMethod
+    fun walletSelect(call: PluginCall) {
+        val slot = call.getInt("slot") ?: 0
+        EngineHolder.selectWallet(context, slot)
+        call.resolve(JSObject().put("current", Wallets.current))
+    }
+
+    /** What it is called and what colour it is framed in. */
+    @PluginMethod
+    fun walletUpdate(call: PluginCall) {
+        val slot = (call.getInt("slot") ?: Wallets.current).coerceIn(0, Wallets.SLOTS - 1)
+        call.getString("label")?.let { Wallets.setLabel(context, slot, it) }
+        call.getString("accent")?.let { Wallets.setAccent(context, slot, it) }
+        call.resolve()
+    }
+
+    /**
+     * Forget a wallet: its key, its reserve and the address that named it.
+     *
+     * What it did is not forgotten — the order log is this process's memory of
+     * the money and outlives a disconnect — but nothing can be signed with it
+     * again until it is connected afresh.
+     */
+    @PluginMethod
+    fun walletForget(call: PluginCall) {
+        val slot = (call.getInt("slot") ?: Wallets.current).coerceIn(0, Wallets.SLOTS - 1)
+        KeyVault.clear(context, slot)
+        Wallets.setAddress(context, slot, null)
+        EngineHolder.peekAutoSell(slot)?.stop()
+        if (slot == Wallets.current) EngineHolder.selectWallet(context, 0)
         call.resolve()
     }
 
@@ -1115,7 +1213,7 @@ class BotPlugin : Plugin() {
                     // While the data API is still indexing a fresh trade it
                     // reports the size but no cost basis, which would show as a
                     // purchase at zero and a profit equal to the whole position.
-                    val local = if (it.avgPrice > 0.0) null else LocalFills.avgFor(it.asset)
+                    val local = if (it.avgPrice > 0.0) null else engine.fills.avgFor(it.asset)
                     val avg = local ?: it.avgPrice
                     val pnl = if (local != null) {
                         (it.curPrice - local) * it.size
@@ -1199,7 +1297,7 @@ class BotPlugin : Plugin() {
                     engine.session()?.let { session ->
                         val open =
                             ClobApi.openOrders(session.creds, session.account.signerAddress)
-                        OrderLog.reconcile(open) { id ->
+                        engine.log.reconcile(open) { id ->
                             ClobApi.order(session.creds, session.account.signerAddress, id)
                         }
                         // The listing says what is still working; only the trade
@@ -1207,13 +1305,13 @@ class BotPlugin : Plugin() {
                         // well as in the sell rule is what makes the panel right
                         // when the rule is off — twice a minute is enough for a
                         // five-minute market and gentle on the data API.
-                        TradeSync.poll(session.account.funderAddress, minGapMs = 30_000L)
+                        engine.sync.poll(session.account.funderAddress, minGapMs = 30_000L)
                     }
                 } catch (e: Exception) {
                     // Reported on the next sweep; the rows still come back.
                 }
                 val out = JSArray()
-                OrderLog.forWindow(windowStart).forEach {
+                engine.log.forWindow(windowStart).forEach {
                     out.put(
                         JSObject()
                             .put("id", it.id)
@@ -1414,11 +1512,11 @@ class BotPlugin : Plugin() {
                 .put("lateFloor", bot.settings.lateFloor)
                 .put("lateBandSec", bot.settings.lateBandSec)
                 .put("timings", JSObject()
-                    .put("sellReadyMs", Timings.readyMs())
-                    .put("sellReadySamples", Timings.readySamples())
-                    .put("cashMs", Timings.cashMs())
-                    .put("cashSamples", Timings.cashSamples())
-                    .put("cashPending", Timings.cashPending()))
+                    .put("sellReadyMs", engine.clock.readyMs())
+                    .put("sellReadySamples", engine.clock.readySamples())
+                    .put("cashMs", engine.clock.cashMs())
+                    .put("cashSamples", engine.clock.cashSamples())
+                    .put("cashPending", engine.clock.cashPending()))
                 .put("rebuys", waiting)
                 .put("rebuysDone", JSArray().also { arr ->
                     bot.recentRebuys.forEach {

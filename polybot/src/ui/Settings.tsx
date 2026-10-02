@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { SignatureType, type AccountConfig } from '../core/account';
 import { clearVault, loadChimeTest, saveChimeTest } from '../core/storage';
-import { PolyBot } from '../native/polybot';
+import { PolyBot, type WalletSlot } from '../native/polybot';
 import { Diagnostics } from './Diagnostics';
 import { Logs } from './Logs';
 import { Fold } from './Fold';
@@ -14,6 +14,10 @@ export function SettingsScreen({
   dayLock,
   onDayLock,
   dayHit,
+  wallets = [],
+  slot = 0,
+  onGoWallet,
+  onWalletsChanged,
 }: {
   account: AccountConfig | null;
   onForget: () => void;
@@ -22,6 +26,11 @@ export function SettingsScreen({
   onDayLock: (on: boolean) => void;
   /** Whether it is stopped right now, which is what the switch would lift. */
   dayHit: boolean;
+  /** Every chair, filled or not — the empty one is where a second wallet goes. */
+  wallets?: WalletSlot[];
+  slot?: number;
+  onGoWallet?: (slot: number) => void;
+  onWalletsChanged?: () => void;
 }) {
   const [balance, setBalance] = useState<string | null>(null);
   const [balanceError, setBalanceError] = useState<string | null>(null);
@@ -89,6 +98,76 @@ export function SettingsScreen({
             Отключить оптимизацию батареи
           </button>
         </div>
+      )}
+
+      {/*
+        The accounts, and the colour each is framed in.
+
+        Two of them trade at once: each has its own key, its own order log and
+        its own standing sell rule, so a position on one keeps being worked
+        while the screen is on the other. Swiping sideways moves between them,
+        and the colour is what says which one you are on without being read.
+      */}
+      {wallets.length > 1 && (
+        <Fold title="Кошельки">
+          {wallets.map((w) => (
+            <div className="row" key={w.index}>
+              <span className="label">
+                {w.name}
+                {w.index === slot && <span className="muted"> · открыт</span>}
+              </span>
+              <span className="value" style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="color"
+                  value={w.accent}
+                  aria-label={`Цвет рамки: ${w.name}`}
+                  onChange={(e) => {
+                    void PolyBot.walletUpdate({
+                      slot: w.index,
+                      accent: e.target.value,
+                    })
+                      .then(() => onWalletsChanged?.())
+                      .catch(() => {});
+                  }}
+                />
+                {w.connected ? (
+                  <>
+                    {w.index !== slot && (
+                      <button
+                        className="ghost compact"
+                        onClick={() => onGoWallet?.(w.index)}
+                      >
+                        открыть
+                      </button>
+                    )}
+                    <button
+                      className="ghost compact"
+                      onClick={() => {
+                        void PolyBot.walletForget({ slot: w.index })
+                          .then(() => onWalletsChanged?.())
+                          .catch(() => {});
+                      }}
+                    >
+                      забыть
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="ghost compact"
+                    onClick={() => onGoWallet?.(w.index)}
+                  >
+                    подключить
+                  </button>
+                )}
+              </span>
+            </div>
+          ))}
+          <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+            Свайп влево-вправо по экрану переключает кошелёк. Оба торгуют
+            одновременно, у каждого свои сделки, свой резерв и свои правила
+            выхода.
+          </p>
+        </Fold>
       )}
 
       <Fold title="Аккаунт">

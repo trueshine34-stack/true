@@ -65,17 +65,33 @@ export async function saveChimeTest(shown: boolean): Promise<void> {
   await Preferences.set({ key: KEY_CHIMETEST, value: shown ? 'on' : 'off' });
 }
 
-export async function clearVault(): Promise<void> {
+export async function clearVault(slot = 0): Promise<void> {
   await Preferences.remove({ key: KEY_VAULT });
-  await Preferences.remove({ key: KEY_ACCOUNT });
+  await Preferences.remove({ key: accountKey(slot) });
 }
 
-export async function saveAccount(account: AccountConfig): Promise<void> {
-  await Preferences.set({ key: KEY_ACCOUNT, value: JSON.stringify(account) });
+/**
+ * Where one wallet's terms are kept.
+ *
+ * The first slot keeps the key it has always had, so an upgrade finds its
+ * account where it left it and a second wallet is new ground rather than a
+ * migration. The native side does the same with its own storage.
+ */
+const accountKey = (slot: number): string =>
+  slot <= 0 ? KEY_ACCOUNT : `${KEY_ACCOUNT}.w${slot}`;
+
+export async function saveAccount(
+  account: AccountConfig,
+  slot = 0,
+): Promise<void> {
+  await Preferences.set({
+    key: accountKey(slot),
+    value: JSON.stringify(account),
+  });
 }
 
-export async function loadAccount(): Promise<AccountConfig | null> {
-  const { value } = await Preferences.get({ key: KEY_ACCOUNT });
+export async function loadAccount(slot = 0): Promise<AccountConfig | null> {
+  const { value } = await Preferences.get({ key: accountKey(slot) });
   if (!value) return null;
   try {
     return JSON.parse(value) as AccountConfig;

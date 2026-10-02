@@ -48,7 +48,7 @@ class BotService : Service() {
         private const val NOTIFICATION_ID = 4201
 
         /** True while the sell rule is still working. */
-        fun anyRunning(): Boolean = EngineHolder.peekAutoSell()?.running == true
+        fun anyRunning(): Boolean = EngineHolder.rules().any { it.running }
 
         fun start(context: Context) = send(context, ACTION_START, foreground = true)
 
@@ -92,6 +92,10 @@ class BotService : Service() {
         // The engine is process-wide and long-lived; the service only drives its
         // foreground lifecycle.
         EngineHolder.get(this)
+        // And every other wallet that has a key. The service is what keeps a
+        // rule alive with the screen off, and a second account whose rule only
+        // started when you looked at it would hold its position all window.
+        EngineHolder.wakeAll(this)
         stateHook = { updateNotification() }
         EngineHolder.onServiceState = stateHook
     }
@@ -100,13 +104,13 @@ class BotService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 deskWanted = false
-                EngineHolder.peekAutoSell()?.stop()
+                EngineHolder.rules().forEach { it.stop() }
                 releaseUnlessBusy()
                 return START_NOT_STICKY
             }
 
             ACTION_STOP_AUTOSELL -> {
-                EngineHolder.peekAutoSell()?.stop()
+                EngineHolder.rules().forEach { it.stop() }
                 releaseUnlessBusy()
                 return START_NOT_STICKY
             }
@@ -120,7 +124,12 @@ class BotService : Service() {
             ACTION_START_AUTOSELL -> {
                 startForeground(NOTIFICATION_ID, buildNotification("Автопродажа", "запускается…", "запускается…"))
                 acquireWakeLock()
-                EngineHolder.autoSell(this).start()
+                // Every connected wallet, not just the one on screen: each
+                // rule works its own account's positions, and the one you are
+                // not looking at is exactly the one that needs watching.
+                EngineHolder.wakeAll(this)
+                val slots = Wallets.connected(this).ifEmpty { listOf(Wallets.current) }
+                for (slot in slots) EngineHolder.autoSell(this, slot).start()
                 updateNotification()
             }
 
@@ -161,7 +170,7 @@ class BotService : Service() {
 
     override fun onDestroy() {
         if (EngineHolder.onServiceState === stateHook) EngineHolder.onServiceState = null
-        EngineHolder.peekAutoSell()?.stop()
+        EngineHolder.rules().forEach { it.stop() }
         releaseWakeLock()
         super.onDestroy()
     }
@@ -328,7 +337,7 @@ class BotService : Service() {
         val text = when {
             resting.isNotEmpty() -> resting.joinToString(" · ")
             positions.size > 1 -> positions.drop(1).joinToString(" · ")
-            EngineHolder.peekAutoSell()?.running == true -> "автопродажа следит"
+            EngineHolder.rules().any { it.running } -> "автопродажа следит"
             else -> "стол открыт"
         }
 

@@ -24,9 +24,30 @@ import kotlinx.coroutines.withContext
  */
 class BotEngine(
     val journal: Journal,
+    /**
+     * Which wallet this engine is.
+     *
+     * Everything an account owns is addressed by it — the key it signs with, the
+     * log of what it sent, what it is holding, how long its money takes to come
+     * back — so an engine is a wallet, and two of them running is two accounts
+     * trading at once rather than one account being switched back and forth.
+     */
+    val slot: Int = 0,
     private val onStateChanged: () -> Unit,
     private val onLog: (LogEntry) -> Unit,
 ) {
+
+    /** This wallet's own record of what it sent and what became of it. */
+    val log: OrderLog.Book get() = OrderLog.of(slot)
+
+    /** And of what it is holding, until the data API catches up with it. */
+    val fills: LocalFills.Fills get() = LocalFills.of(slot)
+
+    /** And how long this account's venue waits have been running. */
+    val clock: Timings.Clockwork get() = Timings.of(slot)
+
+    /** And its own reading of its own fills off the feed. */
+    val sync: TradeSync.Sync get() = TradeSync.of(slot)
     /**
      * The oracle socket, which is per coin.
      *
@@ -412,7 +433,7 @@ class BotEngine(
         val fill = Orders.filled(side, result.makingAmount, result.takingAmount)
 
         if (result.success) {
-            OrderLog.record(
+            log.record(
                 orderId = result.orderId,
                 asset = tokenId,
                 conditionId = conditionId,
@@ -439,13 +460,13 @@ class BotEngine(
         val filledShares = fill.shares
         if (result.success && filledShares > 1e-9) {
             if (side == "BUY") {
-                LocalFills.bought(
+                fills.bought(
                     tokenId,
                     filledShares,
                     fill.usd.takeIf { it > 0.0 } ?: (filledShares * price),
                 )
             } else {
-                LocalFills.sold(tokenId, filledShares)
+                fills.sold(tokenId, filledShares)
             }
         }
 
@@ -550,7 +571,7 @@ class BotEngine(
         // it is money on its way rather than a position, and it is counted as
         // that, in [settlingNow].
         return try {
-            OrderLog.heldCost(window, doomedSide.takeIf { doomedWindow == window })
+            log.heldCost(window, doomedSide.takeIf { doomedWindow == window })
         } catch (e: Exception) {
             0.0
         }
@@ -577,7 +598,7 @@ class BotEngine(
         val loser = doomedSide.takeIf { doomedWindow == previous } ?: return 0.0
         val winner = if (loser == "Up") "Down" else "Up"
         return try {
-            OrderLog.heldShares(previous, winner)
+            log.heldShares(previous, winner)
         } catch (e: Exception) {
             0.0
         }
@@ -592,9 +613,9 @@ class BotEngine(
      * next entry off it rather than waiting out the transfer.
      */
     private fun pendingNow(): Double {
-        val horizon = (Timings.cashMs() ?: DEFAULT_CASH_MS).coerceIn(5_000L, 45_000L)
+        val horizon = (clock.cashMs() ?: DEFAULT_CASH_MS).coerceIn(5_000L, 45_000L)
         val sold = try {
-            OrderLog.pendingProceeds(System.currentTimeMillis() - horizon)
+            log.pendingProceeds(System.currentTimeMillis() - horizon)
         } catch (e: Exception) {
             0.0
         }

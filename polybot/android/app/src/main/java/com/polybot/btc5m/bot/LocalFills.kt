@@ -17,45 +17,61 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object LocalFills {
 
-    private data class Held(var shares: Double, var costUsd: Double)
+    /*
+      One record per wallet.
 
-    private val byAsset = ConcurrentHashMap<String, Held>()
+      Both accounts can hold the same outcome at different prices, and the token
+      is the same token — so a single map keyed by asset would average the two
+      together and show each wallet the other's entry.
+    */
+    private val mine = ConcurrentHashMap<Int, Fills>()
 
-    private const val MAX_ASSETS = 64
+    fun of(slot: Int = Wallets.current): Fills = mine.getOrPut(slot) { Fills() }
 
-    fun bought(asset: String, shares: Double, costUsd: Double) {
-        if (asset.isEmpty() || shares <= 0.0) return
-        synchronized(byAsset) {
-            val held = byAsset.getOrPut(asset) { Held(0.0, 0.0) }
-            held.shares += shares
-            held.costUsd += costUsd
-            // Five-minute markets mint two new outcomes every window, so this
-            // would grow without bound if nothing evicted.
-            if (byAsset.size > MAX_ASSETS) {
-                byAsset.entries.firstOrNull { it.value.shares <= 1e-9 }
-                    ?.let { byAsset.remove(it.key) }
+    fun every(): List<Fills> = mine.values.toList()
+
+    class Fills {
+
+        private data class Held(var shares: Double, var costUsd: Double)
+
+        private val byAsset = ConcurrentHashMap<String, Held>()
+
+        private val MAX_ASSETS = 64
+
+        fun bought(asset: String, shares: Double, costUsd: Double) {
+            if (asset.isEmpty() || shares <= 0.0) return
+            synchronized(byAsset) {
+                val held = byAsset.getOrPut(asset) { Held(0.0, 0.0) }
+                held.shares += shares
+                held.costUsd += costUsd
+                // Five-minute markets mint two new outcomes every window, so this
+                // would grow without bound if nothing evicted.
+                if (byAsset.size > MAX_ASSETS) {
+                    byAsset.entries.firstOrNull { it.value.shares <= 1e-9 }
+                        ?.let { byAsset.remove(it.key) }
+                }
             }
         }
-    }
 
-    /** Average-cost accounting: a partial sale leaves the average where it was. */
-    fun sold(asset: String, shares: Double) {
-        if (asset.isEmpty() || shares <= 0.0) return
-        synchronized(byAsset) {
-            val held = byAsset[asset] ?: return
-            if (held.shares <= 1e-9) return
-            val fraction = (shares / held.shares).coerceIn(0.0, 1.0)
-            held.costUsd -= held.costUsd * fraction
-            held.shares -= held.shares * fraction
-            if (held.shares < 1e-9) byAsset.remove(asset)
+        /** Average-cost accounting: a partial sale leaves the average where it was. */
+        fun sold(asset: String, shares: Double) {
+            if (asset.isEmpty() || shares <= 0.0) return
+            synchronized(byAsset) {
+                val held = byAsset[asset] ?: return
+                if (held.shares <= 1e-9) return
+                val fraction = (shares / held.shares).coerceIn(0.0, 1.0)
+                held.costUsd -= held.costUsd * fraction
+                held.shares -= held.shares * fraction
+                if (held.shares < 1e-9) byAsset.remove(asset)
+            }
         }
-    }
 
-    fun avgFor(asset: String): Double? {
-        val held = byAsset[asset] ?: return null
-        if (held.shares <= 1e-9 || held.costUsd <= 0.0) return null
-        return held.costUsd / held.shares
-    }
+        fun avgFor(asset: String): Double? {
+            val held = byAsset[asset] ?: return null
+            if (held.shares <= 1e-9 || held.costUsd <= 0.0) return null
+            return held.costUsd / held.shares
+        }
 
-    fun clear() = byAsset.clear()
+        fun clear() = byAsset.clear()
+    }
 }

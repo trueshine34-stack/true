@@ -19,10 +19,10 @@ class EventStatsTest {
     private val window = 1_800_000_000L
 
     @Before
-    fun reset() = OrderLog.clear()
+    fun reset() = OrderLog.of(0).clear()
 
     @After
-    fun tidy() = OrderLog.clear()
+    fun tidy() = OrderLog.of(0).clear()
 
     private fun order(
         action: String,
@@ -31,7 +31,7 @@ class EventStatsTest {
         matched: Double,
         outcome: String = "Up",
         at: Long = window,
-    ) = OrderLog.record(
+    ) = OrderLog.of(0).record(
         orderId = "o${(0..1_000_000).random()}",
         asset = if (outcome == "Up") "token-up" else "token-down",
         conditionId = "cond",

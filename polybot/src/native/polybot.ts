@@ -8,6 +8,25 @@ import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
  * bridge. The WebView only unlocks the key, hands it over, and observes.
  */
 
+/**
+ * One of the accounts the desk can trade from.
+ *
+ * Two of them run at once rather than one at a time: each has its own key, its
+ * own order log, its own reserve and its own sell rule, so a position opened on
+ * one keeps being worked while the screen is showing the other. What the screen
+ * shows is the only thing selecting a wallet changes.
+ */
+export type WalletSlot = {
+  index: number;
+  /** What to call it — the user's name for it, or the one it came with. */
+  name: string;
+  label: string;
+  /** The colour the whole screen is framed in while this one is up. */
+  accent: string;
+  address?: string | null;
+  connected: boolean;
+};
+
 export type NativeTick = { timestamp: number; value: number };
 
 export type NativeEntry = {
@@ -179,6 +198,14 @@ export interface PolyBotPlugin {
   getBalance(): Promise<{
     usdc: number;
     wallet?: number;
+    /**
+     * Every connected wallet's balance together.
+     *
+     * The desk leads with what the whole run is worth, and with two accounts
+     * that is the two added up. Taken where the balances are rather than by
+     * asking the screen to poll a wallet it is not showing.
+     */
+    every?: number;
     /** What the reserve comes to right now, in dollars. */
     locked?: number;
     /** And how it is set: a fixed sum, or a share of the wallet. */
@@ -264,9 +291,26 @@ export interface PolyBotPlugin {
   getOrderLog(args?: { windowStart?: number }): Promise<{ orders: LoggedOrder[] }>;
   getEvents(args?: { limit?: number }): Promise<{ events: EventSummary[]; session: number }>;
   getMarketForWindow(args: { windowStart: number }): Promise<NativeMarket>;
-  vaultStore(args: { privateKey: string }): Promise<void>;
-  vaultLoad(): Promise<{ privateKey?: string | null }>;
-  vaultClear(): Promise<void>;
+  vaultStore(args: { privateKey: string; slot?: number }): Promise<void>;
+  vaultLoad(args?: { slot?: number }): Promise<{ privateKey?: string | null }>;
+  vaultClear(args?: { slot?: number }): Promise<void>;
+
+  /**
+   * The accounts the desk knows about, and which of them it is on.
+   *
+   * A slot with no key is listed too: it is the empty chair a second wallet is
+   * connected into. Both connected wallets trade at the same time — each has
+   * its own engine, its own sell rule and its own order log — and selecting one
+   * only moves the screen.
+   */
+  walletList(): Promise<{ slots: WalletSlot[]; current: number }>;
+  walletSelect(args: { slot: number }): Promise<{ current: number }>;
+  walletUpdate(args: {
+    slot: number;
+    label?: string;
+    accent?: string;
+  }): Promise<void>;
+  walletForget(args: { slot: number }): Promise<void>;
   autoSellUpdate(args: {
     enabled?: boolean;
     ladder?: number[];
@@ -617,6 +661,22 @@ const webStub: PolyBotPlugin = {
   },
   vaultLoad: async () => ({ privateKey: null }),
   vaultClear: async () => {},
+  walletList: async () => ({
+    slots: [
+      {
+        index: 0,
+        name: 'Кошелёк 1',
+        label: '',
+        accent: '#4c8dff',
+        address: null,
+        connected: false,
+      },
+    ],
+    current: 0,
+  }),
+  walletSelect: async () => ({ current: 0 }),
+  walletUpdate: async () => {},
+  walletForget: async () => {},
   autoSellUpdate: async () => {},
   autoSellState: async () => ({
     enabled: false,

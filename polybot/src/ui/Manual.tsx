@@ -295,6 +295,14 @@ export function Manual({
   >(null);
   const holdRef = useRef<number | null>(null);
   const heldRef = useRef(false);
+  /**
+   * Every connected wallet's balance together.
+   *
+   * The row leads with what the whole run is worth, and with a second account
+   * connected that is both of them. Null until a reading has come back, so the
+   * figure falls back to this wallet rather than flashing a wrong total.
+   */
+  const [everyWallet, setEveryWallet] = useState<number | null>(null);
   /** The watching buy, while one is running: what it is doing, and a way out. */
   const [buyWatch, setBuyWatch] = useState<string | null>(null);
   const stopBuyRef = useRef(false);
@@ -801,6 +809,7 @@ export function Manual({
         .then((r) => {
           if (cancelled) return;
           setBalance(r.usdc);
+          setEveryWallet(r.every ?? null);
         })
         .catch(() => {});
     };
@@ -2048,7 +2057,12 @@ export function Manual({
             sits in the middle, smaller, with what this window may still take
             after it.
           */}
-          <b>Σ{balance === null ? '—' : (balance + savings).toFixed(2)}</b>
+          <b>
+            Σ
+            {balance === null
+              ? '—'
+              : ((everyWallet ?? balance) + savings).toFixed(2)}
+          </b>
           <i className="railwallet">
             {balance === null ? '—' : balance.toFixed(2)}
           </i>

@@ -1,5 +1,6 @@
 package com.polybot.btc5m.bot
 
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
 
@@ -79,572 +80,590 @@ object OrderLog {
         val realPrice: Double get() = fillPrice ?: price
     }
 
-    private val entries = CopyOnWriteArrayList<Entry>()
-    private val ids = AtomicLong(0)
-    private const val MAX = 300
-
-    fun record(
-        orderId: String?,
-        asset: String,
-        conditionId: String,
-        outcome: String,
-        action: String,
-        price: Double,
-        size: Double,
-        matched: Double,
-        /** The average price the matched part actually went at, if it is known. */
-        fillPrice: Double? = null,
-        auto: Boolean,
-        /**
-         * The window this order's market belongs to. Stamping it from the clock
-         * instead put an order placed into the next window under the current
-         * one, where the desk could never show it.
-         */
-        windowStart: Long,
-    ): Entry {
-        val now = System.currentTimeMillis()
-        val nowSec = now / 1000
-        val entry = Entry(
-            id = ids.incrementAndGet(),
-            orderId = orderId,
-            asset = asset,
-            coin = Coins.current.id,
-            conditionId = conditionId,
-            outcome = outcome,
-            action = action,
-            price = price,
-            size = size,
-            placedAt = now,
-            windowStart = if (windowStart > 0L) windowStart else nowSec - (nowSec % WINDOW_SECONDS),
-            matched = matched,
-            priced = if (fillPrice != null && fillPrice > 0.0 && matched > 1e-9) matched else 0.0,
-            fillPrice = fillPrice?.takeIf { it > 0.0 && matched > 1e-9 },
-            status = statusFor(matched, size, resting = true),
-            auto = auto,
-        )
-        entries.add(entry)
-        while (entries.size > MAX) entries.removeAt(0)
-        return entry
-    }
-
-    private fun statusFor(matched: Double, size: Double, resting: Boolean): String = when {
-        matched >= size - 1e-9 -> "filled"
-        matched > 1e-9 -> if (resting) "partial" else "filled"
-        resting -> "resting"
-        else -> "cancelled"
-    }
-
-    /**
-     * Whether the venue's own word for an order means it is still on the book.
-     *
-     * The CLOB says LIVE for an order working, DELAYED for one held back by
-     * the matching delay and UNMATCHED for one that went to the book after a
-     * failed match — all three are orders that can still fill and can still be
-     * cancelled. Only CANCELED is gone.
-     */
-    private fun stillOnBook(status: String): Boolean {
-        val word = status.trim().lowercase()
-        return word.startsWith("live") ||
-            word.startsWith("delay") ||
-            word.startsWith("unmatched")
-    }
-
-    private fun pulled(status: String): Boolean =
-        status.trim().lowercase().startsWith("cancel")
-
-    /**
-     * Bring the entries in line with the exchange.
-     *
-     * The listing is the venue's own answer to "what is still working", so an
-     * order in it is working — including one this log had already given up on.
-     * Reviving those is the point: an entry wrongly filed as cancelled did not
-     * merely read wrong in the history, it dropped out of the working list and
-     * took its own ✕ with it, so a live order could not be cancelled or moved
-     * from the one screen that is for cancelling and moving orders.
-     *
-     * An entry missing from the listing has either filled or been pulled, and
-     * only the venue knows which — so it is asked, once, per entry, and its
-     * answer is *read* rather than inferred. Inferring was the bug: an order
-     * the listing had not indexed yet came back from the single-order endpoint
-     * alive and untouched, and "not in the listing, nothing matched" was filed
-     * as a cancel. The venue tells us what it is; the word costs nothing.
-     */
-    fun reconcile(
-        open: List<ClobApi.OpenOrder>,
-        lookup: (String) -> ClobApi.OpenOrder?,
-    ) {
-        val byId = open.associateBy { it.id }
-        for (entry in entries) {
-            val id = entry.orderId ?: continue
-
-            val remote = byId[id]
-            if (remote != null) {
-                // Matched never goes backwards: a stale page of the listing
-                // must not un-fill shares the trade feed has already priced.
-                entry.matched = maxOf(entry.matched, remote.sizeMatched)
-                entry.status = statusFor(entry.matched, entry.size, resting = true)
-                continue
-            }
-
-            // Everything below asks the venue about one order, which is a
-            // round trip; a settled entry has nothing left to learn.
-            if (entry.status != "resting" && entry.status != "partial") continue
-
-            val resolved = try {
-                lookup(id)
-            } catch (e: Exception) {
-                continue
-            }
-            // Nothing back means the venue no longer knows this order — which
-            // is what both a fill and a cancel look like. Calling it cancelled
-            // marked filled sells as cancels and silently killed the buy-back,
-            // so an unresolved order is left alone and settled by the trade
-            // feed instead.
-            if (resolved == null) continue
-            entry.matched = maxOf(entry.matched, resolved.sizeMatched)
-            entry.status = when {
-                // Still on the book, whatever the listing did or did not say.
-                stillOnBook(resolved.status) ->
-                    statusFor(entry.matched, entry.size, resting = true)
-                pulled(resolved.status) ->
-                    statusFor(entry.matched, entry.size, resting = false)
-                // Matched, or a word this app has not seen before. Either way
-                // the shares decide: what has filled is filled, and what has
-                // not is left working until something says otherwise. Guessing
-                // "cancelled" here is what put live orders in the history.
-                else -> statusFor(entry.matched, entry.size, resting = true)
-            }
-        }
-    }
-
-    /**
-     * Are any of our sells still working?
-     *
-     * While one is, the rule has to keep looking: that is the only way it can
-     * notice the fill that a buy-back hangs on. Orders older than the previous
-     * window are not counted — their market has closed, and nothing more will
-     * happen to them.
-     */
-    fun hasWorkingSells(windowStart: Long): Boolean = working("SELL", windowStart)
-
-    /**
-     * Are any of our buys still working?
-     *
-     * A limit buy that rests and fills a minute later has to wake the rule just
-     * as much as a sell does — it is a position about to exist, and nothing else
-     * in the loop knows it is coming. Without this the rule went quiet the
-     * moment the order was placed and never came back to cover the fill.
-     */
-    fun hasWorkingBuys(windowStart: Long): Boolean = working("BUY", windowStart)
-
-    /**
-     * Shares bought in a recent window that no sell covers yet, per outcome.
-     *
-     * The app's own record of what it did, which is the only thing that can
-     * answer "did every purchase get an exit?" without asking the exchange.
-     * A buy counts once it has matched; a sell counts whether it has filled or
-     * is merely resting, since a resting sell *is* the exit.
-     *
-     * This is what keeps the rule looking. Attention used to be a one-minute
-     * timer from the moment of purchase, and a sell blocked for that minute —
-     * by a rate limit, by the trade not being indexed yet, by a refusal — was
-     * then never attempted again: the position dropped out of the sweep and the
-     * panel said only that it was waiting for a purchase.
-     */
-    fun uncovered(windowStart: Long): Map<String, Double> {
-        val recent = entries.filter { it.windowStart >= windowStart - WINDOW_SECONDS }
-        val out = HashMap<String, Double>()
-        for (entry in recent) {
-            val covered = when {
-                entry.action == "BUY" -> entry.matched
-                entry.status == "cancelled" -> -entry.matched
-                // A resting sell is an exit already arranged.
-                else -> -maxOf(entry.matched, entry.size)
-            }
-            out[entry.asset] = (out[entry.asset] ?: 0.0) + covered
-        }
-        return out.filterValues { it > 1e-6 }
-    }
-
-    fun hasUncovered(windowStart: Long): Boolean = uncovered(windowStart).isNotEmpty()
-
     /** A purchase that no sell covers yet, at what it cost. */
     data class Lot(val shares: Double, val price: Double, val at: Long)
 
-    /**
-     * The buys of one outcome that still have no sell against them, oldest
-     * first, each with its own price.
-     *
-     * A position's average is not what any single purchase cost. Pricing an
-     * exit off the average puts every offer at one price — near the first buy's
-     * — which is right for none of them: the lot bought at 32¢ is asked to wait
-     * for the same price as the lot bought at 52¢, so one leaves money behind
-     * and the other never fills. Each purchase deserves its own exit, and that
-     * needs the purchases themselves, not their mean.
-     *
-     * Sells consume lots oldest first, resting ones included: an offer already
-     * on the book is an exit already arranged for those shares.
-     */
-    fun uncoveredLots(asset: String): List<Lot> {
-        val mine = entries.filter { it.asset == asset }.sortedBy { it.placedAt }
-        val lots = ArrayList<Lot>()
+    /*
+      One book per wallet.
 
-        for (entry in mine) {
-            if (entry.action != "BUY") continue
-            if (entry.matched > 1e-9) {
-                lots.add(Lot(entry.matched, entry.realPrice, entry.placedAt))
+      The log answers "what did I send and what became of it", and the answer
+      is different for each account — a sell rule reading the other wallet's
+      lots would price an exit off a purchase that was never made with this
+      money. So the entries are held per slot and every question has to say
+      whose book it is asking about.
+    */
+    private val books = ConcurrentHashMap<Int, Book>()
+
+    fun of(slot: Int = Wallets.current): Book = books.getOrPut(slot) { Book() }
+
+    /** Every book that exists, for the sweeps that are not about one screen. */
+    fun every(): List<Book> = books.values.toList()
+
+    class Book {
+        private val entries = CopyOnWriteArrayList<Entry>()
+        private val ids = AtomicLong(0)
+        private val MAX = 300
+
+        fun record(
+            orderId: String?,
+            asset: String,
+            conditionId: String,
+            outcome: String,
+            action: String,
+            price: Double,
+            size: Double,
+            matched: Double,
+            /** The average price the matched part actually went at, if it is known. */
+            fillPrice: Double? = null,
+            auto: Boolean,
+            /**
+             * The window this order's market belongs to. Stamping it from the clock
+             * instead put an order placed into the next window under the current
+             * one, where the desk could never show it.
+             */
+            windowStart: Long,
+        ): Entry {
+            val now = System.currentTimeMillis()
+            val nowSec = now / 1000
+            val entry = Entry(
+                id = ids.incrementAndGet(),
+                orderId = orderId,
+                asset = asset,
+                coin = Coins.current.id,
+                conditionId = conditionId,
+                outcome = outcome,
+                action = action,
+                price = price,
+                size = size,
+                placedAt = now,
+                windowStart = if (windowStart > 0L) windowStart else nowSec - (nowSec % WINDOW_SECONDS),
+                matched = matched,
+                priced = if (fillPrice != null && fillPrice > 0.0 && matched > 1e-9) matched else 0.0,
+                fillPrice = fillPrice?.takeIf { it > 0.0 && matched > 1e-9 },
+                status = statusFor(matched, size, resting = true),
+                auto = auto,
+            )
+            entries.add(entry)
+            while (entries.size > MAX) entries.removeAt(0)
+            return entry
+        }
+
+        private fun statusFor(matched: Double, size: Double, resting: Boolean): String = when {
+            matched >= size - 1e-9 -> "filled"
+            matched > 1e-9 -> if (resting) "partial" else "filled"
+            resting -> "resting"
+            else -> "cancelled"
+        }
+
+        /**
+         * Whether the venue's own word for an order means it is still on the book.
+         *
+         * The CLOB says LIVE for an order working, DELAYED for one held back by
+         * the matching delay and UNMATCHED for one that went to the book after a
+         * failed match — all three are orders that can still fill and can still be
+         * cancelled. Only CANCELED is gone.
+         */
+        private fun stillOnBook(status: String): Boolean {
+            val word = status.trim().lowercase()
+            return word.startsWith("live") ||
+                word.startsWith("delay") ||
+                word.startsWith("unmatched")
+        }
+
+        private fun pulled(status: String): Boolean =
+            status.trim().lowercase().startsWith("cancel")
+
+        /**
+         * Bring the entries in line with the exchange.
+         *
+         * The listing is the venue's own answer to "what is still working", so an
+         * order in it is working — including one this log had already given up on.
+         * Reviving those is the point: an entry wrongly filed as cancelled did not
+         * merely read wrong in the history, it dropped out of the working list and
+         * took its own ✕ with it, so a live order could not be cancelled or moved
+         * from the one screen that is for cancelling and moving orders.
+         *
+         * An entry missing from the listing has either filled or been pulled, and
+         * only the venue knows which — so it is asked, once, per entry, and its
+         * answer is *read* rather than inferred. Inferring was the bug: an order
+         * the listing had not indexed yet came back from the single-order endpoint
+         * alive and untouched, and "not in the listing, nothing matched" was filed
+         * as a cancel. The venue tells us what it is; the word costs nothing.
+         */
+        fun reconcile(
+            open: List<ClobApi.OpenOrder>,
+            lookup: (String) -> ClobApi.OpenOrder?,
+        ) {
+            val byId = open.associateBy { it.id }
+            for (entry in entries) {
+                val id = entry.orderId ?: continue
+
+                val remote = byId[id]
+                if (remote != null) {
+                    // Matched never goes backwards: a stale page of the listing
+                    // must not un-fill shares the trade feed has already priced.
+                    entry.matched = maxOf(entry.matched, remote.sizeMatched)
+                    entry.status = statusFor(entry.matched, entry.size, resting = true)
+                    continue
+                }
+
+                // Everything below asks the venue about one order, which is a
+                // round trip; a settled entry has nothing left to learn.
+                if (entry.status != "resting" && entry.status != "partial") continue
+
+                val resolved = try {
+                    lookup(id)
+                } catch (e: Exception) {
+                    continue
+                }
+                // Nothing back means the venue no longer knows this order — which
+                // is what both a fill and a cancel look like. Calling it cancelled
+                // marked filled sells as cancels and silently killed the buy-back,
+                // so an unresolved order is left alone and settled by the trade
+                // feed instead.
+                if (resolved == null) continue
+                entry.matched = maxOf(entry.matched, resolved.sizeMatched)
+                entry.status = when {
+                    // Still on the book, whatever the listing did or did not say.
+                    stillOnBook(resolved.status) ->
+                        statusFor(entry.matched, entry.size, resting = true)
+                    pulled(resolved.status) ->
+                        statusFor(entry.matched, entry.size, resting = false)
+                    // Matched, or a word this app has not seen before. Either way
+                    // the shares decide: what has filled is filled, and what has
+                    // not is left working until something says otherwise. Guessing
+                    // "cancelled" here is what put live orders in the history.
+                    else -> statusFor(entry.matched, entry.size, resting = true)
+                }
             }
         }
 
-        for (entry in mine) {
-            if (entry.action != "SELL") continue
-            if (entry.status == "cancelled") continue
-            var left = maxOf(entry.matched, entry.size)
-            var i = 0
-            while (left > 1e-9 && i < lots.size) {
-                val lot = lots[i]
-                val take = minOf(lot.shares, left)
-                lots[i] = lot.copy(shares = lot.shares - take)
-                left -= take
-                if (lots[i].shares <= 1e-9) i += 1
+        /**
+         * Are any of our sells still working?
+         *
+         * While one is, the rule has to keep looking: that is the only way it can
+         * notice the fill that a buy-back hangs on. Orders older than the previous
+         * window are not counted — their market has closed, and nothing more will
+         * happen to them.
+         */
+        fun hasWorkingSells(windowStart: Long): Boolean = working("SELL", windowStart)
+
+        /**
+         * Are any of our buys still working?
+         *
+         * A limit buy that rests and fills a minute later has to wake the rule just
+         * as much as a sell does — it is a position about to exist, and nothing else
+         * in the loop knows it is coming. Without this the rule went quiet the
+         * moment the order was placed and never came back to cover the fill.
+         */
+        fun hasWorkingBuys(windowStart: Long): Boolean = working("BUY", windowStart)
+
+        /**
+         * Shares bought in a recent window that no sell covers yet, per outcome.
+         *
+         * The app's own record of what it did, which is the only thing that can
+         * answer "did every purchase get an exit?" without asking the exchange.
+         * A buy counts once it has matched; a sell counts whether it has filled or
+         * is merely resting, since a resting sell *is* the exit.
+         *
+         * This is what keeps the rule looking. Attention used to be a one-minute
+         * timer from the moment of purchase, and a sell blocked for that minute —
+         * by a rate limit, by the trade not being indexed yet, by a refusal — was
+         * then never attempted again: the position dropped out of the sweep and the
+         * panel said only that it was waiting for a purchase.
+         */
+        fun uncovered(windowStart: Long): Map<String, Double> {
+            val recent = entries.filter { it.windowStart >= windowStart - WINDOW_SECONDS }
+            val out = HashMap<String, Double>()
+            for (entry in recent) {
+                val covered = when {
+                    entry.action == "BUY" -> entry.matched
+                    entry.status == "cancelled" -> -entry.matched
+                    // A resting sell is an exit already arranged.
+                    else -> -maxOf(entry.matched, entry.size)
+                }
+                out[entry.asset] = (out[entry.asset] ?: 0.0) + covered
             }
+            return out.filterValues { it > 1e-6 }
         }
 
-        return lots.filter { it.shares > 1e-6 }
-    }
+        fun hasUncovered(windowStart: Long): Boolean = uncovered(windowStart).isNotEmpty()
 
-    /**
-     * Lots still held, whatever is offered against them.
-     *
-     * The difference from [uncoveredLots] is the whole point of it: there, a
-     * resting sell counts as cover, because the question is "does every
-     * purchase have an exit arranged". Here the question is "what do I still
-     * own", and an offer that has not filled has sold nothing. A rule that
-     * wants to take a price the book is showing now has to see the shares the
-     * standing offer is still waiting on.
-     */
-    fun heldLots(asset: String): List<Lot> {
-        val mine = entries.filter { it.asset == asset }.sortedBy { it.placedAt }
-        val lots = ArrayList<Lot>()
+        /**
+         * The buys of one outcome that still have no sell against them, oldest
+         * first, each with its own price.
+         *
+         * A position's average is not what any single purchase cost. Pricing an
+         * exit off the average puts every offer at one price — near the first buy's
+         * — which is right for none of them: the lot bought at 32¢ is asked to wait
+         * for the same price as the lot bought at 52¢, so one leaves money behind
+         * and the other never fills. Each purchase deserves its own exit, and that
+         * needs the purchases themselves, not their mean.
+         *
+         * Sells consume lots oldest first, resting ones included: an offer already
+         * on the book is an exit already arranged for those shares.
+         */
+        fun uncoveredLots(asset: String): List<Lot> {
+            val mine = entries.filter { it.asset == asset }.sortedBy { it.placedAt }
+            val lots = ArrayList<Lot>()
 
-        for (entry in mine) {
-            if (entry.action != "BUY") continue
-            if (entry.matched > 1e-9) {
-                lots.add(Lot(entry.matched, entry.realPrice, entry.placedAt))
-            }
-        }
-
-        for (entry in mine) {
-            if (entry.action != "SELL") continue
-            // Only what actually traded takes shares away.
-            var left = entry.matched
-            var i = 0
-            while (left > 1e-9 && i < lots.size) {
-                val lot = lots[i]
-                val take = minOf(lot.shares, left)
-                lots[i] = lot.copy(shares = lot.shares - take)
-                left -= take
-                if (lots[i].shares <= 1e-9) i += 1
-            }
-        }
-
-        return lots.filter { it.shares > 1e-6 }
-    }
-
-    /**
-     * What everything still held cost, over the windows that can still hold
-     * anything.
-     *
-     * Not what it is worth — what was paid for it. A share of the account has
-     * to mean the same amount of money for as long as the round lasts, and a
-     * base that moved with the price of the position would move the reserve
-     * with it, which is the one thing a reserve must not do.
-     *
-     * Scoped by window, and that is what keeps it honest: a five-minute market
-     * has its own token ids, so a window that has settled drops out by itself
-     * once it is old enough, at which point its money is back in the wallet
-     * and counted there instead.
-     */
-    fun heldCost(sinceWindow: Long, skipOutcome: String? = null): Double {
-        val assets = entries.filter { it.windowStart >= sinceWindow }
-            // A side the window has already decided against is money spent,
-            // not money held: counting it would hold the account against a
-            // position that is on its way to nothing.
-            .filter { skipOutcome == null || !it.outcome.equals(skipOutcome, true) }
-            .map { it.asset }
-            .toSet()
-        return assets.sumOf { asset ->
-            heldLots(asset).sumOf { it.shares * it.price }
-        }
-    }
-
-    /**
-     * Shares still held from one window, on one side of it.
-     *
-     * For the moment a window closes: the winning side is about to be paid a
-     * dollar a share and the losing side is paid nothing, and until the
-     * transfer lands neither is in the balance. What is being asked here is
-     * "how much is on its way", so it is shares rather than what they cost.
-     */
-    fun heldShares(window: Long, outcome: String): Double {
-        val assets = entries
-            .filter { it.windowStart == window && it.outcome.equals(outcome, true) }
-            .map { it.asset }
-            .toSet()
-        return assets.sumOf { asset -> heldLots(asset).sumOf { it.shares } }
-    }
-
-    /**
-     * Money from sales that has been made but has not landed yet.
-     *
-     * A sale is money the moment it fills — the shares are gone and the price
-     * is agreed — but the venue credits the wallet a good twenty seconds
-     * later. Between those two moments the balance shows neither the shares
-     * nor the money, so a reserve taken of the balance holds back a run that
-     * has just closed a winner, and the next entry cannot be sized until the
-     * transfer catches up. This is that money, counted for as long as it can
-     * still be in the air.
-     *
-     * Net of the fee, because that is what actually arrives.
-     */
-    fun pendingProceeds(sinceMs: Long, nowMs: Long = System.currentTimeMillis()): Double =
-        entries
-            .filter { it.action == "SELL" && it.placedAt in sinceMs..nowMs }
-            .sumOf { entry ->
-                val price = entry.realPrice
-                if (entry.matched <= 1e-9 || price <= 0.0 || price >= 1.0) {
-                    0.0
-                } else {
-                    entry.matched * (price - FEE_RATE * price * (1 - price))
+            for (entry in mine) {
+                if (entry.action != "BUY") continue
+                if (entry.matched > 1e-9) {
+                    lots.add(Lot(entry.matched, entry.realPrice, entry.placedAt))
                 }
             }
 
-    /** Polymarket's taker fee, which is charged on a sale as well as on a buy. */
-    private const val FEE_RATE = 0.07
+            for (entry in mine) {
+                if (entry.action != "SELL") continue
+                if (entry.status == "cancelled") continue
+                var left = maxOf(entry.matched, entry.size)
+                var i = 0
+                while (left > 1e-9 && i < lots.size) {
+                    val lot = lots[i]
+                    val take = minOf(lot.shares, left)
+                    lots[i] = lot.copy(shares = lot.shares - take)
+                    left -= take
+                    if (lots[i].shares <= 1e-9) i += 1
+                }
+            }
 
-    /**
-     * Was this order's price chosen by hand?
-     *
-     * A sell the user placed or moved themselves is a decision, and the ladder
-     * re-pricing it a few seconds later throws that decision away. Everything
-     * the rules send is marked `auto`, so what is left is the person.
-     */
-    fun byHand(orderId: String): Boolean = entries.any {
-        it.orderId == orderId && !it.auto
-    }
+            return lots.filter { it.shares > 1e-6 }
+        }
 
-    /**
-     * Did one of this app's rules place this order?
-     *
-     * Only a positive answer counts. An order this log has never heard of — one
-     * left standing from before the app was last opened, or placed on the
-     * Polymarket site — was not put there by a rule, and a rule that treats
-     * "I do not know" as "mine" moves prices it did not set. So the question is
-     * asked this way round, and everything else is left alone.
-     */
-    fun isAuto(orderId: String): Boolean = entries.any {
-        it.orderId == orderId && it.auto
-    }
+        /**
+         * Lots still held, whatever is offered against them.
+         *
+         * The difference from [uncoveredLots] is the whole point of it: there, a
+         * resting sell counts as cover, because the question is "does every
+         * purchase have an exit arranged". Here the question is "what do I still
+         * own", and an offer that has not filled has sold nothing. A rule that
+         * wants to take a price the book is showing now has to see the shares the
+         * standing offer is still waiting on.
+         */
+        fun heldLots(asset: String): List<Lot> {
+            val mine = entries.filter { it.asset == asset }.sortedBy { it.placedAt }
+            val lots = ArrayList<Lot>()
 
-    /** Is one particular asset's buy still working? */
-    fun hasWorkingBuy(asset: String): Boolean = entries.any {
-        it.asset == asset &&
-            it.action == "BUY" &&
-            (it.status == "resting" || it.status == "partial")
-    }
+            for (entry in mine) {
+                if (entry.action != "BUY") continue
+                if (entry.matched > 1e-9) {
+                    lots.add(Lot(entry.matched, entry.realPrice, entry.placedAt))
+                }
+            }
 
-    /**
-     * Outcomes with an order of ours still on the book.
-     *
-     * A position covered by a resting sell counts as finished business
-     * everywhere else — which is why the sweep stopped looking at it, and why a
-     * floor that came into force afterwards never reached the offer sitting
-     * under it. While one of our orders is working, its position is still the
-     * rule's to manage.
-     */
-    fun workingAssets(action: String, windowStart: Long): Set<String> = entries
-        .filter {
+            for (entry in mine) {
+                if (entry.action != "SELL") continue
+                // Only what actually traded takes shares away.
+                var left = entry.matched
+                var i = 0
+                while (left > 1e-9 && i < lots.size) {
+                    val lot = lots[i]
+                    val take = minOf(lot.shares, left)
+                    lots[i] = lot.copy(shares = lot.shares - take)
+                    left -= take
+                    if (lots[i].shares <= 1e-9) i += 1
+                }
+            }
+
+            return lots.filter { it.shares > 1e-6 }
+        }
+
+        /**
+         * What everything still held cost, over the windows that can still hold
+         * anything.
+         *
+         * Not what it is worth — what was paid for it. A share of the account has
+         * to mean the same amount of money for as long as the round lasts, and a
+         * base that moved with the price of the position would move the reserve
+         * with it, which is the one thing a reserve must not do.
+         *
+         * Scoped by window, and that is what keeps it honest: a five-minute market
+         * has its own token ids, so a window that has settled drops out by itself
+         * once it is old enough, at which point its money is back in the wallet
+         * and counted there instead.
+         */
+        fun heldCost(sinceWindow: Long, skipOutcome: String? = null): Double {
+            val assets = entries.filter { it.windowStart >= sinceWindow }
+                // A side the window has already decided against is money spent,
+                // not money held: counting it would hold the account against a
+                // position that is on its way to nothing.
+                .filter { skipOutcome == null || !it.outcome.equals(skipOutcome, true) }
+                .map { it.asset }
+                .toSet()
+            return assets.sumOf { asset ->
+                heldLots(asset).sumOf { it.shares * it.price }
+            }
+        }
+
+        /**
+         * Shares still held from one window, on one side of it.
+         *
+         * For the moment a window closes: the winning side is about to be paid a
+         * dollar a share and the losing side is paid nothing, and until the
+         * transfer lands neither is in the balance. What is being asked here is
+         * "how much is on its way", so it is shares rather than what they cost.
+         */
+        fun heldShares(window: Long, outcome: String): Double {
+            val assets = entries
+                .filter { it.windowStart == window && it.outcome.equals(outcome, true) }
+                .map { it.asset }
+                .toSet()
+            return assets.sumOf { asset -> heldLots(asset).sumOf { it.shares } }
+        }
+
+        /**
+         * Money from sales that has been made but has not landed yet.
+         *
+         * A sale is money the moment it fills — the shares are gone and the price
+         * is agreed — but the venue credits the wallet a good twenty seconds
+         * later. Between those two moments the balance shows neither the shares
+         * nor the money, so a reserve taken of the balance holds back a run that
+         * has just closed a winner, and the next entry cannot be sized until the
+         * transfer catches up. This is that money, counted for as long as it can
+         * still be in the air.
+         *
+         * Net of the fee, because that is what actually arrives.
+         */
+        fun pendingProceeds(sinceMs: Long, nowMs: Long = System.currentTimeMillis()): Double =
+            entries
+                .filter { it.action == "SELL" && it.placedAt in sinceMs..nowMs }
+                .sumOf { entry ->
+                    val price = entry.realPrice
+                    if (entry.matched <= 1e-9 || price <= 0.0 || price >= 1.0) {
+                        0.0
+                    } else {
+                        entry.matched * (price - FEE_RATE * price * (1 - price))
+                    }
+                }
+
+        /** Polymarket's taker fee, which is charged on a sale as well as on a buy. */
+        private val FEE_RATE = 0.07
+
+        /**
+         * Was this order's price chosen by hand?
+         *
+         * A sell the user placed or moved themselves is a decision, and the ladder
+         * re-pricing it a few seconds later throws that decision away. Everything
+         * the rules send is marked `auto`, so what is left is the person.
+         */
+        fun byHand(orderId: String): Boolean = entries.any {
+            it.orderId == orderId && !it.auto
+        }
+
+        /**
+         * Did one of this app's rules place this order?
+         *
+         * Only a positive answer counts. An order this log has never heard of — one
+         * left standing from before the app was last opened, or placed on the
+         * Polymarket site — was not put there by a rule, and a rule that treats
+         * "I do not know" as "mine" moves prices it did not set. So the question is
+         * asked this way round, and everything else is left alone.
+         */
+        fun isAuto(orderId: String): Boolean = entries.any {
+            it.orderId == orderId && it.auto
+        }
+
+        /** Is one particular asset's buy still working? */
+        fun hasWorkingBuy(asset: String): Boolean = entries.any {
+            it.asset == asset &&
+                it.action == "BUY" &&
+                (it.status == "resting" || it.status == "partial")
+        }
+
+        /**
+         * Outcomes with an order of ours still on the book.
+         *
+         * A position covered by a resting sell counts as finished business
+         * everywhere else — which is why the sweep stopped looking at it, and why a
+         * floor that came into force afterwards never reached the offer sitting
+         * under it. While one of our orders is working, its position is still the
+         * rule's to manage.
+         */
+        fun workingAssets(action: String, windowStart: Long): Set<String> = entries
+            .filter {
+                it.action == action &&
+                    (it.status == "resting" || it.status == "partial") &&
+                    it.windowStart >= windowStart - WINDOW_SECONDS
+            }
+            .map { it.asset }
+            .toSet()
+
+        private fun working(action: String, windowStart: Long): Boolean = entries.any {
             it.action == action &&
                 (it.status == "resting" || it.status == "partial") &&
                 it.windowStart >= windowStart - WINDOW_SECONDS
         }
-        .map { it.asset }
-        .toSet()
 
-    private fun working(action: String, windowStart: Long): Boolean = entries.any {
-        it.action == action &&
-            (it.status == "resting" || it.status == "partial") &&
-            it.windowStart >= windowStart - WINDOW_SECONDS
-    }
+        /**
+         * Mark volume against a still-working order from a trade that happened.
+         *
+         * A fill is never worse than the price the order asked for: a buy pays at
+         * most its limit and a sell receives at least it. Matching on "within a
+         * tick either way" therefore threw away every improved fill — an order for
+         * 85c that traded at 87c found no order to belong to, kept the price it had
+         * asked for, and the round's result was wrong by the improvement. Anything
+         * on the right side of the ask can have produced this trade.
+         *
+         * Among those, the venue fills the most aggressive order first — the
+         * dearest buy, the cheapest sell — so that is the order they are tried in,
+         * oldest first where two ask the same. A trade with no order to match (sold
+         * from the Polymarket site, say) simply finds nothing here and is filed as
+         * a fill of its own.
+         */
+        @Synchronized
+        fun applyTrade(
+            asset: String,
+            action: String,
+            price: Double,
+            size: Double,
+            tick: Double,
+        ): Double {
+            var left = size
+            // A working order may yet fill the rest; a finished one only ever has
+            // its matched part to account for, and a cancelled order that never
+            // filled has nothing.
+            fun ceiling(entry: Entry): Double =
+                if (entry.status == "resting" || entry.status == "partial") entry.size else entry.matched
 
-    /**
-     * Mark volume against a still-working order from a trade that happened.
-     *
-     * A fill is never worse than the price the order asked for: a buy pays at
-     * most its limit and a sell receives at least it. Matching on "within a
-     * tick either way" therefore threw away every improved fill — an order for
-     * 85c that traded at 87c found no order to belong to, kept the price it had
-     * asked for, and the round's result was wrong by the improvement. Anything
-     * on the right side of the ask can have produced this trade.
-     *
-     * Among those, the venue fills the most aggressive order first — the
-     * dearest buy, the cheapest sell — so that is the order they are tried in,
-     * oldest first where two ask the same. A trade with no order to match (sold
-     * from the Polymarket site, say) simply finds nothing here and is filed as
-     * a fill of its own.
-     */
-    @Synchronized
-    fun applyTrade(
-        asset: String,
-        action: String,
-        price: Double,
-        size: Double,
-        tick: Double,
-    ): Double {
-        var left = size
-        // A working order may yet fill the rest; a finished one only ever has
-        // its matched part to account for, and a cancelled order that never
-        // filled has nothing.
-        fun ceiling(entry: Entry): Double =
-            if (entry.status == "resting" || entry.status == "partial") entry.size else entry.matched
+            // How much of this order the feed has not spoken for yet, which is
+            // what decides whether this trade belongs to it.
+            fun room(entry: Entry): Double = ceiling(entry) - entry.fed
 
-        // How much of this order the feed has not spoken for yet, which is
-        // what decides whether this trade belongs to it.
-        fun room(entry: Entry): Double = ceiling(entry) - entry.fed
+            // And how much of it still needs a price put on it, which is a
+            // smaller thing: an order that came back already filled knows its own
+            // price and needs none.
+            fun unpriced(entry: Entry): Double = ceiling(entry) - entry.priced
 
-        // And how much of it still needs a price put on it, which is a
-        // smaller thing: an order that came back already filled knows its own
-        // price and needs none.
-        fun unpriced(entry: Entry): Double = ceiling(entry) - entry.priced
-
-        val candidates = entries
-            .filter {
-                it.asset == asset &&
-                    it.action == action &&
-                    room(it) > 1e-9 &&
+            val candidates = entries
+                .filter {
+                    it.asset == asset &&
+                        it.action == action &&
+                        room(it) > 1e-9 &&
+                        if (action == "BUY") {
+                            price <= it.price + tick / 2
+                        } else {
+                            price >= it.price - tick / 2
+                        }
+                }
+                .sortedWith(
                     if (action == "BUY") {
-                        price <= it.price + tick / 2
+                        compareByDescending<Entry> { it.price }.thenBy { it.placedAt }
                     } else {
-                        price >= it.price - tick / 2
-                    }
+                        compareBy<Entry> { it.price }.thenBy { it.placedAt }
+                    },
+                )
+
+            for (entry in candidates) {
+                if (left <= 1e-9) break
+
+                val take = minOf(room(entry), left)
+                if (take <= 1e-9) continue
+
+                // Priced only where a price is still wanted. The listing may
+                // already have counted these shares and the order response may
+                // already have priced them; either way the trade is this order's,
+                // and saying so is what stops it being filed again as its own.
+                val toPrice = minOf(unpriced(entry), take)
+                if (toPrice > 1e-9) {
+                    val was = entry.fillPrice ?: entry.price
+                    entry.fillPrice = (was * entry.priced + price * toPrice) / (entry.priced + toPrice)
+                    entry.priced += toPrice
+                }
+                entry.fed += take
+                entry.matched = maxOf(entry.matched, maxOf(entry.priced, entry.fed))
+                entry.status = statusFor(entry.matched, entry.size, resting = true)
+                left -= take
             }
-            .sortedWith(
-                if (action == "BUY") {
-                    compareByDescending<Entry> { it.price }.thenBy { it.placedAt }
-                } else {
-                    compareBy<Entry> { it.price }.thenBy { it.placedAt }
-                },
-            )
-
-        for (entry in candidates) {
-            if (left <= 1e-9) break
-
-            val take = minOf(room(entry), left)
-            if (take <= 1e-9) continue
-
-            // Priced only where a price is still wanted. The listing may
-            // already have counted these shares and the order response may
-            // already have priced them; either way the trade is this order's,
-            // and saying so is what stops it being filed again as its own.
-            val toPrice = minOf(unpriced(entry), take)
-            if (toPrice > 1e-9) {
-                val was = entry.fillPrice ?: entry.price
-                entry.fillPrice = (was * entry.priced + price * toPrice) / (entry.priced + toPrice)
-                entry.priced += toPrice
-            }
-            entry.fed += take
-            entry.matched = maxOf(entry.matched, maxOf(entry.priced, entry.fed))
-            entry.status = statusFor(entry.matched, entry.size, resting = true)
-            left -= take
+            return left
         }
-        return left
+
+        /**
+         * File a fill that belongs to no order this log knows about.
+         *
+         * There are several ways to end up here and all of them are real: a sale
+         * made in the Polymarket app, an order placed before this process started,
+         * an order whose response never came back. The trade happened either way,
+         * and a panel that leaves it out is wrong about both the position and the
+         * money — so it goes in as what it is, already filled.
+         */
+        @Synchronized
+        fun recordFill(
+            asset: String,
+            conditionId: String,
+            outcome: String,
+            action: String,
+            price: Double,
+            size: Double,
+            windowStart: Long,
+            at: Long,
+        ): Entry {
+            val nowSec = at / 1000
+            val entry = Entry(
+                id = ids.incrementAndGet(),
+                orderId = null,
+                asset = asset,
+                conditionId = conditionId,
+                // The coin the token belongs to, not the one on the screen: a
+                // fill can land minutes after the desk was pointed elsewhere, and
+                // it belongs to the market it traded on. Anything already filed
+                // against this token knows which that was.
+                coin = entries.firstOrNull { it.asset == asset }?.coin ?: Coins.current.id,
+                // The feed does not always name the side. The token id does, and
+                // anything already filed against it knows the name.
+                outcome = outcome.ifEmpty {
+                    entries.firstOrNull { it.asset == asset && it.outcome.isNotEmpty() }
+                        ?.outcome.orEmpty()
+                },
+                action = action,
+                price = price,
+                size = size,
+                placedAt = at,
+                windowStart = if (windowStart > 0L) windowStart else nowSec - (nowSec % WINDOW_SECONDS),
+                matched = size,
+                priced = size,
+                // A fill with no order behind it is the price it happened at.
+                fillPrice = price,
+                status = "filled",
+                fed = size,
+                auto = false,
+            )
+            entries.add(entry)
+            while (entries.size > MAX) entries.removeAt(0)
+            return entry
+        }
+
+        /**
+         * The size a single buy of this outcome was made in.
+         *
+         * Positions here are built up in equal clips — three lots of five rather
+         * than one of fifteen — and a buy-back that went in as one block would take
+         * the whole size at the first price it saw. The smallest buy recorded is
+         * that clip.
+         */
+        fun buyLotFor(asset: String): Double? = entries
+            .filter { it.action == "BUY" && it.asset == asset && it.size > 0.0 }
+            .minOfOrNull { it.size }
+
+        /**
+         * One window's orders on one coin — the desk's own view.
+         *
+         * The coin defaults to the one being traded rather than being optional:
+         * every caller that draws this on the screen wants the screen's coin, and
+         * the one place that wants the lot asks [all].
+         */
+        fun forWindow(windowStart: Long, coin: String? = Coins.current.id): List<Entry> =
+            entries
+                .filter { it.windowStart == windowStart && (coin == null || it.coin == coin) }
+                .sortedByDescending { it.placedAt }
+
+        /** Everything still remembered, for scoring windows that have closed. */
+        fun all(): List<Entry> = entries.toList()
+
+        /** The same, narrowed to one coin — what a coin's own history is made of. */
+        fun allOn(coin: String = Coins.current.id): List<Entry> =
+            entries.filter { it.coin == coin }
+
+        fun clear() = entries.clear()
     }
-
-    /**
-     * File a fill that belongs to no order this log knows about.
-     *
-     * There are several ways to end up here and all of them are real: a sale
-     * made in the Polymarket app, an order placed before this process started,
-     * an order whose response never came back. The trade happened either way,
-     * and a panel that leaves it out is wrong about both the position and the
-     * money — so it goes in as what it is, already filled.
-     */
-    @Synchronized
-    fun recordFill(
-        asset: String,
-        conditionId: String,
-        outcome: String,
-        action: String,
-        price: Double,
-        size: Double,
-        windowStart: Long,
-        at: Long,
-    ): Entry {
-        val nowSec = at / 1000
-        val entry = Entry(
-            id = ids.incrementAndGet(),
-            orderId = null,
-            asset = asset,
-            conditionId = conditionId,
-            // The coin the token belongs to, not the one on the screen: a
-            // fill can land minutes after the desk was pointed elsewhere, and
-            // it belongs to the market it traded on. Anything already filed
-            // against this token knows which that was.
-            coin = entries.firstOrNull { it.asset == asset }?.coin ?: Coins.current.id,
-            // The feed does not always name the side. The token id does, and
-            // anything already filed against it knows the name.
-            outcome = outcome.ifEmpty {
-                entries.firstOrNull { it.asset == asset && it.outcome.isNotEmpty() }
-                    ?.outcome.orEmpty()
-            },
-            action = action,
-            price = price,
-            size = size,
-            placedAt = at,
-            windowStart = if (windowStart > 0L) windowStart else nowSec - (nowSec % WINDOW_SECONDS),
-            matched = size,
-            priced = size,
-            // A fill with no order behind it is the price it happened at.
-            fillPrice = price,
-            status = "filled",
-            fed = size,
-            auto = false,
-        )
-        entries.add(entry)
-        while (entries.size > MAX) entries.removeAt(0)
-        return entry
-    }
-
-    /**
-     * The size a single buy of this outcome was made in.
-     *
-     * Positions here are built up in equal clips — three lots of five rather
-     * than one of fifteen — and a buy-back that went in as one block would take
-     * the whole size at the first price it saw. The smallest buy recorded is
-     * that clip.
-     */
-    fun buyLotFor(asset: String): Double? = entries
-        .filter { it.action == "BUY" && it.asset == asset && it.size > 0.0 }
-        .minOfOrNull { it.size }
-
-    /**
-     * One window's orders on one coin — the desk's own view.
-     *
-     * The coin defaults to the one being traded rather than being optional:
-     * every caller that draws this on the screen wants the screen's coin, and
-     * the one place that wants the lot asks [all].
-     */
-    fun forWindow(windowStart: Long, coin: String? = Coins.current.id): List<Entry> =
-        entries
-            .filter { it.windowStart == windowStart && (coin == null || it.coin == coin) }
-            .sortedByDescending { it.placedAt }
-
-    /** Everything still remembered, for scoring windows that have closed. */
-    fun all(): List<Entry> = entries.toList()
-
-    /** The same, narrowed to one coin — what a coin's own history is made of. */
-    fun allOn(coin: String = Coins.current.id): List<Entry> =
-        entries.filter { it.coin == coin }
-
-    fun clear() = entries.clear()
 }

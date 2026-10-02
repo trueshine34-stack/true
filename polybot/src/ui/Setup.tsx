@@ -19,8 +19,20 @@ const KIND_TO_SIGTYPE: Record<WalletKind, SignatureType> = {
 
 export function Setup({
   onDone,
+  /**
+   * Which wallet is being connected.
+   *
+   * The desk holds two, each with its own key and its own trading, so the same
+   * form fills either chair — the slot only decides where the key and the terms
+   * are filed. The native side is already on this slot when the form opens, so
+   * the connect lands on the right engine.
+   */
+  slot = 0,
+  onCancel,
 }: {
   onDone: (account: AccountConfig) => void;
+  slot?: number;
+  onCancel?: () => void;
 }) {
   const [privateKey, setPrivateKey] = useState('');
   const [kind, setKind] = useState<WalletKind>('email');
@@ -61,8 +73,9 @@ export function Setup({
 
       await PolyBot.vaultStore({
         privateKey: key.startsWith('0x') ? key : `0x${key}`,
+        slot,
       });
-      await saveAccount(account);
+      await saveAccount(account, slot);
       onDone(account);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -77,7 +90,14 @@ export function Setup({
   return (
     <div className="app">
       <div className="scroll">
-        <h1 style={{ fontSize: 21, marginBottom: 4 }}>Подключение Polymarket</h1>
+        <h1 style={{ fontSize: 21, marginBottom: 4 }}>
+          Подключение Polymarket{slot > 0 ? ` · кошелёк ${slot + 1}` : ''}
+        </h1>
+        {onCancel && (
+          <button className="ghost compact" onClick={onCancel}>
+            ← назад к столу
+          </button>
+        )}
         <p className="muted" style={{ marginTop: 0 }}>
           Ключ шифруется хранилищем Android и остаётся только на этом телефоне. Он никуда
           не отправляется — им подписываются ордера прямо на устройстве.

@@ -9,10 +9,12 @@ import android.content.Context
  * own and outlives every switch: a reserve that survived only while the desk
  * was open would be no reserve at all.
  */
-class LockStore(context: Context) {
+class LockStore(context: Context, slot: Int = Wallets.current) {
 
+    // Per wallet, because the reserve is a decision about one account's money.
+    // Slot zero keeps the file it has always had, so an upgrade keeps its hold.
     private val prefs = context.applicationContext
-        .getSharedPreferences("polybot_lock", Context.MODE_PRIVATE)
+        .getSharedPreferences("polybot_lock" + Wallets.suffix(slot), Context.MODE_PRIVATE)
 
     /** The fixed sum, and the share of the wallet, in that order. */
     fun load(): Pair<Double, Double> = Pair(

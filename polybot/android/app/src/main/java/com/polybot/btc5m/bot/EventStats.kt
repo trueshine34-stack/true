@@ -57,10 +57,16 @@ object EventStats {
      * Only matched volume counts. An order that rested and was pulled moved no
      * money and belongs in neither column.
      */
-    fun recent(limit: Int = 12, nowSec: Long = Clock.nowSec()): List<Event> {
+    fun recent(
+        limit: Int = 12,
+        nowSec: Long = Clock.nowSec(),
+        // Whose windows. Scoring is about one account's money, and the two
+        // added together would be a figure neither wallet ever had.
+        log: OrderLog.Book = OrderLog.of(),
+    ): List<Event> {
         // One coin's windows. A five-minute event is an event on a market,
         // and two coins' rounds added together score neither of them.
-        val byWindow = OrderLog.allOn()
+        val byWindow = log.allOn()
             .filter { it.matched > 1e-9 }
             .groupBy { it.windowStart }
 
@@ -117,6 +123,8 @@ object EventStats {
     }
 
     /** Everything the session has made, by the same arithmetic. */
-    fun sessionPnl(nowSec: Long = Clock.nowSec()): Double =
-        recent(limit = 500, nowSec = nowSec).sumOf { it.pnl }
+    fun sessionPnl(
+        nowSec: Long = Clock.nowSec(),
+        log: OrderLog.Book = OrderLog.of(),
+    ): Double = recent(limit = 500, nowSec = nowSec, log = log).sumOf { it.pnl }
 }

@@ -19,10 +19,10 @@ import org.junit.Test
 class OrderLogTest {
 
     @Before
-    fun reset() = OrderLog.clear()
+    fun reset() = OrderLog.of(0).clear()
 
     @After
-    fun tidy() = OrderLog.clear()
+    fun tidy() = OrderLog.of(0).clear()
 
     /** The window record() stamps an entry with when none is given. */
     private fun nowWindow(): Long {
@@ -37,7 +37,7 @@ class OrderLogTest {
         matched: Double = 0.0,
         auto: Boolean = false,
         orderId: String? = "o${(0..1_000_000).random()}",
-    ) = OrderLog.record(
+    ) = OrderLog.of(0).record(
         orderId = orderId,
         asset = "token-a",
         conditionId = "cond-a",
@@ -53,7 +53,7 @@ class OrderLogTest {
     @Test
     fun aTradeMarksTheOrderItFilled() {
         val entry = record("SELL", 0.77, 5.0)
-        OrderLog.applyTrade("token-a", "SELL", 0.77, 5.0, tick = 0.01)
+        OrderLog.of(0).applyTrade("token-a", "SELL", 0.77, 5.0, tick = 0.01)
 
         assertEquals(5.0, entry.matched, 1e-9)
         assertEquals("filled", entry.status)
@@ -62,7 +62,7 @@ class OrderLogTest {
     @Test
     fun aPartialTradeLeavesTheOrderWorking() {
         val entry = record("SELL", 0.77, 10.0)
-        OrderLog.applyTrade("token-a", "SELL", 0.77, 4.0, tick = 0.01)
+        OrderLog.of(0).applyTrade("token-a", "SELL", 0.77, 4.0, tick = 0.01)
 
         assertEquals(4.0, entry.matched, 1e-9)
         assertEquals("partial", entry.status)
@@ -73,7 +73,7 @@ class OrderLogTest {
         // The venue never pays a seller less than they asked; anything above is
         // an improvement, and the order it improved on is this one.
         val entry = record("SELL", 0.77, 5.0)
-        OrderLog.applyTrade("token-a", "SELL", 0.93, 5.0, tick = 0.01)
+        OrderLog.of(0).applyTrade("token-a", "SELL", 0.93, 5.0, tick = 0.01)
 
         assertEquals(5.0, entry.matched, 1e-9)
         assertEquals(0.93, entry.realPrice, 1e-9)
@@ -82,7 +82,7 @@ class OrderLogTest {
     @Test
     fun aSellFilledBelowItsAskIsNotThisOrder() {
         val entry = record("SELL", 0.77, 5.0)
-        OrderLog.applyTrade("token-a", "SELL", 0.60, 5.0, tick = 0.01)
+        OrderLog.of(0).applyTrade("token-a", "SELL", 0.60, 5.0, tick = 0.01)
 
         assertEquals(0.0, entry.matched, 1e-9)
         assertEquals("resting", entry.status)
@@ -91,7 +91,7 @@ class OrderLogTest {
     @Test
     fun aBuyTradeDoesNotFillASell() {
         val entry = record("SELL", 0.77, 5.0)
-        OrderLog.applyTrade("token-a", "BUY", 0.77, 5.0, tick = 0.01)
+        OrderLog.of(0).applyTrade("token-a", "BUY", 0.77, 5.0, tick = 0.01)
         assertEquals(0.0, entry.matched, 1e-9)
     }
 
@@ -99,7 +99,7 @@ class OrderLogTest {
     fun volumeSpillsOntoTheNextOrderAtTheSamePrice() {
         val first = record("SELL", 0.77, 5.0)
         val second = record("SELL", 0.77, 5.0)
-        OrderLog.applyTrade("token-a", "SELL", 0.77, 8.0, tick = 0.01)
+        OrderLog.of(0).applyTrade("token-a", "SELL", 0.77, 8.0, tick = 0.01)
 
         assertEquals(5.0, first.matched, 1e-9)
         assertEquals(3.0, second.matched, 1e-9)
@@ -109,7 +109,7 @@ class OrderLogTest {
     fun aTradeWithNoOrderOfOursIsHarmless() {
         // Sold from the Polymarket app: nothing here to mark, and the buy-back
         // works off the trade itself rather than off this.
-        OrderLog.applyTrade("token-z", "SELL", 0.77, 5.0, tick = 0.01)
+        OrderLog.of(0).applyTrade("token-z", "SELL", 0.77, 5.0, tick = 0.01)
     }
 
     @Test
@@ -117,7 +117,7 @@ class OrderLogTest {
         val entry = record("SELL", 0.97, 5.0, orderId = "gone")
         // The venue answers nothing, which is what a fill and a cancel both
         // look like. Guessing "cancelled" is what killed the buy-back.
-        OrderLog.reconcile(emptyList()) { null }
+        OrderLog.of(0).reconcile(emptyList()) { null }
 
         assertEquals("resting", entry.status)
     }
@@ -125,7 +125,7 @@ class OrderLogTest {
     @Test
     fun aVenueAnswerIsStillBelieved() {
         val entry = record("SELL", 0.97, 5.0, orderId = "gone")
-        OrderLog.reconcile(emptyList()) {
+        OrderLog.of(0).reconcile(emptyList()) {
             ClobApi.OpenOrder(
                 id = "gone",
                 status = "matched",
@@ -153,7 +153,7 @@ class OrderLogTest {
     @Test
     fun anOrderTheVenueCallsLiveStaysWorking() {
         val entry = record("BUY", 0.44, 7.0, orderId = "fresh")
-        OrderLog.reconcile(emptyList()) { venue("fresh", "LIVE", "BUY", 0.44, 7.0, 0.0) }
+        OrderLog.of(0).reconcile(emptyList()) { venue("fresh", "LIVE", "BUY", 0.44, 7.0, 0.0) }
 
         assertEquals("resting", entry.status)
     }
@@ -162,7 +162,7 @@ class OrderLogTest {
     fun theDelayedAndUnmatchedWordsAreAlsoOnTheBook() {
         val delayed = record("BUY", 0.44, 7.0, orderId = "d")
         val unmatched = record("SELL", 0.88, 7.0, orderId = "u")
-        OrderLog.reconcile(emptyList()) { id ->
+        OrderLog.of(0).reconcile(emptyList()) { id ->
             when (id) {
                 "d" -> venue("d", "DELAYED", "BUY", 0.44, 7.0, 0.0)
                 else -> venue("u", "UNMATCHED", "SELL", 0.88, 7.0, 0.0)
@@ -176,7 +176,7 @@ class OrderLogTest {
     @Test
     fun anOrderTheVenueSaysWasPulledIsCancelled() {
         val entry = record("BUY", 0.44, 7.0, orderId = "x")
-        OrderLog.reconcile(emptyList()) { venue("x", "CANCELED", "BUY", 0.44, 7.0, 0.0) }
+        OrderLog.of(0).reconcile(emptyList()) { venue("x", "CANCELED", "BUY", 0.44, 7.0, 0.0) }
 
         assertEquals("cancelled", entry.status)
     }
@@ -185,7 +185,7 @@ class OrderLogTest {
     @Test
     fun aPartlyFilledCancelKeepsItsShares() {
         val entry = record("BUY", 0.44, 7.0, orderId = "x")
-        OrderLog.reconcile(emptyList()) { venue("x", "CANCELED", "BUY", 0.44, 7.0, 3.0) }
+        OrderLog.of(0).reconcile(emptyList()) { venue("x", "CANCELED", "BUY", 0.44, 7.0, 3.0) }
 
         assertEquals("filled", entry.status)
         assertEquals(3.0, entry.matched, 1e-9)
@@ -201,7 +201,7 @@ class OrderLogTest {
         val entry = record("BUY", 0.44, 7.0, orderId = "back")
         entry.status = "cancelled"
 
-        OrderLog.reconcile(listOf(venue("back", "LIVE", "BUY", 0.44, 7.0, 0.0))) { null }
+        OrderLog.of(0).reconcile(listOf(venue("back", "LIVE", "BUY", 0.44, 7.0, 0.0))) { null }
 
         assertEquals("resting", entry.status)
     }
@@ -210,10 +210,10 @@ class OrderLogTest {
     @Test
     fun matchedVolumeNeverGoesBackwards() {
         val entry = record("SELL", 0.88, 7.0, orderId = "s")
-        OrderLog.applyTrade("token-a", "SELL", 0.88, 7.0, tick = 0.01)
+        OrderLog.of(0).applyTrade("token-a", "SELL", 0.88, 7.0, tick = 0.01)
         assertEquals(7.0, entry.matched, 1e-9)
 
-        OrderLog.reconcile(listOf(venue("s", "LIVE", "SELL", 0.88, 7.0, 0.0))) { null }
+        OrderLog.of(0).reconcile(listOf(venue("s", "LIVE", "SELL", 0.88, 7.0, 0.0))) { null }
 
         assertEquals(7.0, entry.matched, 1e-9)
     }
@@ -248,7 +248,7 @@ class OrderLogTest {
     fun whatIsHeldIsCountedAtWhatItCost() {
         record("BUY", 0.50, 10.0, matched = 10.0)
 
-        assertEquals(5.0, OrderLog.heldCost(0L), 1e-9)
+        assertEquals(5.0, OrderLog.of(0).heldCost(0L), 1e-9)
     }
 
     @Test
@@ -256,7 +256,7 @@ class OrderLogTest {
         record("BUY", 0.50, 10.0, matched = 10.0)
         record("SELL", 0.80, 10.0, matched = 10.0)
 
-        assertEquals(0.0, OrderLog.heldCost(0L), 1e-9)
+        assertEquals(0.0, OrderLog.of(0).heldCost(0L), 1e-9)
     }
 
     /** A resting sell has sold nothing, so the shares under it are still held. */
@@ -265,13 +265,13 @@ class OrderLogTest {
         record("BUY", 0.50, 10.0, matched = 10.0)
         record("SELL", 0.80, 10.0, matched = 0.0)
 
-        assertEquals(5.0, OrderLog.heldCost(0L), 1e-9)
+        assertEquals(5.0, OrderLog.of(0).heldCost(0L), 1e-9)
     }
 
     /** And a window old enough to have paid out is cash again, not a holding. */
     @Test
     fun anOldWindowDropsOutOfTheHolding() {
-        OrderLog.record(
+        OrderLog.of(0).record(
             orderId = "old",
             asset = "token-old",
             conditionId = "cond-old",
@@ -284,8 +284,8 @@ class OrderLogTest {
             windowStart = 1_000L,
         )
 
-        assertEquals(5.0, OrderLog.heldCost(1_000L), 1e-9)
-        assertEquals(0.0, OrderLog.heldCost(1_000L + WINDOW_SECONDS), 1e-9)
+        assertEquals(5.0, OrderLog.of(0).heldCost(1_000L), 1e-9)
+        assertEquals(0.0, OrderLog.of(0).heldCost(1_000L + WINDOW_SECONDS), 1e-9)
     }
 
     @Test
@@ -293,7 +293,7 @@ class OrderLogTest {
         val window = System.currentTimeMillis() / 1000 - (System.currentTimeMillis() / 1000) % WINDOW_SECONDS
         record("SELL", 0.97, 5.0, matched = 0.0)
 
-        assertTrue(OrderLog.hasWorkingSells(window))
+        assertTrue(OrderLog.of(0).hasWorkingSells(window))
     }
 
     @Test
@@ -302,7 +302,7 @@ class OrderLogTest {
         val entry = record("SELL", 0.97, 5.0, matched = 0.0)
         entry.status = "filled"
 
-        assertFalse(OrderLog.hasWorkingSells(window))
+        assertFalse(OrderLog.of(0).hasWorkingSells(window))
     }
 
     @Test
@@ -313,9 +313,9 @@ class OrderLogTest {
 
         // The position it will become still has to be covered by a sell, and
         // nothing else in the loop knows the fill is coming.
-        assertTrue(OrderLog.hasWorkingBuys(window))
-        assertTrue(OrderLog.hasWorkingBuy("token-a"))
-        assertFalse(OrderLog.hasWorkingBuy("token-b"))
+        assertTrue(OrderLog.of(0).hasWorkingBuys(window))
+        assertTrue(OrderLog.of(0).hasWorkingBuy("token-a"))
+        assertFalse(OrderLog.of(0).hasWorkingBuy("token-b"))
     }
 
     @Test
@@ -325,8 +325,8 @@ class OrderLogTest {
         val entry = record("BUY", 0.42, 5.0, matched = 5.0)
         entry.status = "filled"
 
-        assertFalse(OrderLog.hasWorkingBuys(window))
-        assertFalse(OrderLog.hasWorkingBuy("token-a"))
+        assertFalse(OrderLog.of(0).hasWorkingBuys(window))
+        assertFalse(OrderLog.of(0).hasWorkingBuy("token-a"))
     }
 
     @Test
@@ -334,7 +334,7 @@ class OrderLogTest {
         record("SELL", 0.72, 5.0, matched = 0.0)
 
         // Same outcome, but nothing here was placed at this price.
-        val left = OrderLog.applyTrade("token-a", "SELL", 0.40, 5.0, tick = 0.01)
+        val left = OrderLog.of(0).applyTrade("token-a", "SELL", 0.40, 5.0, tick = 0.01)
 
         assertEquals(5.0, left, 1e-9)
     }
@@ -343,17 +343,17 @@ class OrderLogTest {
     fun aTradeBooksAgainstTheOrderItBelongsTo() {
         record("SELL", 0.72, 5.0, matched = 0.0)
 
-        val left = OrderLog.applyTrade("token-a", "SELL", 0.72, 5.0, tick = 0.01)
+        val left = OrderLog.of(0).applyTrade("token-a", "SELL", 0.72, 5.0, tick = 0.01)
 
         assertEquals(0.0, left, 1e-9)
-        assertEquals("filled", OrderLog.all().first().status)
+        assertEquals("filled", OrderLog.of(0).all().first().status)
     }
 
     @Test
     fun aFillWithNoOrderIsFiledAsWhatItIs() {
         // Sold in the Polymarket app, or placed before this process started:
         // it happened, so the panel and the profit have to know about it.
-        val entry = OrderLog.recordFill(
+        val entry = OrderLog.of(0).recordFill(
             asset = "token-a",
             conditionId = "cond-a",
             outcome = "Down",
@@ -367,15 +367,15 @@ class OrderLogTest {
         assertEquals("filled", entry.status)
         assertEquals(5.0, entry.matched, 1e-9)
         assertFalse(entry.auto)
-        assertTrue(OrderLog.all().contains(entry))
+        assertTrue(OrderLog.of(0).all().contains(entry))
     }
 
     @Test
     fun aFilledSaleFromOutsideCoversTheLotItSold() {
         record("BUY", 0.23, 5.0, matched = 5.0)
-        assertTrue(OrderLog.hasUncovered(nowWindow()))
+        assertTrue(OrderLog.of(0).hasUncovered(nowWindow()))
 
-        OrderLog.recordFill(
+        OrderLog.of(0).recordFill(
             asset = "token-a",
             conditionId = "cond-a",
             outcome = "Down",
@@ -386,7 +386,7 @@ class OrderLogTest {
             at = System.currentTimeMillis(),
         )
 
-        assertFalse(OrderLog.hasUncovered(nowWindow()))
+        assertFalse(OrderLog.of(0).hasUncovered(nowWindow()))
     }
 
     @Test
@@ -395,7 +395,7 @@ class OrderLogTest {
         record("BUY", 0.52, 5.0, matched = 5.0)
         record("BUY", 0.49, 5.0, matched = 5.0)
 
-        val lots = OrderLog.uncoveredLots("token-a")
+        val lots = OrderLog.of(0).uncoveredLots("token-a")
 
         // Not one position at 44⅓¢ — three purchases, oldest first.
         assertEquals(3, lots.size)
@@ -410,7 +410,7 @@ class OrderLogTest {
         record("BUY", 0.52, 5.0, matched = 5.0)
         record("SELL", 0.41, 5.0, matched = 5.0)
 
-        val lots = OrderLog.uncoveredLots("token-a")
+        val lots = OrderLog.of(0).uncoveredLots("token-a")
 
         assertEquals(1, lots.size)
         assertEquals(0.52, lots[0].price, 1e-9)
@@ -423,7 +423,7 @@ class OrderLogTest {
         // Resting, nothing matched: those shares have an exit arranged.
         record("SELL", 0.41, 5.0, matched = 0.0)
 
-        val lots = OrderLog.uncoveredLots("token-a")
+        val lots = OrderLog.of(0).uncoveredLots("token-a")
 
         assertEquals(1, lots.size)
         assertEquals(0.52, lots[0].price, 1e-9)
@@ -435,7 +435,7 @@ class OrderLogTest {
         val sell = record("SELL", 0.41, 5.0, matched = 0.0)
         sell.status = "cancelled"
 
-        assertEquals(1, OrderLog.uncoveredLots("token-a").size)
+        assertEquals(1, OrderLog.of(0).uncoveredLots("token-a").size)
     }
 
     @Test
@@ -444,7 +444,7 @@ class OrderLogTest {
         record("BUY", 0.52, 5.0, matched = 5.0)
         record("SELL", 0.60, 8.0, matched = 8.0)
 
-        val lots = OrderLog.uncoveredLots("token-a")
+        val lots = OrderLog.of(0).uncoveredLots("token-a")
 
         assertEquals(1, lots.size)
         assertEquals(2.0, lots[0].shares, 1e-9)
@@ -455,7 +455,7 @@ class OrderLogTest {
     fun anotherOutcomeIsNotThisOnesBusiness() {
         record("BUY", 0.32, 5.0, matched = 5.0)
 
-        assertTrue(OrderLog.uncoveredLots("token-b").isEmpty())
+        assertTrue(OrderLog.of(0).uncoveredLots("token-b").isEmpty())
     }
 
     @Test
@@ -466,8 +466,8 @@ class OrderLogTest {
         // Covered, so nothing is uncovered — and that is exactly why the sweep
         // stopped looking, and why a floor that came into force afterwards
         // never reached the 67¢ offer sitting under it.
-        assertFalse(OrderLog.hasUncovered(nowWindow()))
-        assertTrue(OrderLog.workingAssets("SELL", nowWindow()).contains("token-a"))
+        assertFalse(OrderLog.of(0).hasUncovered(nowWindow()))
+        assertTrue(OrderLog.of(0).workingAssets("SELL", nowWindow()).contains("token-a"))
     }
 
     @Test
@@ -475,15 +475,15 @@ class OrderLogTest {
         val sell = record("SELL", 0.67, 5.0, matched = 5.0)
         sell.status = "filled"
 
-        assertTrue(OrderLog.workingAssets("SELL", nowWindow()).isEmpty())
+        assertTrue(OrderLog.of(0).workingAssets("SELL", nowWindow()).isEmpty())
     }
 
     @Test
     fun aBoughtLotWithNoSellIsUncovered() {
         record("BUY", 0.43, 5.0, matched = 5.0)
 
-        assertEquals(5.0, OrderLog.uncovered(nowWindow())["token-a"]!!, 1e-9)
-        assertTrue(OrderLog.hasUncovered(nowWindow()))
+        assertEquals(5.0, OrderLog.of(0).uncovered(nowWindow())["token-a"]!!, 1e-9)
+        assertTrue(OrderLog.of(0).hasUncovered(nowWindow()))
     }
 
     @Test
@@ -492,7 +492,7 @@ class OrderLogTest {
         record("SELL", 0.72, 5.0, matched = 0.0)
 
         // The exit is arranged even though no money has moved yet.
-        assertFalse(OrderLog.hasUncovered(nowWindow()))
+        assertFalse(OrderLog.of(0).hasUncovered(nowWindow()))
     }
 
     @Test
@@ -501,7 +501,7 @@ class OrderLogTest {
         val sell = record("SELL", 0.72, 5.0, matched = 5.0)
         sell.status = "filled"
 
-        assertFalse(OrderLog.hasUncovered(nowWindow()))
+        assertFalse(OrderLog.of(0).hasUncovered(nowWindow()))
     }
 
     @Test
@@ -510,7 +510,7 @@ class OrderLogTest {
         val sell = record("SELL", 0.72, 5.0, matched = 0.0)
         sell.status = "cancelled"
 
-        assertEquals(5.0, OrderLog.uncovered(nowWindow())["token-a"]!!, 1e-9)
+        assertEquals(5.0, OrderLog.of(0).uncovered(nowWindow())["token-a"]!!, 1e-9)
     }
 
     @Test
@@ -518,14 +518,14 @@ class OrderLogTest {
         record("BUY", 0.43, 10.0, matched = 10.0)
         record("SELL", 0.72, 4.0, matched = 0.0)
 
-        assertEquals(6.0, OrderLog.uncovered(nowWindow())["token-a"]!!, 1e-9)
+        assertEquals(6.0, OrderLog.of(0).uncovered(nowWindow())["token-a"]!!, 1e-9)
     }
 
     @Test
     fun aBuyThatNeverFilledIsNotAPosition() {
         record("BUY", 0.43, 5.0, matched = 0.0)
 
-        assertFalse(OrderLog.hasUncovered(nowWindow()))
+        assertFalse(OrderLog.of(0).hasUncovered(nowWindow()))
     }
 
     @Test
@@ -533,17 +533,17 @@ class OrderLogTest {
         val entry = record("BUY", 0.43, 5.0, matched = 5.0)
 
         // Two windows on, the market has settled and there is nothing to sell.
-        assertFalse(OrderLog.hasUncovered(entry.windowStart + WINDOW_SECONDS * 2))
+        assertFalse(OrderLog.of(0).hasUncovered(entry.windowStart + WINDOW_SECONDS * 2))
     }
 
     @Test
     fun ordersFromClosedWindowsAreLetGo() {
         val entry = record("SELL", 0.97, 5.0, matched = 0.0)
         // Two windows on, its market has closed and nothing more will happen.
-        assertFalse(OrderLog.hasWorkingSells(entry.windowStart + WINDOW_SECONDS * 2))
+        assertFalse(OrderLog.of(0).hasWorkingSells(entry.windowStart + WINDOW_SECONDS * 2))
     }
 
-    private fun buy(size: Double, asset: String = "token-a") = OrderLog.record(
+    private fun buy(size: Double, asset: String = "token-a") = OrderLog.of(0).record(
         orderId = "b$size$asset",
         asset = asset,
         conditionId = "cond-a",
@@ -559,7 +559,7 @@ class OrderLogTest {
     @Test
     fun threeLotsOfFiveGiveAClipOfFive() {
         repeat(3) { buy(5.0) }
-        assertEquals(5.0, OrderLog.buyLotFor("token-a")!!, 1e-9)
+        assertEquals(5.0, OrderLog.of(0).buyLotFor("token-a")!!, 1e-9)
     }
 
     @Test
@@ -567,20 +567,20 @@ class OrderLogTest {
         buy(15.0)
         buy(5.0)
         // Mixed sizes: the smallest is the one that keeps the buy-back gradual.
-        assertEquals(5.0, OrderLog.buyLotFor("token-a")!!, 1e-9)
+        assertEquals(5.0, OrderLog.of(0).buyLotFor("token-a")!!, 1e-9)
     }
 
     @Test
     fun clipsAreKeptPerOutcome() {
         buy(5.0, "token-a")
         buy(20.0, "token-b")
-        assertEquals(5.0, OrderLog.buyLotFor("token-a")!!, 1e-9)
-        assertEquals(20.0, OrderLog.buyLotFor("token-b")!!, 1e-9)
+        assertEquals(5.0, OrderLog.of(0).buyLotFor("token-a")!!, 1e-9)
+        assertEquals(20.0, OrderLog.of(0).buyLotFor("token-b")!!, 1e-9)
     }
 
     @Test
     fun aSellIsNotABuyClip() {
-        OrderLog.record(
+        OrderLog.of(0).record(
             orderId = "s1",
             asset = "token-a",
             conditionId = "cond-a",
@@ -592,12 +592,12 @@ class OrderLogTest {
             auto = false,
             windowStart = 0L,
         )
-        assertNull(OrderLog.buyLotFor("token-a"))
+        assertNull(OrderLog.of(0).buyLotFor("token-a"))
     }
 
     @Test
     fun nothingBoughtMeansNoClipToCopy() {
-        assertNull(OrderLog.buyLotFor("never-seen"))
+        assertNull(OrderLog.of(0).buyLotFor("never-seen"))
     }
 }
 
@@ -611,16 +611,16 @@ class OrderLogTest {
 class OrderWindowTest {
 
     @Before
-    fun reset() = OrderLog.clear()
+    fun reset() = OrderLog.of(0).clear()
 
     @After
-    fun tidy() = OrderLog.clear()
+    fun tidy() = OrderLog.of(0).clear()
 
     private val now = System.currentTimeMillis() / 1000
     private val current = now - now % WINDOW_SECONDS
     private val next = current + WINDOW_SECONDS
 
-    private fun place(windowStart: Long) = OrderLog.record(
+    private fun place(windowStart: Long) = OrderLog.of(0).record(
         orderId = "o$windowStart",
         asset = "token-a",
         conditionId = "cond-a",
@@ -636,27 +636,27 @@ class OrderWindowTest {
     @Test
     fun anOrderForTheNextWindowIsFiledUnderIt() {
         place(next)
-        assertTrue(OrderLog.forWindow(next).isNotEmpty())
-        assertTrue(OrderLog.forWindow(current).isEmpty())
+        assertTrue(OrderLog.of(0).forWindow(next).isNotEmpty())
+        assertTrue(OrderLog.of(0).forWindow(current).isEmpty())
     }
 
     @Test
     fun itIsStillThereOnceThatWindowBegins() {
         place(next)
         // The clock moves on; the order does not move with it.
-        assertEquals(1, OrderLog.forWindow(next).size)
+        assertEquals(1, OrderLog.of(0).forWindow(next).size)
     }
 
     @Test
     fun withoutAMarketItFallsBackToTheClock() {
         place(0L)
-        assertEquals(1, OrderLog.forWindow(current).size)
+        assertEquals(1, OrderLog.of(0).forWindow(current).size)
     }
 
     @Test
     fun aPreOpenSellStillKeepsTheRuleAwake() {
         place(next)
-        assertTrue(OrderLog.hasWorkingSells(current))
+        assertTrue(OrderLog.of(0).hasWorkingSells(current))
     }
 
     /**
@@ -666,7 +666,7 @@ class OrderWindowTest {
      */
     @Test
     fun aLotIsWorthWhatItActuallyCost() {
-        OrderLog.record(
+        OrderLog.of(0).record(
             orderId = "a",
             asset = "up",
             conditionId = "c",
@@ -680,7 +680,7 @@ class OrderWindowTest {
             windowStart = 1_000,
         )
 
-        val lot = OrderLog.uncoveredLots("up").single()
+        val lot = OrderLog.of(0).uncoveredLots("up").single()
         assertEquals(5.0, lot.shares, 1e-9)
         assertEquals(0.785, lot.price, 1e-9)
     }
@@ -688,7 +688,7 @@ class OrderWindowTest {
     /** With nothing traded there is nothing better than the price asked for. */
     @Test
     fun anUnfilledOrderKeepsItsAskingPrice() {
-        OrderLog.record(
+        OrderLog.of(0).record(
             orderId = "a",
             asset = "up",
             conditionId = "c",
@@ -701,7 +701,7 @@ class OrderWindowTest {
             windowStart = 1_000,
         )
 
-        assertEquals(0.4, OrderLog.uncoveredLots("up").single().price, 1e-9)
+        assertEquals(0.4, OrderLog.of(0).uncoveredLots("up").single().price, 1e-9)
     }
 
     /**
@@ -710,7 +710,7 @@ class OrderWindowTest {
      */
     @Test
     fun aLaterFillReweightsTheAverage() {
-        OrderLog.record(
+        OrderLog.of(0).record(
             orderId = "a",
             asset = "up",
             conditionId = "c",
@@ -724,10 +724,10 @@ class OrderWindowTest {
             windowStart = 1_000,
         )
 
-        OrderLog.applyTrade("up", "BUY", price = 0.40, size = 5.0, tick = 0.11)
+        OrderLog.of(0).applyTrade("up", "BUY", price = 0.40, size = 5.0, tick = 0.11)
 
         // Five at fifty and five at forty is ten at forty-five.
-        assertEquals(0.45, OrderLog.uncoveredLots("up").single().price, 1e-9)
+        assertEquals(0.45, OrderLog.of(0).uncoveredLots("up").single().price, 1e-9)
     }
 
     /**
@@ -736,7 +736,7 @@ class OrderWindowTest {
      */
     @Test
     fun aHandSetPriceIsToldApartFromTheRulesOwn() {
-        OrderLog.record(
+        OrderLog.of(0).record(
             orderId = "mine",
             asset = "up",
             conditionId = "c",
@@ -748,7 +748,7 @@ class OrderWindowTest {
             auto = false,
             windowStart = 1_000,
         )
-        OrderLog.record(
+        OrderLog.of(0).record(
             orderId = "rule",
             asset = "up",
             conditionId = "c",
@@ -761,17 +761,17 @@ class OrderWindowTest {
             windowStart = 1_000,
         )
 
-        assertTrue(OrderLog.byHand("mine"))
-        assertFalse(OrderLog.byHand("rule"))
-        assertFalse(OrderLog.byHand("never heard of it"))
+        assertTrue(OrderLog.of(0).byHand("mine"))
+        assertFalse(OrderLog.of(0).byHand("rule"))
+        assertFalse(OrderLog.of(0).byHand("never heard of it"))
 
         // And the question the sell rule actually asks, which is the other way
         // round: only an order it can see itself having placed is its own to
         // move. One from before the app was opened, or from the Polymarket
         // site, is somebody's decision and is left where it stands.
-        assertTrue(OrderLog.isAuto("rule"))
-        assertFalse(OrderLog.isAuto("mine"))
-        assertFalse(OrderLog.isAuto("never heard of it"))
+        assertTrue(OrderLog.of(0).isAuto("rule"))
+        assertFalse(OrderLog.of(0).isAuto("mine"))
+        assertFalse(OrderLog.of(0).isAuto("never heard of it"))
     }
 
     /**
@@ -782,7 +782,7 @@ class OrderWindowTest {
      */
     @Test
     fun anImprovedFillStillBelongsToItsOrder() {
-        OrderLog.record(
+        OrderLog.of(0).record(
             orderId = "s",
             asset = "down",
             conditionId = "c",
@@ -795,9 +795,9 @@ class OrderWindowTest {
             windowStart = 1_000,
         )
 
-        assertEquals(0.0, OrderLog.applyTrade("down", "SELL", 0.87, 23.0, 0.01), 1e-9)
+        assertEquals(0.0, OrderLog.of(0).applyTrade("down", "SELL", 0.87, 23.0, 0.01), 1e-9)
 
-        val entry = OrderLog.all().single()
+        val entry = OrderLog.of(0).all().single()
         assertEquals(23.0, entry.matched, 1e-9)
         assertEquals(0.87, entry.realPrice, 1e-9)
     }
@@ -805,7 +805,7 @@ class OrderWindowTest {
     /** And a buy pays at most its limit, so anything under it is its own. */
     @Test
     fun aBuyThatPaidLessKeepsThePriceItPaid() {
-        OrderLog.record(
+        OrderLog.of(0).record(
             orderId = "b",
             asset = "up",
             conditionId = "c",
@@ -818,14 +818,14 @@ class OrderWindowTest {
             windowStart = 1_000,
         )
 
-        OrderLog.applyTrade("up", "BUY", 0.78, 5.0, 0.01)
-        assertEquals(0.78, OrderLog.all().single().realPrice, 1e-9)
+        OrderLog.of(0).applyTrade("up", "BUY", 0.78, 5.0, 0.01)
+        assertEquals(0.78, OrderLog.of(0).all().single().realPrice, 1e-9)
     }
 
     /** A fill worse than the ask cannot have come from this order. */
     @Test
     fun aWorsePriceIsNotThisOrdersFill() {
-        OrderLog.record(
+        OrderLog.of(0).record(
             orderId = "b",
             asset = "up",
             conditionId = "c",
@@ -839,8 +839,8 @@ class OrderWindowTest {
         )
 
         // Nothing to take it, so it is left over for the caller to file.
-        assertEquals(5.0, OrderLog.applyTrade("up", "BUY", 0.55, 5.0, 0.01), 1e-9)
-        assertEquals(0.40, OrderLog.all().single().realPrice, 1e-9)
+        assertEquals(5.0, OrderLog.of(0).applyTrade("up", "BUY", 0.55, 5.0, 0.01), 1e-9)
+        assertEquals(0.40, OrderLog.of(0).all().single().realPrice, 1e-9)
     }
 
     /**
@@ -852,7 +852,7 @@ class OrderWindowTest {
      */
     @Test
     fun aTradeStillPricesSharesTheListingAlreadyCounted() {
-        val entry = OrderLog.record(
+        val entry = OrderLog.of(0).record(
             orderId = "s",
             asset = "down",
             conditionId = "c",
@@ -866,7 +866,7 @@ class OrderWindowTest {
         )
 
         // The open-orders listing gets there first.
-        OrderLog.reconcile(
+        OrderLog.of(0).reconcile(
             listOf(
                 ClobApi.OpenOrder(
                     id = "s",
@@ -885,16 +885,16 @@ class OrderWindowTest {
         assertEquals(0.85, entry.realPrice, 1e-9)
 
         // And the trade, when it arrives, is what says the price.
-        assertEquals(0.0, OrderLog.applyTrade("down", "SELL", 0.87, 23.0, 0.01), 1e-9)
+        assertEquals(0.0, OrderLog.of(0).applyTrade("down", "SELL", 0.87, 23.0, 0.01), 1e-9)
         assertEquals(0.87, entry.realPrice, 1e-9)
-        assertEquals(1, OrderLog.all().size)
+        assertEquals(1, OrderLog.of(0).all().size)
     }
 
     /** Several orders of a side: the venue fills the most aggressive first. */
     @Test
     fun aFillGoesToTheOrderThatWouldHaveMadeIt() {
         for ((id, price) in listOf("dear" to 0.53, "cheap" to 0.46)) {
-            OrderLog.record(
+            OrderLog.of(0).record(
                 orderId = id,
                 asset = "up",
                 conditionId = "c",
@@ -908,10 +908,10 @@ class OrderWindowTest {
             )
         }
 
-        OrderLog.applyTrade("up", "BUY", 0.51, 12.0, 0.01)
+        OrderLog.of(0).applyTrade("up", "BUY", 0.51, 12.0, 0.01)
 
-        val dear = OrderLog.all().single { it.orderId == "dear" }
-        val cheap = OrderLog.all().single { it.orderId == "cheap" }
+        val dear = OrderLog.of(0).all().single { it.orderId == "dear" }
+        val cheap = OrderLog.of(0).all().single { it.orderId == "cheap" }
         assertEquals(12.0, dear.matched, 1e-9)
         assertEquals(0.51, dear.realPrice, 1e-9)
         assertEquals(0.0, cheap.matched, 1e-9)

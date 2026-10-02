@@ -42,6 +42,54 @@ body {
   padding-top: var(--safe-top);
 }
 
+/*
+  Which wallet this is, said in colour rather than in words.
+
+  Two accounts trade at once and a swipe moves between them, so the one thing
+  the screen must never let happen is a trade going to the wallet you thought
+  you had left. A name in a corner does not stop that — it is read when you look
+  for it, which is not when the mistake is made. A band down both edges is seen
+  without looking, and it is the whole screen rather than a part of it, so there
+  is nowhere to be while missing it.
+*/
+.app.framed {
+  border-left: 3px solid var(--wallet, transparent);
+  border-right: 3px solid var(--wallet, transparent);
+}
+
+/*
+  And the names, once there is more than one connected.
+
+  For the second afterwards, when you want to know which rather than to be
+  stopped. It only appears with two wallets in play; with one there is nothing
+  to be confused with and a strip saying so would be a row of screen spent on
+  it.
+*/
+.walletstrip {
+  display: flex;
+  gap: 6px;
+  padding: 4px 14px 0;
+}
+
+.walletstrip button {
+  flex: 1 1 0;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.walletstrip button.on {
+  border-color: var(--wallet, var(--accent));
+  color: var(--wallet, var(--accent));
+  background: transparent;
+}
+
 .scroll {
   flex: 1;
   overflow-y: auto;

@@ -33,8 +33,21 @@ object KeyVault {
     private const val KEY_IV = "iv"
     private const val GCM_TAG_BITS = 128
 
+    /*
+      One sealing key, several sealed keys.
+
+      The keystore entry is the app's, not a wallet's: it is what makes the
+      ciphertext unreadable off the device, and a second entry would buy nothing
+      a second slot in the same preferences file does not. So the alias stays
+      one and the stored ciphertext is per slot — and slot zero keeps the
+      unsuffixed names it was written under, so an upgrade still finds its key.
+    */
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    private fun cipherKey(slot: Int) = KEY_CIPHERTEXT + Wallets.suffix(slot)
+
+    private fun ivKey(slot: Int) = KEY_IV + Wallets.suffix(slot)
 
     private fun secretKey(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -64,14 +77,14 @@ object KeyVault {
         }
     }
 
-    fun store(context: Context, privateKey: String) {
+    fun store(context: Context, privateKey: String, slot: Int = Wallets.current) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
         val sealed = cipher.doFinal(privateKey.toByteArray(Charsets.UTF_8))
 
         prefs(context).edit()
-            .putString(KEY_CIPHERTEXT, Base64.encodeToString(sealed, Base64.NO_WRAP))
-            .putString(KEY_IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+            .putString(cipherKey(slot), Base64.encodeToString(sealed, Base64.NO_WRAP))
+            .putString(ivKey(slot), Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
             .apply()
     }
 
@@ -81,10 +94,10 @@ object KeyVault {
      * some devices, and a reinstall always loses it. Either way the honest
      * answer is that the key is gone and has to be entered again.
      */
-    fun load(context: Context): String? {
+    fun load(context: Context, slot: Int = Wallets.current): String? {
         val prefs = prefs(context)
-        val sealed = prefs.getString(KEY_CIPHERTEXT, null) ?: return null
-        val iv = prefs.getString(KEY_IV, null) ?: return null
+        val sealed = prefs.getString(cipherKey(slot), null) ?: return null
+        val iv = prefs.getString(ivKey(slot), null) ?: return null
 
         return try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -99,8 +112,20 @@ object KeyVault {
         }
     }
 
-    fun clear(context: Context) {
-        prefs(context).edit().clear().apply()
+    /**
+     * Forget one wallet's key.
+     *
+     * The keystore entry goes only when the last of them does: it is what seals
+     * every slot, and deleting it to forget one would take the others with it.
+     */
+    fun clear(context: Context, slot: Int = Wallets.current) {
+        prefs(context).edit()
+            .remove(cipherKey(slot))
+            .remove(ivKey(slot))
+            .apply()
+        val anyLeft = (0 until Wallets.SLOTS)
+            .any { prefs(context).getString(cipherKey(it), null) != null }
+        if (anyLeft) return
         try {
             KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(ALIAS)
         } catch (e: Exception) {

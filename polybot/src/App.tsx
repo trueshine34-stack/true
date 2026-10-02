@@ -5,7 +5,7 @@ import {
   loadSavingsAddress,
   saveSavingsAddress,
 } from './core/storage';
-import { PolyBot } from './native/polybot';
+import { PolyBot, type WalletSlot } from './native/polybot';
 import { Manual } from './ui/Manual';
 import { SettingsScreen } from './ui/Settings';
 import { Setup } from './ui/Setup';
@@ -65,9 +65,32 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 }
 
 const STARTUP_MS = 12_000;
+
+/**
+ * How far sideways a swipe has to go to be a wallet switch.
+ *
+ * The desk is a tall scrolling column, so a gesture that triggered easily would
+ * change accounts every time the charts were read. Sixty pixels and mostly
+ * horizontal is a movement nobody makes by accident.
+ */
+const SWIPE_MIN = 60;
 export function App() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [account, setAccount] = useState<AccountConfig | null>(null);
+  /*
+    The wallets, and which one the screen is on.
+
+    Both trade at once — each has its own key, its own order log and its own
+    sell rule running in the service — so this is only about what is being
+    looked at. Which makes the frame colour the important part of it: the one
+    thing a second account must never do is let you act on it believing it was
+    the first, and a label is read when you go looking for it, which is not when
+    that mistake happens.
+  */
+  const [wallets, setWallets] = useState<WalletSlot[]>([]);
+  const [slot, setSlot] = useState(0);
+  /** The empty chair being filled, when a second wallet is being connected. */
+  const [filling, setFilling] = useState<number | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   /** USDT held off the venue, at the address profit is withdrawn to. */
   const [savings, setSavings] = useState(0);
@@ -367,10 +390,91 @@ export function App() {
   const remind = worth != null && shouldRemind(goal, worth);
   const progress = goal && worth != null ? goalProgress(goal, worth) : null;
 
-  const onSetupDone = useCallback((acct: AccountConfig) => {
-    setAccount(acct);
-    setPhase('ready');
+  /** Re-read the slots, which is how a connect or a rename becomes visible. */
+  const readWallets = useCallback(async () => {
+    const list = await PolyBot.walletList().catch(() => null);
+    if (!list) return;
+    setWallets(list.slots);
+    setSlot(list.current);
   }, []);
+
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    void readWallets();
+  }, [phase, readWallets]);
+
+  /**
+   * Move the screen to another wallet.
+   *
+   * The native side keeps both engines running; what has to happen here is the
+   * one thing it cannot do for us — a slot that has a key but has never been
+   * connected in this process has to be handed its key, or the desk would show
+   * an account that cannot sign.
+   */
+  const goToWallet = useCallback(
+    async (next: number) => {
+      if (next === slot || next < 0 || next >= wallets.length) return;
+      const target = wallets[next];
+      if (!target?.connected) {
+        // An empty chair is an invitation rather than a dead end.
+        await PolyBot.walletSelect({ slot: next }).catch(() => {});
+        setSlot(next);
+        setFilling(next);
+        return;
+      }
+      await PolyBot.walletSelect({ slot: next }).catch(() => {});
+      setSlot(next);
+      const acct = await loadAccount(next);
+      if (acct) setAccount(acct);
+      const vault = await PolyBot.vaultLoad({ slot: next }).catch(() => null);
+      if (vault?.privateKey && acct) {
+        await PolyBot.connect({
+          privateKey: vault.privateKey,
+          funderAddress: acct.funderAddress,
+          signatureType: Number(acct.signatureType),
+        }).catch(() => {});
+      }
+      void readWallets();
+    },
+    [slot, wallets, readWallets],
+  );
+
+  /*
+    A swipe moves between them.
+
+    Horizontal and decisive, or nothing: the desk is a tall scrolling column and
+    a gesture that competed with that would cost a wallet switch every time you
+    read the charts. So it has to be mostly sideways and long enough to be
+    meant.
+  */
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const onSwipeStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    swipe.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  }, []);
+  const onSwipeEnd = useCallback(
+    (e: React.TouchEvent) => {
+      const from = swipe.current;
+      swipe.current = null;
+      const touch = e.changedTouches[0];
+      if (!from || !touch) return;
+      const dx = touch.clientX - from.x;
+      const dy = touch.clientY - from.y;
+      if (Math.abs(dx) < SWIPE_MIN || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+      void goToWallet(slot + (dx < 0 ? 1 : -1));
+    },
+    [goToWallet, slot],
+  );
+
+  const onSetupDone = useCallback(
+    (acct: AccountConfig) => {
+      setAccount(acct);
+      setFilling(null);
+      setPhase('ready');
+      void readWallets();
+    },
+    [readWallets],
+  );
 
   const onForget = useCallback(() => {
     void PolyBot.stop().catch(() => {});
@@ -390,8 +494,57 @@ export function App() {
     return <Setup onDone={onSetupDone} />;
   }
 
+  /* The empty chair, being filled. The desk is still there behind it. */
+  if (filling != null) {
+    return (
+      <Setup
+        slot={filling}
+        onDone={onSetupDone}
+        onCancel={() => {
+          setFilling(null);
+          void goToWallet(0);
+        }}
+      />
+    );
+  }
+
+  const here = wallets[slot];
+
   return (
-    <div className="app">
+    <div
+      className={`app${wallets.length > 1 ? ' framed' : ''}`}
+      style={
+        here ? ({ ['--wallet']: here.accent } as React.CSSProperties) : undefined
+      }
+      onTouchStart={onSwipeStart}
+      onTouchEnd={onSwipeEnd}
+    >
+      {/*
+        Which account this is, where the frame already said it in colour.
+
+        The frame is what stops a trade going to the wrong wallet; this is for
+        the second afterwards, when you want the name rather than the hue. It is
+        only here at all once there is more than one, because with one wallet
+        there is nothing to be confused with.
+      */}
+      {wallets.filter((w) => w.connected).length > 1 && (
+        <div className="walletstrip">
+          {wallets.map((w) => (
+            <button
+              key={w.index}
+              className={w.index === slot ? 'on' : undefined}
+              style={
+                w.index === slot
+                  ? ({ ['--wallet']: w.accent } as React.CSSProperties)
+                  : undefined
+              }
+              onClick={() => void goToWallet(w.index)}
+            >
+              {w.name}
+            </button>
+          ))}
+        </div>
+      )}
       {showBalance && (
         <BalanceSheet
           history={balanceHistory}
@@ -518,6 +671,10 @@ export function App() {
             <SettingsScreen
               account={account}
               onForget={onForget}
+              wallets={wallets}
+              slot={slot}
+              onGoWallet={(next) => void goToWallet(next)}
+              onWalletsChanged={() => void readWallets()}
               dayLock={dayLock}
               onDayLock={(on) => {
                 setDayLock(on);

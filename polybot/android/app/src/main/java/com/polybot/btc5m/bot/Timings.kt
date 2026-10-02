@@ -41,20 +41,20 @@ object Timings {
     )
 
     /** How many timings to keep, and how few will do. */
-    private const val KEEP = 6
+    internal const val KEEP = 6
     const val MIN_SAMPLES = 2
 
     /** A measurement older than this is taken again rather than trusted. */
-    private const val FRESH_MS = 6 * 60 * 60 * 1000L
+    internal const val FRESH_MS = 6 * 60 * 60 * 1000L
 
     /**
      * An attempt that did not start this soon after the purchase is timing our
      * own hesitation, not the venue's lock, and is not recorded.
      */
-    private const val PROMPT_MS = 4_000L
+    internal const val PROMPT_MS = 4_000L
 
     /** Beyond this the lot belongs to some earlier window; not a measurement. */
-    private const val SANE_READY_MS = 3 * 60_000L
+    internal const val SANE_READY_MS = 3 * 60_000L
 
     /** Never sit on sellable shares longer than this, whatever was measured. */
     const val MAX_HOLD_MS = 25_000L
@@ -66,236 +66,260 @@ object Timings {
      * is already an upper bound, and every tenth of it is time the shares are
      * held without an exit arranged.
      */
-    private const val MARGIN_MS = 500L
+    internal const val MARGIN_MS = 500L
 
     /** How much of the expected proceeds must show up to call the money there. */
-    private const val COVER = 0.6
+    internal const val COVER = 0.6
 
     /** Give up on timing a sale that has not landed by then. */
-    private const val CASH_TIMEOUT_MS = 120_000L
+    internal const val CASH_TIMEOUT_MS = 120_000L
 
     /** Too small to pick out of a balance that moves for other reasons. */
-    private const val CASH_MIN_USD = 1.0
+    internal const val CASH_MIN_USD = 1.0
 
+    /*
+      One set of measurements per wallet.
+
+      What the venue takes to make shares sellable is about the venue, but what
+      is being timed is a particular purchase and a particular sale — so a cash
+      watch opened by one account would be answered by the other account's
+      balance moving, and the measure would be of nothing at all.
+    */
+    private val mine = java.util.concurrent.ConcurrentHashMap<Int, Clockwork>()
+
+    /**
+     * Where the measurements are kept, shared by every wallet.
+     *
+     * One file, because it is the app's storage rather than an account's; the
+     * keys inside it carry the slot, so what each wallet measured stays its own.
+     */
     @Volatile
     var store: Store? = null
         set(value) {
             field = value
-            load()
+            every().forEach { it.reload() }
         }
 
-    private val ready = ArrayList<Sample>()
-    private val cash = ArrayList<Sample>()
+    fun of(slot: Int = Wallets.current): Clockwork =
+        mine.getOrPut(slot) { Clockwork(slot).also { it.reload() } }
 
-    /** A purchase whose first sell attempt is being timed. */
-    private data class Chase(val lotAt: Long, val firstTryAt: Long, var refusals: Int)
+    fun every(): List<Clockwork> = mine.values.toList()
 
-    private val chases = HashMap<String, Chase>()
+    class Clockwork(private val slot: Int) {
 
-    /** A sale whose proceeds are being waited for. */
-    private data class CashWatch(val soldAt: Long, val expected: Double, val baseline: Double)
+        private val ready = ArrayList<Sample>()
+        private val cash = ArrayList<Sample>()
 
-    private var cashWatch: CashWatch? = null
+        /** A purchase whose first sell attempt is being timed. */
+        private data class Chase(val lotAt: Long, val firstTryAt: Long, var refusals: Int)
 
-    /** The most recent balance reading, whoever took it, and when. */
-    private var lastBalance: Double? = null
-    private var lastBalanceAt: Long = 0L
+        private val chases = HashMap<String, Chase>()
 
-    // ------------------------------------------------- buy -> sellable
+        /** A sale whose proceeds are being waited for. */
+        private data class CashWatch(val soldAt: Long, val expected: Double, val baseline: Double)
 
-    /**
-     * A sell for this purchase is about to be sent.
-     *
-     * The first such moment is what decides whether the purchase can be timed
-     * at all: only a chase that began right after the buy measures the venue.
-     */
-    @Synchronized
-    fun sellTried(asset: String, lotAt: Long, now: Long) {
-        if (asset.isEmpty() || lotAt <= 0L) return
-        val chase = chases[asset]
-        if (chase == null || chase.lotAt != lotAt) chases[asset] = Chase(lotAt, now, 0)
-    }
+        private var cashWatch: CashWatch? = null
 
-    /** The venue refused; the shares are still locked. */
-    @Synchronized
-    fun sellRefused(asset: String, lotAt: Long) {
-        chases[asset]?.takeIf { it.lotAt == lotAt }?.let { it.refusals += 1 }
-    }
+        /** The most recent balance reading, whoever took it, and when. */
+        private var lastBalance: Double? = null
+        private var lastBalanceAt: Long = 0L
 
-    /** The venue took the order: the shares became sellable at some point before now. */
-    @Synchronized
-    fun sellAccepted(asset: String, lotAt: Long, now: Long) {
-        val chase = chases.remove(asset) ?: return
-        if (chase.lotAt != lotAt || lotAt <= 0L) return
-        // Started late — this times our own wait, not the lock.
-        if (chase.firstTryAt - lotAt > PROMPT_MS) return
-        val ms = now - lotAt
-        if (ms < 0L || ms > SANE_READY_MS) return
-        add(ready, Sample(ms, now))
-        save()
-    }
+        // ------------------------------------------------- buy -> sellable
 
-    /** Forget a chase that came to nothing, so a stale one cannot be credited later. */
-    @Synchronized
-    fun sellDropped(asset: String) {
-        chases.remove(asset)
-    }
+        /**
+         * A sell for this purchase is about to be sent.
+         *
+         * The first such moment is what decides whether the purchase can be timed
+         * at all: only a chase that began right after the buy measures the venue.
+         */
+        @Synchronized
+        fun sellTried(asset: String, lotAt: Long, now: Long) {
+            if (asset.isEmpty() || lotAt <= 0L) return
+            val chase = chases[asset]
+            if (chase == null || chase.lotAt != lotAt) chases[asset] = Chase(lotAt, now, 0)
+        }
 
-    /** How long the shares stay locked, if that has been measured. */
-    @Synchronized
-    fun readyMs(): Long? = median(fresh(ready))
+        /** The venue refused; the shares are still locked. */
+        @Synchronized
+        fun sellRefused(asset: String, lotAt: Long) {
+            chases[asset]?.takeIf { it.lotAt == lotAt }?.let { it.refusals += 1 }
+        }
 
-    /** Samples behind the figure above. */
-    @Synchronized
-    fun readySamples(): Int = fresh(ready).size
-
-    /** Still short of a usable measurement, so the rule should keep trying blind. */
-    @Synchronized
-    fun measuring(): Boolean = fresh(ready).size < MIN_SAMPLES
-
-    /**
-     * How much longer to leave a purchase alone before offering it.
-     *
-     * Zero while nothing has been measured — trying at once and being refused
-     * is how the measurement gets taken in the first place.
-     */
-    @Synchronized
-    fun holdMs(lotAt: Long, now: Long): Long {
-        if (lotAt <= 0L) return 0L
-        val measured = median(fresh(ready)) ?: return 0L
-        val wait = minOf(measured + MARGIN_MS, MAX_HOLD_MS)
-        return (lotAt + wait - now).coerceAtLeast(0L)
-    }
-
-    // ------------------------------------------------- sell -> money
-
-    /**
-     * A sale filled: start timing when its proceeds turn up in the balance.
-     *
-     * Only worth starting when there is a balance reading from *before* the
-     * sale to measure against — without one there is no way to tell proceeds
-     * that just arrived from proceeds that arrived while nobody was looking.
-     */
-    @Synchronized
-    fun sellFilled(usd: Double, at: Long) {
-        if (usd < CASH_MIN_USD) return
-        if (!wantsCash()) return
-        if (cashWatch != null) return
-        val baseline = lastBalance ?: return
-        if (lastBalanceAt >= at) return
-        cashWatch = CashWatch(at, usd, baseline)
-    }
-
-    /** Is a sale still waiting to be seen in the balance? */
-    @Synchronized
-    fun cashPending(): Boolean = cashWatch != null
-
-    /** Nothing left to learn about the money; stop probing the balance. */
-    @Synchronized
-    fun wantsCash(): Boolean = fresh(cash).size < MIN_SAMPLES
-
-    /**
-     * A balance reading, from wherever. Doubles as the baseline for the next
-     * sale, which is why every reader hands one in and not only the probe.
-     *
-     * @return true when this reading completed a measurement.
-     */
-    @Synchronized
-    fun balanceRead(usd: Double, now: Long): Boolean {
-        lastBalance = usd
-        lastBalanceAt = now
-
-        val watch = cashWatch ?: return false
-        if (now <= watch.soldAt) return false
-        if (usd - watch.baseline >= watch.expected * COVER) {
-            add(cash, Sample(now - watch.soldAt, now))
-            cashWatch = null
+        /** The venue took the order: the shares became sellable at some point before now. */
+        @Synchronized
+        fun sellAccepted(asset: String, lotAt: Long, now: Long) {
+            val chase = chases.remove(asset) ?: return
+            if (chase.lotAt != lotAt || lotAt <= 0L) return
+            // Started late — this times our own wait, not the lock.
+            if (chase.firstTryAt - lotAt > PROMPT_MS) return
+            val ms = now - lotAt
+            if (ms < 0L || ms > SANE_READY_MS) return
+            add(ready, Sample(ms, now))
             save()
-            return true
         }
-        // A buy in the meantime can hide the proceeds as surely as a slow
-        // settlement can. Unmeasurable is not the same as slow, so it is
-        // dropped rather than recorded as a long wait.
-        if (now - watch.soldAt > CASH_TIMEOUT_MS) cashWatch = null
-        return false
-    }
 
-    /** How long money takes to become spendable, if that has been measured. */
-    @Synchronized
-    fun cashMs(): Long? = median(fresh(cash))
-
-    @Synchronized
-    fun cashSamples(): Int = fresh(cash).size
-
-    /** True when every timing kept is only an upper bound. */
-    @Synchronized
-    fun cashExact(): Boolean = fresh(cash).let { it.isNotEmpty() && it.any { s -> s.exact } }
-
-    // ------------------------------------------------- housekeeping
-
-    @Synchronized
-    fun reset() {
-        ready.clear()
-        cash.clear()
-        chases.clear()
-        cashWatch = null
-        lastBalance = null
-        lastBalanceAt = 0L
-    }
-
-    private fun add(list: ArrayList<Sample>, sample: Sample) {
-        list.add(sample)
-        while (list.size > KEEP) list.removeAt(0)
-    }
-
-    private fun fresh(list: List<Sample>): List<Sample> {
-        val now = System.currentTimeMillis()
-        return list.filter { now - it.at <= FRESH_MS }
-    }
-
-    /**
-     * The middle timing, not the mean: one refusal that dragged on because the
-     * exchange was busy should not move what every ordinary purchase waits.
-     */
-    private fun median(samples: List<Sample>): Long? {
-        if (samples.size < MIN_SAMPLES) return null
-        val sorted = samples.map { it.ms }.sorted()
-        val mid = sorted.size / 2
-        return if (sorted.size % 2 == 1) {
-            sorted[mid]
-        } else {
-            (sorted[mid - 1] + sorted[mid]) / 2
+        /** Forget a chase that came to nothing, so a stale one cannot be credited later. */
+        @Synchronized
+        fun sellDropped(asset: String) {
+            chases.remove(asset)
         }
-    }
 
-    private fun save() {
-        val store = store ?: return
-        store.write(KEY_READY, encode(ready))
-        store.write(KEY_CASH, encode(cash))
-    }
+        /** How long the shares stay locked, if that has been measured. */
+        @Synchronized
+        fun readyMs(): Long? = median(fresh(ready))
 
-    private fun load() {
-        val store = store ?: return
-        ready.clear()
-        ready.addAll(decode(store.read(KEY_READY)))
-        cash.clear()
-        cash.addAll(decode(store.read(KEY_CASH)))
-    }
+        /** Samples behind the figure above. */
+        @Synchronized
+        fun readySamples(): Int = fresh(ready).size
 
-    private const val KEY_READY = "readySamples"
-    private const val KEY_CASH = "cashSamples"
+        /** Still short of a usable measurement, so the rule should keep trying blind. */
+        @Synchronized
+        fun measuring(): Boolean = fresh(ready).size < MIN_SAMPLES
 
-    private fun encode(samples: List<Sample>): String =
-        samples.joinToString(",") { "${it.ms}:${it.at}:${if (it.exact) 1 else 0}" }
+        /**
+         * How much longer to leave a purchase alone before offering it.
+         *
+         * Zero while nothing has been measured — trying at once and being refused
+         * is how the measurement gets taken in the first place.
+         */
+        @Synchronized
+        fun holdMs(lotAt: Long, now: Long): Long {
+            if (lotAt <= 0L) return 0L
+            val measured = median(fresh(ready)) ?: return 0L
+            val wait = minOf(measured + MARGIN_MS, MAX_HOLD_MS)
+            return (lotAt + wait - now).coerceAtLeast(0L)
+        }
 
-    private fun decode(raw: String?): List<Sample> {
-        if (raw.isNullOrBlank()) return emptyList()
-        return raw.split(",").mapNotNull { part ->
-            val bits = part.split(":")
-            if (bits.size < 2) return@mapNotNull null
-            val ms = bits[0].toLongOrNull() ?: return@mapNotNull null
-            val at = bits[1].toLongOrNull() ?: return@mapNotNull null
-            Sample(ms, at, bits.getOrNull(2) != "0")
+        // ------------------------------------------------- sell -> money
+
+        /**
+         * A sale filled: start timing when its proceeds turn up in the balance.
+         *
+         * Only worth starting when there is a balance reading from *before* the
+         * sale to measure against — without one there is no way to tell proceeds
+         * that just arrived from proceeds that arrived while nobody was looking.
+         */
+        @Synchronized
+        fun sellFilled(usd: Double, at: Long) {
+            if (usd < CASH_MIN_USD) return
+            if (!wantsCash()) return
+            if (cashWatch != null) return
+            val baseline = lastBalance ?: return
+            if (lastBalanceAt >= at) return
+            cashWatch = CashWatch(at, usd, baseline)
+        }
+
+        /** Is a sale still waiting to be seen in the balance? */
+        @Synchronized
+        fun cashPending(): Boolean = cashWatch != null
+
+        /** Nothing left to learn about the money; stop probing the balance. */
+        @Synchronized
+        fun wantsCash(): Boolean = fresh(cash).size < MIN_SAMPLES
+
+        /**
+         * A balance reading, from wherever. Doubles as the baseline for the next
+         * sale, which is why every reader hands one in and not only the probe.
+         *
+         * @return true when this reading completed a measurement.
+         */
+        @Synchronized
+        fun balanceRead(usd: Double, now: Long): Boolean {
+            lastBalance = usd
+            lastBalanceAt = now
+
+            val watch = cashWatch ?: return false
+            if (now <= watch.soldAt) return false
+            if (usd - watch.baseline >= watch.expected * COVER) {
+                add(cash, Sample(now - watch.soldAt, now))
+                cashWatch = null
+                save()
+                return true
+            }
+            // A buy in the meantime can hide the proceeds as surely as a slow
+            // settlement can. Unmeasurable is not the same as slow, so it is
+            // dropped rather than recorded as a long wait.
+            if (now - watch.soldAt > CASH_TIMEOUT_MS) cashWatch = null
+            return false
+        }
+
+        /** How long money takes to become spendable, if that has been measured. */
+        @Synchronized
+        fun cashMs(): Long? = median(fresh(cash))
+
+        @Synchronized
+        fun cashSamples(): Int = fresh(cash).size
+
+        /** True when every timing kept is only an upper bound. */
+        @Synchronized
+        fun cashExact(): Boolean = fresh(cash).let { it.isNotEmpty() && it.any { s -> s.exact } }
+
+        // ------------------------------------------------- housekeeping
+
+        @Synchronized
+        fun reset() {
+            ready.clear()
+            cash.clear()
+            chases.clear()
+            cashWatch = null
+            lastBalance = null
+            lastBalanceAt = 0L
+        }
+
+        private fun add(list: ArrayList<Sample>, sample: Sample) {
+            list.add(sample)
+            while (list.size > KEEP) list.removeAt(0)
+        }
+
+        private fun fresh(list: List<Sample>): List<Sample> {
+            val now = System.currentTimeMillis()
+            return list.filter { now - it.at <= FRESH_MS }
+        }
+
+        /**
+         * The middle timing, not the mean: one refusal that dragged on because the
+         * exchange was busy should not move what every ordinary purchase waits.
+         */
+        private fun median(samples: List<Sample>): Long? {
+            if (samples.size < MIN_SAMPLES) return null
+            val sorted = samples.map { it.ms }.sorted()
+            val mid = sorted.size / 2
+            return if (sorted.size % 2 == 1) {
+                sorted[mid]
+            } else {
+                (sorted[mid - 1] + sorted[mid]) / 2
+            }
+        }
+
+        private fun save() {
+            val store = Timings.store ?: return
+            store.write(KEY_READY + Wallets.suffix(slot), encode(ready))
+            store.write(KEY_CASH + Wallets.suffix(slot), encode(cash))
+        }
+
+        fun reload() {
+            val store = Timings.store ?: return
+            ready.clear()
+            ready.addAll(decode(store.read(KEY_READY + Wallets.suffix(slot))))
+            cash.clear()
+            cash.addAll(decode(store.read(KEY_CASH + Wallets.suffix(slot))))
+        }
+
+        private val KEY_READY = "readySamples"
+        private val KEY_CASH = "cashSamples"
+
+        private fun encode(samples: List<Sample>): String =
+            samples.joinToString(",") { "${it.ms}:${it.at}:${if (it.exact) 1 else 0}" }
+
+        private fun decode(raw: String?): List<Sample> {
+            if (raw.isNullOrBlank()) return emptyList()
+            return raw.split(",").mapNotNull { part ->
+                val bits = part.split(":")
+                if (bits.size < 2) return@mapNotNull null
+                val ms = bits[0].toLongOrNull() ?: return@mapNotNull null
+                val at = bits[1].toLongOrNull() ?: return@mapNotNull null
+                Sample(ms, at, bits.getOrNull(2) != "0")
+            }
         }
     }
 }
