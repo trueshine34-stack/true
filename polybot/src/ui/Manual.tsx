@@ -3698,6 +3698,17 @@ function PositionPair({
     // at a capped price would place anyway.
     const barred = ask != null && buyBarred(ask, elapsed);
     const wanted = barred ? ceiling : ask;
+    /*
+      The face of the tile: the ask until there is a position on this side, the
+      bid after.
+
+      Without a position the question is what getting in costs, and that is the
+      ask. With one the question has changed — the tile is being read to decide
+      whether to get out — and what getting out pays is the bid. Buying still
+      loads the ask, because that is still what another lot costs; it is the
+      number being read that follows the position, not the one being acted on.
+    */
+    const face = held ? bids[name] : ask;
 
     return (
       <div
@@ -3711,7 +3722,7 @@ function PositionPair({
           onClick={() => wanted != null && onPick(name, wanted)}
         >
           <b>{name}</b>
-          <span className="pairask">{ask != null ? cents(ask) : '—'}</span>
+          <span className="pairask">{face != null ? cents(face) : '—'}</span>
           {barred && <span className="pairover">→ {cents(ceiling)}</span>}
         </button>
 
