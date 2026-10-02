@@ -1313,7 +1313,10 @@ export function Manual({
         pulledRef.current.set(orderId, Date.now());
         setOrders((live) => live.filter((o) => o.id !== orderId));
       }
-      setNote(r.cancelled ? 'Ордер снят' : 'Ордер уже неактивен');
+      // Nothing to say when it worked: the row is already gone from the list,
+      // which is the whole of the news. A note that only ever repeats what the
+      // screen just did is one more thing to read on a five-minute clock.
+      if (!r.cancelled) setNote('Ордер уже неактивен');
       // And the wallet, which the venue frees the moment it acknowledges.
       void PolyBot.getBalance()
         .then((cash) => {
