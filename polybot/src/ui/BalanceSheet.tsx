@@ -10,7 +10,6 @@ import {
   type BalancePoint,
 } from '../core/balance';
 import { signedPct, signedUsd, usd } from '../core/money';
-import { DAY_MULTIPLE, dayTarget, type DayGoal } from '../core/day';
 
 const W = 320;
 const H = 132;
@@ -34,11 +33,7 @@ export function BalanceSheet({
   lockedUsd,
   lockedPct,
   onLocked,
-  day,
-  onDayBaseline,
   savings,
-  savingsAddress,
-  onSavingsAddress,
   onClose,
 }: {
   history: BalancePoint[];
@@ -53,13 +48,8 @@ export function BalanceSheet({
   lockedUsd: number;
   lockedPct: number;
   onLocked: (usd: number, pct: number) => void;
-  /** The day's goal, whose number is edited here rather than in settings. */
-  day: DayGoal | null;
-  onDayBaseline: (amount: number) => void;
   /** USDT held off the venue, where profit is withdrawn to. */
   savings: number;
-  savingsAddress: string;
-  onSavingsAddress: (address: string) => void;
   onClose: () => void;
 }) {
   const [span, setSpan] = useState(2);
@@ -243,55 +233,6 @@ export function BalanceSheet({
             {dirty ? 'Сохранить' : 'Сохранено'}
           </button>
         </div>
-        {/*
-          The day's goal, which is one number: what the day is counted from.
-          The target is ten times it and the stop follows it, so the number
-          belongs here, next to the balance it is measured against — settings
-          only says whether the stop is armed.
-
-          Changing it starts the day again from the new figure: a goal moved
-          up is a day that is no longer over, and the block lifts with it.
-        */}
-        <div className="lockrow">
-          <label className="field ballock">
-            <span>цель дня, от $</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="1"
-              placeholder={balance != null ? balance.toFixed(2) : '0'}
-              defaultValue={day != null ? String(day.baseline) : ''}
-              onBlur={(e) => {
-                const value = Number(e.target.value.replace(',', '.'));
-                if (Number.isFinite(value) && value > 0) onDayBaseline(value);
-              }}
-            />
-          </label>
-          <div className="balgoal">
-            <span className="muted">×{DAY_MULTIPLE}</span>
-            <b>{day != null ? usd(dayTarget(day)) : '—'}</b>
-          </div>
-        </div>
-        {/*
-          The address money is taken out to, and the button that takes it.
-          Watched on both chains; sent to only on Polygon, which is the one the
-          app holds a key for.
-        */}
-        <label className="field balsavings">
-          <span>кошелёк вывода</span>
-          <input
-            type="text"
-            inputMode="text"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            placeholder="0x…"
-            defaultValue={savingsAddress}
-            onBlur={(e) => onSavingsAddress(e.target.value)}
-          />
-        </label>
-
         {path ? (
           <svg
             className="balchart"

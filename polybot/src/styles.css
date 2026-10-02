@@ -2836,15 +2836,36 @@ button.step.big {
 }
 
 /*
- * The wallet behind the total. Smaller than the total and plainer than it:
- * it is a part of that figure rather than a rival to it.
+ * This wallet, in the middle of the row.
+ *
+ * Away from the total on the left because a swipe changes this and leaves that
+ * alone — they are not two readings of one thing, they are the run and the
+ * account. Auto margins on both sides put it between the total and the controls
+ * wherever the row happens to be wide.
  */
-.railwallet {
-  font-size: 13px;
-  font-style: normal;
-  font-weight: 600;
+.railhere {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  margin-right: auto;
+  padding: 6px 2px;
+  border: none;
+  background: none;
   color: var(--text);
-  opacity: 0.75;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.railhere i {
+  font-size: 15px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.railhere span {
+  font-size: 12px;
 }
 
 /*
@@ -3588,6 +3609,50 @@ button.wide {
   Quiet lines: they are the background a candle is working against, and a
   level drawn as loudly as the price would be read as the price.
 */
+/*
+  Where the chart turned, and what that was.
+
+  Thinner and quieter than a level: a level is a price the market keeps coming
+  back to and is worth arguing with; this is only the chart read back as a
+  number. The line runs from the candle that made the turn to the figure on the
+  right, so there is never a doubt which peak it belongs to.
+*/
+.peakline {
+  stroke: var(--muted);
+  stroke-width: 0.7;
+  stroke-dasharray: 1 3;
+  stroke-opacity: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+.peakline.high {
+  stroke: rgba(255, 90, 106, 0.55);
+}
+
+.peakline.low {
+  stroke: rgba(35, 192, 123, 0.55);
+}
+
+.peaktag {
+  font-size: 8.5px;
+  font-weight: 600;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3.2px;
+  stroke-linejoin: round;
+  fill: var(--muted);
+}
+
+.peaktag.high {
+  fill: rgba(255, 111, 121, 0.95);
+}
+
+.peaktag.low {
+  fill: rgba(47, 217, 138, 0.95);
+}
+
 .slevel {
   stroke-width: 1;
   stroke-dasharray: 4 4;

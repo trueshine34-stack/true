@@ -10,6 +10,7 @@ import {
   trendOf,
 } from '../core/trend';
 import { priceLabel } from '../core/depth';
+import { swingPeaks } from '../core/peaks';
 
 /** Every window is five minutes, and every window opens on a multiple of it. */
 const WINDOW_SEC = 300;
@@ -430,6 +431,26 @@ export function CandleFace({
     (node) => !shape || (node.price >= shape.floor && node.price <= shape.top),
   );
 
+  /*
+    The tops and bottoms the chart actually turned at, with their figures.
+
+    From what is on screen rather than from everything held: these answer "what
+    number is that peak" about a peak you are looking at, so zooming in on a
+    stretch should find that stretch's own turns rather than keep showing the
+    session's. Dropped when they would be printed on top of each other, furthest
+    from the middle kept — a top just under another top is the same top twice.
+  */
+  const peaks = (() => {
+    if (!shape) return [] as ReturnType<typeof swingPeaks>;
+    const kept: ReturnType<typeof swingPeaks> = [];
+    for (const peak of swingPeaks(visible)) {
+      const at = y(peak.price);
+      if (at < 6 || at > H - 4) continue;
+      if (kept.every((k) => Math.abs(y(k.price) - at) >= 13)) kept.push(peak);
+    }
+    return kept;
+  })();
+
   return (
     <div
       className={`candles${onPick ? ' tappable' : ''}`}
@@ -489,6 +510,39 @@ export function CandleFace({
             strokeOpacity={(0.10 + node.weight * 0.28).toFixed(2)}
           />
         ))}
+
+        {/*
+          And the turns themselves: a line from the candle that made it out to
+          the right edge, with the price on the end of it.
+
+          Right rather than left because the left belongs to the levels, and two
+          columns of figures down one side is a page of numbers rather than a
+          chart. Starting at the candle rather than at the edge says which top
+          it is the figure for.
+        */}
+        {peaks.map((peak) => {
+          const bar = shape?.bars.find((b) => b.time === peak.time);
+          const at = y(peak.price);
+          return (
+            <g key={`${peak.kind}${peak.time}`}>
+              <line
+                className={`peakline ${peak.kind}`}
+                x1={(bar?.x ?? 0).toFixed(1)}
+                x2={W}
+                y1={at.toFixed(1)}
+                y2={at.toFixed(1)}
+              />
+              <text
+                className={`peaktag ${peak.kind}`}
+                x={W - 2}
+                y={(peak.kind === 'high' ? at - 2.5 : at + 8).toFixed(1)}
+                textAnchor="end"
+              >
+                {priceLabel(peak.price, digits)}
+              </text>
+            </g>
+          );
+        })}
         {/*
           The fitted line, over the span it was fitted to. Flat is drawn too:
           "no direction" is an answer, and an empty chart looks like a missing

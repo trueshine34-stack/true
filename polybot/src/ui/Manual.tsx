@@ -200,6 +200,7 @@ export function Manual({
   savings = 0,
   appSettings,
   locked,
+  slot = 0,
 }: {
   /** Potential profit of the round, for the header. */
   onSummary?: (potential: number) => void;
@@ -214,6 +215,15 @@ export function Manual({
   appSettings?: ReactNode;
   /** The day's goal is met: no new exposure until midnight. */
   locked?: boolean;
+  /**
+   * Which wallet this desk is showing.
+   *
+   * The settings are per account — which exit is armed, what the third chip's
+   * percentage is, how a buy goes out — because two wallets are usually being
+   * traded differently or there would be no reason to have two. Changing it
+   * re-reads them and re-arms the rules with that wallet's own answers.
+   */
+  slot?: number;
 }) {
   const [settings, setSettings] = useState<ManualSettings>(DEFAULT_MANUAL_SETTINGS);
   const [tab, setTab] = useState<'desk' | 'settings'>('desk');
@@ -398,7 +408,7 @@ export function Manual({
   const loadedRef = useRef(false);
 
   useEffect(() => {
-    void loadManualSettings().then((stored) => {
+    void loadManualSettings(slot).then((stored) => {
       setSettings(stored);
       loadedRef.current = true;
       // The countdown lives in the service and is stored there too, so this
@@ -407,7 +417,10 @@ export function Manual({
       void PolyBot.setCountdown()
         .then((r) => {
           if (r.enabled !== stored.countdownChime) {
-            void saveManualSettings({ ...stored, countdownChime: r.enabled });
+            void saveManualSettings(
+              { ...stored, countdownChime: r.enabled },
+              slot,
+            );
             setSettings((s) => ({ ...s, countdownChime: r.enabled }));
           }
         })
@@ -451,7 +464,9 @@ export function Manual({
         }).catch(() => {});
       }
     });
-  }, []);
+    // And again on a wallet switch: this slot's answers are not the other's,
+    // and the rules in the service have to be re-armed with them.
+  }, [slot]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -906,10 +921,13 @@ export function Manual({
     };
   }, []);
 
-  const apply = useCallback((next: ManualSettings) => {
-    setSettings(next);
-    void saveManualSettings(next);
-  }, []);
+  const apply = useCallback(
+    (next: ManualSettings) => {
+      setSettings(next);
+      void saveManualSettings(next, slot);
+    },
+    [slot],
+  );
 
   const minSize = market?.minimumOrderSize ?? 5;
 
@@ -2046,26 +2064,29 @@ export function Manual({
           minutes. What has been spent can be read off the difference; what is
           left is the number a size is actually decided from.
         */}
-        <button className="railbal" onClick={onOpenBalance}>
-          {/*
-            The whole run first, the wallet after it.
+        {/*
+          Two figures, and they are about different things, so they are not
+          beside each other.
 
-            What everything is worth is the number that answers "how is this
-            going", and it is the one that belongs in the big type on the left.
-            The wallet behind it is a part of that total rather than a rival to
-            it — the money that happens to be on the venue right now — so it
-            sits in the middle, smaller, with what this window may still take
-            after it.
-          */}
+          On the left, over the first quote, what the whole run is worth: every
+          connected wallet added up, which is the number that answers "how is
+          this going" and belongs nowhere else. In the middle of the row, this
+          wallet — what is on the venue under the account being looked at, and
+          what this window may still take out of it. A swipe changes the second
+          and leaves the first where it was, which is exactly the difference
+          between them.
+        */}
+        <button className="railbal" onClick={onOpenBalance}>
           <b>
             Σ
             {balance === null
               ? '—'
               : ((everyWallet ?? balance) + savings).toFixed(2)}
           </b>
-          <i className="railwallet">
-            {balance === null ? '—' : balance.toFixed(2)}
-          </i>
+        </button>
+
+        <button className="railhere" onClick={onOpenBalance}>
+          <i>{balance === null ? '—' : balance.toFixed(2)}</i>
           <span className={exposure.full ? 'warn' : 'muted'}>
             /{exposure.room.toFixed(2)}
           </span>

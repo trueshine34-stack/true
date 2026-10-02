@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AccountConfig } from './core/account';
-import {
-  loadAccount,
-  loadSavingsAddress,
-  saveSavingsAddress,
-} from './core/storage';
+import { loadAccount, loadSavingsAddress } from './core/storage';
 import { PolyBot, type WalletSlot } from './native/polybot';
 import { Manual } from './ui/Manual';
 import { SettingsScreen } from './ui/Settings';
@@ -564,14 +560,7 @@ export function App() {
               .then(readBalance)
               .catch(() => {});
           }}
-          day={day}
-          onDayBaseline={setDayBaseline}
           savings={savings}
-          savingsAddress={savingsAddress}
-          onSavingsAddress={(next) => {
-            setSavingsAddress(next.trim());
-            void saveSavingsAddress(next);
-          }}
           onClose={() => setShowBalance(false)}
         />
       )}
@@ -664,6 +653,8 @@ export function App() {
       */}
       <div className="scroll">
         <Manual
+          key={slot}
+          slot={slot}
           onOpenBalance={() => setShowBalance(true)}
           savings={savings}
           locked={locked}

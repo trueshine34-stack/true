@@ -102,15 +102,33 @@ export async function loadAccount(slot = 0): Promise<AccountConfig | null> {
 
 
 
-export async function saveManualSettings(settings: ManualSettings): Promise<void> {
-  await Preferences.set({ key: KEY_MANUAL, value: JSON.stringify(settings) });
+/**
+ * Where one wallet's desk settings live.
+ *
+ * Which exit chip is armed, what the third one's percentage is, how long each
+ * watches, how a buy goes out — these are how an account is being traded, and
+ * two accounts are usually being traded differently or there would be no reason
+ * to have two. So each slot keeps its own, and the first keeps the key it has
+ * always had.
+ */
+const manualKey = (slot: number): string =>
+  slot <= 0 ? KEY_MANUAL : `${KEY_MANUAL}.w${slot}`;
+
+export async function saveManualSettings(
+  settings: ManualSettings,
+  slot = 0,
+): Promise<void> {
+  await Preferences.set({
+    key: manualKey(slot),
+    value: JSON.stringify(settings),
+  });
 }
 
 /** How long a rung used to hold, back when there were five of them. */
 const OLD_STEP_SEC = 60;
 
-export async function loadManualSettings(): Promise<ManualSettings> {
-  const { value } = await Preferences.get({ key: KEY_MANUAL });
+export async function loadManualSettings(slot = 0): Promise<ManualSettings> {
+  const { value } = await Preferences.get({ key: manualKey(slot) });
   if (!value) return { ...DEFAULT_MANUAL_SETTINGS };
   try {
     const stored = JSON.parse(value) as ManualSettings;
