@@ -669,6 +669,36 @@ button.stat.quote:active {
   border-color: var(--accent);
 }
 
+/*
+  How the next buy goes out, beside the gear.
+
+  A mode rather than a trade, so it lives with the gear rather than with the
+  terms — and it carries its own number, which is wider than a glyph and worth
+  the room: "5с" says both that it watches and for how long.
+*/
+.buymode {
+  flex: 0 0 auto;
+  min-width: 34px;
+  height: 30px;
+  padding: 0 5px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+}
+
+.buymode.on {
+  color: var(--warn, #f4b740);
+  border-color: var(--warn, #f4b740);
+  background: rgba(244, 183, 64, 0.14);
+}
+
 
 .chartwrap {
   position: relative;
@@ -3174,6 +3204,37 @@ button.wide {
   background: rgba(255, 90, 106, 0.16);
   border-color: var(--down);
   color: var(--down);
+}
+
+/*
+  Armed, and watching. Both win over the side's own colour, so they go last.
+
+  The first of the two taps turns the button into its own prompt — the label
+  says "ещё раз" and the border lights, so a tap that did nothing visible is
+  never a tap that was missed. Watching, it stops being a way in and becomes a
+  readout with a way out: the one thing left to do with it is call it off, and
+  that takes one tap.
+*/
+.buygo.armed,
+.buygo.on.armed {
+  border-color: var(--warn, #f4b740);
+  background: rgba(244, 183, 64, 0.18);
+  color: var(--warn, #f4b740);
+}
+
+/* Watching, it is no longer a way in but a readout with a way out. */
+.buygo.watching,
+.buygo.on.watching {
+  flex: 0 0 auto;
+  min-width: 92px;
+  padding: 0 8px;
+  border-color: var(--accent);
+  background: rgba(76, 141, 255, 0.14);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .buygo:disabled {

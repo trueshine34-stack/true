@@ -102,13 +102,32 @@ const HOLD_MS = 450;
  */
 const DOUBLE_MS = 300;
 
+/**
+ * How long the buy button stays armed after the first of its two taps.
+ *
+ * Longer than the fields' own double-tap: those open a keyboard, and a miss
+ * costs a tap. This one sends money, and a miss costs the trade — so the
+ * second tap gets half a second rather than three tenths, and the button says
+ * out loud that it is waiting for it.
+ */
+const DOUBLE_BUY_MS = 500;
+
 /** True on the second of two quick taps, and arms the next pair. */
-function doubleTap(last: { current: number }): boolean {
+function doubleTap(last: { current: number }, within = DOUBLE_MS): boolean {
   const now = Date.now();
-  const quick = now - last.current < DOUBLE_MS;
+  const quick = now - last.current < within;
   last.current = quick ? 0 : now;
   return quick;
 }
+
+/** A pause, for the two places a buy has to wait for the book. */
+const nap = (ms: number) => new Promise((wake) => setTimeout(wake, ms));
+
+/** How often the watching buy re-reads the book while it waits. */
+const BUY_STEP_MS = 300;
+
+/** How close to the close a watch gives up: a buy landing here is settlement. */
+const BUY_STOP_SEC = 8;
 
 /** How long a pulled order is kept out of the venue's listing by hand. */
 const PULLED_MS = 15_000;
@@ -272,12 +291,18 @@ export function Manual({
    * rule with a window running.
    */
   const [watchFor, setWatchFor] = useState<
-    'cents' | 'take' | 'cheap' | 'custom' | null
+    'buy' | 'cents' | 'take' | 'cheap' | 'custom' | null
   >(null);
   const holdRef = useRef<number | null>(null);
   const heldRef = useRef(false);
+  /** The watching buy, while one is running: what it is doing, and a way out. */
+  const [buyWatch, setBuyWatch] = useState<string | null>(null);
+  const stopBuyRef = useRef(false);
+  /** The buy button's first tap, waiting for its second. */
+  const buyTapRef = useRef(0);
+  const [buyArmed, setBuyArmed] = useState(false);
   const holdWatch = useCallback(
-    (which: 'cents' | 'take' | 'cheap' | 'custom') => {
+    (which: 'buy' | 'cents' | 'take' | 'cheap' | 'custom') => {
       heldRef.current = false;
       holdRef.current = window.setTimeout(() => {
         heldRef.current = true;
@@ -1422,6 +1447,126 @@ export function Manual({
    * The rungs go out oldest-price-first and each is a normal order, so the
    * guard, the minimum and the log all treat them as what they are.
    */
+  /*
+    Buying by watching, which is the exits' rule turned around.
+
+    The price in the field stops being an offer and becomes a trigger: nothing
+    is sent until the book comes down to it, and what is sent then is the best
+    it showed in the seconds after — because the first tick through a price is
+    rarely the best of it, going in no less than coming out. A resting limit
+    gets the price it asked for; this gets the price that was there.
+
+    It runs in the app rather than in the service: a buy is started by a thumb
+    on a screen that is being watched, and it is over in seconds.
+  */
+  const bestAsk = useCallback(
+    async (which: 'Up' | 'Down') => {
+      const tokenId = tokenFor(which);
+      if (!tokenId) return null;
+      const book = await PolyBot.getBookLevels({ tokenId, depth: 1 }).catch(
+        () => null,
+      );
+      return book?.asks?.[0]?.price ?? null;
+    },
+    [tokenFor],
+  );
+
+  /**
+   * One watch: wait for the trigger, then take the best of the next few
+   * seconds. Returns the price it bought at, or null if it never got there.
+   */
+  const watchOnce = useCallback(
+    async (which: 'Up' | 'Down', trigger: number, shares: number, half: string) => {
+      const until = (windowStart + WINDOW_SEC - BUY_STOP_SEC) * 1000;
+      let reachedAt = 0;
+      let best = Number.POSITIVE_INFINITY;
+
+      while (!stopBuyRef.current && Date.now() < until) {
+        const ask = await bestAsk(which);
+        if (ask != null && ask <= trigger + 1e-9) {
+          if (reachedAt === 0) reachedAt = Date.now();
+          if (ask < best) best = ask;
+        }
+        if (reachedAt > 0) {
+          const left = settings.buyWatchMs - (Date.now() - reachedAt);
+          if (left <= 0) break;
+          setBuyWatch(
+            `${half}смотрю ${Math.ceil(left / 1000)} с · лучшее ${cents(best)}`,
+          );
+        } else {
+          setBuyWatch(
+            `${half}жду ${cents(trigger)} · сейчас ${ask != null ? cents(ask) : '—'}`,
+          );
+        }
+        await nap(BUY_STEP_MS);
+      }
+
+      if (stopBuyRef.current || reachedAt === 0 || !Number.isFinite(best)) {
+        return null;
+      }
+      await place(which, 'BUY', best, shares);
+      return best;
+    },
+    [bestAsk, place, settings.buyWatchMs, windowStart],
+  );
+
+  /** The whole flow, one half or two. */
+  const watchBuy = useCallback(
+    async (which: 'Up' | 'Down', trigger: number, shares: number) => {
+      stopBuyRef.current = false;
+      setBuyWatch('жду');
+      try {
+        if (settings.buyMode !== 'split') {
+          await watchOnce(which, trigger, shares, '');
+          return;
+        }
+
+        /*
+          Two halves, and the second cheaper than the first by a margin.
+
+          Buying the lot at one price is one guess; this makes it two, and the
+          second one is only taken if the book has actually come down since —
+          so the average is better than the first price or there is no second
+          half at all. The pause is there so the second is a different moment
+          rather than the same one twice.
+        */
+        const floor = minShares(trigger, minSize);
+        const first = Math.max(floor, Math.round((shares / 2) * 10) / 10);
+        const second = Math.round((shares - first) * 10) / 10;
+        if (second < floor - 1e-9) {
+          setNote('Для 50/50 объёма мало — беру одной покупкой');
+          await watchOnce(which, trigger, shares, '');
+          return;
+        }
+
+        const got = await watchOnce(which, trigger, first, '1/2 · ');
+        if (got == null || stopBuyRef.current) return;
+
+        for (let left = settings.buySplitPauseSec; left > 0; left--) {
+          if (stopBuyRef.current) return;
+          setBuyWatch(`2/2 · пауза ${left} с`);
+          await nap(1000);
+        }
+
+        const under = Math.max(
+          0.01,
+          Math.round((got - settings.buySecondGapCents / 100) * 100) / 100,
+        );
+        await watchOnce(which, under, second, '2/2 · ');
+      } finally {
+        setBuyWatch(null);
+        stopBuyRef.current = false;
+      }
+    },
+    [
+      watchOnce,
+      settings.buyMode,
+      settings.buySplitPauseSec,
+      settings.buySecondGapCents,
+      minSize,
+    ],
+  );
+
   const placeLimit = async (which: 'Up' | 'Down') => {
     if (!Number.isFinite(limitPriceNum) || limitPriceNum <= 0) {
       setNote('Укажите цену лимитки');
@@ -1760,7 +1905,15 @@ export function Manual({
         prices it cannot argue with written under it, and nothing else: this is
         opened once, set, and not looked at again.
       */}
-      {watchFor && (
+      {watchFor === 'buy' && (
+        <BuySheet
+          settings={settings}
+          onChange={apply}
+          onClose={() => setWatchFor(null)}
+        />
+      )}
+
+      {watchFor && watchFor !== 'buy' && (
         <WatchSheet
           which={watchFor}
           ms={
@@ -1960,6 +2113,45 @@ export function Manual({
         </button>
 
         <div className="deskbtns">
+          {/*
+            How the next buy goes out, and how long it looks first.
+
+            Beside the gear because it is a mode rather than a trade: it does
+            not change what is being bought, only the way the price is arrived
+            at. Tapping cycles the three; holding opens their numbers. The
+            label is the setting rather than a name for it — "5с" says both
+            that it watches and for how long, which is the only thing about the
+            mode worth knowing with a window running.
+          */}
+          <button
+            className={`buymode${settings.buyMode !== 'limit' ? ' on' : ''}`}
+            onPointerDown={() => holdWatch('buy')}
+            onPointerUp={dropHold}
+            onPointerLeave={dropHold}
+            onPointerCancel={dropHold}
+            onContextMenu={(e) => e.preventDefault()}
+            onClick={() => {
+              if (heldRef.current) {
+                heldRef.current = false;
+                return;
+              }
+              const next =
+                settings.buyMode === 'limit'
+                  ? 'watch'
+                  : settings.buyMode === 'watch'
+                    ? 'split'
+                    : 'limit';
+              apply({ ...settings, buyMode: next });
+            }}
+            aria-label="Как покупать: лимиткой, с наблюдением, или двумя половинами"
+          >
+            {settings.buyMode === 'limit'
+              ? 'лим'
+              : `${Math.round(settings.buyWatchMs / 1000)}с${
+                  settings.buyMode === 'split' ? '½' : ''
+                }`}
+          </button>
+
           <button
             className={`gear${tab === 'settings' ? ' on' : ''}`}
             onClick={() => setTab(tab === 'settings' ? 'desk' : 'settings')}
@@ -2067,9 +2259,49 @@ export function Manual({
           <button
             className={`buygo${
               side && affordable ? ` on ${side === 'Up' ? 'up' : 'down'}` : ''
-            }`}
-            disabled={busy || locked || limitBarred || side == null || !affordable}
-            onClick={() => side && void placeLimit(side)}
+            }${buyWatch ? ' watching' : ''}${buyArmed ? ' armed' : ''}`}
+            disabled={
+              buyWatch == null &&
+              (busy || locked || limitBarred || side == null || !affordable)
+            }
+            onClick={() => {
+              // A watch already running: the one thing this button can do is
+              // call it off, and that takes one tap. Stopping is never the
+              // thing you have to be sure about.
+              if (buyWatch != null) {
+                stopBuyRef.current = true;
+                return;
+              }
+              if (!side) return;
+              /*
+                Two taps to spend money.
+
+                One tap was a trade, and this button is under a thumb that is
+                also stepping a price and a size on a five-minute clock. The
+                first tap only arms it, and says so; the second sends. Half a
+                second between them, which is long enough not to be a trick and
+                short enough that nobody waits for it.
+              */
+              if (!doubleTap(buyTapRef, DOUBLE_BUY_MS)) {
+                setBuyArmed(true);
+                window.setTimeout(() => setBuyArmed(false), DOUBLE_BUY_MS);
+                return;
+              }
+              setBuyArmed(false);
+              if (settings.buyMode === 'limit') {
+                void placeLimit(side);
+                return;
+              }
+              if (!Number.isFinite(limitPriceNum) || limitPriceNum <= 0) {
+                setNote('Укажите цену');
+                return;
+              }
+              void watchBuy(
+                side,
+                limitPriceNum,
+                limitSizeNum > 0 ? limitSizeNum : limitDefaultSize,
+              );
+            }}
           >
             {/*
               Dead, and saying why. Without a side there is nothing to send;
@@ -2078,13 +2310,17 @@ export function Manual({
               an order went out against a balance that was entirely reserved
               and came back refused.
             */}
-            {side == null
-              ? 'Купить'
-              : limitCost <= 0
-                ? 'цена и объём'
-                : affordable
+            {buyWatch != null
+              ? buyWatch
+              : buyArmed
+                ? 'ещё раз'
+                : side == null
                   ? 'Купить'
-                  : `нет ${usd(limitCost - freeCash)}`}
+                  : limitCost <= 0
+                    ? 'цена и объём'
+                    : affordable
+                      ? 'Купить'
+                      : `нет ${usd(limitCost - freeCash)}`}
           </button>
           <div className="limitmid">
             <div className="limitprice">
@@ -2410,6 +2646,116 @@ export function Manual({
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * The watching buy's three numbers.
+ *
+ * How long it looks at the book once the price in the field has been crossed;
+ * how long the second half of a split waits before it starts looking at all;
+ * and how far under the first half's price the second one refuses to go above.
+ * The last is what makes two buys worth more than one — without it the second
+ * half is the first half again at whatever the book happens to be doing.
+ */
+function BuySheet({
+  settings,
+  onChange,
+  onClose,
+}: {
+  settings: ManualSettings;
+  onChange: (next: ManualSettings) => void;
+  onClose: () => void;
+}) {
+  const split = settings.buyMode === 'split';
+  return (
+    <div className="sheet-scrim" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <h2>
+            {settings.buyMode === 'limit'
+              ? 'Покупка лимиткой'
+              : split
+                ? 'Покупка двумя половинами'
+                : 'Покупка с наблюдением'}
+          </h2>
+          <button className="xbtn" onClick={onClose} aria-label="Закрыть">
+            ✕
+          </button>
+        </div>
+
+        <label className="rideslider">
+          <span className="muted">
+            смотрю книгу {(settings.buyWatchMs / 1000).toFixed(1)} с после моей
+            цены и беру лучшую из них
+          </span>
+          <input
+            type="range"
+            min={500}
+            max={15000}
+            step={250}
+            value={settings.buyWatchMs}
+            onChange={(e) =>
+              onChange({ ...settings, buyWatchMs: Number(e.target.value) })
+            }
+          />
+          <span className="muted rideends">
+            <i>0,5</i>
+            <i>цена в поле — не заявка, а порог</i>
+            <i>15</i>
+          </span>
+        </label>
+
+        <label className="rideslider">
+          <span className="muted">
+            пауза {settings.buySplitPauseSec} с между половинами
+          </span>
+          <input
+            type="range"
+            min={1}
+            max={60}
+            step={1}
+            value={settings.buySplitPauseSec}
+            onChange={(e) =>
+              onChange({
+                ...settings,
+                buySplitPauseSec: Number(e.target.value),
+              })
+            }
+          />
+          <span className="muted rideends">
+            <i>1</i>
+            <i>только для режима ½</i>
+            <i>60</i>
+          </span>
+        </label>
+
+        <label className="rideslider">
+          <span className="muted">
+            вторая половина — не дороже чем на {settings.buySecondGapCents}¢
+            ниже первой
+          </span>
+          <input
+            type="range"
+            min={1}
+            max={20}
+            step={1}
+            value={settings.buySecondGapCents}
+            onChange={(e) =>
+              onChange({
+                ...settings,
+                buySecondGapCents: Number(e.target.value),
+              })
+            }
+          />
+          <span className="muted rideends">
+            <i>1¢</i>
+            <i>не дошло — второй покупки нет</i>
+            <i>20¢</i>
+          </span>
+        </label>
+      </div>
+    </div>
   );
 }
 

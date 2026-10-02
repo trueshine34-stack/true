@@ -171,6 +171,28 @@ export type ManualSettings = {
    */
   autoSellCustomArmed: boolean;
   /**
+   * How a buy is sent.
+   *
+   * `limit` rests the price on the book and waits to be hit, which is what a
+   * limit order is for and what this desk has always done. The other two watch
+   * instead, the way the exits do: the price in the field is a trigger rather
+   * than an offer, and what actually gets sent is the best the book showed in
+   * the seconds after it was crossed. The first tick through a price is rarely
+   * the best of it, going in no less than coming out.
+   *
+   * `split` is the same again, twice: half the size on the first watch, a pause,
+   * then the other half — and the second half will not go at the first's price
+   * or anything near it, only at a price enough below it to be worth waiting
+   * for. An average built out of two prices rather than one.
+   */
+  buyMode: 'limit' | 'watch' | 'split';
+  /** How long the watch lasts once the price in the field has been crossed. */
+  buyWatchMs: number;
+  /** And how long the second half of a split waits before it starts looking. */
+  buySplitPauseSec: number;
+  /** How far under the first half's price the second half will not go above. */
+  buySecondGapCents: number;
+  /**
    * Whether the depth curve is folded away.
    *
    * Not a setting anyone goes looking for: it is set by double-tapping the
@@ -260,6 +282,10 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellCustomWaitMs: 5000,
   autoSellCustomArmed: false,
   depthHidden: false,
+  buyMode: 'limit',
+  buyWatchMs: 5000,
+  buySplitPauseSec: 10,
+  buySecondGapCents: 1,
 };
 
 /** Never spend the last of the balance, whatever the fee works out to. */
