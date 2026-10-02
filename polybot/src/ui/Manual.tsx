@@ -359,7 +359,6 @@ export function Manual({
    * Money set aside on the balance sheet, shown so the rail's figure is not a
    * mystery. It is already out of [balance]; this is only the label for why.
    */
-  const [reserve, setReserve] = useState(0);
 
   // Read inside pollers that must not re-subscribe every time a setting changes.
   const settingsRef = useRef(settings);
@@ -802,7 +801,6 @@ export function Manual({
         .then((r) => {
           if (cancelled) return;
           setBalance(r.usdc);
-          setReserve(r.locked ?? 0);
         })
         .catch(() => {});
     };
@@ -1137,7 +1135,6 @@ export function Manual({
           if (log) setLogged(log.orders);
           if (cash) {
             setBalance(cash.usdc);
-            setReserve(cash.locked ?? 0);
           }
         }
       } catch (e) {
@@ -1344,7 +1341,6 @@ export function Manual({
       void PolyBot.getBalance()
         .then((cash) => {
           setBalance(cash.usdc);
-          setReserve(cash.locked ?? 0);
         })
         .catch(() => {});
     } catch (e) {
@@ -2042,21 +2038,23 @@ export function Manual({
           left is the number a size is actually decided from.
         */}
         <button className="railbal" onClick={onOpenBalance}>
-          <b>{balance === null ? '—' : balance.toFixed(2)}</b>
+          {/*
+            The whole run first, the wallet after it.
+
+            What everything is worth is the number that answers "how is this
+            going", and it is the one that belongs in the big type on the left.
+            The wallet behind it is a part of that total rather than a rival to
+            it — the money that happens to be on the venue right now — so it
+            sits in the middle, smaller, with what this window may still take
+            after it.
+          */}
+          <b>Σ{balance === null ? '—' : (balance + savings).toFixed(2)}</b>
+          <i className="railwallet">
+            {balance === null ? '—' : balance.toFixed(2)}
+          </i>
           <span className={exposure.full ? 'warn' : 'muted'}>
             /{exposure.room.toFixed(2)}
           </span>
-          {/*
-            And everything the run is worth, including what has been taken off
-            the venue. The two numbers before it are what can be traded and
-            what this window may still take; this one is the score.
-          */}
-          {savings > 0 && balance !== null && (
-            <i className="railall">Σ{(balance + savings).toFixed(2)}</i>
-          )}
-          {/* And what is being held back, so a balance smaller than the
-              wallet reads as a decision rather than as a missing sum. */}
-          {reserve > 0 && <i className="raillock">🔒{Math.round(reserve)}</i>}
         </button>
 
         {/*

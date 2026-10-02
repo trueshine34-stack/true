@@ -2788,13 +2788,15 @@ button.step.big {
 }
 
 /*
- * What is held back from the balance beside it. Small and muted: it is the
- * reason the figure is what it is, not a figure competing with it.
+ * The wallet behind the total. Smaller than the total and plainer than it:
+ * it is a part of that figure rather than a rival to it.
  */
-.raillock {
-  font-size: 11px;
+.railwallet {
+  font-size: 13px;
   font-style: normal;
-  color: var(--muted);
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0.75;
 }
 
 /*
