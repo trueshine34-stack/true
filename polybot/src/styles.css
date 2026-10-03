@@ -2838,10 +2838,10 @@ button.step.big {
 /*
  * This wallet, in the middle of the row.
  *
- * Away from the total on the left because a swipe changes this and leaves that
- * alone — they are not two readings of one thing, they are the run and the
- * account. Auto margins on both sides put it between the total and the controls
- * wherever the row happens to be wide.
+ * One figure, away from the total on the left, because a swipe changes this and
+ * leaves that alone — they are not two readings of one thing, they are the run
+ * and the account. Auto margins on both sides put it between the total and the
+ * controls wherever the row happens to be wide.
  */
 .railhere {
   display: flex;
@@ -2864,9 +2864,6 @@ button.step.big {
   letter-spacing: -0.02em;
 }
 
-.railhere span {
-  font-size: 12px;
-}
 
 /*
  * What the total is made of: two or three cells, each a quiet label over its

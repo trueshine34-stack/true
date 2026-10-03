@@ -446,7 +446,21 @@ export function App() {
   const swipe = useRef<{ x: number; y: number } | null>(null);
   const onSwipeStart = useCallback((e: React.TouchEvent) => {
     const touch = e.touches[0];
-    swipe.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+    /*
+      Not where something else is already listening to the finger.
+
+      The charts are dragged sideways to make room ahead of the price and
+      pinched to zoom, which is the same gesture as this one and used far more
+      often — so a drag along a chart was changing wallet. A slider is the same
+      story. The rule is the plain one: a horizontal gesture belongs to the
+      thing it started on, and only a swipe that started on none of them is
+      about which account is on screen.
+    */
+    const on = (touch?.target as HTMLElement | undefined)?.closest?.(
+      '.candles, .depthfold, input[type="range"], .balchart',
+    );
+    swipe.current =
+      touch && !on ? { x: touch.clientX, y: touch.clientY } : null;
   }, []);
   const onSwipeEnd = useCallback(
     (e: React.TouchEvent) => {

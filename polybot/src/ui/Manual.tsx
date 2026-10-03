@@ -2070,11 +2070,10 @@ export function Manual({
 
           On the left, over the first quote, what the whole run is worth: every
           connected wallet added up, which is the number that answers "how is
-          this going" and belongs nowhere else. In the middle of the row, this
-          wallet — what is on the venue under the account being looked at, and
-          what this window may still take out of it. A swipe changes the second
-          and leaves the first where it was, which is exactly the difference
-          between them.
+          this going" and belongs nowhere else. In the middle of the row, one
+          figure and no other: what is on the venue under the account being
+          looked at. A swipe changes the second and leaves the first where it
+          was, which is exactly the difference between them.
         */}
         <button className="railbal" onClick={onOpenBalance}>
           <b>
@@ -2087,9 +2086,6 @@ export function Manual({
 
         <button className="railhere" onClick={onOpenBalance}>
           <i>{balance === null ? '—' : balance.toFixed(2)}</i>
-          <span className={exposure.full ? 'warn' : 'muted'}>
-            /{exposure.room.toFixed(2)}
-          </span>
         </button>
 
         {/*
