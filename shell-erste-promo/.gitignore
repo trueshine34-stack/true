@@ -1,0 +1,5 @@
+build/
+assets/stock/
+assets/music/
+assets/sfx/
+node_modules/
