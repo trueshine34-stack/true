@@ -30,7 +30,7 @@ npm start                    # production-режим (нужны APP_SECRET и A
 npm run seed                 # заполнить пустую базу каталогом/пачкоматами (без демо-заказов)
 npm run seed:demo            # то же + 48 демо-клиентов и 160 демо-заказов для графиков
 npm run create-admin -- ana@livada.ro --role manager --name "Ana Ionescu"
-npm test                     # 21 тест: модули + HTTP-сценарии (регистрация, заказ, оплата, админка, безопасность)
+npm test                     # 23 теста: модули + HTTP-сценарии (регистрация, заказ, оплата, админка, безопасность)
 npm run e2e                  # 15 шагов в настоящем браузере (Playwright), скриншоты в test-results/e2e/
 ```
 
