@@ -152,7 +152,12 @@ function seg7(ctx, str, x, y, h, on, off) {
   let cx = x;
   for (const ch of str) {
     if (ch === ',' || ch === '.') {
-      ctx.fillStyle = on; ctx.beginPath(); ctx.arc(cx - h * 0.04, y + h - th * 0.3, th * 0.7, 0, Math.PI * 2); ctx.fill();
+      const px = cx - h * 0.04, py = y + h - th * 0.3;
+      ctx.fillStyle = on; ctx.beginPath(); ctx.arc(px, py, th * 0.7, 0, Math.PI * 2); ctx.fill();
+      if (ch === ',') {   // decimal comma (Hungarian): dot with a short tail
+        ctx.strokeStyle = on; ctx.lineWidth = th * 0.55; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(px + th * 0.35, py + th * 0.2); ctx.quadraticCurveTo(px + th * 0.2, py + th * 1.2, px - th * 0.55, py + th * 1.6); ctx.stroke();
+      }
       cx += h * 0.2; continue;
     }
     const segs = SEG[ch] || '';
