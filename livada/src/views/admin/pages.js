@@ -323,7 +323,7 @@ export function promosPage(ctx, t, rows) {
     <div class="card card--flush"><div class="adm-table-wrap"><table class="adm-table">
       <thead><tr><th>${t('col.code')}</th><th>${t('col.type')}</th><th class="num">${t('col.value')}</th><th class="num">${t('col.used')}</th><th>${t('col.valid')}</th><th>${t('col.active')}</th><th></th></tr></thead>
       <tbody>${rows.map((p) => html`<tr>
-        <td><b class="mono">${p.code}</b><small class="block muted">${p.description}</small></td>
+        <td><b class="mono">${p.code}</b>${p.first_order_only ? html` ${badge(t('promos.first'), 'green')}` : ''}<small class="block muted">${p.description}</small></td>
         <td>${typeLabel[p.type]}</td>
         <td class="num">${p.type === 'percent' ? `${p.value}%${p.max_discount ? ` (max ${leiShort(p.max_discount)})` : ''}` : p.type === 'fixed' ? leiShort(p.value) : '—'}${p.min_subtotal ? html`<small class="block muted">min. ${leiShort(p.min_subtotal)}</small>` : ''}</td>
         <td class="num">${p.used}${p.max_uses ? ` / ${p.max_uses}` : ''}</td>
@@ -341,6 +341,7 @@ export function promosPage(ctx, t, rows) {
         ${lbl(t('promos.max'), html`<input name="max_discount" inputmode="decimal" placeholder="—">`)}
         ${lbl(t('promos.uses'), html`<input name="max_uses" inputmode="numeric" placeholder="∞">`)}
         ${lbl(t('promos.until'), html`<input name="ends_at" type="date">`)}
+        <label class="adm-check"><input type="checkbox" name="first_order_only" value="1"> ${t('promos.first_hint')}</label>
         <button class="adm-btn adm-btn--dark adm-btn--block">${t('save')}</button>
       </form></div></div>`;
   return adminPage(ctx, { title: t('promos.title'), body, active: 'promos', t });

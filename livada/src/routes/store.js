@@ -62,9 +62,10 @@ export default function storeRoutes(r) {
   });
 
   // ─── coș ───────────────────────────────────────────────────────────────
+  const customerOf = (ctx) => (ctx.user ? { userId: ctx.user.id, email: ctx.user.email } : null);
   const cartState = (ctx) => {
     const cart = cartSvc.loadCart(ctx.cartId);
-    return { cart, totals: cartSvc.priceCart(cart) };
+    return { cart, totals: cartSvc.priceCart(cart, { customer: customerOf(ctx) }) };
   };
 
   r.get('/cos', (ctx) => {
@@ -115,7 +116,7 @@ export default function storeRoutes(r) {
     const code = clean(ctx.body.code, 40).toUpperCase();
     const cart = cartSvc.loadCart(cartId);
     const subtotal = cartSvc.priceCart(cart).subtotal;
-    const problem = cartSvc.promoProblem(cartSvc.findPromo(code), subtotal);
+    const problem = cartSvc.promoProblem(cartSvc.findPromo(code), subtotal, customerOf(ctx));
     if (problem) {
       if (ctx.wantsJson) throw new ValidationError({ code: problem });
       ctx.flash('error', problem);
@@ -134,7 +135,7 @@ export default function storeRoutes(r) {
   r.get('/checkout', (ctx) => {
     const cart = cartSvc.loadCart(ctx.cartId);
     if (!cart.items.length) return ctx.redirect('/cos');
-    const totals = cartSvc.priceCart(cart);
+    const totals = cartSvc.priceCart(cart, { customer: customerOf(ctx) });
     ctx.html(checkoutPage(ctx, { cart, totals, methods: methods(), addresses: ctx.user ? userAddresses(ctx.user.id) : [], user: ctx.user }));
   });
 

@@ -163,6 +163,7 @@ CREATE TABLE IF NOT EXISTS promo_codes (
   max_discount INTEGER,                -- plafon pentru reducerile procentuale
   starts_at TEXT, ends_at TEXT,
   max_uses INTEGER, used INTEGER NOT NULL DEFAULT 0,
+  first_order_only INTEGER NOT NULL DEFAULT 0,  -- doar pentru clienții fără comenzi anterioare
   active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

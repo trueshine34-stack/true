@@ -122,7 +122,7 @@ export async function placeOrder({ cartId, user, body, ip }) {
   if (!payment) errors.payment_method = 'Alege metoda de plată.';
   if (!(body.terms === 'on' || body.terms === true)) errors.terms = 'Trebuie să accepți Termenii și condițiile.';
 
-  const totals = priceCart(cart, { deliveryCode: method?.code, payment });
+  const totals = priceCart(cart, { deliveryCode: method?.code, payment, customer: { userId: user?.id, email } });
   if (payment === 'cod' && !totals.codAllowed) errors.payment_method = method && !method.cod_allowed ? `Plata ramburs nu este disponibilă pentru ${method.name}.` : 'Plata ramburs nu este disponibilă pentru această valoare.';
   if (payment === 'installments' && totals.total < ((getSetting('store') || {}).installments_min ?? 50000)) errors.payment_method = 'Ratele sunt disponibile pentru comenzi de minimum 500 lei.';
   if (cart.promo_code && totals.promoError) errors.promo = totals.promoError;

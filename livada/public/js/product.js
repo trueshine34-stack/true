@@ -15,11 +15,11 @@ if (data && form) {
   const available = (v) => data.preorder || v.stock > 0;
 
   /** cea mai bună variantă pentru o alegere: întâi potrivire exactă, apoi cât mai multe opțiuni păstrate */
-  function resolve(changedKey) {
-    const exact = data.variants.find((v) => matches(v, sel));
+  function resolve(changedKey, s = sel) {
+    const exact = data.variants.find((v) => matches(v, s));
     if (exact) return exact;
-    const scored = data.variants.filter((v) => v.options[changedKey] === sel[changedKey])
-      .map((v) => ({ v, score: keys.filter((k) => v.options[k] === sel[k]).length * 2 + (available(v) ? 1 : 0) }))
+    const scored = data.variants.filter((v) => v.options[changedKey] === s[changedKey])
+      .map((v) => ({ v, score: keys.filter((k) => v.options[k] === s[k]).length * 2 + (available(v) ? 1 : 0) }))
       .sort((a, b) => b.score - a.score || a.v.price - b.v.price);
     return scored[0]?.v || data.variants[0];
   }
@@ -32,18 +32,18 @@ if (data && form) {
       $('[data-option-value]', fs).textContent = label;
       for (const input of $$('input', fs)) {
         input.checked = input.value === sel[o.key];
-        // variantă cu restul opțiunilor neschimbate
+        // variantă cu restul opțiunilor neschimbate; dacă nu există (ex. titan → doar GPS + Cellular),
+        // alegerea schimbă și alte opțiuni, iar diferența de preț se calculează față de varianta rezultată
         const probe = data.variants.find((v) => keys.every((k) => (k === o.key ? v.options[k] === input.value : v.options[k] === sel[k])));
+        const target = probe || resolve(o.key, { ...sel, [o.key]: input.value });
+        const out = probe ? !available(probe) : !data.variants.some((v) => v.options[o.key] === input.value && available(v));
         const card = input.closest('.opt-card, .swatch-pick');
-        card?.classList.toggle('is-unavailable', !probe || !available(probe));
+        card?.classList.toggle('is-unavailable', out);
+        card?.classList.toggle('is-alt', !probe && !out); // disponibilă cu altă carcasă / conectivitate
         const delta = card?.querySelector('[data-delta]');
         if (delta) {
-          if (!probe) delta.textContent = '';
-          else if (probe.id === current.id) delta.textContent = '';
-          else {
-            const d = probe.price - current.price;
-            delta.textContent = d === 0 ? '' : `${d > 0 ? '+' : '−'}${lei(Math.abs(d))}`;
-          }
+          const d = target ? target.price - current.price : 0;
+          delta.textContent = out ? 'stoc epuizat' : !target || target.id === current.id || d === 0 ? '' : `${d > 0 ? '+' : '−'}${lei(Math.abs(d))}`;
         }
       }
     }

@@ -47,8 +47,8 @@ export function dashboardPage(ctx, { orders, favoritesCount, addressesCount }) {
       <a class="dash-card" href="/cont/adrese"><span>${icon('pin', { size: 22 })}</span><b>${addressesCount}</b><small>${addressesCount === 1 ? 'adresă' : 'adrese'}</small></a>
     </div>
     ${last ? html`<div class="panel"><div class="panel__head"><h2 class="h4">Ultima comandă</h2><a class="link-arrow" href=${`/cont/comenzi/${last.number}`}>Detalii ${icon('arrow-right', { size: 14 })}</a></div>
-      ${orderRow(last)}${timeline(last, last.events || [])}</div>` : html`<div class="panel">${emptyState({ iconName: 'package', title: 'Nicio comandă încă', text: 'Folosește codul BUNVENIT50 pentru 50 lei reducere la prima comandă de peste 500 lei.', cta: 'Descoperă produsele', href: '/' })}</div>`}
-    <div class="panel panel--gift"><div>${icon('gift', { size: 22 })}</div><div><b>Cadou de bun venit</b><p>50 lei reducere la prima comandă de minimum 500 lei cu codul <span class="code">BUNVENIT50</span>.</p></div></div>`;
+      ${orderRow(last)}${timeline(last, last.events || [])}</div>` : html`<div class="panel">${emptyState({ iconName: 'package', title: 'Nicio comandă încă', text: 'Comenzile tale și livrările în curs vor apărea aici.', cta: 'Descoperă produsele', href: '/' })}</div>`}
+    ${orders.length ? '' : html`<div class="panel panel--gift"><div>${icon('gift', { size: 22 })}</div><div><b>Cadou de bun venit</b><p>50 lei reducere la prima comandă de minimum 500 lei cu codul <span class="code">BUNVENIT50</span>.</p></div></div>`}`;
   return shell(ctx, '/cont', 'Contul meu', body);
 }
 

@@ -76,8 +76,8 @@ export function seedStore() {
            VALUES (?,?,?,?,?,?,?,?,?,?)`, m.code, m.type, m.carrier, m.name, m.description, m.eta, m.price, m.free_over, m.cod_allowed, m.sort);
     }
     for (const p of PROMO_CODES) {
-      run(`INSERT OR IGNORE INTO promo_codes(code, description, type, value, min_subtotal, max_discount, max_uses, ends_at)
-           VALUES (?,?,?,?,?,?,?,?)`, p.code, p.description, p.type, p.value, p.min_subtotal, p.max_discount, p.max_uses, p.ends_at || null);
+      run(`INSERT OR IGNORE INTO promo_codes(code, description, type, value, min_subtotal, max_discount, max_uses, ends_at, first_order_only)
+           VALUES (?,?,?,?,?,?,?,?,?)`, p.code, p.description, p.type, p.value, p.min_subtotal, p.max_discount, p.max_uses, p.ends_at || null, p.first_order_only ? 1 : 0);
     }
   });
 }

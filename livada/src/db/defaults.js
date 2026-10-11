@@ -76,7 +76,7 @@ export const CARRIERS = {
 };
 
 export const PROMO_CODES = [
-  { code: 'BUNVENIT50', description: '50 lei reducere la prima comandă de minimum 500 lei', type: 'fixed', value: lei(50), min_subtotal: lei(500), max_discount: null, max_uses: null },
+  { code: 'BUNVENIT50', description: '50 lei reducere la prima comandă de minimum 500 lei', type: 'fixed', value: lei(50), min_subtotal: lei(500), max_discount: null, max_uses: null, first_order_only: 1 },
   { code: 'LIVADA10', description: '10% reducere, maximum 300 lei, la comenzi de minimum 200 lei', type: 'percent', value: 10, min_subtotal: lei(200), max_discount: lei(300), max_uses: 500 },
   { code: 'TRANSPORT0', description: 'Transport gratuit la orice metodă de livrare', type: 'shipping', value: 0, min_subtotal: 0, max_discount: null, max_uses: null },
   { code: 'VARA2026', description: 'Campania de vară (expirată)', type: 'percent', value: 8, min_subtotal: 0, max_discount: lei(400), max_uses: null, ends_at: '2026-08-31 21:00:00' },

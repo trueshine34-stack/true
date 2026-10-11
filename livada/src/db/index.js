@@ -11,7 +11,16 @@ export function openDb(file = config.dbFile) {
   db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA synchronous = NORMAL;');
   db.exec(fs.readFileSync(path.join(ROOT, 'src/db/schema.sql'), 'utf8'));
+  migrate(db);
   return db;
+}
+
+/** migrări aditive pentru bazele create cu o versiune mai veche a schemei */
+function migrate(d) {
+  const has = (table, col) => d.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
+  if (!has('promo_codes', 'first_order_only')) {
+    d.exec("ALTER TABLE promo_codes ADD COLUMN first_order_only INTEGER NOT NULL DEFAULT 0; UPDATE promo_codes SET first_order_only = 1 WHERE code = 'BUNVENIT50';");
+  }
 }
 
 export function closeDb() {

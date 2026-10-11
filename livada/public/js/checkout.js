@@ -47,6 +47,7 @@ if (form) {
     }
     if (t.name === 'payment_method' || t.name === 'installments') { $('[data-installments]', form).hidden = payInput()?.value !== 'installments'; quote(); updatePlaceLabel(); }
     if (t.name === 'ship_county') checkExpress();
+    if (t.name === 'email') quote(); // codurile „doar la prima comandă” depind de email
     if (t.name === 'billing_same') $('[data-billing]', form).hidden = t.checked;
     if (t.matches('[data-customer-type]')) $('[data-company]', form).hidden = t.value !== 'pj';
   });
@@ -89,9 +90,10 @@ if (form) {
   async function quote() {
     const seq = ++qSeq;
     try {
-      const r = await api('/api/checkout/quote', { method: 'POST', body: { delivery_method: methodInput()?.value || '', payment_method: payInput()?.value || '' } });
+      const r = await api('/api/checkout/quote', { method: 'POST', body: { delivery_method: methodInput()?.value || '', payment_method: payInput()?.value || '', email: form.elements.email?.value || '' } });
       if (seq !== qSeq) return;
       $('[data-summary-rows]', form).innerHTML = r.rows;
+      if (r.promo !== undefined) $('[data-summary-promo]', form).innerHTML = r.promo;
       $('[data-place-total]', form).textContent = r.totalLabel;
       $('[data-summary-eta]', form).textContent = r.eta;
       for (const [n, v] of Object.entries(r.installments)) { const el = form.querySelector(`[data-rate="${n}"]`); if (el) el.textContent = v; }

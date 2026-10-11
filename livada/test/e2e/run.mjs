@@ -92,6 +92,15 @@ async function latestMail(base, to) {
 async function noHorizontalScroll(page) {
   const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(over <= 1, `${page.url()} are scroll orizontal (${over}px)`);
+  // și elemente care ies din ecran, chiar dacă body le ascunde (exceptând benzile cu scroll orizontal intenționat)
+  const out = await page.evaluate(() => {
+    const clipped = (e) => { for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) if (getComputedStyle(a).overflowX !== 'visible') return true; return false; };
+    return [...document.querySelectorAll('body *')].filter((e) => {
+      const r = e.getBoundingClientRect();
+      return r.width > 0 && r.right > innerWidth + 1 && !e.closest('[hidden]') && getComputedStyle(e).position !== 'fixed' && !clipped(e);
+    }).slice(0, 4).map((e) => `<${e.tagName.toLowerCase()} class="${e.className}"> → ${Math.round(e.getBoundingClientRect().right)}px`);
+  });
+  expect(out.length === 0, `${page.url()}: elemente în afara ecranului:\n${out.join('\n')}`);
 }
 
 const shot = (page, name) => page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: false });
@@ -244,6 +253,21 @@ try {
     expect(await page.locator(`text=${orderNumber}`).count() > 0, 'comanda nu apare în cont');
   });
 
+  await step('cont pe mobil: toate paginile încap pe ecran', async () => {
+    const cookies = await ctx.cookies();
+    const m = await newContext(browser, base, { mobile: true });
+    await m.ctx.addCookies(cookies);
+    const mp = await m.ctx.newPage();
+    for (const p of ['/cont', '/cont/comenzi', `/cont/comenzi/${orderNumber}`, '/cont/favorite', '/cont/adrese', '/cont/profil']) {
+      await mp.goto(base + p);
+      expect(new URL(mp.url()).pathname === p, `redirecționat de pe ${p} la ${mp.url()}`);
+      await noHorizontalScroll(mp);
+    }
+    await shot(mp, '12-mobile-account');
+    expect(m.errors.length === 0, `erori în consolă (cont mobil):\n${m.errors.join('\n')}`);
+    await m.ctx.close();
+  });
+
   expect(errors.length === 0, `erori în consolă:\n${errors.join('\n')}`);
   await ctx.close();
 
@@ -277,8 +301,12 @@ try {
   // ─── mobil ───
   const mob = await newContext(browser, server.base, { mobile: true });
   const mp = await mob.ctx.newPage();
-  await step('mobil: fără scroll orizontal pe paginile principale', async () => {
-    for (const p of ['/', '/iphone', '/produs/iphone-18-pro', '/produs/apple-watch-series-12', '/accesorii', '/cos', '/cont/autentificare', '/cont/inregistrare', '/livrare', '/contact', '/cautare?q=ipad']) {
+  await step('mobil: fără scroll orizontal pe nicio pagină din sitemap', async () => {
+    // toate paginile din sitemap (categorii, cele ~100 de produse, pagini statice) + paginile de cont și erori
+    const sitemap = await (await fetch(`${server.base}/sitemap.xml`)).text();
+    const pages = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => new URL(m[1]).pathname);
+    expect(pages.length > 100, `sitemap prea scurt: ${pages.length}`);
+    for (const p of [...pages, '/oferte', '/noutati', '/cos', '/cont/autentificare', '/cont/inregistrare', '/cont/parola-uitata', '/cautare?q=ipad', '/pagina-inexistenta']) {
       await mp.goto(server.base + p);
       await noHorizontalScroll(mp);
     }

@@ -194,6 +194,25 @@ test('coș + checkout cu easybox și ramburs: comandă, stoc, emailuri', async (
   assert.equal(empty.json.count, 0, 'coșul se golește');
 });
 
+test('BUNVENIT50 se aplică doar la prima comandă (după email)', async () => {
+  const c = new Client(app.base);
+  const v = await firstVariant("p.slug = 'iphone-17' AND v.stock >= 2");
+  await c.post('/cos/adauga', { variant_id: v.id });
+  assert.equal((await c.post('/cos/promo', { code: 'bunvenit50' })).status, 200, 'vizitator anonim: codul se aplică provizoriu');
+  // ioana@exemplu.ro a comandat deja în testul anterior
+  const quote = await c.post('/api/checkout/quote', { delivery_method: 'courier_fan', payment_method: 'cod', email: 'ioana@exemplu.ro' });
+  assert.match(quote.json.promo, /doar la prima comandă/);
+  const base = { first_name: 'Ioana', last_name: 'Marin', phone: '0722 123 456', customer_type: 'pf', delivery_method: 'courier_fan',
+    ship_county: 'Cluj', ship_city: 'Cluj-Napoca', ship_street: 'Str. Republicii 12', billing_same: 'on', payment_method: 'cod', terms: 'on' };
+  const again = await c.post('/checkout', { ...base, email: 'IOANA@exemplu.ro' });
+  assert.equal(again.status, 422);
+  assert.match(again.json.errors.promo, /doar la prima comandă/);
+  const fresh = await c.post('/api/checkout/quote', { delivery_method: 'courier_fan', payment_method: 'cod', email: 'nou@exemplu.ro' });
+  assert.doesNotMatch(fresh.json.rows, /doar la prima/);
+  assert.match(fresh.json.rows, /Reducere BUNVENIT50/);
+  await c.post('/cos/promo/sterge', {});
+});
+
 test('checkout cu cardul: plată simulată → plătită și confirmată; firmă cu CUI invalid respinsă', async () => {
   const c = new Client(app.base);
   const v = await firstVariant("p.slug = 'iphone-17' AND v.stock >= 2");

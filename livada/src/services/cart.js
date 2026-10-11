@@ -85,14 +85,25 @@ export function findPromo(code) {
   return one('SELECT * FROM promo_codes WHERE code = ? COLLATE NOCASE', String(code).trim());
 }
 
-/** @returns {string|null} motivul pentru care codul nu se aplică */
-export function promoProblem(p, subtotal) {
+/** clientul (cont sau email) are deja o comandă necontestată? */
+export function hasOrdered(customer) {
+  if (!customer || (!customer.userId && !customer.email)) return false;
+  return !!one("SELECT 1 FROM orders WHERE (user_id = ? OR email = ? COLLATE NOCASE) AND status NOT IN ('cancelled') LIMIT 1",
+    customer.userId ?? null, customer.email || null);
+}
+
+/**
+ * @param {{userId?:number, email?:string}|null} customer — pentru codurile valabile doar la prima comandă
+ * @returns {string|null} motivul pentru care codul nu se aplică
+ */
+export function promoProblem(p, subtotal, customer = null) {
   if (!p || !p.active) return 'Codul promoțional nu există.';
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
   if (p.starts_at && p.starts_at > now) return 'Codul nu este încă activ.';
   if (p.ends_at && p.ends_at < now) return 'Codul promoțional a expirat.';
   if (p.max_uses !== null && p.used >= p.max_uses) return 'Codul a atins numărul maxim de utilizări.';
   if (subtotal < p.min_subtotal) return `Codul se aplică la comenzi de minimum ${(p.min_subtotal / 100).toLocaleString('ro-RO')} lei.`;
+  if (p.first_order_only && hasOrdered(customer)) return `Codul ${p.code} este valabil doar la prima comandă.`;
   return null;
 }
 
@@ -137,7 +148,7 @@ export function loadCart(cartId) {
  * Calculează totalurile coșului.
  * @param {{deliveryCode?: string, payment?: string}} opts
  */
-export function priceCart(cart, { deliveryCode, payment } = {}) {
+export function priceCart(cart, { deliveryCode, payment, customer } = {}) {
   const store = getSetting('store') || {};
   const items = cart.items.filter((i) => i.available);
   const subtotal = items.reduce((s, i) => s + i.line, 0);
@@ -147,7 +158,7 @@ export function priceCart(cart, { deliveryCode, payment } = {}) {
   let promo = null, promoError = null, discount = 0, freeShipping = false;
   if (cart.promo_code) {
     const p = findPromo(cart.promo_code);
-    promoError = promoProblem(p, subtotal);
+    promoError = promoProblem(p, subtotal, customer);
     if (!promoError) {
       promo = { code: p.code, type: p.type, description: p.description };
       discount = promoDiscount(p, subtotal);

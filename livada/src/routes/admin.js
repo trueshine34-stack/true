@@ -293,9 +293,9 @@ export default function adminRoutes(r) {
     const num = (v) => Number(String(v || '').replace(',', '.')) || 0;
     const value = type === 'percent' ? Math.min(90, Math.max(1, Math.round(num(ctx.body.value)))) : type === 'fixed' ? toBani(num(ctx.body.value)) : 0;
     const ends = /^\d{4}-\d{2}-\d{2}$/.test(ctx.body.ends_at || '') ? `${ctx.body.ends_at} 21:59:59` : null;
-    run(`INSERT INTO promo_codes(code, description, type, value, min_subtotal, max_discount, max_uses, ends_at) VALUES (?,?,?,?,?,?,?,?)`,
+    run(`INSERT INTO promo_codes(code, description, type, value, min_subtotal, max_discount, max_uses, ends_at, first_order_only) VALUES (?,?,?,?,?,?,?,?,?)`,
       code, clean(ctx.body.description, 140), type, value, toBani(num(ctx.body.min_subtotal)), ctx.body.max_discount ? toBani(num(ctx.body.max_discount)) : null,
-      ctx.body.max_uses ? Math.max(1, Math.floor(num(ctx.body.max_uses))) : null, ends);
+      ctx.body.max_uses ? Math.max(1, Math.floor(num(ctx.body.max_uses))) : null, ends, ctx.body.first_order_only ? 1 : 0);
     log(ctx, 'promo.create', 'promo', code, { type, value });
     saved(ctx, '/admin/promotii');
   });

@@ -158,6 +158,7 @@ export function checkoutPage(ctx, { cart, totals, methods, addresses, user, pref
               <span class="mini-lines__img">${it.image ? html`<img src=${it.image} alt="" width="56" height="56">` : ''}<em>${it.qty}</em></span>
               <span class="mini-lines__name">${it.name}<small>${it.label}</small></span><b>${lei(it.line)}</b></li>`)}</ul>
             <div data-summary-promo>${promoForm(ctx, cart, totals)}</div>
+            <p class="field__msg" data-error-for="promo"></p>
             <div data-summary-rows>${summaryRows(totals)}</div>
             <p class="summary__eta" data-summary-eta></p>
             <button class="btn btn--dark btn--lg btn--block" type="submit" data-place-order>
