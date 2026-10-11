@@ -89,7 +89,7 @@ function superErste(ctx, t) {
   ctx.save();
   const x = 112, y = H - 176;
   ctx.font = '700 52px Montserrat';
-  const label = 'Erste Bank ügyfeleknek';
+  const label = 'Erste Bank-ügyfeleknek';
   const tw = trackedWidth(ctx, label, 0.5);
   const full = 96 + 28 + tw + 44;
   ctx.globalAlpha = a;
@@ -249,7 +249,7 @@ function drawPumpGraphic(ctx, t) {
     ctx.restore();
   }
   ctx.font = '600 22px Montserrat'; ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  fillTracked(ctx, 'ERSTE BANK ÜGYFELEKNEK', px + 56, py + ph - 62, 2);
+  fillTracked(ctx, 'ERSTE BANK-ÜGYFELEKNEK', px + 56, py + ph - 62, 2);
   ctx.restore();
 
   // --- contactless reader target on the panel edge

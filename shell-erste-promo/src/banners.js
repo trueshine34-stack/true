@@ -4,14 +4,14 @@
 // Formats: 4:5 (1080×1350, best for feed) and 1:1 (1080×1080).
 
 const TXT = {
-  kicker: 'ERSTE BANK ÜGYFELEKNEK',
+  kicker: 'ERSTE BANK-ÜGYFELEKNEK',
   l1: '25 LITER',
   l2: 'ÜZEMANYAG',
   l3: 'INGYEN!',
-  sub: 'Erste Bank ügyfeleknek.',
+  sub: 'Erste Bank-ügyfeleknek.',
   date: '2026. október 12–20.',
-  legal1: 'Az ajánlat 2026. október 12. és 20. között minden Erste Bank ügyfél',
-  legal2: 'számára érvényes a Shell töltőállomásokon. A kép illusztráció.',
+  legal1: 'Az akció 2026. október 12-től 20-ig minden Erste Bank-ügyfél számára',
+  legal2: 'érvényes a Shell-töltőállomásokon. A kép illusztráció.',
 };
 const NAVY = '#061538', NAVY2 = '#0B2466';
 
@@ -89,7 +89,7 @@ function bannerA(ctx, Wd, Hd, photo) {
   const sq = Hd === Wd;
   const photoH = sq ? 640 : 770;
   // photo band: sun (left) → totem → canopy pecten (right)
-  coverImage(ctx, photo, 0, 0, Wd, photoH, sq ? 0.28 : 0.42, 0.0, sq ? 1.0 : 1.0);
+  coverImage(ctx, photo, 0, 0, Wd, photoH, sq ? 0.28 : 0.11, 0.0, 1.0);
   // grade: lift the warmth a touch, keep the sky clean for the logos
   ctx.save(); ctx.globalCompositeOperation = 'soft-light';
   const wg = ctx.createLinearGradient(0, 0, Wd, photoH);
@@ -99,7 +99,7 @@ function bannerA(ctx, Wd, Hd, photo) {
   top.addColorStop(0, 'rgba(6,21,56,0.62)'); top.addColorStop(1, 'rgba(6,21,56,0)');
   ctx.fillStyle = top; ctx.fillRect(0, 0, Wd, 240);
   // fade into the navy offer panel
-  const fadeTop = photoH - (sq ? 230 : 280);
+  const fadeTop = photoH - 230;
   const fg = ctx.createLinearGradient(0, fadeTop, 0, photoH);
   fg.addColorStop(0, 'rgba(6,21,56,0)'); fg.addColorStop(0.65, 'rgba(6,21,56,0.86)'); fg.addColorStop(1, NAVY);
   ctx.fillStyle = fg; ctx.fillRect(0, fadeTop, Wd, photoH - fadeTop + 1);
@@ -115,7 +115,7 @@ function bannerA(ctx, Wd, Hd, photo) {
   ctx.save();
   const sw = (off) => { ctx.beginPath(); ctx.moveTo(Wd * 0.52, Hd + 4); ctx.bezierCurveTo(Wd * 0.72, Hd - 36 - off, Wd * 0.88, Hd - 70 - off, Wd + 4, Hd - (sq ? 150 : 175) - off); ctx.lineTo(Wd + 4, Hd + 4); ctx.closePath(); };
   sw(14); ctx.fillStyle = C.shellR; ctx.fill();
-  sw(0); const yg = ctx.createLinearGradient(Wd * 0.5, 0, Wd, 0); yg.addColorStop(0, '#F5B400'); yg.addColorStop(1, '#FFD62E'); ctx.fillStyle = yg; ctx.fill();
+  sw(0); const yg = ctx.createLinearGradient(Wd * 0.5, 0, Wd, 0); yg.addColorStop(0, '#FBCE07'); yg.addColorStop(1, '#FFD62E'); ctx.fillStyle = yg; ctx.fill();
   ctx.restore();
 
   const X = 72;
@@ -123,16 +123,16 @@ function bannerA(ctx, Wd, Hd, photo) {
 
   // kicker chip
   ctx.save();
-  const ky = photoH - (sq ? 92 : 108);
-  ctx.font = `800 ${sq ? 25 : 28}px Montserrat`;
-  const kw = trackedWidth(ctx, TXT.kicker, 2.5);
-  const kh = sq ? 50 : 56;
+  const ky = photoH - (sq ? 96 : 112);
+  ctx.font = `800 ${sq ? 28 : 31}px Montserrat`;
+  const kw = trackedWidth(ctx, TXT.kicker, 1.8);
+  const kh = sq ? 56 : 62;
   ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = 18;
-  rrect(ctx, X, ky, kh + kw + 44, kh, kh / 2); ctx.fillStyle = C.ersteB; ctx.fill();
+  rrect(ctx, X, ky, kh + kw + 46, kh, kh / 2); ctx.fillStyle = C.ersteB; ctx.fill();
   ctx.shadowColor = 'transparent';
-  drawErsteS(ctx, X + kh * 0.3, ky + kh * 0.12, kh * 0.42, '#fff');
+  drawErsteS(ctx, X + kh * 0.45, ky + kh * 0.17, kh * 0.42, '#fff');
   ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
-  fillTracked(ctx, TXT.kicker, X + kh + 14, ky + kh / 2 + 1, 2.5);
+  fillTracked(ctx, TXT.kicker, X + kh + 18, ky + kh / 2 + 1, 1.8);
   ctx.restore();
 
   // headline
@@ -158,7 +158,7 @@ function bannerA(ctx, Wd, Hd, photo) {
     y = photoH + s1 * 0.78;
     fillTracked(ctx, TXT.l1 + ' ' + TXT.l2, X - 3, y, -1);
     var line1Base = y;
-    const s3 = fit(ctx, TXT.l3, 900, maxW * 0.6, 160, -2);
+    const s3 = fit(ctx, TXT.l3, 900, maxW * 0.66, 176, -2);
     ctx.font = `900 ${s3}px Montserrat`; ctx.fillStyle = C.shellY;
     y += s3 * 0.98;
     fillTracked(ctx, TXT.l3, X - 5, y, -2);
@@ -166,13 +166,13 @@ function bannerA(ctx, Wd, Hd, photo) {
   ctx.restore();
 
   // the card sits on the seam between photo and panel
-  if (!sq) card(ctx, Wd - 205, photoH - 6, 300, -0.14);
+  if (!sq) card(ctx, Wd - 200, photoH - 36, 280, -0.14);
   else card(ctx, Wd - 190, line1Base + 26 + 112, 280, -0.12);
 
   // date + legal
   const dy = y + (sq ? 30 : 34);
   datePill(ctx, X, dy, sq ? 28 : 32, C.shellY, NAVY);
-  legal(ctx, X, Hd - (sq ? 44 : 50), sq ? 15 : 16, 'rgba(255,255,255,0.62)', Wd * 0.5 - X + 30);
+  legal(ctx, X, Hd - (sq ? 58 : 60), sq ? 17 : 18, 'rgba(255,255,255,0.8)', sq ? 600 : 640);
 }
 
 // ---------------------------------------------------------------- Banner B
@@ -184,6 +184,7 @@ function pumpDisplay(ctx, x, y, w, h) {
   g.addColorStop(0, '#1C1F27'); g.addColorStop(1, '#0B0C10');
   ctx.fillStyle = g; ctx.fill();
   ctx.shadowColor = 'transparent';
+  ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; ctx.shadowBlur = 0;
   ctx.save(); rrect(ctx, x, y, w, h, w * 0.045); ctx.clip();
   ctx.fillStyle = C.shellR; ctx.fillRect(x, y, w, h * 0.035);
   const rg = ctx.createLinearGradient(x, y, x + w * 0.7, y + h);
@@ -192,31 +193,29 @@ function pumpDisplay(ctx, x, y, w, h) {
   ctx.restore();
   ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 2; rrect(ctx, x, y, w, h, w * 0.045); ctx.stroke();
   const u = w / 900;
-  drawPecten(ctx, x + 40 * u, y + 46 * u, 56 * u);
+  drawPecten(ctx, x + 48 * u, y + 46 * u, 56 * u);
   ctx.font = `700 ${28 * u}px Montserrat`; ctx.fillStyle = '#fff';
-  ctx.fillText('Shell', x + 110 * u, y + 88 * u);
+  ctx.fillText('Shell', x + 118 * u, y + 88 * u);
   // accepted chip
   const cw = 330 * u, ch = 50 * u;
   rrect(ctx, x + w - cw - 36 * u, y + 50 * u, cw, ch, ch / 2); ctx.fillStyle = '#1F9D55'; ctx.fill();
   ctx.font = `800 ${21 * u}px Montserrat`; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('ERSTE ✓ ELFOGADVA', x + w - cw / 2 - 36 * u, y + 50 * u + ch / 2 + 1);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.font = `700 ${25 * u}px Montserrat`; ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  fillTracked(ctx, 'LITER', x + 48 * u, y + 196 * u, 4 * u);
-  fillTracked(ctx, 'FIZETENDŐ', x + 48 * u, y + 372 * u, 4 * u);
+  ctx.font = `700 ${30 * u}px Montserrat`; ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  fillTracked(ctx, 'LITER', x + 48 * u, y + 228 * u, 4 * u);
+  fillTracked(ctx, 'FIZETENDŐ', x + 48 * u, y + 404 * u, 4 * u);
   ctx.save();
+  ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
   ctx.shadowColor = rgba(C.shellY, 0.75); ctx.shadowBlur = 30 * u;
-  seg7(ctx, '25,00', x + 300 * u, y + 134 * u, 118 * u, C.shellY, 'rgba(251,206,7,0.07)');
+  seg7(ctx, '25,00', x + 300 * u, y + 166 * u, 118 * u, C.shellY, 'rgba(251,206,7,0.07)');
   ctx.shadowColor = 'rgba(255,255,255,0.55)'; ctx.shadowBlur = 16 * u;
-  seg7(ctx, '    0', x + 300 * u, y + 310 * u, 118 * u, '#fff', 'rgba(255,255,255,0.06)');
+  // 4 cells starting one comma-advance later, so both readouts end on the same edge
+  seg7(ctx, '   0', x + 323.6 * u, y + 342 * u, 118 * u, '#fff', 'rgba(255,255,255,0.06)');
   ctx.restore();
   ctx.font = `700 ${44 * u}px Montserrat`; ctx.fillStyle = 'rgba(255,255,255,0.88)';
-  ctx.fillText('L', x + w - 92 * u, y + 250 * u);
-  ctx.fillText('Ft', x + w - 102 * u, y + 426 * u);
-  // footer rule + label
-  ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fillRect(x + 48 * u, y + 470 * u, w - 96 * u, 2);
-  ctx.font = `700 ${21 * u}px Montserrat`; ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  fillTracked(ctx, 'ERSTE BANK ÜGYFELEKNEK', x + 48 * u, y + 516 * u, 3 * u);
+  ctx.fillText('L', x + w - 92 * u, y + 282 * u);
+  ctx.fillText('Ft', x + w - 102 * u, y + 458 * u);
   ctx.restore();
 }
 
@@ -259,22 +258,14 @@ function bannerB(ctx, Wd, Hd) {
   ctx.restore();
 
   // hero: pump display + Erste card
-  const dw = sq ? 600 : 800, dh = dw * 0.63;
+  const dw = sq ? 570 : 800, dh = dw * 0.63;
   const dx = sq ? X : X + 2, dyy = y + (sq ? 38 : 56);
   ctx.save();
   ctx.translate(dx + dw / 2, dyy + dh / 2); ctx.rotate(-0.035); ctx.translate(-(dx + dw / 2), -(dyy + dh / 2));
   pumpDisplay(ctx, dx, dyy, dw, dh);
   ctx.restore();
-  const cw = sq ? 330 : 380;
-  const cx = sq ? Wd - 200 : Wd - 215, cy = sq ? dyy + dh * 0.98 : dyy + dh + 26;
-  // contactless waves radiating from the card toward the display
-  ctx.save();
-  ctx.lineCap = 'round';
-  for (let i = 0; i < 3; i++) {
-    ctx.strokeStyle = `rgba(255,255,255,${0.85 - i * 0.22})`; ctx.lineWidth = sq ? 6 : 7;
-    ctx.beginPath(); ctx.arc(cx + cw * 0.18, cy - cw * 0.5, (sq ? 46 : 52) + i * (sq ? 30 : 34), -2.5, -1.25); ctx.stroke();
-  }
-  ctx.restore();
+  const cw = sq ? 305 : 345;
+  const cx = sq ? Wd - 215 : Wd - 235, cy = sq ? dyy + dh * 0.98 : dyy + dh + 26;
   card(ctx, cx, cy, cw, 0.12);
 
   // sub + date
@@ -283,8 +274,8 @@ function bannerB(ctx, Wd, Hd) {
   ctx.font = `700 ${sq ? 36 : 44}px Montserrat`; ctx.fillStyle = NAVY;
   fillTracked(ctx, TXT.sub, X, by + (sq ? 30 : 36), 0);
   ctx.restore();
-  datePill(ctx, X, by + (sq ? 48 : 62), sq ? 27 : 32, NAVY, C.shellY);
-  legal(ctx, X, Hd - footH + (sq ? 38 : 44), sq ? 16 : 18, 'rgba(255,255,255,0.78)', Wd - 2 * X);
+  datePill(ctx, X, by + (sq ? 60 : 74), sq ? 27 : 32, NAVY, C.shellY);
+  legal(ctx, X, Hd - footH + (sq ? 38 : 44), sq ? 18 : 20, 'rgba(255,255,255,0.78)', Wd - 2 * X);
 }
 
 window.drawBanner = async function (id, Wd, Hd) {

@@ -7,6 +7,8 @@
 | `out/Shell_Erste_25L_15s_1080p25.mp4` | мастер, 1920×1080, 25 fps, H.264 ~24 Мбит/с, AAC 320k, −14 LUFS |
 | `out/Shell_Erste_25L_15s_web.mp4` | лёгкая версия для мессенджеров и соцсетей (~8 МБ) |
 | `out/storyboard.jpg` | раскадровка по готовому ролику |
+| `out/banners/*.png` | баннеры для Facebook/Instagram: A «Aranyóra» и B «0 Ft», в форматах 4:5 и 1:1 |
+| `out/banners/FB_ad_copy.md` | тексты объявлений (HU + RU) |
 
 ## Монтажный лист
 
@@ -24,7 +26,7 @@
 | 10,54–11,00 | SUV уезжает в солнце, вспышка в белое | старт двигателя, реверс-свуш в дроп |
 | 11,00–15,00 | Пэкшот: логотипы Shell и Erste, **25 LITER ÜZEMANYAG INGYEN!**, *Erste Bank ügyfeleknek.*, плашка **2026. október 12–20.**, теглайн и юридическая строка | дроп; VO: „Shell és Erste. Több lehetőség az Ön mindennapjaira." |
 
-Юридическая строка: *„Az ajánlat 2026. október 12. és 20. között minden Erste Bank ügyfél számára érvényes a Shell töltőállomásokon. A kép illusztráció."*
+Юридическая строка: *„Az akció 2026. október 12-től 20-ig minden Erste Bank-ügyfél számára érvényes a Shell-töltőállomásokon. A kép illusztráció."*
 
 ## Источники и права
 
@@ -43,6 +45,10 @@
 2. Перезаписать голос профессиональным диктором. Тайминг уже рассчитан на текущие реплики: VO1 0,25 с, VO2 3,55 с, VO3 11,25 / 12,60 с.
 3. Для ТВ: перевести громкость на −23 LUFS (EBU R128) и подложить стоковые клипы в 4K, либо снять свою станцию Shell.
 4. Согласовать юридическую формулировку условий акции с банком.
+
+## Баннеры
+
+`node src/banner_render.mjs` рендерит `src/banners.js` в PNG и JPG. Фото станции увеличено в 4 раза нейросетью Real-ESRGAN (`tools/upscale.py`, файл `assets/kv/station_a_x4.jpg`). Перед выпуском баннеры прошли независимую проверку по четырём направлениям: эффективность в ленте и читаемость на телефоне, вёрстка, венгерский текст и юридическая строка, фирменный стиль. Принятые правки внесены.
 
 ## Сборка
 

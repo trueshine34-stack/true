@@ -178,7 +178,7 @@ function drawErsteCard(ctx, w, t, sheen = 0) {
   // number + label
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.font = `600 ${w * 0.052}px Montserrat`;
-  fillTracked(ctx, '•••• •••• •••• 2025', -w * 0.42, h * 0.3, w * 0.006);
+  fillTracked(ctx, '•••• •••• •••• 4821', -w * 0.42, h * 0.3, w * 0.006);
   ctx.font = `700 ${w * 0.04}px Montserrat`;
   ctx.textAlign = 'right';
   ctx.fillText('DEBIT', w * 0.43, h * 0.4);

@@ -135,7 +135,7 @@ const PACK = (() => {
       ctx.save();
       ctx.globalAlpha = p4;
       ctx.font = '600 56px Montserrat'; ctx.fillStyle = '#fff';
-      fillTracked(ctx, 'Erste Bank ügyfeleknek.', x + 4, 806 + (1 - p4) * 24, 0.5);
+      fillTracked(ctx, 'Erste Bank-ügyfeleknek.', x + 4, 806 + (1 - p4) * 24, 0.5);
       ctx.restore();
     }
     // date badge
@@ -200,8 +200,8 @@ const PACK = (() => {
     ctx.save();
     ctx.globalAlpha = a * 0.72;
     ctx.font = '500 18px Montserrat'; ctx.fillStyle = '#fff';
-    ctx.fillText('Az ajánlat 2026. október 12. és 20. között minden Erste Bank ügyfél számára érvényes', 112, 1030);
-    ctx.fillText('a Shell töltőállomásokon. A kép illusztráció.', 112, 1054);
+    ctx.fillText('Az akció 2026. október 12-től 20-ig minden Erste Bank-ügyfél számára', 112, 1030);
+    ctx.fillText('érvényes a Shell-töltőállomásokon. A kép illusztráció.', 112, 1054);
     ctx.restore();
   }
 
