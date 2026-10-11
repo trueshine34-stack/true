@@ -3,6 +3,7 @@ import { html, raw } from '../lib/html.js';
 import { HttpError } from '../lib/http.js';
 import { listOutbox, readOutbox } from '../lib/mailer.js';
 import { dateTime } from '../lib/format.js';
+import { missingStrings, clearMissing } from '../lib/i18n.js';
 
 export default function devRoutes(r) {
   r.get('/dev/mail', (ctx) => {
@@ -26,6 +27,17 @@ ${list.length ? list.map((m) => html`<a class=${`m ${sel?.id === m.id ? 'on' : '
     ctx.send('text/html; charset=utf-8', m.html.replace('<head>', '<head><base target="_blank">'), 200, {
       'Content-Security-Policy': "default-src 'none'; img-src 'self' data: https:; style-src 'unsafe-inline'; font-src 'self'", 'Cache-Control': 'no-store',
     });
+  });
+
+  /** textele cerute în engleză care lipsesc din src/i18n/en/*.json (se adună în timp ce navighezi pe /en) */
+  r.get('/dev/i18n', (ctx) => {
+    if (ctx.query.get('clear')) clearMissing();
+    const rows = missingStrings();
+    if (ctx.query.get('format') === 'json') return ctx.json({ missing: rows.map(([s, n]) => ({ s, n })) });
+    ctx.html(html`<!doctype html><html lang="ro"><head><meta charset="utf-8"><title>Traduceri lipsă — Livada</title>
+<style>body{font:14px/1.5 -apple-system,Inter,system-ui,sans-serif;margin:24px;color:#0E1411}td{padding:4px 10px;border-bottom:1px solid #E3E7E0;vertical-align:top}td.n{color:#6B746F;text-align:right}</style></head>
+<body><h1>Traduceri lipsă (${rows.length})</h1><p><a href="/dev/i18n?clear=1">Golește lista</a> · <a href="/dev/i18n?format=json">JSON</a></p>
+<table>${rows.map(([s, n]) => html`<tr><td class="n">${n}</td><td>${s}</td></tr>`)}</table></body></html>`);
   });
 
   r.get('/dev/mail/latest.json', (ctx) => {

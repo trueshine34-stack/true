@@ -7,6 +7,7 @@ import { sessionUser } from './services/users.js';
 import { cartIdFromToken, cartCount } from './services/cart.js';
 import { ValidationError } from './lib/validate.js';
 import { Raw } from './lib/html.js';
+import { withLang, lang, localizeHtml, localizeJson, localizePath } from './lib/i18n.js';
 
 import storeRoutes from './routes/store.js';
 import accountRoutes from './routes/account.js';
@@ -55,13 +56,13 @@ export class Ctx {
 
   html(body, status = 200, extra = {}) {
     this.sent = true;
-    const s = body instanceof Raw ? body.s : String(body);
+    const s = localizeHtml(body instanceof Raw ? body.s : String(body));
     sendBuffer(this.req, this.res, status, 'text/html; charset=utf-8', s, this.headers({ 'Cache-Control': 'no-store', ...extra }));
   }
 
   json(obj, status = 200, extra = {}) {
     this.sent = true;
-    sendBuffer(this.req, this.res, status, 'application/json; charset=utf-8', JSON.stringify(obj), this.headers({ 'Cache-Control': 'no-store', ...extra }));
+    sendBuffer(this.req, this.res, status, 'application/json; charset=utf-8', localizeJson(JSON.stringify(obj)), this.headers({ 'Cache-Control': 'no-store', ...extra }));
   }
 
   send(type, body, status = 200, extra = {}) {
@@ -71,7 +72,7 @@ export class Ctx {
 
   redirect(location, status = 303) {
     this.sent = true;
-    this.res.writeHead(status, this.headers({ Location: location, 'Cache-Control': 'no-store' }));
+    this.res.writeHead(status, this.headers({ Location: localizePath(location), 'Cache-Control': 'no-store' }));
     this.res.end();
   }
 
@@ -133,10 +134,35 @@ export function createApp() {
   if (config.devTools) devRoutes(router);
   storeRoutes(router); // ultimele: conțin rutele generice de catalog
 
-  return async function handle(req, res) {
+  return function handle(req, res) {
+    // limba: /en/… = engleză (prefixul se scoate înainte de rutare); /ro/… = comutatorul spre română (redirecționare)
+    const url = new URL(req.url, 'http://localhost');
+    const p = url.pathname;
+    if (p === '/ro' || p.startsWith('/ro/')) {
+      res.writeHead(302, { Location: (p.slice(3) || '/') + url.search, 'Set-Cookie': 'lv_lang=ro; Path=/; Max-Age=31536000; SameSite=Lax', 'Cache-Control': 'no-store' });
+      res.end();
+      return;
+    }
+    let l = 'ro';
+    if (p === '/en' || p.startsWith('/en/')) {
+      l = 'en';
+      req.url = (p.slice(3) || '/') + url.search;
+    } else if (p.startsWith('/api/') || (req.headers.accept || '').includes('application/json') || req.headers['x-lang']) {
+      // cererile din scripturi (coș, sumar, căutare) urmează limba paginii: antetul X-Lang sau cookie-ul lv_lang
+      const h = String(req.headers['x-lang'] || '');
+      l = h === 'en' || h === 'ro' ? h : (/(?:^|;\s*)lv_lang=en(?:;|$)/.test(req.headers.cookie || '') ? 'en' : 'ro');
+    }
+    return withLang(l, () => handleIn(req, res, l));
+  };
+
+  async function handleIn(req, res, l) {
     const ctx = new Ctx(req, res);
+    ctx.lang = l;
     try {
       if (serveStatic(req, res, ctx.path, ctx.query)) return;
+      if (ctx.method === 'GET' && !ctx.isApi && ctx.cookies.lv_lang !== l && !ctx.path.startsWith('/admin')) {
+        ctx.setCookie('lv_lang', l, { maxAge: 365 * 86400 });
+      }
       setupVisitor(ctx);
       loadSession(ctx);
       const m = router.match(ctx.method, ctx.path);
@@ -154,7 +180,7 @@ export function createApp() {
     } catch (err) {
       handleError(ctx, err);
     }
-  };
+  }
 }
 
 function handleError(ctx, err) {

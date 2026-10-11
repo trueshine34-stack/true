@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS users (
   marketing_opt_in INTEGER NOT NULL DEFAULT 0,
   admin_lang TEXT NOT NULL DEFAULT 'ro',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  last_login_at TEXT
+  last_login_at TEXT,
+  lang TEXT NOT NULL DEFAULT 'ro'        -- limba magazinului în care și-a făcut contul (ro / en): emailurile vin în ea
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -194,7 +195,8 @@ CREATE TABLE IF NOT EXISTS orders (
   awb TEXT, installments INTEGER,
   ip TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  lang TEXT NOT NULL DEFAULT 'ro'        -- limba în care s-a plasat comanda (ro / en)
 );
 CREATE INDEX IF NOT EXISTS orders_user ON orders(user_id, created_at);
 CREATE INDEX IF NOT EXISTS orders_status ON orders(status, created_at);

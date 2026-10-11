@@ -1,4 +1,5 @@
 // Formatare pentru România: bani (integer) → „7.649,99 lei”, date, telefoane.
+import { lang, t } from './i18n.js';
 
 const nf = new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const nf0 = new Intl.NumberFormat('ro-RO', { maximumFractionDigits: 0 });
@@ -20,10 +21,23 @@ export const toBani = (v) => Math.round(Number(String(v).replace(/\s/g, '').repl
 /** valoarea TVA inclusă într-un preț cu TVA */
 export const vatIncluded = (gross, rate = 21) => Math.round(gross - gross / (1 + rate / 100));
 
-const dtf = new Intl.DateTimeFormat('ro-RO', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Bucharest' });
-const dtfShort = new Intl.DateTimeFormat('ro-RO', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Bucharest' });
-const dttf = new Intl.DateTimeFormat('ro-RO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' });
-const tf = new Intl.DateTimeFormat('ro-RO', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bucharest' });
+// formatoare de date pe limbă (română / engleză), create o singură dată
+const DT = {};
+function fmt(kind) {
+  const l = lang();
+  const key = `${l}:${kind}`;
+  if (!DT[key]) {
+    const loc = l === 'en' ? 'en-GB' : 'ro-RO';
+    const o = {
+      date: { day: 'numeric', month: 'long', year: 'numeric' },
+      short: { day: '2-digit', month: '2-digit', year: 'numeric' },
+      dateTime: { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' },
+      time: { hour: '2-digit', minute: '2-digit' },
+    }[kind];
+    DT[key] = new Intl.DateTimeFormat(loc, { ...o, timeZone: 'Europe/Bucharest' });
+  }
+  return DT[key];
+}
 
 // SQLite păstrează datele ca „YYYY-MM-DD HH:MM:SS” în UTC
 export function asDate(d) {
@@ -35,12 +49,14 @@ export function asDate(d) {
   return new Date(s);
 }
 
-export const date = (d) => dtf.format(asDate(d));
-export const dateShort = (d) => dtfShort.format(asDate(d));
-export const dateTime = (d) => dttf.format(asDate(d));
-export const time = (d) => tf.format(asDate(d));
+export const date = (d) => fmt('date').format(asDate(d));
+export const dateShort = (d) => fmt('short').format(asDate(d));
+export const dateTime = (d) => fmt('dateTime').format(asDate(d));
+export const time = (d) => fmt('time').format(asDate(d));
 
 export function plural(n, one, few, many) {
+  // în engleză: 1 product / 2 products — formele se traduc prin dicționar (t('produs') → 'product')
+  if (lang() === 'en') return `${n.toLocaleString('en-GB')} ${n === 1 ? t(one) : t(few)}`;
   // reguli RO: 1 produs, 2–19 produse, 20+ de produse
   if (n === 1) return `${n} ${one}`;
   if (n === 0 || (n % 100 > 0 && n % 100 < 20)) return `${n} ${few}`;

@@ -24,6 +24,9 @@ function migrate(d) {
   // lockere: tipul punctului (locker non-stop / punct de ridicare cu program) și reperul de găsire
   if (!has('lockers', 'kind')) d.exec("ALTER TABLE lockers ADD COLUMN kind TEXT NOT NULL DEFAULT 'locker'");
   if (!has('lockers', 'note')) d.exec("ALTER TABLE lockers ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+  // limba clientului (ro / en): emailurile despre cont și comenzi se trimit în limba în care a cumpărat
+  if (!has('users', 'lang')) d.exec("ALTER TABLE users ADD COLUMN lang TEXT NOT NULL DEFAULT 'ro'");
+  if (!has('orders', 'lang')) d.exec("ALTER TABLE orders ADD COLUMN lang TEXT NOT NULL DEFAULT 'ro'");
 }
 
 export function closeDb() {

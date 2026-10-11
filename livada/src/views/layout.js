@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, config } from '../config.js';
-import { html, raw, jsonLd, cx } from '../lib/html.js';
+import { html, raw, jsonLd, jsonScript, cx } from '../lib/html.js';
+import { lang, t, alternatePath, localizePath, clientDict } from '../lib/i18n.js';
 import { asset, importMap } from '../lib/static.js';
 import { getSetting } from '../db/index.js';
 import { categories, listProducts } from '../services/catalog.js';
@@ -13,16 +14,25 @@ const LOGO_SVG = fs.readFileSync(path.join(ROOT, 'public/img/brand/logo.svg'), '
   .replace('<svg ', '<svg class="logo-svg" focusable="false" ');
 export const logo = () => raw(LOGO_SVG);
 
-let navCache = null;
-let navCacheAt = 0;
+// meniul se calculează o dată pe minut și pe limbă (numele și textele categoriilor sunt traduse)
+let navCache = {};
 function navData() {
-  if (!navCache || Date.now() - navCacheAt > 60_000) {
-    navCache = categories().map((c) => ({ ...c, products: listProducts({ category: c.slug, sort: 'recommended', limit: c.slug === 'accesorii' ? 6 : 8 }) }));
-    navCacheAt = Date.now();
+  const l = lang();
+  const c = navCache[l];
+  if (!c || Date.now() - c.at > 60_000) {
+    navCache[l] = { at: Date.now(), data: categories().map((x) => ({ ...x, products: listProducts({ category: x.slug, sort: 'recommended', limit: x.slug === 'accesorii' ? 6 : 8 }) })) };
   }
-  return navCache;
+  return navCache[l].data;
 }
-export const invalidateNav = () => { navCache = null; };
+export const invalidateNav = () => { navCache = {}; };
+
+/** comutatorul de limbă: aceeași pagină în cealaltă limbă */
+export function langSwitch(ctx, { cls = 'lang-switch', long = false } = {}) {
+  const other = lang() === 'en' ? 'ro' : 'en';
+  const href = alternatePath(ctx.path, other) + (ctx.url?.search || '');
+  const label = other === 'en' ? 'English' : 'Română';
+  return html`<a class=${cls} href=${href} hreflang=${other} lang=${other} aria-label=${other === 'en' ? 'English version' : 'Versiunea în română'}>${icon('globe', { size: 16 })}<span>${long ? label : other.toUpperCase()}</span></a>`;
+}
 
 function announcement() {
   const msgs = (getSetting('store') || {}).announcement || [];
@@ -64,6 +74,7 @@ function header(ctx, active) {
         </ul>
       </nav>
       <div class="site-header__actions">
+        ${langSwitch(ctx, { cls: 'lang-switch hide-sm' })}
         <button class="icon-btn" type="button" aria-label="Caută" data-open-search>${icon('search', { size: 21 })}</button>
         <a class="icon-btn hide-sm" href=${ctx.user ? '/cont/favorite' : '/cont/autentificare?next=/cont/favorite'} aria-label="Favorite">${icon('heart', { size: 21 })}</a>
         <a class="icon-btn" href=${ctx.user ? '/cont' : '/cont/autentificare'} aria-label=${ctx.user ? `Contul meu (${ctx.user.first_name})` : 'Autentificare'}>
@@ -86,12 +97,13 @@ function header(ctx, active) {
         <li><a href=${ctx.user ? '/cont' : '/cont/autentificare'}>${icon('user', { size: 18 })}<span>${ctx.user ? 'Contul meu' : 'Autentificare'}</span></a></li>
         <li><a href="/livrare">${icon('truck', { size: 18 })}<span>Livrare și lockere</span></a></li>
         <li><a href="/contact">${icon('phone', { size: 18 })}<span>Contact</span></a></li>
+        <li>${langSwitch(ctx, { cls: 'mobile-nav__lang', long: true })}</li>
       </ul>
     </div>
   </div>`;
 }
 
-function footer() {
+function footer(ctx) {
   const co = getSetting('company') || {};
   const sh = getSetting('showroom') || {};
   const cats = navData();
@@ -137,6 +149,7 @@ function footer() {
           <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener" class="anpc__badge"><b>SOL</b><span>Soluționarea online<br>a litigiilor</span></a>
         </div>
       </div>
+      <div class="footer-lang">${langSwitch(ctx, { cls: 'lang-switch lang-switch--footer', long: true })}</div>
       <div class="footer-legal">
         <p>© ${new Date().getFullYear()} ${co.legal_name} · CUI ${co.cui} · Reg. Com. ${co.reg_com} · Capital social ${co.capital} · ${co.address}</p>
         <p>Livada este un magazin independent. Apple, iPhone, iPad, Mac, Apple Watch, AirPods și AirTag sunt mărci înregistrate ale Apple Inc.</p>
@@ -182,23 +195,27 @@ function overlays(ctx) {
 export function page(ctx, o) {
   const title = o.title ? `${o.title} — Livada` : 'Livada — Tehnologia Apple, culeasă cu grijă';
   const desc = o.description || 'Magazin online de produse Apple în România: iPhone, Mac, iPad, Apple Watch, AirPods și accesorii. Livrare în 24h prin curier sau easybox, retur 30 de zile, rate 0%.';
-  const canonical = `${config.publicUrl}${o.canonical || ctx.path}`;
+  const basePath = o.canonical || ctx.path;
+  const canonical = `${config.publicUrl}${localizePath(basePath)}`;
+  const alt = { ro: `${config.publicUrl}${basePath}`, en: `${config.publicUrl}${localizePath(basePath, 'en')}` };
+  const cdict = clientDict();
   const image = o.image ? (o.image.startsWith('http') ? o.image : `${config.publicUrl}${o.image}`) : `${config.publicUrl}/img/brand/og-default.png`;
   const flash = ctx.flashMessage;
   return html`<!doctype html>
-<html lang="ro">
+<html lang=${lang()}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${title}</title>
 <meta name="description" content=${desc}>
 <link rel="canonical" href=${canonical}>
+<link rel="alternate" hreflang="ro" href=${alt.ro}><link rel="alternate" hreflang="en" href=${alt.en}><link rel="alternate" hreflang="x-default" href=${alt.ro}>
 ${o.noindex ? raw('<meta name="robots" content="noindex, nofollow">') : ''}
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0B0F0D" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content=${o.ogType || 'website'}><meta property="og:site_name" content="Livada">
 <meta property="og:title" content=${title}><meta property="og:description" content=${desc}>
-<meta property="og:url" content=${canonical}><meta property="og:image" content=${image}><meta property="og:locale" content="ro_RO">
+<meta property="og:url" content=${canonical}><meta property="og:image" content=${image}><meta property="og:locale" content=${lang() === 'en' ? 'en_GB' : 'ro_RO'}>
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/img/brand/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/img/brand/apple-touch-icon.png">
@@ -208,6 +225,7 @@ ${o.noindex ? raw('<meta name="robots" content="noindex, nofollow">') : ''}
 <meta name="csrf-token" content=${ctx.csrf}>
 ${(o.jsonld || []).map((j) => jsonLd(j))}
 <script type="importmap">${raw(importMap().json)}</script>
+${cdict ? jsonScript('i18n', cdict) : ''}
 </head>
 <body class=${cx(o.bodyClass)} data-user=${ctx.user ? '1' : '0'}>
 <a class="skip" href="#main">Sari la conținut</a>
@@ -216,7 +234,7 @@ ${o.minimal ? html`<header class="site-header site-header--minimal"><div class="
   <span class="secure-note">${icon('shield', { size: 18 })} Plată securizată</span></div></header>` : header(ctx, o.active)}
 ${flash ? html`<div class="wrap"><div class=${`flash flash--${flash.type}`} role="status">${icon(flash.type === 'error' ? 'info' : 'check', { size: 18 })}<span>${flash.message}</span></div></div>` : ''}
 <main id="main" class=${cx('main', o.mainClass)}>${o.body}</main>
-${o.minimal ? '' : footer()}
+${o.minimal ? '' : footer(ctx)}
 ${overlays(ctx)}
 <script type="module" src=${asset('/js/app.js')}></script>
 ${(o.scripts || []).map((s) => html`<script type="module" src=${asset(s)}></script>`)}

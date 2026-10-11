@@ -1,4 +1,5 @@
 import { html } from '../lib/html.js';
+import { localizePath } from '../lib/i18n.js';
 import { config } from '../config.js';
 import { HttpError } from '../lib/http.js';
 import { run, all } from '../db/index.js';
@@ -224,9 +225,13 @@ export default function storeRoutes(r) {
     const urls = ['/', '/noutati', '/oferte', ...catalog.categories().map((c) => `/${c.slug}`),
       ...all('SELECT slug, updated_at FROM products WHERE active = 1').map((p) => ({ loc: `/produs/${p.slug}`, lastmod: p.updated_at.slice(0, 10) })),
       ...Object.keys(STATIC_PAGES).map((s) => `/${s}`), '/contact'];
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => {
+    // fiecare pagină în ambele limbi, cu legături hreflang între versiuni
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls.flatMap((u) => {
       const loc = typeof u === 'string' ? u : u.loc;
-      return `  <url><loc>${config.publicUrl}${loc}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}</url>`;
+      const ro = `${config.publicUrl}${loc}`;
+      const en = `${config.publicUrl}${localizePath(loc, 'en')}`;
+      const alts = `<xhtml:link rel="alternate" hreflang="ro" href="${ro}"/><xhtml:link rel="alternate" hreflang="en" href="${en}"/>`;
+      return [ro, en].map((l) => `  <url><loc>${l}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}${alts}</url>`);
     }).join('\n')}\n</urlset>\n`;
     ctx.send('application/xml; charset=utf-8', xml, 200, { 'Cache-Control': 'public, max-age=3600' });
   });
