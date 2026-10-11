@@ -631,6 +631,13 @@ from accessories_i18n import COLOR_RO, SIZE_RO, LENGTH_RO, CONNECTION_RO, FINISH
 ACC_OPT = [("model", "Model", "dimensionMerchModel"), ("case", "Carcasă", "dimensionCaseSize"), ("color", "Culoare", "dimensionColor"),
            ("finish", "Cataramă", "dimensionMetalFinish"), ("size", "Mărime", None), ("length", "Lungime", "dimensionLength"),
            ("conn", "Conector", "dimensionConnection"), ("layout", "Tastatură", None)]
+
+
+def _nr(n, word):
+    """numeral + substantiv, cu „de” de la 20 în sus (5 culori, 26 de variante)"""
+    return f"{n} {'de ' if n % 100 >= 20 or (n >= 100 and n % 100 == 0) else ''}{word}"
+
+
 SOLO_NOTE = "Solo Loop nu are cataramă: alege mărimea după circumferința încheieturii (ghidul Apple de mărimi o măsoară în 1 minut)."
 UNKNOWN_COLORS = set()
 
@@ -715,9 +722,15 @@ for _p in sorted(_ACC.values(), key=lambda p: (AD.GROUPS.index(p["group"]) if p[
     if any(o["key"] == "case" for o in _options):
         _specs.append(("Compatibilitate", [(AD.CASE_SIZE[v["value"]][0], AD.CASE_SIZE[v["value"]][1].replace("pentru ", "").capitalize())
                                            for o in _options if o["key"] == "case" for v in o["values"]]))
-    _codes = sorted({r[2] for r in _rows})
+    _ncol = len(_seen["color"]) if "color" in _keys else 0
+    _avail = []
+    if _ncol > 1:
+        _avail.append(f"{_nr(_ncol, 'culori')}")
+    if len(_rows) > max(_ncol, 1):
+        _avail.append(f"{_nr(len(_rows), 'variante')} în total" if _ncol > 1 else _nr(len(_rows), "variante"))
+    _brand = "Beats" if "Beats" in _p["name"] else "Apple"
     P(slug=_p["slug"], name=_p["name"], category=_p["cat"], group=_p["group"], tagline=_p["desc"],
-      description=[_p["desc"]] + ([f"Produs original Apple{' / Beats' if 'Beats' in _p['name'] else ''}, cod{'uri' if len(_codes) > 1 else ''} {', '.join(c.split('/')[0] for c in _codes[:3])}{' …' if len(_codes) > 3 else ''}."]),
+      description=[_p["desc"], f"Produs original {_brand}, nou și sigilat." + (f" Disponibil în {', '.join(_avail)}." if _avail else "")],
       highlights=[], specs=_specs, in_box=([_p["name"], "Cablu USB‑C", "Documentație"] if _p["cat"] == "airpods" else []),
       options=_options, promo=_p["promo"],
       variants_explicit=[{"options": r[0], "eur": r[1], "mpn": r[2], "sku": "LV-" + r[2].split("/")[0]} for r in _rows],

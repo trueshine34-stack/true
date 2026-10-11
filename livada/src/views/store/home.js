@@ -12,7 +12,7 @@ const CAT_IMG = {
   iphone: '/img/products/iphone-18-pro/silver-1-480.webp', mac: '/img/products/macbook-air-13-m5/skyblue-1-480.webp',
   ipad: '/img/products/ipad-air-11-m4/purple-1-480.webp', watch: '/img/products/apple-watch-series-12/lightgold-1-480.webp',
   airpods: '/img/products/airpods-pro-3/main-1-480.webp', 'tv-home': '/img/products/homepod-mini/orange-1-480.webp',
-  accesorii: '/img/products/incarcator-magsafe-1-m/main-1-480.webp',
+  accesorii: '/img/products/incarcator-magsafe/main-1-480.webp',
 };
 
 export function homePage(ctx) {

@@ -2,7 +2,7 @@
 
 **Livada** («сад» по‑румынски; слоган *Tehnologia Apple, culeasă cu grijă* — «техника Apple, собранная с заботой») — интернет‑магазин новой техники Apple для Румынии: каталог, корзина, оформление заказа со всеми румынскими службами доставки и пачкоматами на карте, личный кабинет с подтверждением email и панель администратора на румынском и русском.
 
-- **99 товаров, 428 вариантов** — актуальная линейка Apple на октябрь 2026: iPhone (вкл. iPhone Duo, 18 Pro/Pro Max, Air, 17, 17e, 16), Mac, iPad, Apple Watch, AirPods/Beats, Apple TV/HomePod, AirTag и 60 аксессуаров. Настоящие артикулы Apple (MPN), средние рыночные цены в леях с НДС 21%.
+- **149 товаров, 1237 вариантов** — актуальная линейка Apple на октябрь 2026: iPhone (вкл. iPhone Duo, 18 Pro/Pro Max, Air, 17, 17e, 16), Mac, iPad (iPad Pro и со стеклом с нанотекстурой), Apple Watch, AirPods и все модели Beats во всех цветах, Apple TV/HomePod, AirTag и **весь каталог аксессуаров Apple и Beats — 106 товаров, 825 вариантов**: все цвета, размеры ремешков и корпусов, модели iPhone для чехлов, длины кабелей, разъёмы и раскладки клавиатур (132 цвета с румынскими названиями). Настоящие артикулы Apple (MPN), средние рыночные цены в леях с НДС 21%.
 - **Фото в едином стиле**: прозрачный фон, одинаковые поля, WebP 480/1000 px + JPEG‑миниатюры для писем.
 - **1096 пачкоматов** easybox, FANbox, Cargus Ship & Go, DPD Box, GLS ParcelLocker, Packeta Z‑BOX на карте с кластерами, фильтром по сетям, поиском без диакритики и «рядом со мной».
 - **Без зависимостей**: только Node.js ≥ 22.5 (встроенные `node:sqlite`, `node:http`, `node:crypto`). `npm install` не нужен.
@@ -96,12 +96,14 @@ src/
   views/                   store/* (страницы магазина), admin/* (панель, i18n RO/RU, графики)
   cli/create-admin.js
 public/                    css, js (ES-модули, прогрессивное улучшение), img (товары, бренд), fonts, vendor/leaflet
-data/                      catalog.json (99 товаров), lockers.json (1096 пачкоматов)
+data/                      catalog.json (149 товаров), catalog-retired.json, lockers.json (1096 пачкоматов)
 tools/                     сборка каталога и фото (Python + Pillow), пачкоматов (OSM), бренда
 test/                      unit + HTTP (node:test), e2e (Playwright)
 ```
 
-Пересборка каталога: `python3 tools/build_catalog.py` (нужен Pillow; `--skip-images` — только данные). После изменения `data/catalog.json` удалите `DATA_DIR/livada.db` или обновите товары через админку.
+Пересборка каталога: `python3 tools/build_catalog.py` (нужен Pillow; `--skip-images` — только данные; уже обработанные фото пропускаются). Аксессуары собираются из Apple Store Германия: `python3 tools/scrape_accessories.py` сохраняет все семейства с вариантами, ценами и фото каждого цвета в `tools/data/apple_accessories_de.json`, а правила в `tools/accessories_data.py` превращают их в товары (румынские названия, группы, что исключить — Hermès, Vision Pro, чехлы для старых iPhone).
+
+Обновление каталога в работающем магазине — автоматическое: при старте сервер сравнивает хэш `data/catalog.json` и добавляет новые товары и варианты, обновляет опции и фото, а товары из `data/catalog-retired.json` скрывает (не удаляет). Заказы, тексты, цены и скрытые в админке товары и варианты не трогаются.
 
 ## Безопасность
 

@@ -176,3 +176,30 @@ test('public/js: toate scripturile din browser se parsează (fără erori de sin
     assert.equal(r.status, 0, `${f}: ${r.stderr}`);
   }
 });
+
+test('catalog: sincronizare cu un catalog nou — adaugă variante, ascunde produsele retrase, păstrează prețurile din admin', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { one, run } = await import('../src/db/index.js');
+  const { syncCatalog } = await import('../src/db/seed.js');
+  const { ROOT } = await import('../src/config.js');
+  const retired = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/catalog-retired.json'), 'utf8'));
+  const catId = one("SELECT id FROM categories WHERE slug = 'accesorii'").id;
+  // o bază „veche”: un accesoriu retras, o variantă lipsă și un preț modificat în admin
+  run("INSERT INTO products(slug, category_id, name) VALUES (?, ?, 'Produs vechi')", retired[0], catId);
+  const band = one("SELECT p.id, v.id vid, v.sku FROM products p JOIN variants v ON v.product_id = p.id WHERE p.slug = 'curea-sport' ORDER BY v.id LIMIT 1");
+  run('DELETE FROM variants WHERE id = ?', band.vid);
+  run("UPDATE variants SET price = 12345 WHERE product_id = ? AND sku != ?", band.id, band.sku);
+  // un accesoriu cu o singură variantă al cărui SKU s-a schimbat și un produs ascuns din admin
+  const cloth = one("SELECT v.id, v.sku FROM products p JOIN variants v ON v.product_id = p.id WHERE p.slug = 'laveta-de-curatare-apple'");
+  run("UPDATE variants SET sku = 'LV-VECHI', price = 4321 WHERE id = ?", cloth.id);
+  run("UPDATE products SET active = 0 WHERE slug = 'siri-remote'");
+  const st = syncCatalog();
+  assert.equal(one('SELECT sku FROM variants WHERE id = ?', cloth.id).sku, cloth.sku, 'SKU-ul nou e preluat de varianta existentă');
+  assert.equal(one('SELECT price FROM variants WHERE id = ?', cloth.id).price, 4321, 'prețul din admin rămâne');
+  assert.equal(one("SELECT active FROM products WHERE slug = 'siri-remote'").active, 0, 'produsul ascuns din admin rămâne ascuns');
+  assert.equal(one('SELECT active FROM products WHERE slug = ?', retired[0]).active, 0, 'produsul retras e ascuns');
+  assert.ok(one('SELECT id FROM variants WHERE sku = ?', band.sku), 'varianta lipsă e adăugată la loc');
+  assert.ok(st.variants >= 1);
+  assert.ok(one('SELECT COUNT(*) n FROM variants WHERE product_id = ? AND price = 12345', band.id).n > 0, 'prețurile editate rămân');
+});

@@ -16,8 +16,9 @@ const catalogHash = () => crypto.createHash('sha1').update(fs.readFileSync(CATAL
 /**
  * Sincronizează o bază existentă cu un catalog nou (produse, culori și mărimi noi), fără să piardă comenzile:
  * - produsele noi sunt adăugate, iar la cele existente se actualizează structura (opțiuni, imagini, grup, ordine);
- *   textele și prețurile editate în admin rămân neatinse;
+ *   textele, prețurile și produsele/variantele ascunse în admin rămân neatinse;
  * - variantele noi (după SKU) sunt adăugate, iar cele dispărute din catalog devin inactive;
+ *   un produs cu o singură variantă își păstrează varianta (și prețul din admin) chiar dacă SKU-ul s-a schimbat;
  * - produsele retrase din catalog (data/catalog-retired.json) sunt ascunse, nu șterse.
  */
 export function syncCatalog() {
@@ -36,14 +37,18 @@ export function syncCatalog() {
       for (const [k, list] of Object.entries(JSON.parse(ex.images || '{}'))) {
         for (const im of list) if (String(im['480']).startsWith('/uploads/')) (images[k] ||= []).push(im);
       }
-      run(`UPDATE products SET options = ?, images = ?, image_key = ?, category_id = ?, grp = ?, sort = ?, active = 1,
+      run(`UPDATE products SET options = ?, images = ?, image_key = ?, category_id = ?, grp = ?, sort = ?,
            updated_at = datetime('now') WHERE id = ?`,
       JSON.stringify(p.options || []), JSON.stringify(images), p.image_key || null, catId[p.category], p.group || '', i, ex.id);
       stats.updated++;
       const skus = new Set(p.variants.map((v) => v.sku));
+      if (p.variants.length === 1 && !one('SELECT id FROM variants WHERE sku = ?', p.variants[0].sku)) {
+        const old = all("SELECT id FROM variants WHERE product_id = ? AND sku LIKE 'LV-%'", ex.id);
+        if (old.length === 1) run('UPDATE variants SET sku = ?, mpn = ? WHERE id = ?', p.variants[0].sku, p.variants[0].mpn || null, old[0].id);
+      }
       p.variants.forEach((v, j) => {
         const vx = one('SELECT id FROM variants WHERE sku = ?', v.sku);
-        if (vx) { run('UPDATE variants SET options = ?, sort = ?, active = 1 WHERE id = ?', JSON.stringify(v.options), j, vx.id); return; }
+        if (vx) { run('UPDATE variants SET options = ?, sort = ? WHERE id = ?', JSON.stringify(v.options), j, vx.id); return; }
         insertVariant(ex.id, v, j);
         stats.variants++;
       });
