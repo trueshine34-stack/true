@@ -21,7 +21,7 @@ import { adminLogin } from '../views/admin/layout.js';
 import * as V from '../views/admin/pages.js';
 import { signIn } from './account.js';
 
-const tr = (ctx) => translator(ctx.user?.admin_lang || ctx.cookies.lv_lang || 'ro');
+const tr = (ctx) => translator(ctx.user?.admin_lang || ctx.cookies.lv_admin_lang || 'ro');
 const log = (ctx, action, entity, id, data) => audit(ctx.user?.id, action, entity, id, data, ctx.ip);
 const saved = (ctx, to) => { ctx.flash('success', tr(ctx)('saved')); ctx.redirect(to); };
 
@@ -55,6 +55,7 @@ export default function adminRoutes(r) {
   r.post('/admin/limba', requireStaff, (ctx) => {
     const lang = ctx.body.lang === 'ru' ? 'ru' : 'ro';
     run('UPDATE users SET admin_lang = ? WHERE id = ?', lang, ctx.user.id);
+    ctx.setCookie('lv_admin_lang', lang, { maxAge: 365 * 86400 });
     const back = backUrl(ctx, '/admin');
     ctx.redirect(back.startsWith('/admin') ? back : '/admin');
   });
