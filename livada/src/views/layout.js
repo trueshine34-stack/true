@@ -53,7 +53,7 @@ function header(ctx, active) {
                 </div>
                 <ul class="flyout__grid">
                   ${c.products.map((p) => html`<li><a class="flyout__item" href=${`/produs/${p.slug}`}>
-                    <span class="flyout__img">${p.image ? html`<img src=${p.image} alt="" loading="lazy" width="96" height="96">` : ''}</span>
+                    <span class="flyout__img">${p.image ? html`<img data-src=${p.image} alt="" width="96" height="96">` : ''}</span>
                     <span class="flyout__name">${p.name}</span>
                     ${p.badge ? html`<span class="flyout__badge">${p.badge}</span>` : ''}
                   </a></li>`)}

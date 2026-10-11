@@ -164,3 +164,15 @@ test('catalog: toate produsele au imagini existente și prețuri pozitive', asyn
   assert.equal(all('SELECT COUNT(*) n FROM variants WHERE price <= 0')[0].n, 0);
   assert.ok(all('SELECT COUNT(*) n FROM lockers')[0].n > 1000);
 });
+
+test('public/js: toate scripturile din browser se parsează (fără erori de sintaxă)', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { spawnSync } = await import('node:child_process');
+  const { ROOT } = await import('../src/config.js');
+  const dir = path.join(ROOT, 'public/js');
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.js'))) {
+    const r = spawnSync(process.execPath, ['--check', path.join(dir, f)], { encoding: 'utf8' });
+    assert.equal(r.status, 0, `${f}: ${r.stderr}`);
+  }
+});

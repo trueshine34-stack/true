@@ -100,6 +100,11 @@ sInput?.addEventListener('keydown', (e) => {
   items[i].focus();
 });
 
+// imaginile din meniul desktop (~45) se încarcă abia când cursorul ajunge în header, nu la fiecare pagină
+const hydrateNav = () => $$('.flyout img[data-src]').forEach((i) => { i.src = i.dataset.src; i.removeAttribute('data-src'); });
+$('.site-header')?.addEventListener('pointerenter', hydrateNav, { once: true });
+$('.site-header')?.addEventListener('focusin', hydrateNav, { once: true });
+
 // coș (drawer)
 const drawer = $('[data-cart-drawer]');
 export function setCartCount(n) {
