@@ -52,9 +52,13 @@ export function productPage(ctx, p, related) {
         </div>
       </fieldset>`;
     }
+    // multe valori scurte (ex. mărimile 0–12 ale curelei Solo Loop) → plăcuțe compacte; altfel listă sau grilă
+    const chips = o.values.length > 5 && o.values.every((x) => x.label.length <= 8 && !x.hint);
+    const layout = chips ? 'opt__grid--chips' : o.values.length > 3 || o.values.some((x) => x.label.length > 18) ? 'opt__grid--list' : '';
     return html`<fieldset class="opt" data-option=${o.key}>
       <legend class="opt__legend">${o.label} <span class="opt__value" data-option-value>${current?.label}</span></legend>
-      <div class=${cx('opt__grid', o.values.length > 3 || o.values.some((x) => x.label.length > 18) ? 'opt__grid--list' : '')}>
+      ${o.note ? html`<p class="opt__note">${o.note}</p>` : ''}
+      <div class=${cx('opt__grid', layout)}>
         ${o.values.map((x) => html`<label class="opt-card">
           <input type="radio" name=${`opt-${o.key}`} value=${x.value}${attr('checked', x.value === current?.value)} data-label=${x.label}>
           <span class="opt-card__box"><span class="opt-card__label">${x.label}</span>${x.hint ? html`<span class="opt-card__hint">${x.hint}</span>` : ''}<span class="opt-card__delta" data-delta=${x.value}></span></span>

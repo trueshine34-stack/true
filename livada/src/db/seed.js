@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROOT, config } from '../config.js';
@@ -9,32 +10,94 @@ import { fold } from '../lib/format.js';
 
 const bani = (lei) => Math.round(lei * 100);
 
-export function seedCatalog() {
-  const data = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/catalog.json'), 'utf8'));
+const CATALOG_FILE = path.join(ROOT, 'data/catalog.json');
+const catalogHash = () => crypto.createHash('sha1').update(fs.readFileSync(CATALOG_FILE)).digest('hex').slice(0, 16);
+
+/**
+ * Sincronizează o bază existentă cu un catalog nou (produse, culori și mărimi noi), fără să piardă comenzile:
+ * - produsele noi sunt adăugate, iar la cele existente se actualizează structura (opțiuni, imagini, grup, ordine);
+ *   textele și prețurile editate în admin rămân neatinse;
+ * - variantele noi (după SKU) sunt adăugate, iar cele dispărute din catalog devin inactive;
+ * - produsele retrase din catalog (data/catalog-retired.json) sunt ascunse, nu șterse.
+ */
+export function syncCatalog() {
+  const data = JSON.parse(fs.readFileSync(CATALOG_FILE, 'utf8'));
+  const retiredFile = path.join(ROOT, 'data/catalog-retired.json');
+  const retired = fs.existsSync(retiredFile) ? JSON.parse(fs.readFileSync(retiredFile, 'utf8')) : [];
+  const stats = { added: 0, updated: 0, variants: 0, hidden: 0 };
   tx(() => {
-    data.categories.forEach((c, i) => {
-      run(`INSERT INTO categories(slug, name, title, tagline, groups, sort) VALUES (?,?,?,?,?,?)
-           ON CONFLICT(slug) DO UPDATE SET name=excluded.name, title=excluded.title, tagline=excluded.tagline, groups=excluded.groups, sort=excluded.sort`,
-      c.slug, c.name, c.title, c.tagline, JSON.stringify(c.groups), i);
-    });
+    upsertCategories(data.categories);
     const catId = Object.fromEntries(all('SELECT slug, id FROM categories').map((r) => [r.slug, r.id]));
     data.products.forEach((p, i) => {
-      const exists = one('SELECT id FROM products WHERE slug = ?', p.slug);
-      if (exists) return; // nu suprascriem modificările din admin
-      const r = run(`INSERT INTO products(slug, category_id, grp, name, tagline, badge, featured, release_note, description, highlights,
-                      specs, in_box, options, images, image_key, preorder, sort) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      p.slug, catId[p.category], p.group || '', p.name, p.tagline || '', p.badge || null, p.featured ? 1 : 0, p.release || null,
-      JSON.stringify(p.description || []), JSON.stringify(p.highlights || []), JSON.stringify(p.specs || []),
-      JSON.stringify(p.in_box || []), JSON.stringify(p.options || []), JSON.stringify(p.images || {}), p.image_key || null,
-      p.preorder ? 1 : 0, i);
-      const pid = Number(r.lastInsertRowid);
+      const ex = one('SELECT id, images FROM products WHERE slug = ?', p.slug);
+      if (!ex) { insertProduct(p, i, catId); stats.added++; return; }
+      // păstrăm imaginile încărcate din admin
+      const images = structuredClone(p.images || {});
+      for (const [k, list] of Object.entries(JSON.parse(ex.images || '{}'))) {
+        for (const im of list) if (String(im['480']).startsWith('/uploads/')) (images[k] ||= []).push(im);
+      }
+      run(`UPDATE products SET options = ?, images = ?, image_key = ?, category_id = ?, grp = ?, sort = ?, active = 1,
+           updated_at = datetime('now') WHERE id = ?`,
+      JSON.stringify(p.options || []), JSON.stringify(images), p.image_key || null, catId[p.category], p.group || '', i, ex.id);
+      stats.updated++;
+      const skus = new Set(p.variants.map((v) => v.sku));
       p.variants.forEach((v, j) => {
-        run('INSERT INTO variants(product_id, sku, mpn, options, price, compare_at, stock, sort) VALUES (?,?,?,?,?,?,?,?)',
-          pid, v.sku, v.mpn || null, JSON.stringify(v.options), bani(v.price), v.compare_at ? bani(v.compare_at) : null, v.stock, j);
+        const vx = one('SELECT id FROM variants WHERE sku = ?', v.sku);
+        if (vx) { run('UPDATE variants SET options = ?, sort = ?, active = 1 WHERE id = ?', JSON.stringify(v.options), j, vx.id); return; }
+        insertVariant(ex.id, v, j);
+        stats.variants++;
       });
+      for (const v of all("SELECT id, sku FROM variants WHERE product_id = ? AND active = 1 AND sku LIKE 'LV-%'", ex.id)) {
+        if (!skus.has(v.sku)) run('UPDATE variants SET active = 0 WHERE id = ?', v.id);
+      }
+    });
+    for (const slug of retired) {
+      if (data.products.some((p) => p.slug === slug)) continue;
+      stats.hidden += Number(run('UPDATE products SET active = 0 WHERE slug = ? AND active = 1', slug).changes);
+    }
+  });
+  rebuildSearchIndex();
+  setSetting('catalog_hash', catalogHash());
+  return stats;
+}
+
+function upsertCategories(categories) {
+  categories.forEach((c, i) => {
+    run(`INSERT INTO categories(slug, name, title, tagline, groups, sort) VALUES (?,?,?,?,?,?)
+         ON CONFLICT(slug) DO UPDATE SET name=excluded.name, title=excluded.title, tagline=excluded.tagline, groups=excluded.groups, sort=excluded.sort`,
+    c.slug, c.name, c.title, c.tagline, JSON.stringify(c.groups), i);
+  });
+}
+
+function insertProduct(p, i, catId) {
+  const r = run(`INSERT INTO products(slug, category_id, grp, name, tagline, badge, featured, release_note, description, highlights,
+                  specs, in_box, options, images, image_key, preorder, sort) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  p.slug, catId[p.category], p.group || '', p.name, p.tagline || '', p.badge || null, p.featured ? 1 : 0, p.release || null,
+  JSON.stringify(p.description || []), JSON.stringify(p.highlights || []), JSON.stringify(p.specs || []),
+  JSON.stringify(p.in_box || []), JSON.stringify(p.options || []), JSON.stringify(p.images || {}), p.image_key || null,
+  p.preorder ? 1 : 0, i);
+  const pid = Number(r.lastInsertRowid);
+  p.variants.forEach((v, j) => insertVariant(pid, v, j));
+  return pid;
+}
+
+function insertVariant(pid, v, j) {
+  run('INSERT INTO variants(product_id, sku, mpn, options, price, compare_at, stock, sort) VALUES (?,?,?,?,?,?,?,?)',
+    pid, v.sku, v.mpn || null, JSON.stringify(v.options), bani(v.price), v.compare_at ? bani(v.compare_at) : null, v.stock, j);
+}
+
+export function seedCatalog() {
+  const data = JSON.parse(fs.readFileSync(CATALOG_FILE, 'utf8'));
+  tx(() => {
+    upsertCategories(data.categories);
+    const catId = Object.fromEntries(all('SELECT slug, id FROM categories').map((r) => [r.slug, r.id]));
+    data.products.forEach((p, i) => {
+      if (one('SELECT id FROM products WHERE slug = ?', p.slug)) return; // nu suprascriem modificările din admin
+      insertProduct(p, i, catId);
     });
   });
   rebuildSearchIndex();
+  setSetting('catalog_hash', catalogHash());
   return data.products.length;
 }
 
@@ -224,6 +287,11 @@ export async function seedAll({ demo = false, log = true } = {}) {
   openDb();
   seedStore();
   const n = one('SELECT COUNT(*) n FROM products').n === 0 ? seedCatalog() : 0;
+  // catalog nou (produse, culori, mărimi) față de cel din bază → sincronizare fără pierderea comenzilor
+  if (!n && getSetting('catalog_hash') !== catalogHash()) {
+    const st = syncCatalog();
+    if (log) console.log(`[livada] catalog actualizat: +${st.added} produse, +${st.variants} variante, ${st.hidden} produse retrase`);
+  }
   const l = one('SELECT COUNT(*) n FROM lockers').n === 0 ? seedLockers() : 0;
   await ensureAdmin({ log });
   const d = demo ? await seedDemo() : 0;

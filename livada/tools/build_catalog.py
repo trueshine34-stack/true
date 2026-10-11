@@ -66,6 +66,7 @@ def sku_of(slug, opts):
 
 
 SEEN_SKUS = set()
+FALLBACK_HEX = {"transparent": "#E9EEF0", "black": "#2A2A2C", "white": "#F4F4F2", "silver": "#E3E4E1", "midnight": "#2E3643"}
 
 
 # ------------------------------------------------------------------ date Apple DE
@@ -178,6 +179,18 @@ def get_watch(spec, cache_dir):
     return out
 
 
+def swatch_hex(name, cache_dir):
+    """culoarea medie a mostrei Apple (centrul imaginii _SW_COLOR) → #RRGGBB pentru buline"""
+    p = os.path.join(cache_dir, re.sub(r"[^A-Za-z0-9_.-]", "_", name) + "-sw.png")
+    if not os.path.exists(p):
+        open(p, "wb").write(fetch(f"{D.CDN}{name}_SW_COLOR?wid=64&hei=64&fmt=png&.v=1"))
+    im = Image.open(p).convert("RGB").resize((64, 64))
+    box = im.crop((18, 18, 46, 46))
+    px = list(box.getdata())
+    r, g, b = (round(sum(c[i] for c in px) / len(px)) for i in range(3))
+    return f"#{r:02X}{g:02X}{b:02X}"
+
+
 def normalize(im, fill=FILL):
     bbox = im.getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()
     if bbox:
@@ -217,13 +230,21 @@ def build_variants(p, metrics, cache):
     keys = [o["key"] for o in opts]
     variants = []
 
-    def add(o, price, mpn=None, compare=None):
-        sku = sku_of(p["slug"], o)
+    def add(o, price, mpn=None, compare=None, sku=None):
+        if sku:
+            SEEN_SKUS.add(sku)
+        else:
+            sku = sku_of(p["slug"], o)
         v = {"sku": sku, "options": o, "price": price, "mpn": mpn}
         if compare:
             v["compare_at"] = compare
         variants.append(v)
 
+    if "variants_explicit" in p:  # accesorii din magazinul Apple: doar combinațiile care există, fiecare cu codul ei
+        for ve in p["variants_explicit"]:
+            price = lei(ve["eur"], cat)
+            add(ve["options"], price, ve.get("mpn"), bump(price, p["promo"]) if p.get("promo") else None, ve.get("sku"))
+        return variants
     if p.get("watch_matrix") == "s12":
         prods, prices = watch_products(cache, "apple-watch")
         mp = {}
@@ -256,32 +277,35 @@ def build_variants(p, metrics, cache):
 
     if "eur_from" in p:  # iPad: preț + MPN din pagina Apple DE
         rows = metrics[p["eur_from"]]
-        for c in [v["value"] for v in opts[0]["values"]]:
-            for st in [v["value"] for v in opts[1]["values"]]:
-                for conn in ("wifi", "cell"):
-                    hit = None
-                    for pn, pr, name in rows:
-                        n = name.replace("‑", "-").replace("\xa0", " ")
-                        if p.get("eur_size") and not n.startswith(p["eur_size"]):
-                            continue
-                        if f" {st.upper()}" not in n.upper():
-                            continue
-                        is_cell = "Cellular" in n
-                        if is_cell != (conn == "cell"):
-                            continue
-                        if "nano-texture" in n:
-                            continue
-                        col = EN.get(c, c)
-                        tail = n.rsplit(" - ", 1)[-1].strip() if " - " in n else ""
-                        if tail == col or (c == "silver" and tail in ("", "Silver")):
-                            hit = (pn, pr)
-                            break
-                    if not hit:
-                        print("  ! lipsă iPad", p["slug"], c, st, conn, file=sys.stderr)
-                        continue
-                    price = lei(hit[1], cat)
-                    add({"color": c, "storage": st, "conn": conn}, price, hit[0],
-                        bump(price, p["promo"]) if p.get("promo") else None)
+        glasses = next(([v["value"] for v in o["values"]] for o in opts if o["key"] == "glass"), [None])
+        combos = [(c, st, g, cn) for c in [v["value"] for v in opts[0]["values"]]
+                  for st in [v["value"] for v in opts[1]["values"]] for g in glasses for cn in ("wifi", "cell")]
+        for c, st, glass, conn in combos:
+            hit = None
+            for pn, pr, name in rows:
+                n = name.replace("‑", "-").replace("\xa0", " ")
+                if p.get("eur_size") and not n.startswith(p["eur_size"]):
+                    continue
+                if f" {st.upper()}" not in n.upper():
+                    continue
+                is_cell = "Cellular" in n
+                if is_cell != (conn == "cell"):
+                    continue
+                if ("nano-texture" in n) != (glass == "nano"):
+                    continue
+                col = EN.get(c, c)
+                tail = n.rsplit(" - ", 1)[-1].strip() if " - " in n else ""
+                if tail == col or (c == "silver" and tail in ("", "Silver")):
+                    hit = (pn, pr)
+                    break
+            if not hit:
+                if glass != "nano":  # nanotextura există doar la 1 TB / 2 TB
+                    print("  ! lipsă iPad", p["slug"], c, st, conn, file=sys.stderr)
+                continue
+            price = lei(hit[1], cat)
+            o = {"color": c, "storage": st, **({"glass": glass} if glass else {}), "conn": conn}
+            add(o, price, hit[0],
+                bump(price, p["promo"]) if p.get("promo") else None)
         return variants
 
     if "mpn_from" in p:  # iPhone
@@ -354,7 +378,17 @@ def main():
         for v in variants:
             v["stock"] = 0 if p.get("stock_mode") == "preorder" else stock_for(v["sku"])
         # imagini
-        fill = 0.72 if p["category"] == "accesorii" else 0.80 if p["category"] in ("tv-home",) else D_FILL(p)
+        fill = p.get("fill") or (0.72 if p["category"] == "accesorii" else 0.80 if p["category"] in ("tv-home",) else D_FILL(p))
+        # bulinele de culoare ale accesoriilor: culoarea medie a mostrei Apple
+        for o in p.get("options", []):
+            for v in o["values"]:
+                if "hex" in v and v["hex"] is None:
+                    sw = (p.get("swatch_images") or {}).get(v["value"])
+                    try:
+                        v["hex"] = swatch_hex(sw, a.img_cache) if sw and not a.skip_images else FALLBACK_HEX.get(v["value"], "#C8CCC6")
+                    except Exception as e:  # noqa: BLE001
+                        print(f"  ! mostră {p['slug']} {v['value']}: {e}", file=sys.stderr)
+                        v["hex"] = FALLBACK_HEX.get(v["value"], "#C8CCC6")
         images = {}
         src = p.get("images") or {}
         if "images_by_option" in p:

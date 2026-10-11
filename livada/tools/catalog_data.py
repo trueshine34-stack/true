@@ -25,16 +25,15 @@ CATEGORIES = [
      "tagline": "Sănătate, sport și notificări — la încheietură.",
      "groups": ["Series 12", "Ultra", "SE"]},
     {"slug": "airpods", "name": "AirPods", "title": "AirPods și audio",
-     "tagline": "Anulare activă a zgomotului, audio spațial, Beats.",
+     "tagline": "AirPods și toată gama Beats, în toate culorile.",
      "groups": ["AirPods", "Beats"]},
     {"slug": "tv-home", "name": "TV & Home", "title": "TV & Home",
      "tagline": "Apple TV 4K, HomePod și AirTag.",
      "groups": ["Apple TV", "HomePod", "AirTag"]},
     {"slug": "accesorii", "name": "Accesorii", "title": "Accesorii",
-     "tagline": "Huse, încărcătoare, curele și tot ce completează setup-ul.",
-     "groups": ["Huse și protecție", "Încărcare și cabluri", "Adaptoare",
-                "Apple Pencil și tastaturi iPad", "Tastaturi și mouse Mac",
-                "Curele Apple Watch", "Diverse"]},
+     "tagline": "Toate accesoriile Apple și Beats, în toate culorile și mărimile.",
+     "groups": ["Huse iPhone", "iPad și Apple Pencil", "Curele Apple Watch", "Încărcare",
+                "Cabluri și adaptoare", "Tastaturi și mouse", "Audio", "Diverse"]},
 ]
 
 # multiplicator EUR(DE) → lei(RO), calibrat pe prețuri reale de retail
@@ -419,6 +418,8 @@ for inch in (11, 13):
       in_box=["iPad Pro", "Cablu USB‑C (1 m)"],
       options=[{"key": "color", "label": "Culoare", "values": colors("spaceblack", "silver")},
                {"key": "storage", "label": "Stocare", "values": storage("256gb", "512gb", "1tb", "2tb")},
+               {"key": "glass", "label": "Sticlă", "values": [opt("standard", "Sticlă standard"),
+                                                              opt("nano", "Nanotextură", "reflexii minime · 1 TB și 2 TB")]},
                {"key": "conn", "label": "Conectivitate", "values": [opt("wifi", "Wi‑Fi"), opt("cell", "Wi‑Fi + Cellular")]}],
       eur_from="de-ipad-pro", eur_size=f"{inch}-inch",
       images={c: [f"ipad-pro-{inch}-select-wifi-{c}-202405"] for c in ["spaceblack", "silver"]})
@@ -576,18 +577,6 @@ P(slug="airpods-max-2", name="AirPods Max 2", category="airpods", group="AirPods
   mpn_suffix="ZM/A",
   images={c: [f"airpods-max-select-202409-{c}_FV1"] for c in ["midnight", "starlight", "blue", "purple", "orange"]})
 
-for mpn, name, eur, tag, desc in [
-    ("MJE14", "Beats 360", 349.95, "Căștile over-ear noi de la Beats, cu ANC și autonomie lungă.", "Beats 360 sunt căștile over-ear lansate în 2026, cu pernițe Performance din material tricotat, anulare a zgomotului și integrare rapidă cu iPhone și Android."),
-    ("MQTT3", "Beats Studio Pro", 299.95, "ANC, audio spațial, până la 40 de ore.", "Beats Studio Pro oferă sunet personalizat, anulare activă a zgomotului și audio fără pierderi prin USB‑C."),
-    ("MUW43", "Beats Solo 4", 229.95, "On-ear, până la 50 de ore autonomie.", "Beats Solo 4 sunt ușoare, pliabile și țin până la 50 de ore, cu audio spațial și încărcare rapidă Fast Fuel."),
-    ("MX743", "Powerbeats Pro 2", 299.95, "Căști sport cu senzor de puls.", "Powerbeats Pro 2 au cârlige flexibile, ANC, senzor de puls și rezistență IPX4 pentru antrenamente intense."),
-    ("MUW03", "Beats Solo Buds", 89.95, "Cele mai mici căști Beats, până la 18 ore.", "Beats Solo Buds sunt compacte, cu sunet puternic și până la 18 ore de ascultare."),
-    ("MW463", "Beats Pill", 169.95, "Boxă portabilă IP67, 24 de ore.", "Beats Pill are sunet puternic, rezistență IP67, 24 de ore de autonomie și poate încărca telefonul prin USB‑C."),
-]:
-    P(slug=name.lower().replace(" ", "-"), name=name, category="airpods", group="Beats", tagline=tag,
-      description=[desc], highlights=[], specs=[], in_box=[name, "Cablu USB‑C"], options=[],
-      eur_flat=eur, mpn_single=f"{mpn}ZM/A", images={"-": [mpn]})
-
 # ================================================================= TV & Home
 P(slug="apple-tv-4k", name="Apple TV 4K", category="tv-home", group="Apple TV",
   tagline="Filme 4K HDR, Dolby Atmos și centrul casei inteligente.",
@@ -635,85 +624,102 @@ P(slug="airtag", name="AirTag (a doua generație)", category="tv-home", group="A
   eur={"1": 35, "4": 119}, mpn={("1",): "MFE94", ("4",): "MFEA4"}, mpn_suffix="ZM/A",
   images_by_option={"1": ["airtag-1pack-select-202601_GEO_EMEA"], "4": ["airtag-4pack-select-202601_GEO_EMEA"]})
 
-# ================================================================= Accesorii
-ACC = [
-    # (mpn, nume RO, grup, eur, scurtă descriere)
-    ("MK8W4", "Husă din silicon cu MagSafe pentru iPhone 18 Pro – Albastru clar", "Huse și protecție", 59, "Silicon moale la atingere, interior din microfibră, magneți MagSafe."),
-    ("MK904", "Husă din silicon cu MagSafe pentru iPhone 18 Pro Max – Magenta", "Huse și protecție", 59, "Silicon moale la atingere, interior din microfibră, magneți MagSafe."),
-    ("MKD54", "Husă TechWoven cu MagSafe pentru iPhone 18 Pro – Chambray", "Huse și protecție", 69, "Țesătură rezistentă, fină la atingere, cu buton Camera Control."),
-    ("MKDM4", "Husă TechWoven cu MagSafe pentru iPhone 18 Pro Max – Burgundia", "Huse și protecție", 69, "Țesătură rezistentă, fină la atingere, cu buton Camera Control."),
-    ("MKDV4", "Husă transparentă cu MagSafe pentru iPhone 18 Pro Max", "Huse și protecție", 59, "Policarbonat optic care nu se îngălbenește, arată culoarea iPhone‑ului."),
-    ("MKR84", "Husă pentru iPhone Duo – Bleumarin", "Huse și protecție", 89, "Protecție pe ambele jumătăți, balama liberă, compatibilă MagSafe."),
-    ("MKR64", "Husă Folio cu suport pentru iPhone Duo – Taupe", "Huse și protecție", 149, "Folio care se transformă în suport pentru modul tabletă."),
-    ("MGH24", "Husă cu MagSafe pentru iPhone Air – Umbră", "Huse și protecție", 59, "Subțire, păstrează linia ultra-fină a iPhone Air."),
-    ("MH024", "Bumper pentru iPhone Air – Albastru deschis", "Huse și protecție", 45, "Protecție minimă pe margini, lasă spatele liber."),
-    ("MHVT4", "Husă din silicon cu MagSafe pentru iPhone 17 – Lavandă", "Huse și protecție", 59, "Silicon moale, interior din microfibră, MagSafe."),
-    ("MGF24", "Husă transparentă cu MagSafe pentru iPhone 17", "Huse și protecție", 59, "Transparentă, rezistentă la îngălbenire."),
-    ("MHWJ4", "Husă din silicon cu MagSafe pentru iPhone 17e – Roz deschis", "Huse și protecție", 59, "Silicon moale, MagSafe."),
-    ("MK9G4", "Portofel FineWoven cu MagSafe – Magenta", "Huse și protecție", 69, "Ține până la trei carduri, cu suport Găsire."),
-    ("MGKG4", "Husă Beats cu MagSafe pentru iPhone 17 Pro – Albastru stâncă", "Huse și protecție", 55, "Husă Beats cu protecție la căderi și Camera Control."),
-    ("MD3J4", "Adaptor de alimentare USB‑C 20 W", "Încărcare și cabluri", 19, "Încărcare rapidă pentru iPhone, AirPods și iPad."),
-    ("MGTU4", "Adaptor Dynamic 40 W (max. 60 W)", "Încărcare și cabluri", 45, "Încarcă iPhone 18 Pro la 50% în ~15 minute."),
-    ("MW2K3", "Adaptor dual USB‑C 35 W", "Încărcare și cabluri", 65, "Două porturi pentru încărcare simultană."),
-    ("MXN53", "Adaptor de alimentare USB‑C 70 W", "Încărcare și cabluri", 65, "Pentru MacBook Air și MacBook Pro 14\"."),
-    ("MW2M3", "Adaptor de alimentare USB‑C 140 W", "Încărcare și cabluri", 119, "Încărcare rapidă pentru MacBook Pro 16\"."),
-    ("MGD74", "Încărcător MagSafe (1 m)", "Încărcare și cabluri", 49, "Încărcare wireless rapidă de până la 25 W."),
-    ("MGDM4", "Încărcător MagSafe (2 m)", "Încărcare și cabluri", 59, "Încărcare wireless rapidă, cablu de 2 m."),
-    ("MGPG4", "Baterie MagSafe pentru iPhone Air", "Încărcare și cabluri", 115, "Baterie subțire care se atașează magnetic."),
-    ("MYQT3", "Cablu de încărcare USB‑C 240 W (2 m)", "Încărcare și cabluri", 35, "Cablu țesut, compatibil cu toate dispozitivele USB‑C."),
-    ("MW493", "Cablu de încărcare USB‑C 60 W (1 m)", "Încărcare și cabluri", 19, "Cablu țesut pentru încărcare zilnică."),
-    ("MW613", "Cablu USB‑C la MagSafe 3 (2 m) – Argintiu", "Încărcare și cabluri", 55, "Pentru MacBook Air și MacBook Pro."),
-    ("ML434", "Încărcător magnetic rapid Apple Watch la USB‑C (1 m)", "Încărcare și cabluri", 29, "Încărcare rapidă pentru Apple Watch."),
-    ("MDW94", "Cablu Thunderbolt 5 (USB‑C) Pro (1 m)", "Încărcare și cabluri", 79, "Transfer de date de până la 120 Gb/s."),
-    ("MW5M3", "Adaptor USB‑C Digital AV Multiport", "Adaptoare", 79, "HDMI 4K60, USB‑A și USB‑C de încărcare."),
-    ("MW653", "Cititor de carduri USB‑C la SD", "Adaptoare", 45, "Transfer rapid de pe camera foto."),
-    ("MW2Q3", "Adaptor USB‑C la jack 3,5 mm", "Adaptoare", 10, "Pentru căștile cu fir."),
-    ("MUQX3", "Adaptor USB‑C la Lightning", "Adaptoare", 35, "Folosește accesoriile Lightning cu dispozitive USB‑C."),
-    ("MW5L3", "Adaptor USB‑C la USB", "Adaptoare", 25, "Conectează stick-uri și accesorii USB‑A."),
-    ("MX2D3", "Apple Pencil Pro", "Apple Pencil și tastaturi iPad", 149, "Squeeze, rotire tip baton, feedback haptic, Găsire."),
-    ("MUWA3", "Apple Pencil (USB‑C)", "Apple Pencil și tastaturi iPad", 89, "Precizie pixel cu pixel, încărcare prin USB‑C."),
-    ("MWR03", "Magic Keyboard pentru iPad Pro 11\" (M5) – Engleză internațională – Alb", "Apple Pencil și tastaturi iPad", 349, "Trackpad din sticlă, rând de taste funcționale, aluminiu."),
-    ("MWR53", "Magic Keyboard pentru iPad Pro 13\" (M5) – Engleză internațională – Negru", "Apple Pencil și tastaturi iPad", 399, "Trackpad din sticlă, rând de taste funcționale, aluminiu."),
-    ("MDFV4", "Magic Keyboard pentru iPad Air 11\" (M4) – Engleză internațională – Alb", "Apple Pencil și tastaturi iPad", 329, "Tastatură completă cu trackpad, design subțire."),
-    ("MQDP3", "Magic Keyboard Folio pentru iPad (A16) – Engleză internațională", "Apple Pencil și tastaturi iPad", 299, "Două piese, rând de taste funcționale, trackpad."),
-    ("MW993", "Smart Folio pentru iPad Pro 11\" (M5) – Denim", "Apple Pencil și tastaturi iPad", 89, "Protecție față-spate, se transformă în suport."),
-    ("MWK83", "Smart Folio pentru iPad Air 11\" (M4) – Violet deschis", "Apple Pencil și tastaturi iPad", 89, "Protecție față-spate, trezire automată."),
-    ("MC2T4", "Smart Folio pentru iPad mini (A17 Pro) – Violet deschis", "Apple Pencil și tastaturi iPad", 69, "Protecție subțire și suport."),
-    ("MXCK3", "Magic Keyboard cu Touch ID (USB‑C) – Română", "Tastaturi și mouse Mac", 169, "Wireless, cu Touch ID pentru Mac-uri cu cip Apple, layout RO."),
-    ("MXK83", "Magic Keyboard cu Touch ID și tastatură numerică (USB‑C) – Română – Negru", "Tastaturi și mouse Mac", 229, "Layout extins cu tastatură numerică, layout RO."),
-    ("MXCL3", "Magic Keyboard (USB‑C) – Română", "Tastaturi și mouse Mac", 119, "Wireless, compactă, layout RO."),
-    ("MXK53", "Magic Mouse (USB‑C) – Alb", "Tastaturi și mouse Mac", 85, "Suprafață Multi‑Touch, încărcare USB‑C."),
-    ("MXK93", "Magic Trackpad (USB‑C) – Alb", "Tastaturi și mouse Mac", 139, "Force Touch, gesturi Multi‑Touch."),
-    ("MJVH4", "Curea sport 46 mm – Burgundia (S/M)", "Curele Apple Watch", 49, "Fluoroelastomer moale, închidere pin-and-tuck."),
-    ("MK874", "Curea Sport Loop 46 mm – Burgundia carouri", "Curele Apple Watch", 49, "Țesătură moale, respirabilă, ajustare rapidă."),
-    ("MKMQ4", "Curea Solo Loop 46 mm – Burgundia", "Curele Apple Watch", 49, "Fără cataramă, din silicon elastic."),
-    ("MKY74", "Curea Solo Loop împletită 46 mm – Magenta", "Curele Apple Watch", 99, "Fir reciclat împletit, extensibil."),
-    ("MJNM4", "Curea Milanese Loop 46 mm – Bronz închis", "Curele Apple Watch", 99, "Plasă din oțel inoxidabil, închidere magnetică."),
-    ("MKRW4", "Curea cu închidere magnetică 46 mm – Cămilă (M/L)", "Curele Apple Watch", 99, "Piele fină cu închidere magnetică."),
-    ("MJNY4", "Brățară cu zale 46 mm – Auriu strălucitor", "Curele Apple Watch", 349, "Oțel inoxidabil cu peste 100 de componente."),
-    ("MKTN4", "Curea sport Nike 46 mm – After Dark Black", "Curele Apple Watch", 49, "Perforații pentru aerisire, design Nike."),
-    ("MK7A4", "Curea Alpine Loop 49 mm – Măsliniu închis (M)", "Curele Apple Watch", 99, "Pentru Ultra: cârlig din titan, țesătură dublă."),
-    ("MK8K4", "Curea Trail Loop 49 mm – Umbră închisă (M/L)", "Curele Apple Watch", 99, "Pentru Ultra: subțire, ușoară, ajustabilă."),
-    ("MKAY4", "Curea Ocean 49 mm – Negru translucid", "Curele Apple Watch", 99, "Pentru Ultra: elastomer pentru sporturi acvatice."),
-    ("MK0D4", "Curea Milanese Loop din titan 49 mm – Natural (M)", "Curele Apple Watch", 199, "Pentru Ultra: plasă din titan."),
-    ("MLH74", "Lavetă de curățare Apple", "Diverse", 10, "Material neabraziv pentru ecrane, inclusiv nanotextură."),
-    ("MYQY3", "EarPods (USB‑C)", "Diverse", 19, "Căști cu fir cu telecomandă și microfon."),
-]
+# ================================================================= Accesorii și Beats (din Apple Store, toate culorile)
+import accessories_data as AD  # noqa: E402
+from accessories_i18n import COLOR_RO, SIZE_RO, LENGTH_RO, CONNECTION_RO, FINISH_RO  # noqa: E402
 
-# imaginea de catalog Apple diferă uneori de codul produsului (curele: varianta „ref”)
-ACC_IMG = {"MJVH4": "MJVH4ref", "MKMQ4": "MKMQ4ref", "MKY74": "MKY14ref", "MJNM4": "MJNM4ref", "MKRW4": "MKRT4ref",
-           "MKTN4": "MKTN4ref", "MK7A4": "MK794ref", "MK8K4": "MK8J4ref", "MK0D4": "MK0A4ref", "MYQY3": "MTJY3",
-           "MW2K3": "MNWP3_GEO_EMEA", "MXN53": "MQLN3_GEO_EMEA", "MW613": "MLYV3", "MW653": "MUFG2", "MW2Q3": "MU7E2"}
+ACC_OPT = [("model", "Model", "dimensionMerchModel"), ("case", "Carcasă", "dimensionCaseSize"), ("color", "Culoare", "dimensionColor"),
+           ("finish", "Cataramă", "dimensionMetalFinish"), ("size", "Mărime", None), ("length", "Lungime", "dimensionLength"),
+           ("conn", "Conector", "dimensionConnection"), ("layout", "Tastatură", None)]
+SOLO_NOTE = "Solo Loop nu are cataramă: alege mărimea după circumferința încheieturii (ghidul Apple de mărimi o măsoară în 1 minut)."
+UNKNOWN_COLORS = set()
 
-PROMO_ACC = {"MGD74": 0.10, "MX2D3": 0.08, "MXK53": 0.10, "MK9G4": 0.15}
 
-for mpn, name, group, eur, desc in ACC:
-    slug = name.lower()
-    for a, b in [("ă", "a"), ("â", "a"), ("î", "i"), ("ș", "s"), ("ț", "t"), ("‑", "-"), ("\"", ""), ("(", ""), (")", ""),
-                 (",", ""), ("–", ""), ("/", "-"), ("’", ""), (".", "")]:
-        slug = slug.replace(a, b)
-    slug = "-".join(slug.split())
-    slug = slug[:72].strip("-")
-    P(slug=slug, name=name, category="accesorii", group=group, tagline=desc, description=[desc], highlights=[],
-      specs=[], in_box=[], options=[], eur_flat=eur, mpn_single=f"{mpn}ZM/A",
-      promo=PROMO_ACC.get(mpn), images={"-": [ACC_IMG.get(mpn, mpn)]})
+RAW_LABELS = {"extralarge": "XL", "s_m": "S/M", "m_l": "M/L", "small": "S", "medium": "M", "large": "L",
+              "0_2meters": "20 cm", "1_5meters": "1,5 m", "1meter": "1 m", "2meters": "2 m", "3meters": "3 m"}
+
+
+def _acc_label(key, raw, labels):
+    if raw in RAW_LABELS:
+        return RAW_LABELS[raw]
+    if key == "model":
+        return raw
+    if key == "case":
+        return AD.CASE_SIZE[raw][0]
+    if key == "layout":
+        return {"ro": "Română", "en": "Engleză (internațională)"}[raw]
+    if key == "size":
+        lab = AD.clean(labels.get("dimensionbandsize", {}).get(raw) or labels.get("dimensionProductsize", {}).get(raw) or raw)
+        return AD.EAR_TIP.get(lab) or SIZE_RO.get(lab, lab)
+    dim = dict((k, d) for k, _, d in ACC_OPT)[key]
+    lab = AD.clean(labels.get(dim, {}).get(raw, raw))
+    table = {"color": COLOR_RO, "length": LENGTH_RO, "conn": CONNECTION_RO, "finish": FINISH_RO}[key]
+    if key == "color" and lab not in COLOR_RO:
+        UNKNOWN_COLORS.add(lab)
+    return table.get(lab, lab)
+
+
+def _acc_order(key, values, labels, seen):
+    if key == "model":
+        return sorted(values, key=AD._model_order)
+    if key == "case":
+        return sorted(values)
+    if key == "size" and all(v.isdigit() for v in values):
+        return sorted(values, key=int)
+    order = list(labels.get(dict((k, d) for k, _, d in ACC_OPT).get(key) or "dimensionbandsize", {})) or []
+    if key == "size":
+        order = list(labels.get("dimensionbandsize", {})) + list(labels.get("dimensionProductsize", {}))
+    return sorted(values, key=lambda v: (order.index(v) if v in order else 99, seen.index(v)))
+
+
+_ACC, ACC_SKIPPED = AD.build()
+for _p in sorted(_ACC.values(), key=lambda p: (AD.GROUPS.index(p["group"]) if p["group"] in AD.GROUPS else -1, p["name"])):
+    _rows = _p["rows"]
+    for _v, _sw in _p["swatches"].items():  # unele familii au etichetele culorilor doar în mostre
+        _p["labels"].setdefault("dimensionColor", {}).setdefault(_v, _sw["label"])
+    # opțiunile cu o singură valoare nu ajută la alegere (ex. husa transparentă are o singură „culoare”)
+    _keys = [k for k, _, _ in ACC_OPT if len({r[0].get(k) for r in _rows if k in r[0]}) > 1]
+    for _r in _rows:
+        _r[0] = {k: v for k, v in _r[0].items() if k in _keys}
+    _seen = {k: [] for k in _keys}
+    for _r in _rows:
+        for k in _keys:
+            if _r[0][k] not in _seen[k]:
+                _seen[k].append(_r[0][k])
+    _options = []
+    for k, label, _ in ACC_OPT:
+        if k not in _keys:
+            continue
+        vals = []
+        for v in _acc_order(k, _seen[k], _p["labels"], _seen[k]):
+            o = {"value": v, "label": _acc_label(k, v, _p["labels"])}
+            if k == "case":
+                o["hint"] = AD.CASE_SIZE[v][1]
+            if k == "color":
+                o["hex"] = None  # completat la build din mostra Apple
+            vals.append(o)
+        opt_ = {"key": k, "label": label, "values": vals}
+        if k == "size" and "Solo Loop" in _p["name"]:
+            opt_["note"] = SOLO_NOTE
+        _options.append(opt_)
+    # imagini: câte una pe culoare (fotografia din mostra Apple), altfel imaginea principală a produsului
+    _first_part = _rows[0][2].split("/")[0][:5]
+    if "color" in _keys:
+        _imgs = {v: [_p["swatches"][v]["image"]] if v in _p["swatches"] else [(_p["gallery"] or [_first_part])[0]] for v in _seen["color"]}
+    else:
+        _imgs = {"-": [(_p["gallery"] or [_first_part])[0]]}
+    _specs = []
+    _models = [v["label"] for o in _options if o["key"] == "model" for v in o["values"]]
+    if _p["group"] == "Huse iPhone" and (_models or " pentru " in _p["name"]):
+        _specs.append(("Compatibilitate", [("Modele", ", ".join(_models) if _models else _p["name"].split(" pentru ", 1)[1])]))
+    if any(o["key"] == "case" for o in _options):
+        _specs.append(("Compatibilitate", [(AD.CASE_SIZE[v["value"]][0], AD.CASE_SIZE[v["value"]][1].replace("pentru ", "").capitalize())
+                                           for o in _options if o["key"] == "case" for v in o["values"]]))
+    _codes = sorted({r[2] for r in _rows})
+    P(slug=_p["slug"], name=_p["name"], category=_p["cat"], group=_p["group"], tagline=_p["desc"],
+      description=[_p["desc"]] + ([f"Produs original Apple{' / Beats' if 'Beats' in _p['name'] else ''}, cod{'uri' if len(_codes) > 1 else ''} {', '.join(c.split('/')[0] for c in _codes[:3])}{' …' if len(_codes) > 3 else ''}."]),
+      highlights=[], specs=_specs, in_box=([_p["name"], "Cablu USB‑C", "Documentație"] if _p["cat"] == "airpods" else []),
+      options=_options, promo=_p["promo"],
+      variants_explicit=[{"options": r[0], "eur": r[1], "mpn": r[2], "sku": "LV-" + r[2].split("/")[0]} for r in _rows],
+      images=_imgs, swatch_images={v: _p["swatches"][v]["image"] for v in _p["swatches"]},
+      fill=0.78 if _p["cat"] == "airpods" else None)

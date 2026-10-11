@@ -5,3 +5,4 @@ var/
 *.log
 test-results/
 preview/
+__pycache__/
