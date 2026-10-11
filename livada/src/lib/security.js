@@ -78,7 +78,7 @@ export function rateLimit(key, limit, windowMs) {
 export const resetRateLimits = () => buckets.clear();
 
 // ─── antete de securitate ──────────────────────────────────────────────────
-export function securityHeaders() {
+export function securityHeaders({ scriptHashes = [] } = {}) {
   const tileHosts = new Set();
   try {
     const u = new URL(config.map.tiles.replace('{s}', 'a').replace(/\{[a-z]+\}/g, '0'));
@@ -87,7 +87,7 @@ export function securityHeaders() {
   const csp = [
     "default-src 'self'",
     `img-src 'self' data: blob: ${[...tileHosts].join(' ')}`.trim(),
-    "script-src 'self'",
+    ["script-src 'self'", ...scriptHashes].join(' '),
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     "connect-src 'self'",

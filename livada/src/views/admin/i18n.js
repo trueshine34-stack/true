@@ -1,4 +1,5 @@
 // Traducerile panoului de administrare (română / rusă). Cheile lipsă cad pe română.
+import { plural } from '../../lib/format.js';
 const RO = {
   'nav.dashboard': 'Panou', 'nav.orders': 'Comenzi', 'nav.products': 'Produse', 'nav.customers': 'Clienți', 'nav.promos': 'Promoții',
   'nav.delivery': 'Livrare', 'nav.emails': 'Emailuri', 'nav.messages': 'Mesaje', 'nav.settings': 'Setări', 'nav.audit': 'Jurnal',
@@ -20,7 +21,7 @@ const RO = {
   'orders.title': 'Comenzi', 'order.items': 'Produse', 'order.customer': 'Client', 'order.delivery': 'Livrare', 'order.payment': 'Plată', 'order.billing': 'Facturare',
   'order.timeline': 'Istoric', 'order.change_status': 'Schimbă statusul', 'order.notify': 'Trimite email clientului', 'order.note': 'Notă (vizibilă în email)',
   'order.awb': 'AWB (număr de urmărire)', 'order.apply': 'Aplică', 'order.admin_notes': 'Note interne', 'order.invoice': 'Proformă / factură', 'order.mark_paid': 'Marchează plătită',
-  'order.customer_notes': 'Mențiuni client', 'order.open_map': 'Vezi pe hartă', 'order.company': 'Firmă',
+  'order.customer_notes': 'Mențiuni client', 'order.open_map': 'Vezi pe hartă', 'order.track': 'Urmărește', 'order.guest': 'fără cont', 'order.company': 'Firmă',
   'products.title': 'Produse', 'products.new': 'Produs nou', 'products.edit': 'Editează produsul', 'products.basic': 'Informații', 'products.variants': 'Variante, prețuri și stoc',
   'products.images': 'Imagini', 'products.upload': 'Încarcă imagine', 'products.for_key': 'Pentru', 'products.name': 'Nume', 'products.slug': 'Slug (URL)',
   'products.tagline': 'Descriere scurtă', 'products.description': 'Descriere (un paragraf pe linie)', 'products.highlights': 'Puncte forte (unul pe linie)',
@@ -62,7 +63,7 @@ const RU = {
   'orders.title': 'Заказы', 'order.items': 'Товары', 'order.customer': 'Клиент', 'order.delivery': 'Доставка', 'order.payment': 'Оплата', 'order.billing': 'Счёт',
   'order.timeline': 'История', 'order.change_status': 'Изменить статус', 'order.notify': 'Отправить письмо клиенту', 'order.note': 'Комментарий (попадёт в письмо)',
   'order.awb': 'AWB (трек-номер)', 'order.apply': 'Применить', 'order.admin_notes': 'Внутренние заметки', 'order.invoice': 'Счёт / проформа', 'order.mark_paid': 'Отметить оплаченным',
-  'order.customer_notes': 'Комментарий клиента', 'order.open_map': 'На карте', 'order.company': 'Компания',
+  'order.customer_notes': 'Комментарий клиента', 'order.open_map': 'На карте', 'order.track': 'Отследить', 'order.guest': 'без аккаунта', 'order.company': 'Компания',
   'products.title': 'Товары', 'products.new': 'Новый товар', 'products.edit': 'Редактирование товара', 'products.basic': 'Основное', 'products.variants': 'Варианты, цены и остатки',
   'products.images': 'Фото', 'products.upload': 'Загрузить фото', 'products.for_key': 'Для', 'products.name': 'Название', 'products.slug': 'Slug (URL)',
   'products.tagline': 'Короткое описание', 'products.description': 'Описание (абзац на строку)', 'products.highlights': 'Ключевые преимущества (по одному на строку)',
@@ -94,5 +95,13 @@ export function translator(lang) {
   t.status = (s, fallback) => (lang === 'ru' ? STATUS_RU[s] : null) || fallback || s;
   t.pay = (s, fallback) => (lang === 'ru' ? PAY_RU[s] : null) || fallback || s;
   t.paym = (s, fallback) => (lang === 'ru' ? PAYM_RU[s] : null) || fallback || s;
+  /** „3 comenzi” / „3 заказа” — pluralul corect în ambele limbi */
+  t.orders = (n) => {
+    if (t.lang === 'ru') {
+      const m10 = n % 10; const m100 = n % 100;
+      return `${n} ${m10 === 1 && m100 !== 11 ? 'заказ' : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? 'заказа' : 'заказов'}`;
+    }
+    return plural(n, 'comandă', 'comenzi', 'de comenzi');
+  };
   return t;
 }

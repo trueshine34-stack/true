@@ -46,9 +46,12 @@ export async function register(body, meta) {
   if (pwp) errors.password = pwp;
   if (!(body.terms === true || body.terms === 'on' || body.terms === '1')) errors.terms = 'Trebuie să accepți Termenii și Politica de confidențialitate.';
   if (Object.keys(errors).length) throw new ValidationError(errors);
-  if (userByEmail(data.email)) throw new ValidationError({ email: 'Există deja un cont cu acest email. Te poți autentifica sau reseta parola.' });
+  const taken = () => new ValidationError({ email: 'Există deja un cont cu acest email. Te poți autentifica sau reseta parola.' });
+  if (userByEmail(data.email)) throw taken();
 
   const hash = await hashPassword(body.password);
+  // verificăm din nou după hash (async): două trimiteri simultane nu trebuie să ajungă la constrângerea UNIQUE
+  if (userByEmail(data.email)) throw taken();
   const r = run(`INSERT INTO users(email, password_hash, first_name, last_name, phone, marketing_opt_in) VALUES (?,?,?,?,?,?)`,
     data.email, hash, data.first_name, data.last_name, data.phone || '', data.marketing ? 1 : 0);
   const user = userById(Number(r.lastInsertRowid));

@@ -113,15 +113,15 @@ export function checkoutPage(ctx, { cart, totals, methods, addresses, user, pref
               <label><input type="radio" name="customer_type" value="pj" data-customer-type><span>Persoană juridică</span></label>
             </div>
             <div class="grid2" data-company hidden>
-              ${field({ name: 'company_name', label: 'Denumire firmă', value: v('company_name'), cls: 'span2' })}
-              ${field({ name: 'company_cui', label: 'CUI / CIF', value: v('company_cui'), hint: 'Ex: RO12345678' })}
+              ${field({ name: 'company_name', label: 'Denumire firmă', value: v('company_name'), required: true, cls: 'span2' })}
+              ${field({ name: 'company_cui', label: 'CUI / CIF', value: v('company_cui'), required: true, hint: 'Ex: RO12345678' })}
               ${field({ name: 'company_reg', label: 'Nr. Reg. Comerțului', value: v('company_reg') })}
             </div>
             <div data-billing-same-wrap>${checkbox({ name: 'billing_same', label: 'Adresa de facturare este aceeași cu adresa de livrare', checked: true })}</div>
             <div class="grid2" data-billing hidden>
-              ${selectField({ name: 'bill_county', label: 'Județ', options: COUNTIES, value: v('bill_county', def.county) })}
-              ${field({ name: 'bill_city', label: 'Localitate', value: v('bill_city', def.city) })}
-              ${field({ name: 'bill_street', label: 'Strada și numărul', value: v('bill_street', def.street), cls: 'span2' })}
+              ${selectField({ name: 'bill_county', label: 'Județ', options: COUNTIES, value: v('bill_county', def.county), required: true })}
+              ${field({ name: 'bill_city', label: 'Localitate', value: v('bill_city', def.city), required: true, autocomplete: 'billing address-level2' })}
+              ${field({ name: 'bill_street', label: 'Strada și numărul', value: v('bill_street', def.street), required: true, autocomplete: 'billing street-address', cls: 'span2' })}
               ${field({ name: 'bill_postcode', label: 'Cod poștal', value: v('bill_postcode', def.postcode), inputmode: 'numeric', maxlength: 6 })}
             </div>
           </section>
@@ -185,7 +185,7 @@ export function checkoutPage(ctx, { cart, totals, methods, addresses, user, pref
   })}
       </div>
       <div class="locker-modal__body">
-        <div class="locker-map" data-locker-map></div>
+        <div class="locker-map" data-locker-map data-tone=${config.map.tone}></div>
         <div class="locker-list" data-locker-list><p class="muted">Se încarcă lockerele…</p></div>
       </div>
     </div>

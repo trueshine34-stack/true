@@ -47,6 +47,20 @@ export function asset(urlPath) {
   return versions.get(urlPath);
 }
 
+/**
+ * Import map pentru modulele JS: paginile încarcă /js/app.js?v=…, iar scripturile de pagină importă „./app.js”.
+ * Fără hartă, browserul le-ar trata ca module diferite și app.js ar rula de două ori (handlere duble).
+ * Hash-ul intră în CSP (script-src), deoarece harta este un script inline.
+ */
+const SHARED_MODULES = ['/js/app.js'];
+let importMapMemo = null;
+export function importMap() {
+  const imports = Object.fromEntries(SHARED_MODULES.map((m) => [m, asset(m)]));
+  const json = JSON.stringify({ imports });
+  if (importMapMemo?.json !== json) importMapMemo = { json, hash: `'sha256-${crypto.createHash('sha256').update(json).digest('base64')}'` };
+  return importMapMemo;
+}
+
 function resolveSafe(base, urlPath) {
   let p;
   try { p = decodeURIComponent(urlPath); } catch { return null; }

@@ -34,7 +34,7 @@ function pill(label, { bg = C.leafSoft, fg = C.leaf } = {}) {
 }
 
 function codeTiles(code) {
-  const cells = code.split('').map((d, i) => `${i === 3 ? `<td width="14" style="font-size:0">&nbsp;</td>` : ''}<td align="center" valign="middle" width="50" height="64" bgcolor="${C.mist}" style="width:50px;height:64px;border:1px solid ${C.line};border-radius:14px;font-family:${MONO};font-size:30px;font-weight:700;color:${C.ink}">${esc(d)}</td>${i < 5 && i !== 2 ? '<td width="8" style="font-size:0">&nbsp;</td>' : ''}`).join('');
+  const cells = code.split('').map((d, i) => `${i === 3 ? `<td width="14" style="font-size:0">&nbsp;</td>` : ''}<td align="center" valign="middle" width="50" height="64" bgcolor="${C.mist}" style="width:50px;height:64px;border:1px solid ${C.line};border-radius:14px;font-family:${SANS};font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;color:${C.ink}">${esc(d)}</td>${i < 5 && i !== 2 ? '<td width="8" style="font-size:0">&nbsp;</td>' : ''}`).join('');
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto"><tr>${cells}</tr></table>`;
 }
 
@@ -206,7 +206,11 @@ ${row('Total', lei(o.total), true)}
 
 export function deliveryText(o) {
   const d = o.delivery;
-  if (d.type === 'locker' && d.locker) return `${CARRIERS[d.carrier]?.name || d.carrier} · ${d.locker.name}, ${d.locker.address}, ${d.locker.city}`;
+  if (d.type === 'locker' && d.locker) {
+    const net = CARRIERS[d.carrier]?.name || d.carrier || '';
+    const name = d.locker.name.toLowerCase().startsWith(net.toLowerCase()) ? d.locker.name : `${net} · ${d.locker.name}`;
+    return `${name}, ${d.locker.address}, ${d.locker.city}`;
+  }
   if (d.type === 'pickup') return `${d.store?.name || 'Showroom Livada'} · ${d.store?.address || ''}`;
   const a = d.address || {};
   return `${o.delivery_label || ''}${o.delivery_label ? ' · ' : ''}${a.street}, ${a.city}, jud. ${a.county}${a.postcode ? `, ${a.postcode}` : ''}`;

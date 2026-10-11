@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, config } from '../config.js';
 import { html, raw, jsonLd, cx } from '../lib/html.js';
-import { asset } from '../lib/static.js';
+import { asset, importMap } from '../lib/static.js';
 import { getSetting } from '../db/index.js';
 import { categories, listProducts } from '../services/catalog.js';
 import { icon } from './icons.js';
@@ -207,6 +207,7 @@ ${o.noindex ? raw('<meta name="robots" content="noindex, nofollow">') : ''}
 <link rel="stylesheet" href=${asset('/css/store.css')}>
 <meta name="csrf-token" content=${ctx.csrf}>
 ${(o.jsonld || []).map((j) => jsonLd(j))}
+<script type="importmap">${raw(importMap().json)}</script>
 </head>
 <body class=${cx(o.bodyClass)} data-user=${ctx.user ? '1' : '0'}>
 <a class="skip" href="#main">Sari la conținut</a>

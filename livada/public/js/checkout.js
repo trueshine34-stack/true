@@ -164,7 +164,7 @@ if (form) {
     const L = window.L;
     map = L.map($('[data-locker-map]', modal), { zoomControl: true, attributionControl: true, minZoom: 6, maxBounds: [[43.2, 19.5], [48.6, 30.2]] })
       .setView([45.9, 24.9], 7);
-    L.tileLayer(cfg.map.tiles, { attribution: cfg.map.attribution, subdomains: 'abcd', maxZoom: 19, detectRetina: true }).addTo(map);
+    L.tileLayer(cfg.map.tiles, { attribution: cfg.map.attribution, subdomains: 'abcd', maxZoom: 19 }).addTo(map);
     layer = L.layerGroup().addTo(map);
     map.on('moveend', render);
     if (picked) map.setView([picked.lat, picked.lng], 15);
@@ -186,6 +186,8 @@ if (form) {
     return window.L.divIcon({ className: 'lpin-wrap', html: `<span class="lpin ${active?.id === l.id ? 'is-active' : ''}" style="--cb:${c.color || '#333'}"></span>`,
       iconSize: [26, 26], iconAnchor: [13, 30] });
   }
+
+  const clusterSize = (n) => (n < 10 ? 36 : n < 50 ? 44 : n < 200 ? 52 : 60);
 
   function render() {
     if (!map) return;
@@ -211,7 +213,22 @@ if (form) {
         if (!c) { c = { items: [], lat: 0, lng: 0 }; cells.set(key, c); }
         c.items.push(l); c.lat += l.lat; c.lng += l.lng;
       }
-      for (const c of cells.values()) {
+      // grupurile vecine din grilă se pot suprapune pe ecran → le unim până nu se mai ating
+      const radius = (n) => (n === 1 ? 16 : clusterSize(n) / 2);
+      const centerOf = (g) => map.latLngToLayerPoint([g.lat / g.items.length, g.lng / g.items.length]);
+      const groups = [...cells.values()].map((c) => ({ ...c, p: centerOf(c) }));
+      for (let changed = true; changed;) {
+        changed = false;
+        for (let i = 0; i < groups.length; i++) {
+          for (let j = i + 1; j < groups.length; j++) {
+            const a = groups[i]; const g = groups[j];
+            if (a.p.distanceTo(g.p) >= radius(a.items.length) + radius(g.items.length) + 6) continue;
+            a.items.push(...g.items); a.lat += g.lat; a.lng += g.lng; a.p = centerOf(a);
+            groups.splice(j, 1); j = i; changed = true;
+          }
+        }
+      }
+      for (const c of groups) {
         const n = c.items.length;
         if (n === 1) {
           const l = c.items[0];
@@ -220,7 +237,7 @@ if (form) {
           layer.addLayer(m);
           continue;
         }
-        const size = n < 10 ? 36 : n < 50 ? 44 : n < 200 ? 52 : 60;
+        const size = clusterSize(n);
         const m = L.marker([c.lat / n, c.lng / n], { icon: L.divIcon({ className: 'lcluster', html: `<span>${n}</span>`, iconSize: [size, size] }), title: `${n} lockere` });
         m.on('click', () => map.fitBounds(L.latLngBounds(c.items.map((x) => [x.lat, x.lng])), { padding: [40, 40], maxZoom: 16 }));
         layer.addLayer(m);
@@ -281,7 +298,11 @@ if (form) {
       ${pr.cod ? '' : '<small>Plata ramburs nu este disponibilă în această rețea.</small>'}</span>
       <button type="button" class="link-btn" data-open-lockers>Schimbă</button>`;
     box.hidden = false;
-    $('[data-open-lockers]', form).hidden = true;
+    $('.locker-open', form).hidden = true; // butonul mare; „Schimbă” din card rămâne
+    // la locker, adresa de facturare se completează separat: pornim de la localitatea lockerului
+    const bc = form.elements.bill_county;
+    if (bc && !bc.value && [...bc.options].some((o) => o.value === l.county)) { bc.value = l.county; bc.closest('.field')?.classList.add('has-value'); }
+    if (form.elements.bill_city && !form.elements.bill_city.value && l.city) form.elements.bill_city.value = l.city;
     showErrors(form, {});
     closeModal();
     updatePayments();

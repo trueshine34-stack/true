@@ -47,8 +47,10 @@ export const config = {
   },
   shopNotifyEmail: env.SHOP_NOTIFY_EMAIL || 'comenzi@livada.ro',
   map: {
-    tiles: env.MAP_TILES_URL || 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    attribution: env.MAP_TILES_ATTRIBUTION || '© OpenStreetMap contributors © CARTO',
+    // implicit: dalele OpenStreetMap (fără cheie), afișate monocrom ca să se potrivească cu designul
+    tiles: env.MAP_TILES_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: env.MAP_TILES_ATTRIBUTION || '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    tone: env.MAP_TILES_TONE || (env.MAP_TILES_URL ? 'none' : 'mono'),
   },
   // dev-only: pagina /dev/mail cu emailurile trimise
   devTools: !production || bool(env.ENABLE_DEV_TOOLS),

@@ -152,7 +152,7 @@ export function orderPage(ctx, t, { order: o, items, events, customerOrders }) {
           <button class="adm-btn adm-btn--dark adm-btn--block">${t('order.apply')}</button>
         </form></div>` : ''}
       ${o.payment_status !== 'paid' && !['cancelled', 'returned'].includes(o.status) ? html`<form method="post" action=${`/admin/comenzi/${o.id}/plata`}>${csrfInput(ctx)}<input type="hidden" name="status" value="paid"><button class="adm-btn adm-btn--block">${icon('check', { size: 16 })} ${t('order.mark_paid')}</button></form>` : ''}
-      <div class="card"><div class="card__head"><h2>${t('order.customer')}</h2>${o.user_id ? html`<a class="adm-link" href=${`/admin/clienti/${o.user_id}`}>${customerOrders} ${t('col.orders').toLowerCase()} →</a>` : html`<span class="muted small">vizitator</span>`}</div>
+      <div class="card"><div class="card__head"><h2>${t('order.customer')}</h2>${o.user_id ? html`<a class="adm-link" href=${`/admin/clienti/${o.user_id}`}>${t.orders(customerOrders)} →</a>` : html`<span class="muted small">${t('order.guest')}</span>`}</div>
         <p class="adm-strong">${o.first_name} ${o.last_name}</p><p><a href=${`mailto:${o.email}`}>${o.email}</a></p><p><a href=${`tel:${o.phone}`}>${fmtPhone(o.phone)}</a></p>
         ${o.company ? html`<p class="muted">${t('order.company')}: ${o.company.name} · ${o.company.cui}${o.company.reg_com ? ` · ${o.company.reg_com}` : ''}</p>` : ''}
         ${o.notes ? html`<p class="adm-note"><b>${t('order.customer_notes')}:</b> ${o.notes}</p>` : ''}
@@ -160,7 +160,7 @@ export function orderPage(ctx, t, { order: o, items, events, customerOrders }) {
       <div class="card"><div class="card__head"><h2>${t('order.delivery')}</h2>${carrierBadge(d.carrier, { size: 28 })}</div>
         <p class="adm-strong">${o.delivery_title}</p><p>${deliveryText(o)}</p>
         ${d.type === 'locker' && d.locker?.lat ? html`<p><a class="adm-link" target="_blank" href=${`https://www.openstreetmap.org/?mlat=${d.locker.lat}&mlon=${d.locker.lng}#map=17/${d.locker.lat}/${d.locker.lng}`}>${t('order.open_map')} →</a></p>` : ''}
-        ${o.awb ? html`<p>AWB <b class="mono">${o.awb}</b>${c.track ? html` · <a class="adm-link" target="_blank" href=${c.track.replace('{awb}', encodeURIComponent(o.awb))}>track</a>` : ''}</p>` : ''}
+        ${o.awb ? html`<p>AWB <b class="mono">${o.awb}</b>${c.track ? html` · <a class="adm-link" target="_blank" href=${c.track.replace('{awb}', encodeURIComponent(o.awb))}>${t('order.track')} →</a>` : ''}</p>` : ''}
       </div>
       <div class="card"><div class="card__head"><h2>${t('order.billing')}</h2></div>
         <p>${o.billing.first_name || o.first_name} ${o.billing.last_name || o.last_name}</p><p>${o.billing.street}, ${o.billing.city}, jud. ${o.billing.county} ${o.billing.postcode || ''}</p>

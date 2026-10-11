@@ -18,7 +18,7 @@ if (otp) {
       const v = c.value.replace(/\D/g, '');
       c.value = '';
       if (v) fill(v.slice(0, 6 - i), i);
-      otp.classList.remove('is-error');
+      otp.classList.remove('is-error', 'is-ok');
       sync();
     });
     c.addEventListener('keydown', (e) => {
@@ -36,7 +36,7 @@ if (otp) {
     c.addEventListener('focus', () => c.select());
   });
   setTimeout(() => cells[0].focus(), 50);
-  form.addEventListener('ajax:error', () => { otp.classList.remove('is-error'); void otp.offsetWidth; otp.classList.add('is-error'); cells.forEach((x) => { x.value = ''; }); cells[0].focus(); });
+  form.addEventListener('ajax:error', () => { otp.classList.remove('is-error', 'is-ok'); void otp.offsetWidth; otp.classList.add('is-error'); cells.forEach((x) => { x.value = ''; }); cells[0].focus(); });
   form.addEventListener('submit', () => { if (sync().length === 6) otp.classList.add('is-ok'); });
 }
 

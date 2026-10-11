@@ -2,7 +2,7 @@ import { config } from './config.js';
 import { Router, runHandlers } from './lib/router.js';
 import { HttpError, parseCookies, serializeCookie, parseBody, sendBuffer, clientIp } from './lib/http.js';
 import { securityHeaders, csrfFor, randomToken, safeEqual, signJson, verifyJson } from './lib/security.js';
-import { serveStatic } from './lib/static.js';
+import { serveStatic, importMap } from './lib/static.js';
 import { sessionUser } from './services/users.js';
 import { cartIdFromToken, cartCount } from './services/cart.js';
 import { ValidationError } from './lib/validate.js';
@@ -15,7 +15,14 @@ import adminRoutes from './routes/admin.js';
 import devRoutes from './routes/dev.js';
 import { errorPage } from './views/store/errors.js';
 
-const SEC = securityHeaders();
+// antetele depind de versiunea app.js (hash-ul import map-ului din CSP) → recalculate doar când aceasta se schimbă
+let SEC = null;
+let secFor = '';
+function sec() {
+  const { hash } = importMap();
+  if (hash !== secFor) { SEC = securityHeaders({ scriptHashes: [hash] }); secFor = hash; }
+  return SEC;
+}
 const UNSAFE = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export class Ctx {
@@ -41,7 +48,7 @@ export class Ctx {
   clearCookie(name) { this.outCookies.push(serializeCookie(name, '', { maxAge: 0 })); }
 
   headers(extra = {}) {
-    const h = { ...SEC, ...extra };
+    const h = { ...sec(), ...extra };
     if (this.outCookies.length) h['Set-Cookie'] = this.outCookies;
     return h;
   }
