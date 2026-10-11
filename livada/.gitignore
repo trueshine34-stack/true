@@ -1,0 +1,7 @@
+node_modules/
+var/
+.cache/
+.env
+*.log
+test-results/
+preview/

@@ -1,0 +1,21 @@
+{
+  "name": "livada",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Livada — magazin online de tehnologie Apple în România: catalog, coș, checkout cu toți curierii și lockerele din RO, conturi cu confirmare pe email și panou de administrare.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "dev": "NODE_ENV=development node --disable-warning=ExperimentalWarning --watch-path=src --watch-preserve-output src/server.js",
+    "seed": "node --disable-warning=ExperimentalWarning src/db/seed.js",
+    "seed:demo": "node --disable-warning=ExperimentalWarning src/db/seed.js --demo",
+    "create-admin": "node --disable-warning=ExperimentalWarning src/cli/create-admin.js",
+    "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 test/",
+    "e2e": "node test/e2e/run.mjs",
+    "build:preview": "node --disable-warning=ExperimentalWarning tools/build-preview.mjs"
+  },
+  "dependencies": {}
+}
