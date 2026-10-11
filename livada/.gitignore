@@ -6,3 +6,4 @@ var/
 test-results/
 preview/
 __pycache__/
+public/img/products/**/*.src

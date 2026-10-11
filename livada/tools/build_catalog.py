@@ -213,6 +213,17 @@ def save_variants(im, rel_base):
     return paths
 
 
+def process_image_job(name, rel_base, cache_dir, fill, sig):
+    """rulează într-un proces separat; sare peste imaginile deja generate cu aceeași sursă și același format"""
+    marker = os.path.join(IMG_DIR, rel_base + ".src")
+    if os.path.exists(marker) and open(marker).read() == sig and all(
+            os.path.exists(os.path.join(IMG_DIR, rel_base + f"-{s}.webp")) for s in SIZES):
+        return {s: "/img/products/" + rel_base + f"-{s}.webp" for s in SIZES}
+    out = process_image(name, rel_base, cache_dir, fill)
+    open(marker, "w").write(sig)
+    return out
+
+
 def process_image(name, rel_base, cache_dir, fill):
     if name.startswith("@watch:"):
         im = get_watch(name[7:], cache_dir)
@@ -367,6 +378,8 @@ def main():
     os.makedirs(a.img_cache, exist_ok=True)
     metrics = load_metrics(a.apple_cache)
 
+    from concurrent.futures import ProcessPoolExecutor
+    pool = ProcessPoolExecutor(max_workers=os.cpu_count() or 2)
     out_products = []
     for p in D.PRODUCTS:
         if a.only and p["slug"] not in a.only.split(","):
@@ -400,10 +413,7 @@ def main():
                 if a.skip_images:
                     lst.append({s: f"/img/products/{rel}-{s}.webp" for s in SIZES})
                     continue
-                try:
-                    lst.append(process_image(n, rel, a.img_cache, fill))
-                except Exception as e:
-                    print(f"  ! imagine eșuată {p['slug']} {n}: {e}", file=sys.stderr)
+                lst.append((n, pool.submit(process_image_job, n, rel, a.img_cache, fill, f"{n}|{fill}|{CANVAS}|q82")))
             if lst:
                 images[key] = lst
         prices = [v["price"] for v in variants]
@@ -418,7 +428,26 @@ def main():
         prod["price_from"] = min(prices)
         prod["warranty"] = D.WARRANTY
         out_products.append(prod)
-        print(f"{p['slug']:48s} {len(variants):3d} var  de la {min(prices):>10,.2f} lei  img:{sum(len(x) for x in images.values())}")
+        print(f"{p['slug']:48s} {len(variants):3d} var  de la {min(prices):>10,.2f} lei  img:{sum(len(x) for x in images.values())}", flush=True)
+
+    # imaginile se procesează în paralel; aici așteptăm rezultatele și scoatem ce a eșuat
+    for prod in out_products:
+        for key in list(prod["images"]):
+            done = []
+            for item in prod["images"][key]:
+                if isinstance(item, dict):
+                    done.append(item)
+                    continue
+                n, fut = item
+                try:
+                    done.append(fut.result())
+                except Exception as e:  # noqa: BLE001
+                    print(f"  ! imagine eșuată {prod['slug']} {n}: {e}", file=sys.stderr)
+            if done:
+                prod["images"][key] = done
+            else:
+                del prod["images"][key]
+    pool.shutdown()
 
     data = {"generated": time.strftime("%Y-%m-%d"), "currency": "RON", "vat": 21,
             "categories": D.CATEGORIES, "products": out_products}
