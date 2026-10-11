@@ -184,6 +184,13 @@ test('coș + checkout cu easybox și ramburs: comandă, stoc, emailuri', async (
   assert.match(order.body, /Mulțumim, Ioana/);
   assert.match(order.body, new RegExp(easy[2].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 
+  // simularea plății cu cardul nu poate marca plătită o comandă cu ramburs
+  const token = ok.json.redirect.match(/\/comanda\/([\w-]+)/)[1];
+  const forged = await c.post(`/plata/${token}`, { result: 'success' }, { json: false });
+  assert.equal(forged.status, 303);
+  const { one } = await import('../src/db/index.js');
+  assert.equal(one('SELECT payment_status FROM orders WHERE public_token = ?', token).payment_status, 'cod');
+
   const after = await firstVariant(`v.id = ${v.id}`);
   assert.equal(after.stock, v.stock - 1, 'stocul scade');
   const conf = lastMail(app.dir, 'ioana@exemplu.ro');

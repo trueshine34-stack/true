@@ -2,7 +2,7 @@ import { html } from '../lib/html.js';
 import { config } from '../config.js';
 import { HttpError } from '../lib/http.js';
 import { run, all } from '../db/index.js';
-import { done, limit } from './helpers.js';
+import { done, limit, backUrl } from './helpers.js';
 import { ensureCartId } from '../app.js';
 import { clean, cleanText, isEmail, ValidationError } from '../lib/validate.js';
 import { sendMail } from '../lib/mailer.js';
@@ -93,7 +93,7 @@ export default function storeRoutes(r) {
     } catch (e) {
       if (ctx.wantsJson) throw e;
       ctx.flash('error', e.message);
-      return ctx.redirect(ctx.req.headers.referer || '/cos');
+      return ctx.redirect(backUrl(ctx, '/cos'));
     }
     const count = cartSvc.cartCount(cartId);
     return done(ctx, { redirect: '/cos', message: 'Produsul a fost adăugat în coș.', data: { count } });
@@ -161,16 +161,22 @@ export default function storeRoutes(r) {
     ctx.html(orderPage(ctx, o, orders.orderItems(o.id), orders.orderEvents(o.id), { fresh: ctx.query.get('nou') === '1' }));
   });
 
+  // simularea procesatorului de plăți: doar pentru comenzile cu card/rate, neplătite și active
+  const payable = (o) => o && config.paymentMock && ['card', 'installments'].includes(o.payment_method)
+    && o.payment_status !== 'paid' && !['cancelled', 'returned'].includes(o.status);
+
   r.get('/plata/:token', (ctx) => {
     const o = orders.orderByToken(ctx.params.token);
-    if (!o) throw new HttpError(404, 'Comanda nu există.');
+    if (!o || !config.paymentMock) throw new HttpError(404, 'Comanda nu există.');
     if (o.payment_status === 'paid' || !['card', 'installments'].includes(o.payment_method)) return ctx.redirect(`/comanda/${o.public_token}`);
     ctx.html(paymentPage(ctx, o));
   });
 
   r.post('/plata/:token', async (ctx) => {
+    limit(ctx, 'pay', 10, 10 * 60_000);
     const o = orders.orderByToken(ctx.params.token);
-    if (!o) throw new HttpError(404, 'Comanda nu există.');
+    if (!o || !config.paymentMock) throw new HttpError(404, 'Comanda nu există.');
+    if (!payable(o)) return ctx.redirect(`/comanda/${o.public_token}`);
     if (ctx.body.result === 'fail') {
       ctx.flash('error', 'Plata a fost respinsă de bancă. Poți încerca din nou sau alege altă metodă.');
       return ctx.redirect(`/plata/${o.public_token}`);

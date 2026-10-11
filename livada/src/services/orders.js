@@ -120,6 +120,7 @@ export async function placeOrder({ cartId, user, body, ip }) {
 
   const payment = ['card', 'cod', 'transfer', 'installments'].includes(body.payment_method) ? body.payment_method : null;
   if (!payment) errors.payment_method = 'Alege metoda de plată.';
+  else if (['card', 'installments'].includes(payment) && !config.paymentMock) errors.payment_method = 'Plata online nu este disponibilă momentan. Alege ramburs sau transfer bancar.';
   if (!(body.terms === 'on' || body.terms === true)) errors.terms = 'Trebuie să accepți Termenii și condițiile.';
 
   const totals = priceCart(cart, { deliveryCode: method?.code, payment, customer: { userId: user?.id, email } });

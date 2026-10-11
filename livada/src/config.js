@@ -52,6 +52,9 @@ export const config = {
     attribution: env.MAP_TILES_ATTRIBUTION || '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     tone: env.MAP_TILES_TONE || (env.MAP_TILES_URL ? 'none' : 'mono'),
   },
+  // plata cu cardul simulată (pagina /plata/:token). În producție e oprită până la integrarea unui procesator
+  // (Netopia / EuPlătesc / Stripe); fără ea, checkout-ul oferă doar ramburs și transfer bancar.
+  paymentMock: !production || bool(env.PAYMENT_MOCK),
   // dev-only: pagina /dev/mail cu emailurile trimise
   devTools: !production || bool(env.ENABLE_DEV_TOOLS),
   trustProxy: bool(env.TRUST_PROXY, production),

@@ -75,8 +75,10 @@ if (form) {
     const cod = form.querySelector('input[name="payment_method"][value="cod"]');
     cod.disabled = !codOk;
     $('[data-pay-cod] small', form).dataset.base ||= $('[data-pay-cod] small', form).textContent;
-    $('[data-pay-cod] small', form).textContent = codOk ? $('[data-pay-cod] small', form).dataset.base : 'Indisponibil pentru metoda de livrare aleasă — plătești cu cardul la comandă.';
-    if (!codOk && cod.checked) { form.querySelector('input[name="payment_method"][value="card"]').checked = true; }
+    const card = form.querySelector('input[name="payment_method"][value="card"]');
+    $('[data-pay-cod] small', form).textContent = codOk ? $('[data-pay-cod] small', form).dataset.base
+      : `Indisponibil pentru metoda de livrare aleasă${card ? ' — plătești cu cardul la comandă' : ''}.`;
+    if (!codOk && cod.checked) (card || form.querySelector('input[name="payment_method"][value="transfer"]')).checked = true;
     updatePlaceLabel();
   }
 

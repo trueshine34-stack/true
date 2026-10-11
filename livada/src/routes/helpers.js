@@ -2,18 +2,27 @@ import { HttpError } from '../lib/http.js';
 import { rateLimit } from '../lib/security.js';
 import { ValidationError } from '../lib/validate.js';
 
+/** pagina de unde a venit cererea — doar de pe același site (fără open redirect prin Referer) */
+export function backUrl(ctx, fallback = '/') {
+  try {
+    const u = new URL(ctx.req.headers.referer);
+    if (u.host === ctx.req.headers.host) return u.pathname + u.search;
+  } catch { /* fără Referer valid */ }
+  return fallback;
+}
+
 /** răspuns pentru formulare: JSON pentru fetch, redirect + flash pentru formularele clasice */
 export function done(ctx, { redirect, message, type = 'success', data = {} } = {}) {
   if (ctx.wantsJson) return ctx.json({ ok: true, redirect, message, ...data });
   if (message) ctx.flash(type, message);
-  return ctx.redirect(redirect || ctx.req.headers.referer || '/');
+  return ctx.redirect(redirect || backUrl(ctx));
 }
 
 /** eroare de formular: JSON cu erorile pe câmpuri sau redirect înapoi cu mesaj */
 export function fail(ctx, err, back) {
   if (ctx.wantsJson) throw err;
   ctx.flash('error', err instanceof ValidationError ? Object.values(err.errors)[0] : err.message);
-  return ctx.redirect(back || ctx.req.headers.referer || '/');
+  return ctx.redirect(back || backUrl(ctx));
 }
 
 export function limit(ctx, bucket, max, windowMs, key = ctx.ip) {

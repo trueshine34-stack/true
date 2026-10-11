@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { config } from '../config.js';
 import { HttpError } from '../lib/http.js';
 import { one, all, run, tx, json, getSetting, setSetting, audit } from '../db/index.js';
-import { requireStaff, requireAdmin, limit, safeNext } from './helpers.js';
+import { requireStaff, requireAdmin, limit, safeNext, backUrl } from './helpers.js';
 import { clean, cleanText, isEmail } from '../lib/validate.js';
 import { toBani, slugify } from '../lib/format.js';
 import { sendMail } from '../lib/mailer.js';
@@ -26,7 +26,8 @@ const log = (ctx, action, entity, id, data) => audit(ctx.user?.id, action, entit
 const saved = (ctx, to) => { ctx.flash('success', tr(ctx)('saved')); ctx.redirect(to); };
 
 function csvCell(v) {
-  const s = String(v ?? '');
+  // „=”, „+”, „-”, „@” la început ar fi interpretate ca formule în Excel (CSV injection) → prefix cu apostrof
+  const s = String(v ?? '').replace(/^[=+\-@\t\r]/, "'$&");
   return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -54,7 +55,8 @@ export default function adminRoutes(r) {
   r.post('/admin/limba', requireStaff, (ctx) => {
     const lang = ctx.body.lang === 'ru' ? 'ru' : 'ro';
     run('UPDATE users SET admin_lang = ? WHERE id = ?', lang, ctx.user.id);
-    ctx.redirect(ctx.req.headers.referer?.includes('/admin') ? new URL(ctx.req.headers.referer).pathname : '/admin');
+    const back = backUrl(ctx, '/admin');
+    ctx.redirect(back.startsWith('/admin') ? back : '/admin');
   });
 
   // ─── panou ─────────────────────────────────────────────────────────────

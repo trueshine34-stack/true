@@ -3,6 +3,7 @@ import { $, $$, api, toast, openCart, setCartCount } from './app.js';
 const data = JSON.parse($('#product-data')?.textContent || 'null');
 const form = $('[data-add-to-cart]');
 
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = new Intl.NumberFormat('ro-RO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const lei = (b) => `${fmt.format(b / 100)} lei`;
 
@@ -56,10 +57,10 @@ if (data && form) {
     const track = $('[data-gallery-track]');
     const gallery = $('[data-gallery]');
     const alt = `${data.name}`;
-    track.innerHTML = imgs.map((im, i) => `<figure class="gallery__slide"><img src="${im['1000']}" alt="${alt}" width="1000" height="1000" ${i ? 'loading="lazy"' : ''}></figure>`).join('');
+    track.innerHTML = imgs.map((im, i) => `<figure class="gallery__slide"><img src="${esc(im['1000'])}" alt="${esc(alt)}" width="1000" height="1000" ${i ? 'loading="lazy"' : ''}></figure>`).join('');
     track.scrollLeft = 0;
     const thumbs = $('[data-gallery-thumbs]');
-    if (thumbs) thumbs.innerHTML = imgs.length > 1 ? imgs.map((im, i) => `<button type="button" class="gallery__thumb ${i ? '' : 'is-active'}" aria-label="Imaginea ${i + 1}" data-index="${i}"><img src="${im['480']}" alt="" width="80" height="80"></button>`).join('') : '';
+    if (thumbs) thumbs.innerHTML = imgs.length > 1 ? imgs.map((im, i) => `<button type="button" class="gallery__thumb ${i ? '' : 'is-active'}" aria-label="Imaginea ${i + 1}" data-index="${i}"><img src="${esc(im['480'])}" alt="" width="80" height="80"></button>`).join('') : '';
     gallery.classList.remove('is-swapping'); void gallery.offsetWidth; gallery.classList.add('is-swapping');
   }
 

@@ -32,6 +32,7 @@ export function checkoutPage(ctx, { cart, totals, methods, addresses, user, pref
   const lockers = methods.filter((m) => m.type === 'locker');
   const pickup = methods.find((m) => m.type === 'pickup');
   const sub = totals.subtotal - totals.discount;
+  const online = config.paymentMock; // plata online e disponibilă doar cu un procesator configurat (sau simularea în development)
   const def = addresses.find((a) => a.is_default) || addresses[0] || {};
   const v = (k, fallback = '') => prefill[k] ?? fallback;
 
@@ -130,12 +131,12 @@ export function checkoutPage(ctx, { cart, totals, methods, addresses, user, pref
           <section class="cstep" aria-labelledby="h-pay">
             <header class="cstep__head"><span class="cstep__n">4</span><h2 id="h-pay">Plată</h2></header>
             <div class="paycards">
-              <label class="pcard-pay"><input type="radio" name="payment_method" value="card" checked>
-                <span class="pcard-pay__box">${icon('card', { size: 22 })}<span><b>Card online</b><small>Visa, Mastercard, Apple Pay, Google Pay · 3‑D Secure</small></span></span></label>
-              <label class="pcard-pay" data-pay-cod><input type="radio" name="payment_method" value="cod">
+              ${online ? html`<label class="pcard-pay"><input type="radio" name="payment_method" value="card" checked>
+                <span class="pcard-pay__box">${icon('card', { size: 22 })}<span><b>Card online</b><small>Visa, Mastercard, Apple Pay, Google Pay · 3‑D Secure</small></span></span></label>` : ''}
+              <label class="pcard-pay" data-pay-cod><input type="radio" name="payment_method" value="cod"${attr('checked', !online)}>
                 <span class="pcard-pay__box">${icon('cash', { size: 22 })}<span><b>Ramburs la livrare</b><small>Numerar sau card la curier / locker · +${lei(store.cod_fee ?? 999)}</small></span></span></label>
-              <label class="pcard-pay"${totals.total < (store.installments_min ?? 50000) ? html` data-disabled="1"` : ''}><input type="radio" name="payment_method" value="installments"${attr('disabled', totals.total < (store.installments_min ?? 50000))}>
-                <span class="pcard-pay__box">${icon('calendar', { size: 22 })}<span><b>Rate fără dobândă</b><small>3, 6 sau 12 rate 0% cu cardurile partenere · de la 500 lei</small></span></span></label>
+              ${online ? html`<label class="pcard-pay"${totals.total < (store.installments_min ?? 50000) ? html` data-disabled="1"` : ''}><input type="radio" name="payment_method" value="installments"${attr('disabled', totals.total < (store.installments_min ?? 50000))}>
+                <span class="pcard-pay__box">${icon('calendar', { size: 22 })}<span><b>Rate fără dobândă</b><small>3, 6 sau 12 rate 0% cu cardurile partenere · de la 500 lei</small></span></span></label>` : ''}
               <label class="pcard-pay"><input type="radio" name="payment_method" value="transfer">
                 <span class="pcard-pay__box">${icon('bank', { size: 22 })}<span><b>Transfer bancar (OP)</b><small>Pentru firme · ${company.bank} · expediem după confirmarea plății</small></span></span></label>
             </div>
