@@ -168,9 +168,10 @@ export async function seedDemo({ orders = 160 } = {}) {
       }
       const subtotal = items.reduce((s, x) => s + x.v.price * x.qty, 0);
       const mType = R();
-      const method = mType < 0.42 ? methods.find((m) => m.code === pick(['locker_easybox', 'locker_easybox', 'locker_fanbox']))
-        : mType < 0.9 ? methods.find((m) => m.code === pick(['courier_fan', 'courier_sameday', 'courier_cargus', 'courier_dpd', 'courier_gls']))
-          : mType < 0.95 ? methods.find((m) => m.code === 'pickup_showroom') : methods.find((m) => m.code === 'express_bucuresti');
+      const code = mType < 0.42 ? pick(['locker_easybox', 'locker_easybox', 'locker_fanbox'])
+        : mType < 0.9 ? pick(['courier_fan', 'courier_sameday', 'courier_cargus', 'courier_dpd', 'courier_gls'])
+          : mType < 0.95 ? 'pickup_showroom' : 'express_bucuresti';
+      const method = methods.find((m) => m.code === code);
       const fee = method.free_over && subtotal >= method.free_over ? 0 : method.price;
       const pay = R();
       const payment = pay < 0.55 ? 'card' : pay < 0.85 ? 'cod' : pay < 0.95 ? 'installments' : 'transfer';

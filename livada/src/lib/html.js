@@ -17,9 +17,15 @@ function render(v) {
   return esc(v);
 }
 
+// valoare interpolată direct după „=” → atribut fără ghilimele: le adăugăm automat
+const UNQUOTED_ATTR = /=\s*$/;
+
 export function html(strings, ...vals) {
   let out = strings[0];
-  for (let i = 0; i < vals.length; i++) out += render(vals[i]) + strings[i + 1];
+  for (let i = 0; i < vals.length; i++) {
+    const v = render(vals[i]);
+    out += (UNQUOTED_ATTR.test(strings[i]) ? `"${v.replace(/"/g, '&quot;')}"` : v) + strings[i + 1];
+  }
   return new Raw(out);
 }
 

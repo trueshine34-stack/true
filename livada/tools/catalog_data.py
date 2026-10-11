@@ -168,7 +168,7 @@ for model, size, eur, title in [
       options=[{"key": "color", "label": "Culoare", "values": colors("silver", "burgundy", "black", "glacier")},
                {"key": "storage", "label": "Stocare", "values": storage("256gb", "512gb", "1tb", "2tb")}],
       eur=eur, mpn_from="de-18pro", mpn_filter=("Max" if big else "Pro "),
-      images={c: [f"{model}-finish-select-{c}-202609"] for c in ["silver", "burgundy", "black", "glacier"]})
+      images={c: [f"{model}-finish-select-{c}-202609"] for c in (["glacier", "silver", "burgundy", "black"] if big else ["silver", "burgundy", "black", "glacier"])})
 
 P(slug="iphone-air", name="iPhone Air", category="iphone", group="Air",
   tagline="Cel mai subțire iPhone. Incredibil de ușor, surprinzător de puternic.",
@@ -477,7 +477,8 @@ S12_CASE = {"spacegray": "aluminum-spacegray-cell", "black": "aluminum-black-nc"
 
 def s12_img(c):
     case = S12_CASE[c]
-    face = case.rsplit("-", 1)[0]
+    # fața ecranului: pentru ceramică numele include și conectivitatea („-cell”)
+    face = case if case.startswith("ceramic") else case.rsplit("-", 1)[0]
     return [f"@watch:{S12_BAND[c]}_VW_34FR|watch-case-46-{case}-s12_VW_34FR|watch-face-46-{face}-s12_VW_34FR",
             f"@watch:{S12_BAND[c]}_VW_34FR|watch-case-42-{case}-s12_VW_34FR|watch-face-42-{face}-s12_VW_34FR"]
 

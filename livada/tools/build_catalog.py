@@ -56,8 +56,16 @@ def stock_for(sku):
 def sku_of(slug, opts):
     base = re.sub(r"[^A-Z0-9]", "", slug.upper().replace("IPHONE", "IP").replace("MACBOOK", "MB")
                   .replace("APPLE-WATCH", "AW").replace("IPAD", "IPD"))[:10]
-    tail = "-".join(re.sub(r"[^A-Z0-9]", "", str(v).upper())[:6] for v in opts.values() if v != "-")
-    return f"LV-{base}" + (f"-{tail}" if tail else "")
+    tail = "-".join(re.sub(r"[^A-Z0-9]", "", str(v).upper())[:12] for v in opts.values() if v != "-")
+    sku = f"LV-{base}" + (f"-{tail}" if tail else "")
+    n, out = 2, sku
+    while out in SEEN_SKUS:
+        out, n = f"{sku}-{n}", n + 1
+    SEEN_SKUS.add(out)
+    return out
+
+
+SEEN_SKUS = set()
 
 
 # ------------------------------------------------------------------ date Apple DE
