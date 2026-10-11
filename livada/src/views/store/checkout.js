@@ -38,6 +38,7 @@ export function checkoutPage(ctx, { cart, totals, methods, addresses, user, pref
   const body = html`
   <section class="section section--page checkout-wrap">
     <div class="wrap">
+      <h1 class="visually-hidden">Finalizează comanda</h1>
       <ol class="steps" aria-label="Pași">
         <li class="is-done"><a href="/cos">${icon('check', { size: 14 })} Coș</a></li>
         <li class="is-active"><span>2</span> Livrare și plată</li>
@@ -151,7 +152,7 @@ export function checkoutPage(ctx, { cart, totals, methods, addresses, user, pref
           </section>
         </div>
 
-        <aside class="checkout__side">
+        <div class="checkout__side">
           <div class="summary summary--sticky" data-summary>
             <h2 class="h4">Comanda ta</h2>
             <ul class="mini-lines">${cart.items.map((it) => html`<li>
@@ -166,7 +167,7 @@ export function checkoutPage(ctx, { cart, totals, methods, addresses, user, pref
             </button>
             <p class="summary__legal">Prin plasarea comenzii, comanda devine obligație de plată. Ai dreptul de retragere în 30 de zile.</p>
           </div>
-        </aside>
+        </div>
       </form>
     </div>
   </section>

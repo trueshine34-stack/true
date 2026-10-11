@@ -70,7 +70,7 @@ export function productPage(ctx, p, related) {
       <div class="gallery" data-gallery>
         <div class="gallery__stage">
           ${p.badge ? html`<span class=${cx('badge', p.badge === 'Precomandă' ? 'badge--dark' : 'badge--leaf')}>${p.badge}</span>` : ''}
-          <div class="gallery__track" data-gallery-track>
+          <div class="gallery__track" data-gallery-track tabindex="0" role="region" aria-label="Galerie foto">
             ${gallery.map((img, i) => html`<figure class="gallery__slide"><img src=${img['1000']} alt=${`${p.name} ${variantLabel(p, v.options)}`} width="1000" height="1000" ${i === 0 ? html`fetchpriority="high"` : html`loading="lazy"`} decoding="async"></figure>`)}
           </div>
         </div>
@@ -122,14 +122,14 @@ export function productPage(ctx, p, related) {
         ${p.specs.length ? html`<h2 class="h3 pdp-info__sub">Specificații</h2>
         <div class="specs">${p.specs.map((g) => html`<div class="specs__group"><h3>${g.group}</h3><dl>${g.rows.map((r) => html`<div><dt>${r.k}</dt><dd>${r.v}</dd></div>`)}</dl></div>`)}</div>` : ''}
       </div>
-      <aside class="pdp-info__side">
+      <div class="pdp-info__side">
         ${p.in_box.length ? html`<div class="side-card"><h3>${icon('package', { size: 18 })} În cutie</h3><ul>${p.in_box.map((x) => html`<li>${x}</li>`)}</ul></div>` : ''}
         <div class="side-card"><h3>${icon('shield', { size: 18 })} Garanție și retur</h3>
           <p>Produs nou, sigilat, cu factură fiscală și garanție de 24 de luni. Îl poți returna gratuit în 30 de zile de la livrare.</p>
           <a class="link-arrow" href="/retur">Cum funcționează returul ${icon('arrow-right', { size: 14 })}</a></div>
         <div class="side-card"><h3>${icon('calendar', { size: 18 })} Rate fără dobândă</h3>
           <p>3, 6 sau 12 rate 0% cu cardurile de credit partenere, pentru comenzi de peste 500 lei.</p></div>
-      </aside>
+      </div>
     </div>
   </section>
 

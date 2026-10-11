@@ -19,7 +19,7 @@ function pager(t, { total, limit, offset, base, query }) {
   if (total <= limit) return '';
   const q = new URLSearchParams(query);
   const link = (o) => { q.set('o', String(o)); return `${base}?${q}`; };
-  return html`<nav class="adm-pager">
+  return html`<nav class="adm-pager" aria-label="Pagini">
     <span>${offset + 1}–${Math.min(offset + limit, total)} / ${total}</span>
     ${offset > 0 ? html`<a class="adm-btn adm-btn--sm" href=${link(Math.max(0, offset - limit))}>← ${t('prev')}</a>` : ''}
     ${offset + limit < total ? html`<a class="adm-btn adm-btn--sm" href=${link(offset + limit)}>${t('next')} →</a>` : ''}
@@ -93,13 +93,13 @@ export function ordersTable(t, rows) {
 }
 
 export function ordersPage(ctx, t, { rows, total, filters, limit, offset }) {
-  const sel = (name, options, value) => html`<select name=${name}><option value="">${t('all')}</option>${options.map(([v, l]) => html`<option value=${v}${attr('selected', v === value)}>${l}</option>`)}</select>`;
+  const sel = (name, options, value, label) => html`<select name=${name} aria-label=${label}><option value="">${t('all')}</option>${options.map(([v, l]) => html`<option value=${v}${attr('selected', v === value)}>${l}</option>`)}</select>`;
   const body = html`
   <form class="adm-filters" method="get">
-    <input name="q" value=${filters.q || ''} placeholder=${t('search.orders')}>
-    ${sel('status', Object.entries(STATUSES).map(([k, v]) => [k, t.status(k, v.label)]), filters.status)}
-    ${sel('payment', Object.entries(PAYMENT_METHODS).map(([k, v]) => [k, t.paym(k, v)]), filters.payment)}
-    ${sel('delivery', [['courier', 'Curier'], ['locker', 'Locker'], ['express', 'Express'], ['pickup', 'Showroom']], filters.delivery)}
+    <input name="q" value=${filters.q || ''} placeholder=${t('search.orders')} aria-label=${t('search.orders')}>
+    ${sel('status', Object.entries(STATUSES).map(([k, v]) => [k, t.status(k, v.label)]), filters.status, t('col.status'))}
+    ${sel('payment', Object.entries(PAYMENT_METHODS).map(([k, v]) => [k, t.paym(k, v)]), filters.payment, t('order.payment'))}
+    ${sel('delivery', [['courier', 'Curier'], ['locker', 'Locker'], ['express', 'Express'], ['pickup', 'Showroom']], filters.delivery, t('col.delivery'))}
     <button class="adm-btn adm-btn--dark">${t('filter')}</button>
     ${Object.values(filters).some(Boolean) ? html`<a class="adm-btn" href="/admin/comenzi">${t('reset')}</a>` : ''}
   </form>
@@ -166,7 +166,7 @@ export function orderPage(ctx, t, { order: o, items, events, customerOrders }) {
         <p>${o.billing.first_name || o.first_name} ${o.billing.last_name || o.last_name}</p><p>${o.billing.street}, ${o.billing.city}, jud. ${o.billing.county} ${o.billing.postcode || ''}</p>
         <p class="muted">${t.paym(o.payment_method, PAYMENT_METHODS[o.payment_method])}${o.installments ? ` · ${o.installments} rate` : ''}</p></div>
       <div class="card"><div class="card__head"><h2>${t('order.admin_notes')}</h2></div>
-        <form method="post" action=${`/admin/comenzi/${o.id}/note`} class="adm-form">${csrfInput(ctx)}<textarea name="admin_notes" rows="3">${o.admin_notes}</textarea><button class="adm-btn adm-btn--sm">${t('save')}</button></form></div>
+        <form method="post" action=${`/admin/comenzi/${o.id}/note`} class="adm-form">${csrfInput(ctx)}<textarea name="admin_notes" rows="3" aria-label=${t('order.admin_notes')}>${o.admin_notes}</textarea><button class="adm-btn adm-btn--sm">${t('save')}</button></form></div>
     </div>
   </div>`;
   return adminPage(ctx, { title: `${t('col.order')} ${o.number}`, body, active: 'orders', t,
@@ -196,9 +196,9 @@ export function invoicePage(ctx, { order: o, items, company }) {
 export function productsPage(ctx, t, { rows, categories, filters }) {
   const body = html`
   <form class="adm-filters" method="get">
-    <input name="q" value=${filters.q || ''} placeholder="iPhone, MagSafe, SKU…">
-    <select name="cat"><option value="">${t('all')}</option>${categories.map((c) => html`<option value=${c.slug}${attr('selected', c.slug === filters.cat)}>${c.name}</option>`)}</select>
-    <select name="stoc"><option value="">${t('col.stock')}: ${t('all')}</option><option value="low"${attr('selected', filters.stoc === 'low')}>≤ 3</option><option value="out"${attr('selected', filters.stoc === 'out')}>${t('products.out')}</option></select>
+    <input name="q" value=${filters.q || ''} placeholder="iPhone, MagSafe, SKU…" aria-label="iPhone, MagSafe, SKU…">
+    <select name="cat" aria-label=${t('col.category')}><option value="">${t('all')}</option>${categories.map((c) => html`<option value=${c.slug}${attr('selected', c.slug === filters.cat)}>${c.name}</option>`)}</select>
+    <select name="stoc" aria-label=${t('col.stock')}><option value="">${t('col.stock')}: ${t('all')}</option><option value="low"${attr('selected', filters.stoc === 'low')}>≤ 3</option><option value="out"${attr('selected', filters.stoc === 'out')}>${t('products.out')}</option></select>
     <button class="adm-btn adm-btn--dark">${t('filter')}</button>
   </form>
   <p class="adm-count">${t('results', { n: rows.length })}</p>
@@ -258,10 +258,10 @@ export function productEditPage(ctx, t, { p, categories, isNew = false }) {
         <thead><tr><th>${t('col.variants')}</th><th>${t('col.sku')} / ${t('col.mpn')}</th><th class="num">${t('col.price')}</th><th class="num">${t('col.old_price')}</th><th class="num">${t('col.stock')}</th><th>${t('col.active')}</th></tr></thead>
         <tbody>${p.allVariants.map((v) => html`<tr>
           <td>${optLabel(v)}</td><td class="mono small">${v.sku}<small class="block muted">${v.mpn || ''}</small></td>
-          <td class="num"><input class="adm-num" name=${`price_${v.id}`} value=${(v.price / 100).toFixed(2)} inputmode="decimal" required></td>
-          <td class="num"><input class="adm-num" name=${`compare_${v.id}`} value=${v.compare_at ? (v.compare_at / 100).toFixed(2) : ''} inputmode="decimal" placeholder="—"></td>
-          <td class="num"><input class="adm-num adm-num--sm" name=${`stock_${v.id}`} value=${v.stock} inputmode="numeric"></td>
-          <td><input type="checkbox" name=${`active_${v.id}`} value="1"${attr('checked', v.active)}></td>
+          <td class="num"><input class="adm-num" name=${`price_${v.id}`} aria-label=${`${optLabel(v)} — ${t('col.price')}`} value=${(v.price / 100).toFixed(2)} inputmode="decimal" required></td>
+          <td class="num"><input class="adm-num" name=${`compare_${v.id}`} aria-label=${`${optLabel(v)} — ${t('col.old_price')}`} value=${v.compare_at ? (v.compare_at / 100).toFixed(2) : ''} inputmode="decimal" placeholder="—"></td>
+          <td class="num"><input class="adm-num adm-num--sm" name=${`stock_${v.id}`} aria-label=${`${optLabel(v)} — ${t('col.stock')}`} value=${v.stock} inputmode="numeric"></td>
+          <td><input type="checkbox" name=${`active_${v.id}`} aria-label=${`${optLabel(v)} — ${t('col.active')}`} value="1"${attr('checked', v.active)}></td>
         </tr>`)}</tbody></table></div>
       <div class="card__foot">
         <label class="adm-inline">${t('products.bulk_pct')} <input class="adm-num adm-num--sm" name="bulk_pct" placeholder="0" inputmode="decimal"> %</label>
@@ -284,7 +284,7 @@ export function productEditPage(ctx, t, { p, categories, isNew = false }) {
 // ─── clienți ───────────────────────────────────────────────────────────────
 export function customersPage(ctx, t, { rows, total, q, limit, offset }) {
   const body = html`
-  <form class="adm-filters" method="get"><input name="q" value=${q || ''} placeholder="Nume, email, telefon"><button class="adm-btn adm-btn--dark">${t('filter')}</button></form>
+  <form class="adm-filters" method="get"><input name="q" value=${q || ''} placeholder="Nume, email, telefon" aria-label="Nume, email, telefon"><button class="adm-btn adm-btn--dark">${t('filter')}</button></form>
   <p class="adm-count">${t('results', { n: total })}</p>
   <div class="card card--flush"><div class="adm-table-wrap"><table class="adm-table">
     <thead><tr><th>${t('col.customer')}</th><th>${t('col.registered')}</th><th>${t('col.verified')}</th><th class="num">${t('col.orders')}</th><th class="num">${t('col.spent')}</th><th>${t('col.status')}</th></tr></thead>
@@ -321,7 +321,7 @@ export function promosPage(ctx, t, rows) {
   const typeLabel = { percent: t('promos.percent'), fixed: t('promos.fixed'), shipping: t('promos.shipping') };
   const body = html`<div class="adm-grid adm-grid--2-1">
     <div class="card card--flush"><div class="adm-table-wrap"><table class="adm-table">
-      <thead><tr><th>${t('col.code')}</th><th>${t('col.type')}</th><th class="num">${t('col.value')}</th><th class="num">${t('col.used')}</th><th>${t('col.valid')}</th><th>${t('col.active')}</th><th></th></tr></thead>
+      <thead><tr><th>${t('col.code')}</th><th>${t('col.type')}</th><th class="num">${t('col.value')}</th><th class="num">${t('col.used')}</th><th>${t('col.valid')}</th><th>${t('col.active')}</th><th><span class="sr-only">${t('promos.delete')}</span></th></tr></thead>
       <tbody>${rows.map((p) => html`<tr>
         <td><b class="mono">${p.code}</b>${p.first_order_only ? html` ${badge(t('promos.first'), 'green')}` : ''}<small class="block muted">${p.description}</small></td>
         <td>${typeLabel[p.type]}</td>
@@ -356,11 +356,11 @@ export function deliveryPage(ctx, t, { methods, stats }) {
         <thead><tr><th>${t('col.method')}</th><th>${t('col.eta')}</th><th class="num">${t('col.price')}</th><th class="num">${t('col.free_over')}</th><th>${t('col.cod')}</th><th>${t('col.active')}</th></tr></thead>
         <tbody>${methods.map((m) => html`<tr>
           <td><div class="adm-prod">${carrierBadge(m.carrier, { size: 30 })}<span><b>${m.name}</b><small class="block muted">${m.code}</small></span></div></td>
-          <td><input name=${`eta_${m.code}`} value=${m.eta} class="adm-input-sm"></td>
-          <td class="num"><input class="adm-num" name=${`price_${m.code}`} value=${(m.price / 100).toFixed(2)} inputmode="decimal"></td>
-          <td class="num"><input class="adm-num" name=${`free_${m.code}`} value=${m.free_over ? (m.free_over / 100).toFixed(0) : ''} inputmode="decimal" placeholder="—"></td>
-          <td><input type="checkbox" name=${`cod_${m.code}`} value="1"${attr('checked', m.cod_allowed)}></td>
-          <td><input type="checkbox" name=${`active_${m.code}`} value="1"${attr('checked', m.active)}></td>
+          <td><input name=${`eta_${m.code}`} aria-label=${`${m.name} — ${t('col.eta')}`} value=${m.eta} class="adm-input-sm"></td>
+          <td class="num"><input class="adm-num" name=${`price_${m.code}`} aria-label=${`${m.name} — ${t('col.price')}`} value=${(m.price / 100).toFixed(2)} inputmode="decimal"></td>
+          <td class="num"><input class="adm-num" name=${`free_${m.code}`} aria-label=${`${m.name} — ${t('col.free_over')}`} value=${m.free_over ? (m.free_over / 100).toFixed(0) : ''} inputmode="decimal" placeholder="—"></td>
+          <td><input type="checkbox" name=${`cod_${m.code}`} aria-label=${`${m.name} — ${t('col.cod')}`} value="1"${attr('checked', m.cod_allowed)}></td>
+          <td><input type="checkbox" name=${`active_${m.code}`} aria-label=${`${m.name} — ${t('col.active')}`} value="1"${attr('checked', m.active)}></td>
         </tr>`)}</tbody></table></div>
       <div class="card__foot"><button class="adm-btn adm-btn--dark">${t('save')}</button></div>
     </form></div>
@@ -371,7 +371,7 @@ export function deliveryPage(ctx, t, { methods, stats }) {
     <div class="card"><div class="card__head"><h2>${t('delivery.import')}</h2></div>
       <form class="adm-form" method="post" action="/admin/livrare/lockere" enctype="multipart/form-data">${csrfInput(ctx)}
         <p class="muted small">${t('delivery.import_hint')}</p>
-        <input type="file" name="file" accept="application/json,.json" required>
+        <input type="file" name="file" accept="application/json,.json" required aria-label=${t('delivery.import')}>
         <button class="adm-btn">${icon('upload', { size: 16 })} Import</button></form></div>
   </div>`;
   return adminPage(ctx, { title: t('delivery.title'), body, active: 'delivery', t });

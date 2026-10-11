@@ -111,17 +111,17 @@ function footer() {
           </form>
         </div>
         <nav class="footer-cols" aria-label="Linkuri utile">
-          <div><h3>Magazin</h3><ul>${cats.map((c) => html`<li><a href=${`/${c.slug}`}>${c.name}</a></li>`)}<li><a href="/oferte">Oferte</a></li></ul></div>
-          <div><h3>Ajutor</h3><ul>
+          <div><h2>Magazin</h2><ul>${cats.map((c) => html`<li><a href=${`/${c.slug}`}>${c.name}</a></li>`)}<li><a href="/oferte">Oferte</a></li></ul></div>
+          <div><h2>Ajutor</h2><ul>
             <li><a href="/livrare">Livrare și lockere</a></li><li><a href="/retur">Retur 30 de zile</a></li>
             <li><a href="/garantie">Garanție și service</a></li><li><a href="/ajutor">Întrebări frecvente</a></li><li><a href="/contact">Contact</a></li>
           </ul></div>
-          <div><h3>Livada</h3><ul>
+          <div><h2>Livada</h2><ul>
             <li><a href="/despre">Despre noi</a></li><li><a href="/contact#showroom">Showroom</a></li>
             <li><a href="/termeni">Termeni și condiții</a></li><li><a href="/confidentialitate">Confidențialitate</a></li>
             <li><a href="/cookies">Cookie-uri</a></li>
           </ul></div>
-          <div class="footer-contact"><h3>Contact</h3>
+          <div class="footer-contact"><h2>Contact</h2>
             <p><a href=${`tel:${(co.phone || '').replace(/\s/g, '')}`}>${co.phone}</a><br><small>${co.phone_hours}</small></p>
             <p><a href=${`mailto:${co.email}`}>${co.email}</a></p>
             <p><small>${sh.address}</small></p>

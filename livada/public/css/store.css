@@ -360,6 +360,7 @@ ul, ol { padding: 0; list-style: none; }
 .badge--leaf { background: var(--leaf-soft); color: var(--leaf-2); }
 .badge--dark { background: var(--ink); color: var(--paper); }
 .badge--sale { background: var(--sale); color: #fff; }
+@media (prefers-color-scheme: dark) { .badge--sale { color: #1A0D06; } } /* --sale e mai deschis în modul întunecat */
 .swatches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .swatch { --c: #ccc; display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); flex: none; }
 .swatches__more { font-size: 11px; color: var(--muted); }
@@ -916,7 +917,7 @@ ul, ol { padding: 0; list-style: none; }
 .newsletter__row { display: flex; gap: 6px; padding: 5px; border-radius: 999px; background: var(--paper); border: 1px solid var(--line); }
 .newsletter__row input { flex: 1; min-width: 0; width: 0; border: 0; outline: 0; background: none; padding: 0 12px; }
 .footer-cols { display: grid; grid-template-columns: repeat(2, 1fr); gap: 28px; }
-.footer-cols h3 { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+.footer-cols h2 { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
 .footer-cols ul { display: grid; gap: 8px; }
 .footer-cols a { color: var(--ink-2); }
 .footer-cols a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }

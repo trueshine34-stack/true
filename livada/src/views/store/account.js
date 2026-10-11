@@ -13,14 +13,14 @@ const NAV = [['/cont', 'Prezentare', 'home'], ['/cont/comenzi', 'Comenzi', 'pack
 function shell(ctx, active, title, body) {
   const u = ctx.user;
   const content = html`<section class="section section--page"><div class="wrap account">
-    <aside class="account__nav">
+    <div class="account__nav">
       <div class="account__me"><span class="avatar avatar--lg">${(u.first_name || '?')[0]}</span><div><b>${u.first_name} ${u.last_name}</b><small>${u.email}</small></div></div>
       <nav aria-label="Contul meu"><ul>
         ${NAV.map(([href, label, ic]) => html`<li><a class=${cx(active === href && 'is-active')} href=${href}>${icon(ic, { size: 18 })}${label}</a></li>`)}
         ${u.role !== 'customer' ? html`<li><a href="/admin">${icon('grid', { size: 18 })}Panou admin</a></li>` : ''}
         <li><form action="/cont/iesire" method="post">${csrfInput(ctx)}<button type="submit">${icon('logout', { size: 18 })}Ieșire</button></form></li>
       </ul></nav>
-    </aside>
+    </div>
     <div class="account__main">${body}</div>
   </div></section>`;
   return page(ctx, { title, body: content, noindex: true, scripts: ['/js/account.js'] });
@@ -69,7 +69,7 @@ export function accountOrderPage(ctx, order, items, events) {
 
 export function favoritesPage(ctx, products) {
   const body = html`<h1 class="h2">Favorite</h1>
-    ${products.length ? productGrid(products, { size: 'sm' }) : emptyState({ iconName: 'heart', title: 'Lista de favorite e goală', text: 'Apasă inimioara de pe pagina unui produs ca să-l salvezi aici.', cta: 'Explorează', href: '/' })}`;
+    ${products.length ? productGrid(products, { size: 'sm', heading: 2 }) : emptyState({ iconName: 'heart', title: 'Lista de favorite e goală', text: 'Apasă inimioara de pe pagina unui produs ca să-l salvezi aici.', cta: 'Explorează', href: '/' })}`;
   return shell(ctx, '/cont/favorite', 'Favorite', body);
 }
 

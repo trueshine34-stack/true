@@ -15,7 +15,7 @@ function qtyControl(ctx, it) {
 
 function line(ctx, it, { compact = false } = {}) {
   return html`<li class=${cx('cline', !it.available && 'is-unavailable')}>
-    <a class="cline__img" href=${`/produs/${it.slug}`}>${it.image ? html`<img src=${it.image} alt="" width="96" height="96" loading="lazy">` : ''}</a>
+    <a class="cline__img" href=${`/produs/${it.slug}`} tabindex="-1" aria-hidden="true">${it.image ? html`<img src=${it.image} alt="" width="96" height="96" loading="lazy">` : ''}</a>
     <div class="cline__info">
       <a class="cline__name" href=${`/produs/${it.slug}`}>${it.name}</a>
       ${it.label ? html`<span class="cline__var">${it.label}</span>` : ''}
@@ -77,7 +77,7 @@ export function cartSection(ctx, cart, t, suggestions = []) {
       ${freeShippingBar(t)}
       <ul class="clines">${cart.items.map((it) => line(ctx, it))}</ul>
     </div>
-    <aside class="cartpage__side">
+    <div class="cartpage__side">
       <div class="summary">
         <h2 class="h4">Sumar</h2>
         ${promoForm(ctx, cart, t)}
@@ -89,7 +89,7 @@ export function cartSection(ctx, cart, t, suggestions = []) {
           <li>${icon('calendar', { size: 16 })} Rate 0% de la 500 lei</li>
         </ul>
       </div>
-    </aside>
+    </div>
   </div>`;
 }
 

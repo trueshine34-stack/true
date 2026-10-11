@@ -3,7 +3,7 @@ import { lei } from '../lib/format.js';
 import { icon } from './icons.js';
 import { carrier } from '../services/shipping.js';
 
-export function productCard(p, { size = 'md', eager = false } = {}) {
+export function productCard(p, { size = 'md', eager = false, heading = 3 } = {}) {
   const sale = p.compare_from && p.compare_from > p.price_from;
   const pct = sale ? Math.round((1 - p.price_from / p.compare_from) * 100) : 0;
   return html`<article class=${cx('pcard', `pcard--${size}`)} data-product-card>
@@ -17,7 +17,7 @@ export function productCard(p, { size = 'md', eager = false } = {}) {
           ${p.colors.slice(0, 6).map((c) => html`<span class="swatch" style=${`--c:${c.hex}`} title=${c.label} data-swatch-img=${c.image || ''}></span>`)}
           ${p.colors.length > 6 ? html`<span class="swatches__more">+${p.colors.length - 6}</span>` : ''}
         </div>` : ''}
-        <h3 class="pcard__name">${p.name}</h3>
+        ${heading === 2 ? html`<h2 class="pcard__name">${p.name}</h2>` : html`<h3 class="pcard__name">${p.name}</h3>`}
         ${size !== 'sm' ? html`<p class="pcard__tag">${p.tagline}</p>` : ''}
         <p class="pcard__price">
           ${p.variant_count > 1 && p.price_to > p.price_from ? html`<span class="pcard__from">de la</span>` : ''}

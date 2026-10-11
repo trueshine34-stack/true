@@ -31,7 +31,7 @@ export function adminPage(ctx, { title, body, active, t, actions = '', narrow = 
 <body class="adm">
 <aside class="adm-side" data-adm-side>
   <div class="adm-side__brand"><a href="/admin" aria-label="Panou">${logo()}</a><span class="adm-badge">Admin</span></div>
-  <nav class="adm-nav">
+  <nav class="adm-nav" aria-label="Panou de administrare">
     ${nav.map(([group, items]) => html`<div class="adm-nav__group">
       ${group ? html`<p class="adm-nav__title">${t(group)}</p>` : ''}
       ${items.map(([href, key, ic, id, badge]) => html`<a class=${cx('adm-nav__link', active === id && 'is-active')} href=${href}>${icon(ic, { size: 18 })}<span>${t(key)}</span>${badge ? html`<em>${badge}</em>` : ''}</a>`)}

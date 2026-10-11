@@ -74,7 +74,7 @@ export function listingPage(ctx, o) {
           ${icon('chevron-down', { size: 16 })}
         </form>
       </div>`}
-      ${o.products.length ? productGrid(o.products, { eager: true }) : emptyState({ iconName: 'search', title: 'Niciun produs nu se potrivește', text: 'Încearcă alte filtre sau caută după numele modelului.', cta: 'Vezi toate produsele', href: o.base })}
+      ${o.products.length ? productGrid(o.products, { eager: true, heading: 2 }) : emptyState({ iconName: 'search', title: 'Niciun produs nu se potrivește', text: 'Încearcă alte filtre sau caută după numele modelului.', cta: 'Vezi toate produsele', href: o.base })}
     </div>
   </section>`;
   return page(ctx, { title: o.metaTitle || o.title, description: o.description, body, active: o.category?.slug, canonical: o.canonical });
