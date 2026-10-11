@@ -937,7 +937,7 @@ ul, ol { padding: 0; list-style: none; }
   .reveal { opacity: 0; transform: translateY(16px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
   .reveal.is-in { opacity: 1; transform: none; }
 }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0s !important; } }
 
 /* tranziții între pagini (Chrome / Safari 18+) */
 @media (prefers-reduced-motion: no-preference) {
