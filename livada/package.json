@@ -14,8 +14,7 @@
     "seed:demo": "node --disable-warning=ExperimentalWarning src/db/seed.js --demo",
     "create-admin": "node --disable-warning=ExperimentalWarning src/cli/create-admin.js",
     "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"test/*.test.js\"",
-    "e2e": "node test/e2e/run.mjs",
-    "build:preview": "node --disable-warning=ExperimentalWarning tools/build-preview.mjs"
+    "e2e": "node test/e2e/run.mjs"
   },
   "dependencies": {}
 }

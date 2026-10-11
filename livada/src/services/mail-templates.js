@@ -52,7 +52,7 @@ function layout({ preheader, topRight = '', body, footerNote }) {
 <meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
 <title>${esc(preheader)}</title>
 <style>
-  @media (max-width:620px){ .card{padding:28px 22px !important} .h1{font-size:28px !important} .px{padding-left:16px !important;padding-right:16px !important} .stack{display:block !important;width:100% !important} }
+  @media (max-width:620px){ .card{padding:28px 22px !important} .h1{font-size:28px !important} .px{padding-left:16px !important;padding-right:16px !important} .stack{display:block !important;width:100% !important;box-sizing:border-box !important} .sgap{height:10px !important} }
   @media (prefers-color-scheme: dark){
     .page{background:#0B0F0D !important} .card{background:#141A17 !important} .t-ink{color:#F2F4EF !important} .t-mute{color:#A3ABA6 !important}
     .tile{background:#1C2420 !important;border-color:#2A332E !important;color:#F2F4EF !important} .box{background:#1C2420 !important}
@@ -187,7 +187,7 @@ function tracker(status) {
 function itemsTable(items) {
   return items.map((it) => `<tr><td style="padding:0 0 14px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
 <td width="72" valign="top"><div class="box" style="width:64px;height:64px;border-radius:14px;background:${C.mist};overflow:hidden">${it.image ? `<img src="${esc(emailImage(it.image))}" width="64" height="64" alt="" style="display:block;width:64px;height:64px;border:0">` : ''}</div></td>
-<td valign="top" style="font-family:${SANS};font-size:14px;line-height:1.45;color:${C.ink}" class="t-ink"><b>${esc(it.name)}</b><br><span class="t-mute" style="color:${C.muted};font-size:13px">${esc(it.variant_label || '')}${it.variant_label ? ' · ' : ''}${it.qty} × ${lei(it.unit_price)}</span></td>
+<td valign="top" style="font-family:${SANS};font-size:14px;line-height:1.45;color:${C.ink}" class="t-ink"><b>${esc(it.name)}</b><br><span class="t-mute" style="color:${C.muted};font-size:13px">${esc(it.variant_label || '')}${it.variant_label ? '<br>' : ''}${it.qty} × ${lei(it.unit_price)}</span></td>
 <td valign="top" align="right" style="font-family:${SANS};font-size:14px;font-weight:600;color:${C.ink};white-space:nowrap" class="t-ink">${lei(it.line_total)}</td>
 </tr></table></td></tr>`).join('');
 }
@@ -204,7 +204,8 @@ ${row('Total', lei(o.total), true)}
 </table></td></tr>`;
 }
 
-export function deliveryText(o) {
+/** adresa de livrare într-un rând; `withTitle: false` când titlul metodei e afișat deja deasupra */
+export function deliveryText(o, { withTitle = true } = {}) {
   const d = o.delivery;
   if (d.type === 'locker' && d.locker) {
     const net = CARRIERS[d.carrier]?.name || d.carrier || '';
@@ -213,7 +214,9 @@ export function deliveryText(o) {
   }
   if (d.type === 'pickup') return `${d.store?.name || 'Showroom Livada'} · ${d.store?.address || ''}`;
   const a = d.address || {};
-  return `${o.delivery_label || ''}${o.delivery_label ? ' · ' : ''}${a.street}, ${a.city}, jud. ${a.county}${a.postcode ? `, ${a.postcode}` : ''}`;
+  // curierul rămâne vizibil când diferă de titlu (ex. „Livrare în aceeași zi” · Sameday)
+  const label = withTitle ? o.delivery_label || o.delivery_title || '' : (o.delivery_label !== o.delivery_title ? o.delivery_label || '' : '');
+  return `${label}${label ? ' · ' : ''}${a.street}, ${a.city}, jud. ${a.county}${a.postcode ? `, ${a.postcode}` : ''}`;
 }
 
 function infoBlocks(o) {
@@ -227,8 +230,8 @@ function infoBlocks(o) {
   const block = (title, html) => `<td class="stack box" valign="top" width="50%" bgcolor="${C.mist}" style="background:${C.mist};border-radius:18px;padding:18px 20px;font-family:${SANS};font-size:14px;line-height:1.55;color:${C.ink2}">
 <span style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${C.muted}">${title}</span><br>${html}</td>`;
   return `<tr><td style="padding:6px 0 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-${block('Livrare', `<b class="t-ink" style="color:${C.ink}">${esc(o.delivery_title || '')}</b><br>${esc(deliveryText(o))}${o.delivery_eta ? `<br><span style="color:${C.leaf};font-weight:600">${esc(o.delivery_eta)}</span>` : ''}`)}
-<td width="12" class="stack" style="font-size:0">&nbsp;</td>
+${block('Livrare', `<b class="t-ink" style="color:${C.ink}">${esc(o.delivery_title || '')}</b><br>${esc(deliveryText(o, { withTitle: false }))}${o.delivery_eta ? `<br><span style="color:${C.leaf};font-weight:600">${esc(o.delivery_eta)}</span>` : ''}`)}
+<td width="12" class="stack sgap" style="font-size:0;line-height:0">&nbsp;</td>
 ${block('Plată', `<b class="t-ink" style="color:${C.ink}">${esc(PAYMENT_LABEL[o.payment_method] || o.payment_method)}</b>${payExtra}`)}
 </tr></table></td></tr>`;
 }

@@ -44,7 +44,7 @@ export function orderDetails(order, items) {
     </dl>
     <div class="info-cards">
       <div class="info-card"><h3>${carrierBadge(d.carrier, { size: 26 })} Livrare</h3>
-        <p><b>${order.delivery_title}</b></p><p>${deliveryText(order)}</p>
+        <p><b>${order.delivery_title}</b></p><p>${deliveryText(order, { withTitle: false })}</p>
         ${d.type === 'locker' && d.locker?.hours ? html`<p class="muted">Program: ${d.locker.hours}</p>` : ''}
         ${order.awb ? html`<p>AWB: <b class="mono">${order.awb}</b>${track ? html` · <a href=${track} target="_blank" rel="noopener">Urmărește ${icon('external', { size: 14 })}</a>` : ''}</p>` : ''}
       </div>

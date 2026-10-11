@@ -158,7 +158,7 @@ export function orderPage(ctx, t, { order: o, items, events, customerOrders }) {
         ${o.notes ? html`<p class="adm-note"><b>${t('order.customer_notes')}:</b> ${o.notes}</p>` : ''}
       </div>
       <div class="card"><div class="card__head"><h2>${t('order.delivery')}</h2>${carrierBadge(d.carrier, { size: 28 })}</div>
-        <p class="adm-strong">${o.delivery_title}</p><p>${deliveryText(o)}</p>
+        <p class="adm-strong">${o.delivery_title}</p><p>${deliveryText(o, { withTitle: false })}</p>
         ${d.type === 'locker' && d.locker?.lat ? html`<p><a class="adm-link" target="_blank" href=${`https://www.openstreetmap.org/?mlat=${d.locker.lat}&mlon=${d.locker.lng}#map=17/${d.locker.lat}/${d.locker.lng}`}>${t('order.open_map')} →</a></p>` : ''}
         ${o.awb ? html`<p>AWB <b class="mono">${o.awb}</b>${c.track ? html` · <a class="adm-link" target="_blank" href=${c.track.replace('{awb}', encodeURIComponent(o.awb))}>${t('order.track')} →</a>` : ''}</p>` : ''}
       </div>
