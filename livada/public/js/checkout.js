@@ -1,4 +1,5 @@
 import { $, $$, api, toast, showErrors } from './app.js';
+import { createLockerPicker } from './lockers.js';
 
 const form = $('[data-checkout]');
 const cfg = JSON.parse($('#checkout-data')?.textContent || '{}');
@@ -148,215 +149,45 @@ if (form) {
 
   // ─── harta lockerelor ───────────────────────────────────────────────
   const modal = $('[data-locker-modal]');
-  let map, layer, lockers = [], meMarker = null, me = null, active = null, filterText = '';
-  const enabled = new Set(Object.keys(cfg.lockerPrices || {}));
-
-  const loadCss = (href) => new Promise((ok) => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; l.onload = ok; document.head.append(l); });
-  const loadJs = (src) => new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.append(s); });
-
-  async function ensureMap() {
-    if (map) return;
-    await Promise.all([loadCss('/vendor/leaflet/leaflet.css'), window.L ? null : loadJs('/vendor/leaflet/leaflet.js')]);
-    const data = await (await fetch('/api/lockers')).json();
-    lockers = data.rows.map((r) => Object.fromEntries(data.fields.map((f, i) => [f, r[i]])))
-      .filter((l) => cfg.lockerPrices[l.provider]);
-    lockers.forEach((l) => { l.search = fold(`${l.name} ${l.address} ${l.city} ${l.county} ${l.postcode}`); });
-    for (const p of Object.keys(cfg.lockerPrices)) {
-      const el = modal.querySelector(`[data-lf-count="${p}"]`);
-      if (el) el.textContent = lockers.filter((l) => l.provider === p).length;
-    }
-    const L = window.L;
-    map = L.map($('[data-locker-map]', modal), { zoomControl: true, attributionControl: true, minZoom: 6, maxBounds: [[43.2, 19.5], [48.6, 30.2]] })
-      .setView([45.9, 24.9], 7);
-    L.tileLayer(cfg.map.tiles, { attribution: cfg.map.attribution, subdomains: 'abcd', maxZoom: 19 }).addTo(map);
-    layer = L.layerGroup().addTo(map);
-    map.on('moveend', render);
-    if (picked) map.setView([picked.lat, picked.lng], 15);
-    else if (lockers.length) map.fitBounds(L.latLngBounds(lockers.map((l) => [l.lat, l.lng])), { padding: [20, 20] });
-  }
-
-  const visible = () => lockers.filter((l) => enabled.has(l.provider) && (!filterText || filterText.every((t) => l.search.includes(t))));
-
-  function distKm(a, b) {
-    const R = 6371, rad = Math.PI / 180;
-    const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
-    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
-    return 2 * R * Math.asin(Math.sqrt(h));
-  }
-
-  function pinIcon(l) {
-    const c = cfg.carriers[l.provider] || {};
-    // Leaflet poziționează elementul exterior cu transform; forma „picăturii” e pe elementul interior
-    return window.L.divIcon({ className: 'lpin-wrap', html: `<span class="lpin ${active?.id === l.id ? 'is-active' : ''}" style="--cb:${c.color || '#333'}"></span>`,
-      iconSize: [26, 26], iconAnchor: [13, 30] });
-  }
-
-  const clusterSize = (n) => (n < 10 ? 36 : n < 50 ? 44 : n < 200 ? 52 : 60);
-
-  function render() {
-    if (!map) return;
-    const L = window.L;
-    layer.clearLayers();
-    const list = visible();
-    const b = map.getBounds().pad(0.15);
-    const inView = list.filter((l) => b.contains([l.lat, l.lng]));
-    const zoom = map.getZoom();
-    if (zoom >= 14 || inView.length <= 120) {
-      for (const l of inView) {
-        const m = L.marker([l.lat, l.lng], { icon: pinIcon(l), title: l.name, keyboard: true, riseOnHover: true, zIndexOffset: active?.id === l.id ? 1000 : 0 });
-        m.on('click', () => focusLocker(l, { pan: false }));
-        layer.addLayer(m);
-      }
-    } else {
-      // grupare pe o grilă de 64 px în spațiul ecranului
-      const cells = new Map();
-      for (const l of inView) {
-        const p = map.latLngToLayerPoint([l.lat, l.lng]);
-        const key = `${Math.floor(p.x / 64)}:${Math.floor(p.y / 64)}`;
-        let c = cells.get(key);
-        if (!c) { c = { items: [], lat: 0, lng: 0 }; cells.set(key, c); }
-        c.items.push(l); c.lat += l.lat; c.lng += l.lng;
-      }
-      // grupurile vecine din grilă se pot suprapune pe ecran → le unim până nu se mai ating
-      const radius = (n) => (n === 1 ? 16 : clusterSize(n) / 2);
-      const centerOf = (g) => map.latLngToLayerPoint([g.lat / g.items.length, g.lng / g.items.length]);
-      const groups = [...cells.values()].map((c) => ({ ...c, p: centerOf(c) }));
-      for (let changed = true; changed;) {
-        changed = false;
-        for (let i = 0; i < groups.length; i++) {
-          for (let j = i + 1; j < groups.length; j++) {
-            const a = groups[i]; const g = groups[j];
-            if (a.p.distanceTo(g.p) >= radius(a.items.length) + radius(g.items.length) + 6) continue;
-            a.items.push(...g.items); a.lat += g.lat; a.lng += g.lng; a.p = centerOf(a);
-            groups.splice(j, 1); j = i; changed = true;
-          }
-        }
-      }
-      for (const c of groups) {
-        const n = c.items.length;
-        if (n === 1) {
-          const l = c.items[0];
-          const m = L.marker([l.lat, l.lng], { icon: pinIcon(l), title: l.name });
-          m.on('click', () => focusLocker(l, { pan: false }));
-          layer.addLayer(m);
-          continue;
-        }
-        const size = clusterSize(n);
-        const m = L.marker([c.lat / n, c.lng / n], { icon: L.divIcon({ className: 'lcluster', html: `<span>${n}</span>`, iconSize: [size, size] }), title: `${n} lockere` });
-        m.on('click', () => map.fitBounds(L.latLngBounds(c.items.map((x) => [x.lat, x.lng])), { padding: [40, 40], maxZoom: 16 }));
-        layer.addLayer(m);
-      }
-    }
-    renderList(list);
-  }
-
-  function renderList(list) {
-    const box = $('[data-locker-list]', modal);
-    const center = me || map.getCenter();
-    const ref = { lat: center.lat, lng: center.lng };
-    const sorted = list.map((l) => ({ l, d: distKm(ref, l) })).sort((a, b) => a.d - b.d).slice(0, 40);
-    if (!sorted.length) { box.innerHTML = '<p class="muted" style="padding:12px">Niciun locker nu se potrivește căutării. Încearcă alt oraș sau activează mai multe rețele.</p>'; return; }
-    box.innerHTML = `<p class="locker-list__head">${me ? 'Cele mai apropiate de tine' : 'Cele mai apropiate de centrul hărții'} · ${list.length} în total</p>` + sorted.map(({ l, d }) => {
-      const c = cfg.carriers[l.provider] || {};
-      const pr = cfg.lockerPrices[l.provider];
-      return `<div class="litem ${active?.id === l.id ? 'is-active' : ''}" data-lid="${esc(l.id)}" role="button" tabindex="0">
-        <span class="carrier" style="--cb:${c.color};--ci:${c.ink};--cs:30px">${esc(c.short)}</span>
-        <span class="litem__main"><b>${esc(l.name)}</b><span>${esc(l.address)}</span><small>${esc(l.city)}${l.county ? `, ${esc(l.county)}` : ''} · ${esc(l.hours)} · ${pr.price ? `${(pr.price / 100).toFixed(2).replace('.', ',')} lei` : 'gratuit'}</small></span>
-        <span class="litem__dist">${d < 1 ? `${Math.round(d * 1000)} m` : `${d.toFixed(d < 10 ? 1 : 0).replace('.', ',')} km`}</span>
-        ${active?.id === l.id ? `<button type="button" class="btn btn--dark btn--sm litem__select" data-pick="${esc(l.id)}">Alege acest locker</button>` : ''}
-      </div>`;
-    }).join('');
-  }
-
-  function focusLocker(l, { pan = true } = {}) {
-    active = l;
-    if (pan) map.setView([l.lat, l.lng], Math.max(map.getZoom(), 16));
-    else render();
-    if (!pan) setTimeout(() => $(`[data-lid="${CSS.escape(l.id)}"]`, modal)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 30);
-  }
-
-  modal?.addEventListener('click', (e) => {
-    const pick = e.target.closest('[data-pick]');
-    if (pick) { choose(lockers.find((l) => l.id === pick.dataset.pick)); return; }
-    const it = e.target.closest('[data-lid]');
-    if (it) focusLocker(lockers.find((l) => l.id === it.dataset.lid));
-    if (e.target === modal) closeModal();
-  });
-  modal?.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeModal();
-    if (e.key === 'Enter' && e.target.matches('[data-lid]')) focusLocker(lockers.find((l) => l.id === e.target.dataset.lid));
-  });
+  const nets = cfg.lockers?.networks || {};
+  const picker = modal && createLockerPicker({ modal, cfg: cfg.lockers, onChoose: choose });
 
   function choose(l) {
     if (!l) return;
     picked = l;
     form.elements.locker_id.value = l.id;
-    const radio = form.querySelector(`[data-locker-method="${l.provider}"]`);
     $$('input[name="delivery_method"]', form).forEach((i) => { i.checked = false; });
-    radio.checked = true;
-    const c = cfg.carriers[l.provider] || {};
-    const pr = cfg.lockerPrices[l.provider];
+    const radio = form.querySelector(`[data-locker-method="${l.provider}"]`);
+    if (radio) radio.checked = true;
+    const n = nets[l.provider] || {};
     const box = $('[data-locker-picked]', form);
-    box.innerHTML = `<span class="carrier" style="--cb:${c.color};--ci:${c.ink};--cs:40px">${esc(c.short)}</span>
-      <span class="locker-pick__main"><b>${esc(l.name)}</b><span>${esc(l.address)}, ${esc(l.city)}</span><small>${esc(pr.name)} · ${esc(l.hours)} · ${esc(pr.eta)} · ${pr.price ? `${(pr.price / 100).toFixed(2).replace('.', ',')} lei` : 'livrare gratuită'}</small>
-      ${pr.cod ? '' : '<small>Plata ramburs nu este disponibilă în această rețea.</small>'}</span>
-      <button type="button" class="link-btn" data-open-lockers>Schimbă</button>`;
+    box.innerHTML = `<span class="carrier" style="--cs:48px"><img src="${n.mark}" alt=""></span>
+      <span class="locker-pick__main">
+        <small class="locker-pick__net">${esc(n.name)} · ${l.point ? 'punct de ridicare' : 'locker non-stop'}</small>
+        <b>${esc(l.name)}</b><span>${esc(l.address)}, ${esc(l.city)}${l.county && l.county !== l.city ? `, ${esc(l.county)}` : ''}</span>
+        ${l.note ? `<small>${esc(l.note)}</small>` : ''}
+        <small>${l.point ? esc(l.hours || '') + ' · ' : ''}${esc(n.eta)} · ${n.price ? `${(n.price / 100).toFixed(2).replace('.', ',')} lei` : 'livrare gratuită'}</small>
+        ${n.cod ? '' : '<small class="warn">Plata ramburs nu e disponibilă în această rețea.</small>'}
+      </span>
+      <button type="button" class="btn btn--ghost btn--sm" data-open-lockers>Schimbă</button>`;
     box.hidden = false;
-    $('.locker-open', form).hidden = true; // butonul mare; „Schimbă” din card rămâne
+    $('[data-locker-find]', form).hidden = true;
+    $('.locker-open', form).hidden = true;
+    const nd = $('.lnets-wrap', form); if (nd) nd.open = false;
     // la locker, adresa de facturare se completează separat: pornim de la localitatea lockerului
     const bc = form.elements.bill_county;
     if (bc && !bc.value && [...bc.options].some((o) => o.value === l.county)) { bc.value = l.county; bc.closest('.field')?.classList.add('has-value'); }
     if (form.elements.bill_city && !form.elements.bill_city.value && l.city) form.elements.bill_city.value = l.city;
     showErrors(form, {});
-    closeModal();
+    picker.setPicked(l);
+    picker.close();
     updatePayments();
     quote();
   }
 
-  async function openModal() {
-    modal.hidden = false;
-    document.documentElement.style.overflow = 'hidden';
-    try {
-      await ensureMap();
-      setTimeout(() => { map.invalidateSize(); render(); }, 60);
-      $('[data-locker-search]', modal).focus();
-    } catch {
-      $('[data-locker-list]', modal).innerHTML = '<p class="muted" style="padding:12px">Harta nu s-a putut încărca. Verifică conexiunea și încearcă din nou.</p>';
-    }
-  }
-  function closeModal() { modal.hidden = true; document.documentElement.style.overflow = ''; }
-  form.addEventListener('click', (e) => { if (e.target.closest('[data-open-lockers]')) openModal(); });
-  $$('[data-close-lockers]').forEach((b) => b.addEventListener('click', closeModal));
-
-  $('[data-locker-filters]', modal)?.addEventListener('change', (e) => {
-    if (e.target.checked) enabled.add(e.target.value); else enabled.delete(e.target.value);
-    render();
-  });
-
-  let fTimer;
-  $('[data-locker-search]', modal)?.addEventListener('input', (e) => {
-    clearTimeout(fTimer);
-    fTimer = setTimeout(() => {
-      const q = fold(e.target.value.trim());
-      filterText = q ? q.split(/\s+/).filter(Boolean) : '';
-      const list = visible();
-      if (q && list.length) {
-        // dacă textul identifică o localitate, centrăm harta pe ea
-        const cityHits = list.filter((l) => fold(l.city).startsWith(q.split(' ')[0]));
-        const target = cityHits.length ? cityHits : list;
-        map.fitBounds(window.L.latLngBounds(target.map((l) => [l.lat, l.lng])), { padding: [30, 30], maxZoom: 15 });
-      } else render();
-    }, 220);
-  });
-
-  $('[data-locker-locate]', modal)?.addEventListener('click', () => {
-    if (!navigator.geolocation) { toast('Browserul nu permite localizarea.', { type: 'error' }); return; }
-    navigator.geolocation.getCurrentPosition((pos) => {
-      me = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      if (meMarker) meMarker.remove();
-      meMarker = window.L.marker([me.lat, me.lng], { icon: window.L.divIcon({ className: 'lme', iconSize: [18, 18] }), interactive: false, zIndexOffset: 2000 }).addTo(map);
-      map.setView([me.lat, me.lng], 14);
-    }, () => toast('Nu am putut afla locația. Caută după oraș sau stradă.', { type: 'error' }), { enableHighAccuracy: true, timeout: 8000 });
+  form.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-open-lockers]');
+    if (b && picker) picker.open({ locateMe: b.hasAttribute('data-locate') });
   });
 
   updatePayments();

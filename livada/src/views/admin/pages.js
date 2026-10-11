@@ -348,7 +348,7 @@ export function promosPage(ctx, t, rows) {
 }
 
 // ─── livrare ───────────────────────────────────────────────────────────────
-export function deliveryPage(ctx, t, { methods, stats }) {
+export function deliveryPage(ctx, t, { methods, stats, sources = {} }) {
   const body = html`
   <div class="card card--flush"><div class="card__head"><h2>${t('delivery.methods')}</h2></div>
     <form method="post" action="/admin/livrare">${csrfInput(ctx)}
@@ -365,9 +365,15 @@ export function deliveryPage(ctx, t, { methods, stats }) {
       <div class="card__foot"><button class="adm-btn adm-btn--dark">${t('save')}</button></div>
     </form></div>
   <div class="adm-grid adm-grid--2">
-    <div class="card"><div class="card__head"><h2>${t('delivery.lockers')}</h2><span class="muted small">${stats.reduce((s, x) => s + x.n, 0)}</span></div>
-      ${hbars(stats.map((s) => ({ label: html`<span class="adm-carrier">${carrierBadge(s.provider, { size: 20 })}${carrier(s.provider).name}</span>`, value: s.n })), { fmt: (v) => v.toLocaleString('ro-RO') })}
-      <p class="muted small">Sursa demo: OpenStreetMap (ODbL). ${stats.reduce((s, x) => s + x.cities, 0)} localități.</p></div>
+    <div class="card card--flush"><div class="card__head"><h2>${t('delivery.lockers')}</h2><span class="muted small">${stats.reduce((s, x) => s + x.n, 0).toLocaleString('ro-RO')}${sources.generated ? ` · ${t('delivery.updated', { date: sources.generated })}` : ''}</span></div>
+      <div class="adm-table-wrap"><table class="adm-table">
+        <thead><tr><th>${t('col.method')}</th><th class="num">${t('col.lockers')}</th><th class="num">${t('col.points')}</th><th class="num">${t('col.counties')}</th><th>${t('col.source')}</th></tr></thead>
+        <tbody>${stats.map((s) => {
+    const src = sources.sources?.[s.provider];
+    return html`<tr><td><span class="adm-carrier">${carrierBadge(s.provider, { size: 24 })}${carrier(s.provider).name}</span></td>
+          <td class="num">${Number(s.lockers || 0).toLocaleString('ro-RO')}</td><td class="num">${Number(s.points || 0).toLocaleString('ro-RO')}</td><td class="num">${s.counties}/42</td>
+          <td>${src ? html`<span class=${cx('spill', src.complete ? 'spill--green' : 'spill--amber')}>${src.complete ? t('delivery.official') : t('delivery.partial')}</span>` : html`<span class="muted small">import</span>`}</td></tr>`;
+  })}</tbody></table></div></div>
     <div class="card"><div class="card__head"><h2>${t('delivery.import')}</h2></div>
       <form class="adm-form" method="post" action="/admin/livrare/lockere" enctype="multipart/form-data">${csrfInput(ctx)}
         <p class="muted small">${t('delivery.import_hint')}</p>

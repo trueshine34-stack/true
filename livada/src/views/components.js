@@ -38,10 +38,21 @@ export function breadcrumbs(items) {
   </ol></nav>`;
 }
 
+/** insigna curierului: semnul original pe o plăcuță albă (arată la fel în tema deschisă și în cea întunecată) */
 export function carrierBadge(code, { size = 32 } = {}) {
   const c = carrier(code);
-  const cf = c.short.length >= 3 ? 0.27 : 0.36;
-  return html`<span class="carrier" style=${`--cb:${c.color};--ci:${c.ink};--cs:${size}px;--cf:${cf}`} title=${c.name} aria-hidden="true">${c.short}</span>`;
+  return html`<span class="carrier" style=${`--cs:${size}px`} title=${c.name}><img src=${c.mark} alt="" loading="lazy" decoding="async"></span>`;
+}
+
+/** mai multe semne suprapuse (ex.: „FAN, Sameday, Cargus, DPD, GLS”) */
+export function carrierStack(codes, { size = 28 } = {}) {
+  return html`<span class="cstack" title=${codes.map((c) => carrier(c).name).join(', ')}>${codes.map((c) => html`<span class="carrier" style=${`--cs:${size}px`}><img src=${carrier(c).mark} alt="" loading="lazy" decoding="async"></span>`)}</span>`;
+}
+
+/** sigla completă a curierului (carduri de livrare, pagina de livrare) */
+export function carrierLogo(code, { w = 76, h = 44, cls = '' } = {}) {
+  const c = carrier(code);
+  return html`<span class=${cx('carrier-logo', cls)} style=${`--cw:${w}px;--ch:${h}px`}><img src=${c.logo} alt=${c.name} loading="lazy" decoding="async"></span>`;
 }
 
 /** câmp de formular cu etichetă flotantă și eroare */

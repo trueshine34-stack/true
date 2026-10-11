@@ -1,5 +1,7 @@
 // Șabloanele de email Livada — HTML pe tabele (compatibil Gmail / Outlook / Apple Mail) + versiune text.
-import { config } from '../config.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { config, ROOT } from '../config.js';
 import { getSetting } from '../db/index.js';
 import { esc } from '../lib/html.js';
 import { lei, dateTime, phone as fmtPhone } from '../lib/format.js';
@@ -19,6 +21,23 @@ function emailImage(p) {
   // imaginile WebP au o variantă JPG pentru clienții de email (Outlook nu afișează WebP)
   if (!p) return null;
   return abs(p.replace(/-(480|1000)\.webp$/, '-email.jpg'));
+}
+
+// sigla curierului (PNG 2×): dimensiunile reale din antetul PNG, ca Outlook să nu o afișeze la mărimea fișierului
+const logoSize = new Map();
+function carrierImg(code, h = 22) {
+  const c = CARRIERS[code];
+  if (!c?.email) return '';
+  if (!logoSize.has(code)) {
+    try {
+      const b = fs.readFileSync(path.join(ROOT, 'public', c.email));
+      logoSize.set(code, { w: b.readUInt32BE(16), h: b.readUInt32BE(20) });
+    } catch { logoSize.set(code, null); }
+  }
+  const d = logoSize.get(code);
+  if (!d) return '';
+  const w = Math.round((d.w / d.h) * h);
+  return `<img src="${esc(abs(c.email))}" width="${w}" height="${h}" alt="${esc(c.name)}" style="display:block;border:0;width:${w}px;height:${h}px;margin:6px 0 8px">`;
 }
 
 function button(href, label, { dark = true } = {}) {
@@ -230,7 +249,7 @@ function infoBlocks(o) {
   const block = (title, html) => `<td class="stack box" valign="top" width="50%" bgcolor="${C.mist}" style="background:${C.mist};border-radius:18px;padding:18px 20px;font-family:${SANS};font-size:14px;line-height:1.55;color:${C.ink2}">
 <span style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${C.muted}">${title}</span><br>${html}</td>`;
   return `<tr><td style="padding:6px 0 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-${block('Livrare', `<b class="t-ink" style="color:${C.ink}">${esc(o.delivery_title || '')}</b><br>${esc(deliveryText(o, { withTitle: false }))}${o.delivery_eta ? `<br><span style="color:${C.leaf};font-weight:600">${esc(o.delivery_eta)}</span>` : ''}`)}
+${block('Livrare', `${carrierImg(o.delivery?.carrier)}<b class="t-ink" style="color:${C.ink}">${esc(o.delivery_title || '')}</b><br>${esc(deliveryText(o, { withTitle: false }))}${o.delivery_eta ? `<br><span style="color:${C.leaf};font-weight:600">${esc(o.delivery_eta)}</span>` : ''}`)}
 <td width="12" class="stack sgap" style="font-size:0;line-height:0">&nbsp;</td>
 ${block('Plată', `<b class="t-ink" style="color:${C.ink}">${esc(PAYMENT_LABEL[o.payment_method] || o.payment_method)}</b>${payExtra}`)}
 </tr></table></td></tr>`;
@@ -277,7 +296,7 @@ ${h1(title, order.status === 'shipped' ? `${esc(order.first_name)}.` : '')}
 ${p(`${text}${note ? `<br><br><i>${esc(note)}</i>` : ''}`)}
 ${['cancelled', 'returned'].includes(order.status) ? '' : tracker(order.status)}
 ${order.awb ? `<tr><td style="padding:16px 0 4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="box" bgcolor="${C.mist}" style="background:${C.mist};border-radius:18px;padding:18px 20px;font-family:${SANS}">
-<span style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${C.muted}">AWB ${esc(carrier?.name || '')}</span><br>
+<span style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${C.muted}">AWB ${esc(carrier?.name || '')}</span>${carrierImg(order.delivery?.carrier, 24)}
 <span class="t-ink" style="font-family:${MONO};font-size:22px;font-weight:700;letter-spacing:0.06em;color:${C.ink}">${esc(order.awb)}</span></td></tr></table></td></tr>` : ''}
 ${hairline(20)}
 ${itemsTable(items)}

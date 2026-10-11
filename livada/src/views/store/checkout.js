@@ -1,12 +1,13 @@
 import { html, cx, attr, jsonScript } from '../../lib/html.js';
 import { config } from '../../config.js';
 import { page } from '../layout.js';
-import { field, selectField, checkbox, csrfInput, carrierBadge } from '../components.js';
+import { field, selectField, checkbox, csrfInput, carrierBadge, carrierLogo } from '../components.js';
 import { icon } from '../icons.js';
 import { lei } from '../../lib/format.js';
 import { COUNTIES } from '../../db/defaults.js';
 import { getSetting } from '../../db/index.js';
-import { estimate, carrier as carrierInfo } from '../../services/shipping.js';
+import { estimate } from '../../services/shipping.js';
+import { lockerNetworks, lockerConfig, lockerModal, networkRows } from './lockers.js';
 import { summaryRows, promoForm } from './cart.js';
 
 const price = (m, subtotal) => (m.free_over !== null && subtotal >= m.free_over ? 0 : m.price);
@@ -16,7 +17,7 @@ function methodCard(m, subtotal, checked) {
   return html`<label class=${cx('mcard', m.type === 'express' && 'mcard--express')} data-method-card data-type=${m.type}>
     <input type="radio" name="delivery_method" value=${m.code}${attr('checked', checked)} data-method=${m.code} data-cod=${m.cod_allowed ? '1' : '0'}>
     <span class="mcard__box">
-      ${carrierBadge(m.carrier, { size: 36 })}
+      ${m.type === 'express' ? carrierBadge(m.carrier, { size: 44 }) : carrierLogo(m.carrier)}
       <span class="mcard__main"><b>${m.name}</b><small>${estimate(m)}</small></span>
       <span class="mcard__price">${p === 0 ? html`<span class="free">Gratuit</span>` : lei(p)}${m.free_over && p > 0 ? html`<small>gratuit de la ${Math.round(m.free_over / 100)} lei</small>` : ''}</span>
     </span>
@@ -30,6 +31,8 @@ export function checkoutPage(ctx, { cart, totals, methods, addresses, user, pref
   const couriers = methods.filter((m) => m.type === 'courier');
   const express = methods.find((m) => m.type === 'express');
   const lockers = methods.filter((m) => m.type === 'locker');
+  const nets = lockerNetworks(methods, totals.subtotal - totals.discount);
+  const lockerTotal = nets.reduce((a, n) => a + n.lockers + n.points, 0);
   const pickup = methods.find((m) => m.type === 'pickup');
   const sub = totals.subtotal - totals.discount;
   const online = config.paymentMock; // plata online e disponibilă doar cu un procesator configurat (sau simularea în development)
@@ -86,14 +89,20 @@ export function checkoutPage(ctx, { cart, totals, methods, addresses, user, pref
             </div>
 
             <div class="shippane" data-ship-pane="locker" hidden>
-              <div class="locker-nets">${lockers.map((m) => {
-    const p = price(m, sub);
-    return html`<span class="locker-net">${carrierBadge(m.carrier, { size: 24 })}<span>${m.name}</span><b>${p ? lei(p) : 'Gratuit'}</b></span>`;
-  })}</div>
               <div class="locker-pick" data-locker-picked hidden></div>
-              <button class="btn btn--dark btn--lg locker-open" type="button" data-open-lockers>${icon('pin', { size: 20 })} Alege lockerul pe hartă</button>
+              <div class="lfind" data-locker-find>
+                <button class="lfind__search" type="button" data-open-lockers>
+                  ${icon('search', { size: 20 })}<span><b>Caută lockerul sau punctul de ridicare</b><small>Localitate, stradă sau cod poștal · ${lockerTotal.toLocaleString('ro-RO')} puncte în toată țara</small></span>
+                </button>
+                <button class="btn btn--ghost lfind__near" type="button" data-open-lockers data-locate aria-label="Lockere lângă mine">${icon('locate', { size: 18 })}<span>Lângă mine</span></button>
+              </div>
+              <button class="btn btn--dark btn--lg locker-open" type="button" data-open-lockers>${icon('pin', { size: 20 })} Alege pe hartă</button>
               <input type="hidden" name="locker_id" value="" data-locker-id>
               <p class="field__msg" data-error-for="locker_id"></p>
+              <details class="lnets-wrap" open>
+                <summary>Rețele, prețuri și termene</summary>
+                ${networkRows(nets)}
+              </details>
               <div hidden>${lockers.map((m) => html`<input type="radio" name="delivery_method" value=${m.code} data-method=${m.code} data-cod=${m.cod_allowed ? '1' : '0'} data-locker-method=${m.carrier}>`)}</div>
             </div>
 
@@ -173,30 +182,9 @@ export function checkoutPage(ctx, { cart, totals, methods, addresses, user, pref
     </div>
   </section>
 
-  <div class="locker-modal" hidden data-locker-modal role="dialog" aria-modal="true" aria-labelledby="locker-title">
-    <div class="locker-modal__panel">
-      <header class="locker-modal__head">
-        <h2 id="locker-title">Alege lockerul</h2>
-        <div class="locker-search">${icon('search', { size: 18 })}<input type="search" placeholder="Oraș, stradă sau nume locker" data-locker-search aria-label="Caută locker"></div>
-        <button class="btn btn--ghost btn--sm" type="button" data-locker-locate>${icon('locate', { size: 16 })} Lângă mine</button>
-        <button class="icon-btn" type="button" aria-label="Închide" data-close-lockers>${icon('close', { size: 22 })}</button>
-      </header>
-      <div class="locker-filters" data-locker-filters>
-        ${lockers.map((m) => {
-    const c = carrierInfo(m.carrier);
-    return html`<label class="lf" style=${`--cb:${c.color};--ci:${c.ink}`}><input type="checkbox" value=${m.carrier} checked><span><i></i>${m.name}<small data-lf-count=${m.carrier}></small></span></label>`;
-  })}
-      </div>
-      <div class="locker-modal__body">
-        <div class="locker-map" data-locker-map data-tone=${config.map.tone}></div>
-        <div class="locker-list" data-locker-list><p class="muted">Se încarcă lockerele…</p></div>
-      </div>
-    </div>
-  </div>
+  ${lockerModal(nets)}
   ${jsonScript('checkout-data', {
-    map: { tiles: config.map.tiles, attribution: config.map.attribution },
-    lockerPrices: Object.fromEntries(lockers.map((m) => [m.carrier, { code: m.code, name: m.name, price: price(m, sub), cod: !!m.cod_allowed, eta: estimate(m) }])),
-    carriers: Object.fromEntries(lockers.map((m) => [m.carrier, carrierInfo(m.carrier)])),
+    lockers: lockerConfig(nets),
     expressCounties: ['București', 'Ilfov'],
   })}`;
 

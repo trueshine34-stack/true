@@ -1,11 +1,11 @@
 import { html, cx, jsonScript, attr } from '../../lib/html.js';
 import { config } from '../../config.js';
 import { page } from '../layout.js';
-import { breadcrumbs, productCard, carrierBadge, csrfInput } from '../components.js';
+import { breadcrumbs, productCard, carrierBadge, carrierStack, csrfInput } from '../components.js';
 import { icon } from '../icons.js';
 import { lei } from '../../lib/format.js';
 import { imageFor, variantLabel } from '../../services/catalog.js';
-import { estimate, methodByCode } from '../../services/shipping.js';
+import { estimate, methodByCode, lockerTotal } from '../../services/shipping.js';
 import { getSetting } from '../../db/index.js';
 
 function pickVariant(p, sku) {
@@ -107,8 +107,8 @@ export function productPage(ctx, p, related) {
         </form>
 
         <ul class="perks">
-          <li>${carrierBadge('fan', { size: 28 })}<div><b>Livrare la adresă</b><span>${estimate(methodByCode('courier_fan'))} · gratuit de la 500 lei</span></div></li>
-          <li>${carrierBadge('easybox', { size: 28 })}<div><b>easybox, FANbox și alte lockere</b><span>${easybox ? estimate(easybox) : 'în 24 de ore'} · ${lei(easybox?.price || 1299)}, gratuit de la 300 lei</span></div></li>
+          <li>${carrierStack(['fan', 'sameday', 'cargus', 'dpd', 'gls'], { size: 28 })}<div><b>Livrare la adresă</b><span>${estimate(methodByCode('courier_fan'))} · gratuit de la 500 lei</span></div></li>
+          <li>${carrierStack(['easybox', 'fanbox', 'dpd', 'gls'], { size: 28 })}<div><b>Lockere și puncte de ridicare</b><span>${lockerTotal().toLocaleString('ro-RO')} în toată țara · ${easybox ? estimate(easybox) : 'în 24 de ore'} · gratuit de la 300 lei</span></div></li>
           <li>${carrierBadge('livada', { size: 28 })}<div><b>Ridicare din showroom</b><span>${showroom.address?.split(',').slice(0, 2).join(',')} · gratuit</span></div></li>
           <li><span class="perks__icon">${icon('return', { size: 18 })}</span><div><b>Retur gratuit 30 de zile</b><span>${p.warranty || 'Garanție 24 de luni'}</span></div></li>
         </ul>

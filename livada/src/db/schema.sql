@@ -148,7 +148,9 @@ CREATE TABLE IF NOT EXISTS lockers (
   postcode TEXT NOT NULL DEFAULT '',
   lat REAL NOT NULL, lng REAL NOT NULL,
   hours TEXT NOT NULL DEFAULT 'Non-stop',
-  active INTEGER NOT NULL DEFAULT 1
+  active INTEGER NOT NULL DEFAULT 1,
+  kind TEXT NOT NULL DEFAULT 'locker',   -- locker (non-stop) | point (punct de ridicare cu program)
+  note TEXT NOT NULL DEFAULT ''          -- reper: „în dreapta intrării principale”
 );
 CREATE INDEX IF NOT EXISTS lockers_geo ON lockers(lat, lng);
 CREATE INDEX IF NOT EXISTS lockers_provider ON lockers(provider, active);

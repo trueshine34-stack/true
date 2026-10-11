@@ -54,25 +54,27 @@ export const DELIVERY_METHODS = [
   // lockere
   { code: 'locker_easybox', type: 'locker', carrier: 'easybox', name: 'easybox', description: 'Lockerele Sameday — plată cu cardul la locker pentru ramburs.', eta: '24 de ore', price: lei(12.99), free_over: lei(300), cod_allowed: 1, sort: 30 },
   { code: 'locker_fanbox', type: 'locker', carrier: 'fanbox', name: 'FANbox', description: 'Lockerele FAN Courier, deschise non-stop.', eta: '24 de ore', price: lei(12.99), free_over: lei(300), cod_allowed: 1, sort: 31 },
-  { code: 'locker_cargus', type: 'locker', carrier: 'cargus', name: 'Cargus Ship & Go', description: 'Lockere și puncte Ship & Go.', eta: '24–48 de ore', price: lei(11.99), free_over: lei(300), cod_allowed: 0, sort: 32 },
-  { code: 'locker_dpd', type: 'locker', carrier: 'dpd', name: 'DPD Box', description: 'Lockere și puncte DPD Pickup.', eta: '24–48 de ore', price: lei(11.99), free_over: lei(300), cod_allowed: 0, sort: 33 },
-  { code: 'locker_gls', type: 'locker', carrier: 'gls', name: 'GLS ParcelLocker', description: 'Lockere GLS și ParcelShop.', eta: '24–48 de ore', price: lei(11.99), free_over: lei(300), cod_allowed: 0, sort: 34 },
+  { code: 'locker_cargus', type: 'locker', carrier: 'cargus', name: 'Cargus Ship & Go', description: 'Lockere Cargus și punctele partenere Ship & Go.', eta: '24–48 de ore', price: lei(11.99), free_over: lei(300), cod_allowed: 0, sort: 32 },
+  { code: 'locker_dpd', type: 'locker', carrier: 'dpd', name: 'DPD Box', description: 'Lockere DPD Box și punctele DPD Pickup.', eta: '24–48 de ore', price: lei(11.99), free_over: lei(300), cod_allowed: 0, sort: 33 },
+  { code: 'locker_gls', type: 'locker', carrier: 'gls', name: 'GLS ParcelLocker', description: 'Lockere GLS și magazinele partenere ParcelShop.', eta: '24–48 de ore', price: lei(11.99), free_over: lei(300), cod_allowed: 0, sort: 34 },
   { code: 'locker_packeta', type: 'locker', carrier: 'packeta', name: 'Packeta Z-BOX', description: 'Z-BOX și puncte Packeta.', eta: '2–3 zile', price: lei(10.99), free_over: lei(300), cod_allowed: 0, sort: 35 },
   // ridicare
   { code: 'pickup_showroom', type: 'pickup', carrier: 'livada', name: 'Ridicare din showroom', description: 'Calea Dorobanți 142, București — comanda e gata în aproximativ 2 ore.', eta: 'Azi', price: 0, free_over: null, cod_allowed: 1, sort: 40 },
 ];
 
+// logo = sigla originală a curierului, mark = semnul compact (insigne, pini pe hartă), email = PNG pentru emailuri
+const L = (key, mark = key) => ({ logo: `/img/carriers/${key}.${key === 'cargus' ? 'png' : 'svg'}`, mark: `/img/carriers/${mark}-mark.${mark === 'cargus' ? 'png' : 'svg'}`, email: `/img/carriers/${key}-email.png` });
 export const CARRIERS = {
-  fan: { name: 'FAN Courier', short: 'FAN', color: '#0B4EA2', ink: '#FFD200', track: 'https://www.fancourier.ro/awb-tracking/?tracking={awb}' },
-  sameday: { name: 'Sameday', short: 'SD', color: '#E10A1E', ink: '#FFFFFF', track: 'https://sameday.ro/#awb={awb}' },
-  cargus: { name: 'Cargus', short: 'CG', color: '#F26B21', ink: '#241206', track: 'https://www.cargus.ro/personal/urmareste-coletul/?tracking_number={awb}' },
-  dpd: { name: 'DPD', short: 'DPD', color: '#DC0032', ink: '#FFFFFF', track: 'https://tracking.dpd.ro/?shipmentNumber={awb}' },
-  gls: { name: 'GLS', short: 'GLS', color: '#061AB1', ink: '#FFD100', track: 'https://gls-group.com/RO/ro/urmarire-colet?match={awb}' },
-  posta: { name: 'Poșta Română', short: 'PR', color: '#003F87', ink: '#FFCC00', track: 'https://www.posta-romana.ro/track-trace.html?id={awb}' },
-  easybox: { name: 'easybox', short: 'eb', color: '#E10A1E', ink: '#FFFFFF', track: 'https://sameday.ro/#awb={awb}' },
-  fanbox: { name: 'FANbox', short: 'FB', color: '#0B4EA2', ink: '#FFD200', track: 'https://www.fancourier.ro/awb-tracking/?tracking={awb}' },
-  packeta: { name: 'Packeta', short: 'PK', color: '#BA1B02', ink: '#FFFFFF', track: 'https://tracking.packeta.com/ro/?id={awb}' },
-  livada: { name: 'Livada', short: 'LV', color: '#0E1411', ink: '#8EE0AE', track: '' },
+  fan: { name: 'FAN Courier', ...L('fan'), color: '#0F2345', track: 'https://www.fancourier.ro/awb-tracking/?tracking={awb}' },
+  sameday: { name: 'Sameday', ...L('sameday'), color: '#E92427', track: 'https://sameday.ro/#awb={awb}' },
+  cargus: { name: 'Cargus', ...L('cargus'), color: '#F18A21', track: 'https://www.cargus.ro/personal/urmareste-coletul/?tracking_number={awb}' },
+  dpd: { name: 'DPD', ...L('dpd'), color: '#DC0032', track: 'https://tracking.dpd.ro/?shipmentNumber={awb}' },
+  gls: { name: 'GLS', ...L('gls'), color: '#061AB1', track: 'https://gls-group.com/RO/ro/urmarire-colet?match={awb}' },
+  posta: { name: 'Poșta Română', ...L('posta'), color: '#EA0029', track: 'https://www.posta-romana.ro/track-trace.html?id={awb}' },
+  easybox: { name: 'easybox', network: 'Sameday', ...L('sameday'), color: '#E92427', track: 'https://sameday.ro/#awb={awb}' },
+  fanbox: { name: 'FANbox', network: 'FAN Courier', ...L('fan'), color: '#0F2345', track: 'https://www.fancourier.ro/awb-tracking/?tracking={awb}' },
+  packeta: { name: 'Packeta', ...L('packeta'), color: '#BA1B02', track: 'https://tracking.packeta.com/ro/?id={awb}' },
+  livada: { name: 'Livada', logo: '/img/brand/logo.svg', mark: '/img/brand/mark.svg', email: '/img/brand/email-logo.png', color: '#0E1411', track: '' },
 };
 
 export const PROMO_CODES = [

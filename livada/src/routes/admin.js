@@ -12,7 +12,7 @@ import * as T from '../services/mail-templates.js';
 import * as orders from '../services/orders.js';
 import * as users from '../services/users.js';
 import { listProducts, productById, hydrate, categories, imageFor } from '../services/catalog.js';
-import { allMethods, lockerStats, invalidateLockers } from '../services/shipping.js';
+import { allMethods, lockerStats, lockerSources, invalidateLockers } from '../services/shipping.js';
 import { dashboard, customerStats } from '../services/stats.js';
 import { rebuildSearchIndex } from '../db/seed.js';
 import { invalidateNav } from '../views/layout.js';
@@ -305,7 +305,7 @@ export default function adminRoutes(r) {
   r.post('/admin/promotii/:id/sterge', requireAdmin, (ctx) => { run('DELETE FROM promo_codes WHERE id = ?', Number(ctx.params.id)); log(ctx, 'promo.delete', 'promo', ctx.params.id); saved(ctx, '/admin/promotii'); });
 
   // ─── livrare ───────────────────────────────────────────────────────────
-  r.get('/admin/livrare', requireStaff, (ctx) => ctx.html(V.deliveryPage(ctx, tr(ctx), { methods: allMethods(), stats: lockerStats() })));
+  r.get('/admin/livrare', requireStaff, (ctx) => ctx.html(V.deliveryPage(ctx, tr(ctx), { methods: allMethods(), stats: lockerStats(), sources: lockerSources() })));
   r.post('/admin/livrare', requireAdmin, (ctx) => {
     tx(() => {
       for (const m of allMethods()) {
@@ -330,10 +330,11 @@ export default function adminRoutes(r) {
       for (const l of list) {
         const lat = Number(l.lat), lng = Number(l.lng);
         if (!l.id || !l.provider || !Number.isFinite(lat) || !Number.isFinite(lng) || lat < 43 || lat > 49 || lng < 20 || lng > 30.5) continue;
-        run(`INSERT INTO lockers(id, provider, name, address, city, county, postcode, lat, lng, hours) VALUES (?,?,?,?,?,?,?,?,?,?)
+        run(`INSERT INTO lockers(id, provider, name, address, city, county, postcode, lat, lng, hours, kind, note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
              ON CONFLICT(id) DO UPDATE SET provider=excluded.provider, name=excluded.name, address=excluded.address, city=excluded.city, county=excluded.county,
-             postcode=excluded.postcode, lat=excluded.lat, lng=excluded.lng, hours=excluded.hours, active=1`,
-        clean(l.id, 60), clean(l.provider, 20), clean(l.name, 120), clean(l.address, 200), clean(l.city, 80), clean(l.county, 40), clean(l.postcode, 10), lat, lng, clean(l.hours || 'Non-stop', 80));
+             postcode=excluded.postcode, lat=excluded.lat, lng=excluded.lng, hours=excluded.hours, kind=excluded.kind, note=excluded.note, active=1`,
+        clean(l.id, 60), clean(l.provider, 20), clean(l.name, 120), clean(l.address, 200), clean(l.city, 80), clean(l.county, 40), clean(l.postcode, 10), lat, lng,
+        clean(l.hours || 'Non-stop', 80), l.kind === 'point' ? 'point' : 'locker', clean(l.note || '', 160));
         n++;
       }
     });

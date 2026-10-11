@@ -118,7 +118,7 @@ export function sendBuffer(req, res, status, type, body, headers = {}) {
   let buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
   const h = { 'Content-Type': type, ...headers };
   const ae = req.headers['accept-encoding'] || '';
-  if (buf.length > 1024 && COMPRESSIBLE.test(type)) {
+  if (buf.length > 1024 && COMPRESSIBLE.test(type) && !h['Content-Encoding']) {
     h.Vary = 'Accept-Encoding';
     if (/\bbr\b/.test(ae)) {
       buf = zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } });

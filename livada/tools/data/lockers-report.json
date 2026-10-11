@@ -1,0 +1,109 @@
+{
+ "easybox": {
+  "exemple: localitate necunoscută": [
+   "Victoria - Ucea (Brașov) → Victoria",
+   "Valea Puțului (Buzău) → Săpoca"
+  ],
+  "sursă": 1399,
+  "locker": 804,
+  "duplicate eliminate": 595,
+  "fără număr": 847,
+  "localitate dedusă din coordonate": 2,
+  "județe acoperite": 28
+ },
+ "fanbox": {
+  "exemple: coordonate în alt județ": [
+   "fanbox-F1012054 FANbox Sediu Barlad — Barlad, Vaslui ≠ hartă: Țigănești, Galați",
+   "fanbox-F1012491 FANbox Haltei 7 — Valu lui Traian, Constanța ≠ hartă: Tudor Vladimirescu, Tulcea",
+   "fanbox-F1012855 FANbox Sediu Toplita — Toplita, Hunedoara ≠ hartă: Zencani, Harghita"
+  ],
+  "sursă": 3252,
+  "locker": 3249,
+  "coordonate verificate prin codul poștal (localitate cu centru greșit în nomenclator)": 9,
+  "eliminate: coordonate în alt județ decât adresa": 3,
+  "județe acoperite": 42
+ },
+ "cargus": {
+  "exemple: coordonate în alt județ": [
+   "cargus-231274 Ship & Go Str. Progresului Nr. 20 — Potcoava, Călărași ≠ hartă: Bucinișu, Olt",
+   "cargus-231258 Ship & Go Nr. 158 A Craciunesti — Craciunesti, Maramureș ≠ hartă: Răscoala, Hunedoara",
+   "cargus-150753 Ship & Go Mihai Viteazu 2 Hateg — Hateg, Hunedoara ≠ hartă: Frățilești, Ialomița",
+   "cargus-230788 Ship & Go Tudor Vladimirescu Bl. 30 Corabia Robest — Corabia, Olt ≠ hartă: Bragadiru, Teleorman"
+  ],
+  "sursă": 2080,
+  "point": 1908,
+  "fără număr": 35,
+  "coordonate verificate prin codul poștal (localitate cu centru greșit în nomenclator)": 9,
+  "eliminate: coordonate în alt județ decât adresa": 4,
+  "locker": 168,
+  "județe acoperite": 42
+ },
+ "dpd": {
+  "exemple: coordonate în alt județ": [
+   "dpd-22684 DPD Pickup PayPoint Rotaru I Adriana — Ciochiuta, Mehedinți ≠ hartă: Târgu Jiu, Gorj",
+   "dpd-22768 DPD Pickup PayPoint Zuzuu Nutu 3 — Osica de Sus, Olt ≠ hartă: Viile, Constanța",
+   "dpd-23830 DPD Pickup PayPoint Lupascu Aliosa — Maxut, Iași ≠ hartă: Zăuan, Sălaj",
+   "dpd-23921 DPD Pickup PayPoint Cristian DMC — Valea Stanciului, Dolj ≠ hartă: Mircea Vodă, Dâmbovița",
+   "dpd-23970 DPD Pickup PayPoint MEH Profy Market — Beudiu, Bistrița-Năsăud ≠ hartă: Teșna, Suceava",
+   "dpd-24032 DPD Pickup PayPoint Mixt Economy — Urca, Cluj ≠ hartă: Letea Veche, Bacău",
+   "dpd-24033 DPD Pickup PayPoint Damian V-TIN — Mircea Voda, Brăila ≠ hartă: Cojasca, Dâmbovița"
+  ],
+  "sursă": 2469,
+  "point": 1708,
+  "fără număr": 72,
+  "fără program": 1,
+  "coordonate verificate prin codul poștal (localitate cu centru greșit în nomenclator)": 50,
+  "eliminate: coordonate în alt județ decât adresa": 7,
+  "locker": 754,
+  "județe acoperite": 42
+ },
+ "gls": {
+  "exemple: localitate necunoscută": [
+   "Drobeta-Turnu (Mehedinți) → Drobeta-Turnu Severin",
+   "Drobeta-Turnu (Mehedinți) → Drobeta-Turnu Severin",
+   "Apoldu de sus Sb (?) → Apoldu de Sus"
+  ],
+  "exemple: coordonate în alt județ": [
+   "gls-RO147355-PARCELSH01 GLS ParcelShop Primas — Slobozia Mandra, Teleorman ≠ hartă: Slobozia, Neamț",
+   "gls-RO227077-PARCELSHOP GLS ParcelShop Barbulescu T. Teodor 2 — Luncsoara, Mehedinți ≠ hartă: Buruieniș, Bacău",
+   "gls-RO247069-PARCELSHOP GLS ParcelShop Alicos Family — Malu Alb, Vâlcea ≠ hartă: Malu Alb, Galați",
+   "gls-RO337327-PARCELSHOP GLS ParcelShop Popasul Dacilor Prodcom — Costesti, Hunedoara ≠ hartă: Costești, Dâmbovița",
+   "gls-RO337366-PARCELSH03 GLS ParcelShop Crisan Prodcom — Bobalna, Hunedoara ≠ hartă: Bobâlna, Cluj",
+   "gls-RO407591-PSHOP001 GLS ParcelShop Mixt Economy — Urca, Cluj ≠ hartă: Letea Veche, Bacău",
+   "gls-RO447255-PARCELSHOP GLS ParcelShop Miclaus Mariana Luminita — Pomi, Satu Mare ≠ hartă: Săgagea, Alba",
+   "gls-RO507180-PARCELSH06 GLS ParcelShop Agritehnod — Recea, Brașov ≠ hartă: Șesuri, Suceava",
+   "gls-RO537280-PARCELSHOP GLS ParcelShop Tx Henike Impex — Sanmartin, Harghita ≠ hartă: Rontău, Bihor",
+   "gls-RO617093-PARCELSHOP GLS ParcelShop Tutcom Rares — Moreni, Neamț ≠ hartă: Cioranca, Buzău",
+   "gls-RO627015-PARCELSH01 GLS ParcelShop Victorgin Shop — Balesti, Vrancea ≠ hartă: Bălești, Gorj",
+   "gls-RO707575-PARCELSH08 GLS ParcelShop Cazacu D. Elena — Vanatori, Iași ≠ hartă: Vânători, Galați"
+  ],
+  "sursă": 2932,
+  "locker": 1879,
+  "point": 1036,
+  "fără număr": 185,
+  "fără program": 20,
+  "coordonate verificate prin codul poștal (localitate cu centru greșit în nomenclator)": 14,
+  "duplicate eliminate": 1,
+  "eliminate: coordonate în alt județ decât adresa": 16,
+  "localitate dedusă din coordonate": 3,
+  "județe acoperite": 42
+ },
+ "județe fără acoperire": {
+  "easybox": [
+   "Botoșani",
+   "Caraș-Severin",
+   "Covasna",
+   "Călărași",
+   "Giurgiu",
+   "Gorj",
+   "Harghita",
+   "Ialomița",
+   "Mehedinți",
+   "Olt",
+   "Sălaj",
+   "Teleorman",
+   "Tulcea",
+   "Vaslui"
+  ]
+ }
+}

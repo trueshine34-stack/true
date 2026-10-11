@@ -203,7 +203,12 @@ img, svg { display: block; max-width: 100%; }
 .spill--amber { background: var(--warn-soft); color: var(--warn); } .spill--violet { background: #F1EBFB; color: #6941C6; }
 .spill--red { background: var(--danger-soft); color: var(--danger); } .spill--gray { background: var(--mist); color: var(--muted); }
 @media (prefers-color-scheme: dark) { .spill--blue { background: #16223A; color: #8FB0F4; } .spill--violet { background: #241B38; color: #B9A1F0; } }
-.carrier { --cs: 32px; display: inline-grid; place-items: center; flex: none; width: var(--cs); height: var(--cs); border-radius: calc(var(--cs) * .28); background: var(--cb); color: var(--ci); font-weight: 800; font-size: calc(var(--cs) * var(--cf, .34)); letter-spacing: -.03em; line-height: 1; }
+.carrier { --cs: 32px; display: inline-grid; place-items: center; flex: none; width: var(--cs); height: var(--cs); border-radius: calc(var(--cs) * .28);
+  background: #fff; box-shadow: inset 0 0 0 1px rgba(14, 20, 17, .09); overflow: hidden; }
+.carrier img { width: calc(var(--cs) * .76); height: calc(var(--cs) * .7); object-fit: contain; display: block; }
+.carrier-logo { --cw: 76px; --ch: 44px; display: inline-grid; place-items: center; flex: none; width: var(--cw); height: var(--ch); padding: 7px 9px;
+  border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 1px rgba(14, 20, 17, .09); }
+.carrier-logo img { max-width: calc(var(--cw) - 18px); max-height: calc(var(--ch) - 14px); width: auto; height: auto; object-fit: contain; display: block; }
 
 /* comandă */
 .adm-order-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: -6px 0 16px; }

@@ -157,7 +157,8 @@ test('coș + checkout cu easybox și ramburs: comandă, stoc, emailuri', async (
 
   const page = await c.get('/checkout');
   assert.equal(page.status, 200);
-  assert.match(page.body, /Alege lockerul pe hartă/);
+  assert.match(page.body, /Caută lockerul sau punctul de ridicare/);
+  assert.match(page.body, /\/img\/carriers\/sameday-mark\.svg/, 'sigla originală a rețelei în checkout');
 
   // locker lipsă → eroare pe câmp
   const base = { first_name: 'Ioana', last_name: 'Marin', email: 'ioana@exemplu.ro', phone: '0722 123 456', customer_type: 'pf',
@@ -167,8 +168,15 @@ test('coș + checkout cu easybox și ramburs: comandă, stoc, emailuri', async (
   assert.ok(noLocker.json.errors.locker_id);
 
   const lockers = await c.get('/api/lockers', { json: true });
-  const easy = lockers.json.rows.find((r) => r[1] === 'easybox' && r[4] === 'Cluj-Napoca');
-  const fan = lockers.json.rows.find((r) => r[1] === 'fanbox');
+  const F = Object.fromEntries(lockers.json.fields.map((f, i) => [f, i]));
+  const easy = lockers.json.rows.find((r) => r[F.provider] === 'easybox' && r[F.city] === 'Cluj-Napoca');
+  const fan = lockers.json.rows.find((r) => r[F.provider] === 'fanbox');
+  assert.ok(lockers.json.rows.length > 10000, 'lista completă a lockerelor și punctelor');
+  assert.ok(lockers.json.rows.some((r) => r[F.provider] === 'gls' && r[F.kind] === 1), 'punctele de ridicare (ParcelShop) sunt marcate');
+  assert.ok(fan[F.note], 'FANbox are reperul de găsire');
+  // ETag: a doua cerere nu mai descarcă lista
+  const again = await c.get('/api/lockers', { headers: { 'if-none-match': lockers.headers.get('etag') } });
+  assert.equal(again.status, 304);
   const mismatch = await c.post('/checkout', { ...base, delivery_method: 'locker_easybox', locker_id: fan[0] });
   assert.equal(mismatch.status, 422);
 
@@ -182,7 +190,7 @@ test('coș + checkout cu easybox și ramburs: comandă, stoc, emailuri', async (
   const order = await c.get(ok.json.redirect);
   assert.equal(order.status, 200);
   assert.match(order.body, /Mulțumim, Ioana/);
-  assert.match(order.body, new RegExp(easy[2].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(order.body, new RegExp(easy[F.name].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 
   // simularea plății cu cardul nu poate marca plătită o comandă cu ramburs
   const token = ok.json.redirect.match(/\/comanda\/([\w-]+)/)[1];

@@ -21,6 +21,9 @@ function migrate(d) {
   if (!has('promo_codes', 'first_order_only')) {
     d.exec("ALTER TABLE promo_codes ADD COLUMN first_order_only INTEGER NOT NULL DEFAULT 0; UPDATE promo_codes SET first_order_only = 1 WHERE code = 'BUNVENIT50';");
   }
+  // lockere: tipul punctului (locker non-stop / punct de ridicare cu program) și reperul de găsire
+  if (!has('lockers', 'kind')) d.exec("ALTER TABLE lockers ADD COLUMN kind TEXT NOT NULL DEFAULT 'locker'");
+  if (!has('lockers', 'note')) d.exec("ALTER TABLE lockers ADD COLUMN note TEXT NOT NULL DEFAULT ''");
 }
 
 export function closeDb() {

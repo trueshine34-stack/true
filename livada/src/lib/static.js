@@ -52,7 +52,7 @@ export function asset(urlPath) {
  * Fără hartă, browserul le-ar trata ca module diferite și app.js ar rula de două ori (handlere duble).
  * Hash-ul intră în CSP (script-src), deoarece harta este un script inline.
  */
-const SHARED_MODULES = ['/js/app.js'];
+const SHARED_MODULES = ['/js/app.js', '/js/lockers.js'];
 let importMapMemo = null;
 export function importMap() {
   const imports = Object.fromEntries(SHARED_MODULES.map((m) => [m, asset(m)]));

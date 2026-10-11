@@ -26,6 +26,8 @@ export function homePage(ctx) {
   const cats = categories();
   const stats = lockerStats();
   const totalLockers = stats.reduce((s, x) => s + x.n, 0);
+  const byNet = Object.fromEntries(stats.map((x) => [x.provider, x.n]));
+  const nf = (n) => Number(n || 0).toLocaleString('ro-RO');
   const co = getSetting('company') || {};
   const sh = getSetting('showroom') || {};
   const minPrice = (p) => Math.min(...p.variants.map((v) => v.price));
@@ -108,7 +110,7 @@ export function homePage(ctx) {
     <div class="wrap">
       <ul class="benefits">
         <li><span class="benefits__icon">${icon('truck', { size: 22 })}</span><div><b>Livrare în 24 de ore</b><p>Cu FAN Courier, Sameday, Cargus, DPD, GLS sau în aceeași zi în București.</p></div></li>
-        <li><span class="benefits__icon">${icon('locker', { size: 22 })}</span><div><b>${totalLockers.toLocaleString('ro-RO')} de lockere pe hartă</b><p>easybox, FANbox, Ship & Go, DPD, GLS și Packeta — alegi locul pe hartă.</p></div></li>
+        <li><span class="benefits__icon">${icon('locker', { size: 22 })}</span><div><b>${totalLockers.toLocaleString('ro-RO')} de lockere și puncte de ridicare</b><p>easybox, FANbox, Cargus Ship & Go, DPD și GLS — cauți localitatea și alegi punctul pe hartă.</p></div></li>
         <li><span class="benefits__icon">${icon('return', { size: 22 })}</span><div><b>Retur gratuit 30 de zile</b><p>Dublu față de minimul legal. Ridicăm noi coletul.</p></div></li>
         <li><span class="benefits__icon">${icon('shield', { size: 22 })}</span><div><b>Garanție 24 de luni</b><p>Produse noi, sigilate, cu factură. Service autorizat.</p></div></li>
       </ul>
@@ -158,9 +160,9 @@ export function homePage(ctx) {
           <a class="btn btn--ghost" href="/livrare">Metode și tarife ${icon('arrow-right', { size: 18 })}</a>
         </div>
         <ul class="deliver__list">
-          ${[['fan', 'FAN Courier', 'La adresă · 24h'], ['sameday', 'Sameday', 'La adresă · 24h'], ['easybox', 'easybox', `${stats.find((s) => s.provider === 'easybox')?.n || 0} lockere`],
-    ['fanbox', 'FANbox', `${stats.find((s) => s.provider === 'fanbox')?.n || 0} lockere`], ['cargus', 'Cargus', 'Adresă · Ship & Go'], ['dpd', 'DPD', 'Adresă · DPD Box'],
-    ['gls', 'GLS', 'Adresă · ParcelLocker'], ['posta', 'Poșta Română', '2–5 zile'], ['packeta', 'Packeta', 'Z-BOX'], ['livada', 'Showroom', 'Ridicare în 2 ore']]
+          ${[['fan', 'FAN Courier', 'La adresă · 24h'], ['sameday', 'Sameday', 'La adresă · 24h'], ['easybox', 'easybox', `${nf(byNet.easybox)} lockere`],
+    ['fanbox', 'FANbox', `${nf(byNet.fanbox)} lockere`], ['cargus', 'Cargus', `Adresă · ${nf(byNet.cargus)} puncte`], ['dpd', 'DPD', `Adresă · ${nf(byNet.dpd)} puncte`],
+    ['gls', 'GLS', `Adresă · ${nf(byNet.gls)} puncte`], ['posta', 'Poșta Română', '2–5 zile'], ['livada', 'Showroom', 'Ridicare în 2 ore']]
     .map(([c, n, s]) => html`<li>${carrierBadge(c, { size: 40 })}<span><b>${n}</b><small>${s}</small></span></li>`)}
         </ul>
       </div>

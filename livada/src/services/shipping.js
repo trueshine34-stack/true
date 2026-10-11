@@ -1,10 +1,16 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import crypto from 'node:crypto';
+import { ROOT } from '../config.js';
 import { one, all, getSetting } from '../db/index.js';
+import { fold } from '../lib/format.js';
 import { CARRIERS } from '../db/defaults.js';
 
 export const methods = () => all('SELECT * FROM delivery_methods WHERE active = 1 ORDER BY sort');
 export const allMethods = () => all('SELECT * FROM delivery_methods ORDER BY sort');
 export const methodByCode = (code) => one('SELECT * FROM delivery_methods WHERE code = ? AND active = 1', code);
-export const carrier = (code) => CARRIERS[code] || { name: code, short: code.slice(0, 2).toUpperCase(), color: '#555', ink: '#fff', track: '' };
+export const carrier = (code) => CARRIERS[code] || { name: code, color: '#555', track: '' };
 
 export function feeFor(method, subtotal, { freeShipping = false } = {}) {
   if (!method) return 0;
@@ -66,19 +72,100 @@ export function cutoffHint(now = new Date()) {
 
 // ─── lockere ────────────────────────────────────────────────────────────────
 let lockerCache = null;
-export function lockersCompact() {
+/** lista compactă pentru hartă, comprimată o singură dată (br + gzip) și servită cu ETag */
+export function lockersPayload() {
   if (!lockerCache) {
-    const rows = all('SELECT id, provider, name, address, city, county, postcode, lat, lng, hours FROM lockers WHERE active = 1 ORDER BY city, name');
-    lockerCache = JSON.stringify({
-      fields: ['id', 'provider', 'name', 'address', 'city', 'county', 'postcode', 'lat', 'lng', 'hours'],
-      rows: rows.map((r) => [r.id, r.provider, r.name, r.address, r.city, r.county, r.postcode, r.lat, r.lng, r.hours]),
+    const rows = all(`SELECT l.id, l.provider, l.kind, l.name, l.address, l.city, l.county, l.postcode, l.lat, l.lng, l.hours, l.note
+      FROM lockers l WHERE l.active = 1 ORDER BY l.county, l.city, l.name`);
+    const json = JSON.stringify({
+      fields: ['id', 'provider', 'kind', 'name', 'address', 'city', 'county', 'postcode', 'lat', 'lng', 'hours', 'note'],
+      rows: rows.map((r) => [r.id, r.provider, r.kind === 'point' ? 1 : 0, r.name, r.address, r.city, r.county, r.postcode, r.lat, r.lng, r.hours, r.note]),
     });
+    const raw = Buffer.from(json);
+    lockerCache = {
+      raw,
+      br: zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length } }),
+      gz: zlib.gzipSync(raw, { level: 9 }),
+      etag: `"${crypto.createHash('sha1').update(raw).digest('base64url').slice(0, 20)}"`,
+      count: rows.length,
+    };
   }
   return lockerCache;
 }
-export const invalidateLockers = () => { lockerCache = null; };
+export const lockersCompact = () => lockersPayload().raw.toString();
+let totalCache = null;
+/** numărul de lockere și puncte active (pentru textele din magazin) */
+export const lockerTotal = () => (totalCache ??= one('SELECT COUNT(*) n FROM lockers WHERE active = 1').n);
+export const invalidateLockers = () => { lockerCache = null; nearCache = null; totalCache = null; };
 export const lockerById = (id) => one('SELECT * FROM lockers WHERE id = ? AND active = 1', id);
-export const lockerStats = () => all('SELECT provider, COUNT(*) n, COUNT(DISTINCT city) cities FROM lockers WHERE active = 1 GROUP BY provider ORDER BY n DESC');
+export const lockerStats = () => all(`SELECT provider, COUNT(*) n, SUM(kind = 'locker') lockers, SUM(kind = 'point') points,
+  COUNT(DISTINCT county || '/' || city) cities, COUNT(DISTINCT county) counties FROM lockers WHERE active = 1 GROUP BY provider ORDER BY n DESC`);
+
+/** sursele listei de lockere (din data/lockers.json, fără lista propriu-zisă) */
+let sourcesCache = null;
+export function lockerSources() {
+  if (!sourcesCache) {
+    const file = path.join(ROOT, 'data/lockers.json');
+    try {
+      const raw = fs.readFileSync(file, 'utf8');
+      // lista e ultima cheie din fișier; „lockers” apare și în statisticile surselor, de aceea căutăm începutul tabloului
+      const head = `${raw.slice(0, raw.indexOf(',"lockers":['))}}`;
+      const d = JSON.parse(head);
+      sourcesCache = { generated: d.generated, sources: d.sources };
+    } catch { sourcesCache = {}; }
+  }
+  return sourcesCache;
+}
+
+// ─── localități (căutarea de pe hartă, inclusiv satele fără lockere) ────────
+let places = null;
+let nearCache = null;
+function loadPlaces() {
+  if (!places) {
+    const file = path.join(ROOT, 'data/places.json');
+    const d = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { rows: [] };
+    places = d.rows.map(([name, county, lat, lng, pop]) => ({ name, county, lat, lng, pop, key: fold(name), countyKey: fold(county) }));
+  }
+  return places;
+}
+/** coordonatele lockerelor active, pentru numărul de puncte din jurul unei localități */
+function lockerPoints() {
+  if (!nearCache) nearCache = all('SELECT lat, lng FROM lockers WHERE active = 1');
+  return nearCache;
+}
+function countNear(lat, lng, km) {
+  const dLat = km / 111, dLng = km / (111 * Math.cos(lat * Math.PI / 180));
+  let n = 0;
+  for (const p of lockerPoints()) {
+    if (Math.abs(p.lat - lat) <= dLat && Math.abs(p.lng - lng) <= dLng && haversineKm({ lat, lng }, p) <= km) n++;
+  }
+  return n;
+}
+
+/** „cluj” → Cluj-Napoca; „sanpetru bv” → Sânpetru, Brașov; ordonat după potrivire și populație */
+export function searchPlaces(q, limit = 6) {
+  const words = fold(q).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const scored = [];
+  for (const p of loadPlaces()) {
+    const name = p.key;
+    const first = words[0];
+    let score;
+    if (name === words.join(' ')) score = 0;
+    else if (name.startsWith(words.join(' '))) score = 1;
+    else if (name.startsWith(first) || name.split(/[ -]/).some((w) => w.startsWith(first))) score = 2;
+    else continue;
+    // cuvintele în plus pot fi județul („sanpetru brasov”)
+    const rest = words.slice(1).filter((w) => !name.includes(w));
+    if (rest.length && !rest.every((w) => p.countyKey.includes(w))) continue;
+    scored.push([score, -p.pop, p]);
+  }
+  scored.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  return scored.slice(0, limit).map(([, , p]) => ({
+    name: p.name, county: p.county, lat: p.lat, lng: p.lng,
+    near: countNear(p.lat, p.lng, p.pop > 100000 ? 8 : 5),
+  }));
+}
 
 export function haversineKm(a, b) {
   const R = 6371, rad = Math.PI / 180;

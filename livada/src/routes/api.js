@@ -3,7 +3,7 @@ import { limit } from './helpers.js';
 import { clean } from '../lib/validate.js';
 import * as catalog from '../services/catalog.js';
 import * as cartSvc from '../services/cart.js';
-import { lockersCompact, methodByCode, estimate } from '../services/shipping.js';
+import { lockersPayload, searchPlaces, methodByCode, estimate } from '../services/shipping.js';
 import { toggleFavorite, favoriteIds } from '../services/users.js';
 import { summaryRows, promoForm } from '../views/store/cart.js';
 import { lei } from '../lib/format.js';
@@ -16,7 +16,20 @@ export default function apiRoutes(r) {
   });
 
   r.get('/api/lockers', (ctx) => {
-    ctx.send('application/json; charset=utf-8', lockersCompact(), 200, { 'Cache-Control': 'public, max-age=3600' });
+    const p = lockersPayload();
+    const headers = { 'Cache-Control': 'public, max-age=3600', ETag: p.etag, Vary: 'Accept-Encoding' };
+    if (ctx.req.headers['if-none-match'] === p.etag) return ctx.send('application/json; charset=utf-8', '', 304, headers);
+    const ae = ctx.req.headers['accept-encoding'] || '';
+    if (/\bbr\b/.test(ae)) return ctx.send('application/json; charset=utf-8', p.br, 200, { ...headers, 'Content-Encoding': 'br' });
+    if (/\bgzip\b/.test(ae)) return ctx.send('application/json; charset=utf-8', p.gz, 200, { ...headers, 'Content-Encoding': 'gzip' });
+    return ctx.send('application/json; charset=utf-8', p.raw, 200, headers);
+  });
+
+  /** localitățile pentru căutarea de pe harta lockerelor */
+  r.get('/api/places', (ctx) => {
+    limit(ctx, 'places', 240, 60_000);
+    const q = clean(ctx.query.get('q'), 60);
+    ctx.json({ q, places: q.length >= 2 ? searchPlaces(q) : [] }, 200, { 'Cache-Control': 'public, max-age=86400' });
   });
 
   /** recalculează totalurile la checkout când se schimbă livrarea / plata */

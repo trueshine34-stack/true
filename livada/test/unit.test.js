@@ -203,3 +203,25 @@ test('catalog: sincronizare cu un catalog nou — adaugă variante, ascunde prod
   assert.ok(st.variants >= 1);
   assert.ok(one('SELECT COUNT(*) n FROM variants WHERE product_id = ? AND price = 12345', band.id).n > 0, 'prețurile editate rămân');
 });
+
+test('lockere: căutarea localităților (cu sate fără lockere) și sincronizarea listei', async () => {
+  const { searchPlaces, lockerStats, invalidateLockers } = await import('../src/services/shipping.js');
+  const { syncLockers } = await import('../src/db/seed.js');
+  const { one, run } = await import('../src/db/index.js');
+  const cluj = searchPlaces('cluj');
+  assert.equal(cluj[0].name, 'Cluj-Napoca');
+  assert.ok(cluj[0].near > 100, 'multe puncte în Cluj-Napoca');
+  const sat = searchPlaces('sanpetru hunedoara');
+  assert.equal(sat[0].name, 'Sânpetru');
+  assert.equal(sat[0].county, 'Hunedoara');
+  assert.equal(searchPlaces('bucuresti')[0].name, 'București');
+  // toate rețelele, în toate cele 42 de județe (easybox din OpenStreetMap acoperă doar o parte)
+  const st = Object.fromEntries(lockerStats().map((s) => [s.provider, s]));
+  for (const p of ['fanbox', 'gls', 'dpd', 'cargus']) assert.equal(st[p].counties, 42, `${p}: toate județele`);
+  // un punct dispărut din listă devine inactiv, iar la resincronizare revine
+  run("INSERT INTO lockers(id, provider, name, address, city, county, lat, lng) VALUES ('test-vechi', 'fanbox', 'FANbox vechi', 'Str. X', 'Cluj-Napoca', 'Cluj', 46.77, 23.6)");
+  const r = syncLockers();
+  invalidateLockers();
+  assert.ok(r.removed >= 1);
+  assert.equal(one("SELECT active FROM lockers WHERE id = 'test-vechi'").active, 0);
+});

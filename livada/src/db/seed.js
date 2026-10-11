@@ -121,20 +121,34 @@ export function rebuildSearchIndex() {
   });
 }
 
-export function seedLockers() {
-  const file = path.join(ROOT, 'data/lockers.json');
-  if (!fs.existsSync(file)) return 0;
-  const { lockers } = JSON.parse(fs.readFileSync(file, 'utf8'));
+const LOCKERS_FILE = path.join(ROOT, 'data/lockers.json');
+export const lockersHash = () => (fs.existsSync(LOCKERS_FILE) ? crypto.createHash('sha1').update(fs.readFileSync(LOCKERS_FILE)).digest('hex') : '');
+
+/**
+ * Sincronizează lockerele cu data/lockers.json: adaugă și actualizează punctele, iar cele care nu mai apar în listă
+ * devin inactive (comenzile vechi își păstrează adresa lockerului, salvată în comandă).
+ */
+export function syncLockers() {
+  if (!fs.existsSync(LOCKERS_FILE)) return { total: 0, removed: 0 };
+  const { lockers } = JSON.parse(fs.readFileSync(LOCKERS_FILE, 'utf8'));
+  let removed = 0;
   tx(() => {
+    run('CREATE TEMP TABLE IF NOT EXISTS locker_ids(id TEXT PRIMARY KEY)');
+    run('DELETE FROM locker_ids');
     for (const l of lockers) {
-      run(`INSERT INTO lockers(id, provider, name, address, city, county, postcode, lat, lng, hours) VALUES (?,?,?,?,?,?,?,?,?,?)
-           ON CONFLICT(id) DO UPDATE SET name=excluded.name, address=excluded.address, city=excluded.city, county=excluded.county,
-           postcode=excluded.postcode, lat=excluded.lat, lng=excluded.lng, hours=excluded.hours`,
-      l.id, l.provider, l.name, l.address, l.city, l.county, l.postcode, l.lat, l.lng, l.hours);
+      run(`INSERT INTO lockers(id, provider, name, address, city, county, postcode, lat, lng, hours, kind, note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+           ON CONFLICT(id) DO UPDATE SET provider=excluded.provider, name=excluded.name, address=excluded.address, city=excluded.city,
+           county=excluded.county, postcode=excluded.postcode, lat=excluded.lat, lng=excluded.lng, hours=excluded.hours, kind=excluded.kind,
+           note=excluded.note, active=1`,
+      l.id, l.provider, l.name, l.address, l.city, l.county, l.postcode, l.lat, l.lng, l.hours || 'Non-stop', l.kind || 'locker', l.note || '');
+      run('INSERT OR IGNORE INTO locker_ids(id) VALUES (?)', l.id);
     }
+    removed = Number(run('UPDATE lockers SET active = 0 WHERE active = 1 AND id NOT IN (SELECT id FROM locker_ids)').changes);
   });
-  return lockers.length;
+  setSetting('lockers_hash', lockersHash());
+  return { total: lockers.length, removed };
 }
+export const seedLockers = () => syncLockers().total;
 
 export function seedStore() {
   tx(() => {
@@ -297,7 +311,13 @@ export async function seedAll({ demo = false, log = true } = {}) {
     const st = syncCatalog();
     if (log) console.log(`[livada] catalog actualizat: +${st.added} produse, +${st.variants} variante, ${st.hidden} produse retrase`);
   }
-  const l = one('SELECT COUNT(*) n FROM lockers').n === 0 ? seedLockers() : 0;
+  let l = 0;
+  if (getSetting('lockers_hash') !== lockersHash()) {
+    const fresh = one('SELECT COUNT(*) n FROM lockers').n === 0;
+    const st = syncLockers();
+    if (fresh) l = st.total;
+    else if (log) console.log(`[livada] lockere actualizate: ${st.total} puncte, ${st.removed} retrase`);
+  }
   await ensureAdmin({ log });
   const d = demo ? await seedDemo() : 0;
   clearSettingsCache();

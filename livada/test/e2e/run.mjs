@@ -203,12 +203,19 @@ try {
     await page.goto(`${base}/checkout`);
     await page.fill('input[name=phone]', '0722555101');
     await page.click('[data-ship-tab=locker]');
-    await page.click('[data-open-lockers]');
+    await page.click('.lfind__search');
     await page.waitForSelector('[data-locker-modal]:not([hidden])');
-    await page.waitForSelector('.litem', { timeout: 10000 });
+    await page.waitForSelector('.lstart', { timeout: 10000 });
     expect(await page.locator('.leaflet-marker-icon').count() > 0, 'harta nu are markere');
+    expect(await page.locator('.lpin img, .lcl').count() > 0, 'markerele nu au sigla rețelei / grupurile');
+    // căutarea propune localitatea (cu numărul de puncte din zonă) și lockere după nume
     await page.fill('[data-locker-search]', 'Cluj');
-    await page.waitForTimeout(400);
+    await page.waitForSelector('.lsug', { timeout: 5000 });
+    const sug = await page.locator('.lsug').first().innerText();
+    expect(/Cluj-Napoca/.test(sug) && /puncte în zonă/.test(sug), `prima sugestie nu e Cluj-Napoca: ${sug}`);
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('.litem', { timeout: 10000 });
+    await page.waitForTimeout(300);
     const first = page.locator('.litem').first();
     const txt = await first.innerText();
     expect(/Cluj/i.test(txt), `primul rezultat nu este din Cluj: ${txt}`);
@@ -322,10 +329,19 @@ try {
     await mp.goto(`${server.base}/checkout`);
     await noHorizontalScroll(mp);
     await mp.click('[data-ship-tab=locker]');
-    await mp.click('[data-open-lockers]');
-    await mp.waitForSelector('.litem', { timeout: 10000 });
+    await mp.click('.lfind__search');
+    await mp.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
     await mp.waitForTimeout(400);
     await shot(mp, '15-mobile-lockers');
+    // pe telefon: comutatorul Hartă / Listă și fișa punctului peste hartă
+    await mp.click('[data-locker-view=list]');
+    await mp.waitForSelector('.lstart__cities', { state: 'visible' });
+    await mp.click('.lstart__cities [data-goto]');
+    await mp.waitForSelector('.litem', { timeout: 10000 });
+    await mp.locator('.litem').first().click();
+    await mp.waitForSelector('[data-locker-card]:not([hidden])');
+    expect(await mp.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'harta lockerelor iese din ecran pe telefon');
+    await shot(mp, '16-mobile-locker-card');
   });
   expect(mob.errors.length === 0, `erori în consolă (mobil):\n${mob.errors.join('\n')}`);
   await mob.ctx.close();

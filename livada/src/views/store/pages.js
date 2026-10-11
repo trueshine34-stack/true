@@ -1,18 +1,19 @@
-import { html, raw } from '../../lib/html.js';
+import { html, raw, jsonScript } from '../../lib/html.js';
 import { page } from '../layout.js';
-import { field, csrfInput, carrierBadge, breadcrumbs } from '../components.js';
+import { field, csrfInput, carrierBadge, carrierLogo, breadcrumbs } from '../components.js';
 import { icon } from '../icons.js';
 import { lei } from '../../lib/format.js';
 import { getSetting } from '../../db/index.js';
-import { methods, lockerStats, estimate } from '../../services/shipping.js';
+import { methods, estimate } from '../../services/shipping.js';
+import { lockerNetworks, lockerConfig, lockerModal } from './lockers.js';
 
-function doc(ctx, { title, lead, body, slug, eyebrow }) {
+function doc(ctx, { title, lead, body, slug, eyebrow, after = '', scripts }) {
   const content = html`<section class="section section--page"><div class="wrap wrap--narrow">
     ${breadcrumbs([{ label: title }])}
     <header class="doc-head">${eyebrow ? html`<p class="eyebrow">${eyebrow}</p>` : ''}<h1 class="h1">${title}</h1>${lead ? html`<p class="lead lead--sm">${lead}</p>` : ''}</header>
     <div class="doc">${body}</div>
-  </div></section>`;
-  return page(ctx, { title, description: lead, body: content, canonical: `/${slug}` });
+  </div></section>${after}`;
+  return page(ctx, { title, description: lead, body: content, canonical: `/${slug}`, scripts });
 }
 
 const co = () => getSetting('company') || {};
@@ -86,26 +87,38 @@ export function contactPage(ctx, { sent = false, errors = {}, values = {} } = {}
 
 export function deliveryPage(ctx) {
   const ms = methods();
-  const stats = lockerStats();
-  const byProv = Object.fromEntries(stats.map((s) => [s.provider, s]));
-  const groups = [['courier', 'Curier la adresă'], ['express', 'Livrare în aceeași zi'], ['locker', 'Lockere (pachetomate)'], ['pickup', 'Ridicare personală']];
+  const nets = lockerNetworks(ms, 0);
+  const byNet = Object.fromEntries(nets.map((n) => [n.key, n]));
+  const total = nets.reduce((a, n) => a + n.lockers + n.points, 0);
+  const nf = (n) => Number(n).toLocaleString('ro-RO');
+  const groups = [['courier', 'Curier la adresă'], ['express', 'Livrare în aceeași zi'], ['locker', 'Lockere și puncte de ridicare'], ['pickup', 'Ridicare personală']];
   return doc(ctx, {
     slug: 'livrare', title: 'Livrare și lockere', eyebrow: 'Livrare',
     lead: `Comenzile plasate până la ora ${st().cutoff_hour ?? 16}:00 în zilele lucrătoare pleacă în aceeași zi. Livrare gratuită la adresă de la 500 lei și în lockere de la 300 lei.`,
-    body: html`${groups.map(([type, label]) => {
-      const list = ms.filter((m) => m.type === type);
-      if (!list.length) return '';
-      return html`<h2>${label}</h2><div class="rate-table">${list.map((m) => html`<div class="rate-row">
-        ${carrierBadge(m.carrier, { size: 36 })}
-        <div class="rate-row__main"><b>${m.name}</b><span>${m.description}</span>${type === 'locker' && byProv[m.carrier] ? html`<span class="muted">${byProv[m.carrier].n} lockere în ${byProv[m.carrier].cities} localități</span>` : ''}</div>
+    scripts: ['/js/delivery.js'],
+    body: html`
+    <div class="lmap-cta">
+      <div><b>${nf(total)} lockere și puncte de ridicare</b><span>în toate cele 42 de județe — vezi pe hartă care e cel mai aproape de tine.</span></div>
+      <button class="btn btn--dark" type="button" data-open-lockers>${icon('pin', { size: 18 })} Deschide harta</button>
+    </div>
+    ${groups.map(([type, label]) => {
+    const list = ms.filter((m) => m.type === type && (type !== 'locker' || byNet[m.carrier]));
+    if (!list.length) return '';
+    return html`<h2>${label}</h2><div class="rate-table">${list.map((m) => {
+      const n = m.type === 'locker' ? byNet[m.carrier] : null;
+      return html`<div class="rate-row">
+        ${m.type === 'pickup' || m.type === 'express' ? carrierBadge(m.carrier, { size: 44 }) : carrierLogo(m.carrier)}
+        <div class="rate-row__main"><b>${m.name}</b><span>${m.description}</span>${n ? html`<span class="muted">${[n.lockers ? `${nf(n.lockers)} lockere` : '', n.points ? `${nf(n.points)} puncte de ridicare` : ''].filter(Boolean).join(' și ')} în ${nf(n.cities)} localități</span>` : ''}</div>
         <div class="rate-row__eta"><span>${m.eta}</span><small>${estimate(m)}</small></div>
         <div class="rate-row__price"><b>${m.price ? lei(m.price) : 'Gratuit'}</b>${m.free_over ? html`<small>gratuit de la ${Math.round(m.free_over / 100)} lei</small>` : ''}</div>
-      </div>`)}</div>`;
-    })}
+      </div>`;
+    })}</div>`;
+  })}
     <h2>Plata ramburs</h2>
     <p>Plata la livrare (numerar sau card) costă ${lei(st().cod_fee ?? 999)} și este disponibilă pentru comenzile de până la ${Math.round((st().cod_max ?? 1500000) / 100).toLocaleString('ro-RO')} lei. La easybox și FANbox plătești cu cardul direct la locker.</p>
     <h2>Despre harta lockerelor</h2>
-    <p class="muted">Locațiile lockerelor provin din OpenStreetMap (© contribuitorii OpenStreetMap, licență ODbL) și sunt actualizate periodic din API-urile curierilor.</p>`,
+    <p class="muted">Locațiile provin din listele publicate de FAN Courier (FANbox), GLS (lockere și ParcelShop), Cargus (lockere și Ship & Go) și DPD (DPD Box și DPD Pickup); punctele easybox, din OpenStreetMap (© contribuitorii OpenStreetMap, ODbL). Lista se actualizează periodic. Hărți © OpenStreetMap.</p>`,
+    after: html`${lockerModal(nets, { title: 'Harta lockerelor', mode: 'browse' })}${jsonScript('lockers-data', lockerConfig(nets, 'browse'))}`,
   });
 }
 
@@ -192,7 +205,7 @@ export function cookiesPage(ctx) {
 const FAQ = [
   ['Produsele sunt originale și noi?', 'Da. Vindem exclusiv produse Apple noi, sigilate, din distribuția oficială pentru Uniunea Europeană, cu factură și garanție de 24 de luni.'],
   ['Cât durează livrarea?', 'Comenzile plasate în zilele lucrătoare până la 16:00 pleacă în aceeași zi și ajung de regulă a doua zi. În București și Ilfov poți primi comanda chiar în aceeași seară.'],
-  ['Cum aleg un locker?', 'La finalizarea comenzii alege „Locker”, apoi lockerul dorit pe hartă — easybox, FANbox, Ship & Go, DPD, GLS sau Packeta. Primești un cod de deschidere prin SMS.'],
+  ['Cum aleg un locker?', 'La finalizarea comenzii alege „Locker”, caută localitatea sau strada și alege punctul pe hartă — easybox, FANbox, Cargus Ship & Go, DPD sau GLS. Când coletul ajunge, primești codul de deschidere prin SMS.'],
   ['Pot plăti în rate?', 'Da, 3, 6 sau 12 rate fără dobândă cu cardurile de credit partenere, pentru comenzi de minimum 500 lei.'],
   ['Emiteți factură pe firmă?', 'Sigur. La checkout alege „Persoană juridică” și completează CUI-ul — validăm cifra de control automat. Factura se transmite și în RO e-Factura.'],
   ['Pot returna un produs desigilat?', 'Da, în 30 de zile, dacă este complet și fără urme de utilizare. Excepție fac căștile in-ear cu sigiliul de igienă desfăcut.'],
