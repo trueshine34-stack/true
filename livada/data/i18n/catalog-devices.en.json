@@ -1,0 +1,2566 @@
+{
+ "categories": {
+  "iphone": {
+   "name": "iPhone",
+   "title": "iPhone",
+   "tagline": "From iPhone 17e to the foldable iPhone Duo.",
+   "groups": {
+    "Pliabil": "Foldable",
+    "Pro": "Pro",
+    "Air": "Air",
+    "Clasic": "Classic"
+   }
+  },
+  "mac": {
+   "name": "Mac",
+   "title": "Mac",
+   "tagline": "Laptops, desktops and displays powered by Apple silicon.",
+   "groups": {
+    "Laptopuri": "Laptops",
+    "Desktop": "Desktops",
+    "Monitoare": "Displays"
+   }
+  },
+  "ipad": {
+   "name": "iPad",
+   "title": "iPad",
+   "tagline": "Big display, powerful chip, Apple Pencil Pro.",
+   "groups": {
+    "iPad Pro": "iPad Pro",
+    "iPad Air": "iPad Air",
+    "iPad": "iPad",
+    "iPad mini": "iPad mini"
+   }
+  },
+  "watch": {
+   "name": "Watch",
+   "title": "Apple Watch",
+   "tagline": "Health, fitness and notifications — right on your wrist.",
+   "groups": {
+    "Series 12": "Series 12",
+    "Ultra": "Ultra",
+    "SE": "SE"
+   }
+  },
+  "airpods": {
+   "name": "AirPods",
+   "title": "AirPods & audio",
+   "tagline": "AirPods and the whole Beats range, in every colour.",
+   "groups": {
+    "AirPods": "AirPods",
+    "Beats": "Beats"
+   }
+  },
+  "tv-home": {
+   "name": "TV & Home",
+   "title": "TV & Home",
+   "tagline": "Apple TV 4K, HomePod and AirTag.",
+   "groups": {
+    "Apple TV": "Apple TV",
+    "HomePod": "HomePod",
+    "AirTag": "AirTag"
+   }
+  },
+  "accesorii": {
+   "name": "Accessories",
+   "title": "Accessories",
+   "tagline": "Every Apple and Beats accessory, in every colour and size.",
+   "groups": {
+    "Huse iPhone": "iPhone Cases",
+    "iPad și Apple Pencil": "iPad & Apple Pencil",
+    "Curele Apple Watch": "Apple Watch Bands",
+    "Încărcare": "Charging",
+    "Cabluri și adaptoare": "Cables & Adapters",
+    "Tastaturi și mouse": "Keyboards & Mice",
+    "Audio": "Audio",
+    "Diverse": "Other Accessories"
+   }
+  }
+ },
+ "labels": {
+  "Culoare": "Colour",
+  "Culoare titan": "Titanium colour",
+  "Stocare": "Storage",
+  "Configurație": "Configuration",
+  "Ecran": "Display",
+  "Sticlă": "Glass",
+  "Suport": "Stand",
+  "Conectivitate": "Connectivity",
+  "Mărime": "Size",
+  "Model": "Model",
+  "Pachet": "Pack",
+  "Performanță": "Performance",
+  "Camere": "Cameras",
+  "Autonomie": "Battery life",
+  "Design": "Design",
+  "Securitate": "Security",
+  "Porturi": "Ports",
+  "Wireless": "Wireless",
+  "Sănătate": "Health",
+  "Rezistență": "Water & dust resistance",
+  "Audio": "Audio",
+  "Video": "Video",
+  "Tehnologie": "Technology",
+  "Interior": "Inner",
+  "Exterior": "Outer",
+  "Luminozitate": "Brightness",
+  "Cip": "Chip",
+  "Principală": "Main",
+  "Ultra Wide": "Ultra Wide",
+  "Teleobiectiv": "Telephoto",
+  "Frontale": "Front",
+  "Frontală": "Front",
+  "Baterie": "Battery",
+  "Încărcare rapidă": "Fast charging",
+  "Material": "Material",
+  "Grosime": "Thickness",
+  "Greutate": "Weight",
+  "Autentificare": "Authentication",
+  "Diagonală": "Size",
+  "Rezoluție": "Resolution",
+  "Tehnologii": "Features",
+  "Modem": "Modem",
+  "Redare video": "Video playback",
+  "Port": "Port",
+  "Memorie unificată": "Unified memory",
+  "Streaming video": "Video streaming",
+  "Web wireless": "Wireless web browsing",
+  "Conectori": "Connections",
+  "Cameră": "Camera",
+  "Accesorii": "Accessories",
+  "Față": "Front",
+  "Spate": "Back",
+  "Dimensiuni": "Dimensions",
+  "Memorie": "Memory",
+  "Tip": "Type",
+  "Senzori": "Sensors",
+  "Notificări": "Notifications",
+  "Utilizare normală": "Typical use",
+  "Apă / praf": "Water / dust",
+  "Apă": "Water",
+  "Rețele": "Networks",
+  "Funcții": "Features",
+  "Căști": "Earbuds",
+  "Cu carcasa": "With case",
+  "Clasă": "Rating",
+  "Cu ANC": "With ANC",
+  "Total cu carcasa": "Total with case",
+  "Ascultare": "Listening",
+  "Format": "Format",
+  "Difuzoare": "Speakers",
+  "Sunet": "Sound",
+  "Localizare": "Location tracking",
+  "Încărcare": "Charging"
+ },
+ "values": {
+  "Da": "Yes",
+  "Nu": "No",
+  "Argintiu": "Silver",
+  "Negru": "Black",
+  "Alb": "White",
+  "Burgundia": "Burgundy",
+  "Glacier": "Glacier",
+  "Night Sky": "Night Sky",
+  "Star White": "Star White",
+  "Albastru cer": "Sky Blue",
+  "Auriu deschis": "Light Gold",
+  "Alb nor": "Cloud White",
+  "Negru spațial": "Space Black",
+  "Lavandă": "Lavender",
+  "Salvie": "Sage",
+  "Albastru ceață": "Mist Blue",
+  "Roz pal": "Soft Pink",
+  "Ultramarin": "Ultramarine",
+  "Turcoaz": "Teal",
+  "Roz": "Pink",
+  "Blush": "Blush",
+  "Citrus": "Citrus",
+  "Indigo": "Indigo",
+  "Lumina stelelor": "Starlight",
+  "Miezul nopții": "Midnight",
+  "Albastru": "Blue",
+  "Mov": "Purple",
+  "Portocaliu": "Orange",
+  "Galben": "Yellow",
+  "Verde": "Green",
+  "Gri spațial": "Space Grey",
+  "Bronz închis": "Dark Bronze",
+  "Auriu strălucitor": "Radiant Gold",
+  "Alb perlat": "Pearl White",
+  "Albastru nocturn": "Night Blue",
+  "Natural": "Natural",
+  "Nor": "Cloud",
+  "Albastru flacără": "Flame Blue",
+  "Negru Beats": "Beats Black",
+  "Gri fum": "Smoke Grey",
+  "Galben yuzu": "Yuzu Yellow",
+  "Roșu semnal": "Statement Red",
+  "Șampanie": "Champagne Gold",
+  "Albastru ardezie": "Slate Blue",
+  "Roz nor": "Cloud Pink",
+  "Gri furtună": "Storm Grey",
+  "Violet polar": "Arctic Purple",
+  "Roșu transparent": "Transparent Red",
+  "Transparent": "Transparent",
+  "Negru/Auriu": "Black/Gold",
+  "Alb crem": "Ivory",
+  "Gresie": "Sandstone",
+  "Negru diamant": "Jet Black",
+  "Gri pietriș": "Gravel Grey",
+  "Portocaliu aprins": "Spark Orange",
+  "Power Pink": "Power Pink",
+  "Nisip mișcător": "Quick Sand",
+  "Hiperviolet": "Hyper Purple",
+  "Portocaliu neon": "Electric Orange",
+  "Sticlă standard": "Standard glass",
+  "Nanotextură": "Nano-texture glass",
+  "Standard": "Standard",
+  "reflexii minime": "minimal glare",
+  "reflexii minime · 1 TB și 2 TB": "minimal glare · 1 TB and 2 TB models",
+  "Înclinare reglabilă": "Tilt-adjustable stand",
+  "Înclinare și înălțime": "Tilt- and height-adjustable stand",
+  "Adaptor VESA": "VESA mount adapter",
+  "Wi‑Fi": "Wi‑Fi",
+  "Wi‑Fi + Cellular": "Wi‑Fi + Cellular",
+  "GPS": "GPS",
+  "GPS + Cellular": "GPS + Cellular",
+  "Aluminiu": "Aluminium",
+  "Titan": "Titanium",
+  "Ceramică": "Ceramic",
+  "doar GPS + Cellular": "GPS + Cellular only",
+  "Carcasă USB‑C": "USB‑C case",
+  "Carcasă wireless": "Wireless case",
+  "Qi, difuzor Găsire": "Qi charging, Find My speaker",
+  "Thread": "Thread",
+  "1 bucată": "Single",
+  "4 bucăți": "4-pack",
+  "Magic Keyboard": "Magic Keyboard",
+  "Magic Keyboard cu Touch ID": "Magic Keyboard with Touch ID",
+  "Documentație": "Documentation",
+  "Cablu USB‑C": "USB‑C cable",
+  "Cablu de alimentare": "Power cord",
+  "Lavetă de curățare": "Polishing Cloth",
+  "M5 · GPU 8 nuclee · 16 GB · 512 GB": "M5 · 8-core GPU · 16 GB · 512 GB",
+  "M5 · GPU 10 nuclee · 16 GB · 512 GB": "M5 · 10-core GPU · 16 GB · 512 GB",
+  "M5 · GPU 10 nuclee · 16 GB · 1 TB": "M5 · 10-core GPU · 16 GB · 1 TB",
+  "M5 · GPU 10 nuclee · 24 GB · 1 TB": "M5 · 10-core GPU · 24 GB · 1 TB",
+  "24 de luni garanție (garanția legală de conformitate) + 14 zile drept de retur.": "24-month warranty (statutory guarantee of conformity) + 14-day right of withdrawal."
+ },
+ "products": {
+  "iphone-duo": {
+   "tagline": "The first foldable iPhone. Two displays, one simple gesture.",
+   "release": "Shipping from 23 October 2026",
+   "description": [
+    "iPhone Duo unfolds into a 7.6\" inner display with no visible crease and folds into a 5.4\" iPhone that fits in any pocket. The titanium design is just 5.2 mm thin when open.",
+    "The A20 Pro chip, the 48 MP camera system and all-day battery life make Duo a complete phone — and a tablet whenever you need one."
+   ],
+   "highlights": [
+    "7.6\" foldable ProMotion inner display",
+    "5.4\" Always‑On outer display",
+    "A20 Pro chip",
+    "Just 5.2 mm thin when open",
+    "Touch ID in the side button"
+   ],
+   "in_box": [
+    "iPhone Duo",
+    "Woven USB‑C cable (1 m)",
+    "Documentation"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Inner",
+       "v": "7.6\" foldable OLED, 2670×1878, 430 ppi, ProMotion 120 Hz"
+      },
+      {
+       "k": "Outer",
+       "v": "5.4\" OLED, 2034×1398, 460 ppi, Always‑On"
+      },
+      {
+       "k": "Brightness",
+       "v": "1000 nits typical, 3000 nits outdoors"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "A20 Pro — 6-core CPU, 7-core GPU, dual 16-core Neural Engine"
+      }
+     ]
+    },
+    {
+     "group": "Cameras",
+     "rows": [
+      {
+       "k": "Main",
+       "v": "48 MP Fusion, ƒ/1.6"
+      },
+      {
+       "k": "Ultra Wide",
+       "v": "48 MP, 120°"
+      },
+      {
+       "k": "Telephoto",
+       "v": "12 MP 2×"
+      },
+      {
+       "k": "Front",
+       "v": "12 MP Center Stage + under-display camera"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Battery",
+       "v": "Dual-cell, up to 24 hours of typical use"
+      },
+      {
+       "k": "Fast charging",
+       "v": "50% in about 20–30 minutes"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Material",
+       "v": "Titanium, Ceramic Shield 2"
+      },
+      {
+       "k": "Thickness",
+       "v": "5.2 mm open / 11.3 mm closed"
+      },
+      {
+       "k": "Weight",
+       "v": "254 g"
+      },
+      {
+       "k": "Water & dust resistance",
+       "v": "IP68 (6 m, 30 min)"
+      }
+     ]
+    },
+    {
+     "group": "Security",
+     "rows": [
+      {
+       "k": "Authentication",
+       "v": "Touch ID in the side button"
+      }
+     ]
+    }
+   ]
+  },
+  "iphone-18-pro": {
+   "tagline": "Pro in every detail. A camera with variable aperture.",
+   "description": [
+    "iPhone 18 Pro brings the A20 Pro chip, a 6.3\" ProMotion display with up to 3000 nits outdoors and a triple 48 MP camera system with variable aperture on the main camera.",
+    "The Apple C2 modem, Wi‑Fi 7 and an aluminium unibody with Ceramic Shield 2 make it faster, tougher and more efficient than ever. Battery life reaches up to 36 hours of video playback."
+   ],
+   "highlights": [
+    "6.3\" ProMotion display, Always‑On",
+    "A20 Pro chip",
+    "48 MP main camera, ƒ/1.48–ƒ/4.0",
+    "8× optical-quality zoom",
+    "Apple C2 modem · Wi‑Fi 7"
+   ],
+   "in_box": [
+    "iPhone",
+    "USB‑C charging cable (1 m)",
+    "Documentation"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "6.3\" Super Retina XDR OLED"
+      },
+      {
+       "k": "Resolution",
+       "v": "2622×1206, 460 ppi"
+      },
+      {
+       "k": "Features",
+       "v": "ProMotion up to 120 Hz, Always‑On, 3000 nits outdoors"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "A20 Pro — 6-core CPU, 7-core GPU"
+      },
+      {
+       "k": "Modem",
+       "v": "Apple C2, 5G"
+      }
+     ]
+    },
+    {
+     "group": "Cameras",
+     "rows": [
+      {
+       "k": "Main",
+       "v": "48 MP, 24 mm, variable ƒ/1.48–ƒ/4.0"
+      },
+      {
+       "k": "Ultra Wide",
+       "v": "48 MP, 13 mm, 120°"
+      },
+      {
+       "k": "Telephoto",
+       "v": "48 MP 4× (100 mm), 8× option (200 mm)"
+      },
+      {
+       "k": "Front",
+       "v": "18 MP Center Stage"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Video playback",
+       "v": "up to 36 hours"
+      },
+      {
+       "k": "Fast charging",
+       "v": "50% in ~15 minutes with a 60 W adapter"
+      }
+     ]
+    },
+    {
+     "group": "Connectivity",
+     "rows": [
+      {
+       "k": "Wireless",
+       "v": "Wi‑Fi 7, Bluetooth 6, 2nd-gen UWB, NFC, Thread"
+      },
+      {
+       "k": "Port",
+       "v": "USB‑C (USB 3, up to 10 Gb/s)"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Material",
+       "v": "Aluminium unibody, Ceramic Shield 2"
+      },
+      {
+       "k": "Weight",
+       "v": "211 g"
+      },
+      {
+       "k": "Water & dust resistance",
+       "v": "IP68 (6 m, 30 min)"
+      }
+     ]
+    }
+   ]
+  },
+  "iphone-18-pro-max": {
+   "tagline": "The biggest display and the longest battery life ever in an iPhone Pro.",
+   "description": [
+    "iPhone 18 Pro Max brings the A20 Pro chip, a 6.9\" ProMotion display with up to 3000 nits outdoors and a triple 48 MP camera system with variable aperture on the main camera.",
+    "The Apple C2 modem, Wi‑Fi 7 and an aluminium unibody with Ceramic Shield 2 make it faster, tougher and more efficient than ever. Battery life reaches up to 45 hours of video playback."
+   ],
+   "highlights": [
+    "6.9\" ProMotion display, Always‑On",
+    "A20 Pro chip",
+    "48 MP main camera, ƒ/1.48–ƒ/4.0",
+    "8× optical-quality zoom",
+    "Apple C2 modem · Wi‑Fi 7"
+   ],
+   "in_box": [
+    "iPhone",
+    "USB‑C charging cable (1 m)",
+    "Documentation"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "6.9\" Super Retina XDR OLED"
+      },
+      {
+       "k": "Resolution",
+       "v": "2868×1320, 460 ppi"
+      },
+      {
+       "k": "Features",
+       "v": "ProMotion up to 120 Hz, Always‑On, 3000 nits outdoors"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "A20 Pro — 6-core CPU, 7-core GPU"
+      },
+      {
+       "k": "Modem",
+       "v": "Apple C2, 5G"
+      }
+     ]
+    },
+    {
+     "group": "Cameras",
+     "rows": [
+      {
+       "k": "Main",
+       "v": "48 MP, 24 mm, variable ƒ/1.48–ƒ/4.0"
+      },
+      {
+       "k": "Ultra Wide",
+       "v": "48 MP, 13 mm, 120°"
+      },
+      {
+       "k": "Telephoto",
+       "v": "48 MP 4× (100 mm), 8× option (200 mm)"
+      },
+      {
+       "k": "Front",
+       "v": "18 MP Center Stage"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Video playback",
+       "v": "up to 45 hours"
+      },
+      {
+       "k": "Fast charging",
+       "v": "50% in ~15 minutes with a 60 W adapter"
+      }
+     ]
+    },
+    {
+     "group": "Connectivity",
+     "rows": [
+      {
+       "k": "Wireless",
+       "v": "Wi‑Fi 7, Bluetooth 6, 2nd-gen UWB, NFC, Thread"
+      },
+      {
+       "k": "Port",
+       "v": "USB‑C (USB 3, up to 10 Gb/s)"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Material",
+       "v": "Aluminium unibody, Ceramic Shield 2"
+      },
+      {
+       "k": "Weight",
+       "v": "249 g"
+      },
+      {
+       "k": "Water & dust resistance",
+       "v": "IP68 (6 m, 30 min)"
+      }
+     ]
+    }
+   ]
+  },
+  "iphone-air": {
+   "tagline": "The thinnest iPhone ever. Incredibly light, surprisingly powerful.",
+   "description": [
+    "iPhone Air is just 5.6 mm thin, with a titanium frame, a 6.5\" ProMotion display and the A19 Pro chip.",
+    "A 48 MP Fusion camera, the Apple C1X modem and Ceramic Shield 2 on both sides — all in an iPhone you'll barely feel in your pocket."
+   ],
+   "highlights": [
+    "Just 5.6 mm thin",
+    "6.5\" ProMotion display",
+    "A19 Pro chip",
+    "48 MP Fusion camera",
+    "Titanium frame"
+   ],
+   "in_box": [
+    "iPhone",
+    "USB‑C charging cable (1 m)",
+    "Documentation"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "6.5\" Super Retina XDR, ProMotion 120 Hz, Always‑On"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "A19 Pro"
+      },
+      {
+       "k": "Modem",
+       "v": "Apple C1X"
+      }
+     ]
+    },
+    {
+     "group": "Cameras",
+     "rows": [
+      {
+       "k": "Main",
+       "v": "48 MP Fusion"
+      },
+      {
+       "k": "Front",
+       "v": "18 MP Center Stage"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Video playback",
+       "v": "up to 27 hours"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Thickness",
+       "v": "5.64 mm"
+      },
+      {
+       "k": "Weight",
+       "v": "165 g"
+      },
+      {
+       "k": "Material",
+       "v": "Titanium, Ceramic Shield 2"
+      },
+      {
+       "k": "Water & dust resistance",
+       "v": "IP68"
+      }
+     ]
+    }
+   ]
+  },
+  "iphone-17": {
+   "tagline": "ProMotion display, Center Stage front camera and 256 GB as standard.",
+   "description": [
+    "iPhone 17 comes with a 6.3\" ProMotion Always‑On display, the A19 chip and a dual 48 MP camera system.",
+    "The 18 MP Center Stage front camera and Ceramic Shield 2, with three times better scratch resistance, round off the most balanced iPhone in the line-up."
+   ],
+   "highlights": [
+    "6.3\" ProMotion 120 Hz display",
+    "A19 chip",
+    "Dual 48 MP cameras",
+    "18 MP Center Stage selfies",
+    "256 GB base storage"
+   ],
+   "in_box": [
+    "iPhone",
+    "USB‑C charging cable (1 m)",
+    "Documentation"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "6.3\" Super Retina XDR, ProMotion, Always‑On"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "A19"
+      }
+     ]
+    },
+    {
+     "group": "Cameras",
+     "rows": [
+      {
+       "k": "Main",
+       "v": "48 MP Fusion"
+      },
+      {
+       "k": "Ultra Wide",
+       "v": "48 MP"
+      },
+      {
+       "k": "Front",
+       "v": "18 MP Center Stage"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Video playback",
+       "v": "up to 30 hours"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Material",
+       "v": "Aluminium, Ceramic Shield 2"
+      },
+      {
+       "k": "Weight",
+       "v": "177 g"
+      },
+      {
+       "k": "Water & dust resistance",
+       "v": "IP68"
+      }
+     ]
+    }
+   ]
+  },
+  "iphone-17e": {
+   "tagline": "Everything that matters in an iPhone, at the best price.",
+   "description": [
+    "iPhone 17e brings the A19 chip, the Apple C1X modem and MagSafe to a 6.1\" design — now with 256 GB of base storage.",
+    "The 48 MP Fusion camera takes excellent photos day and night, and the battery easily lasts until evening."
+   ],
+   "highlights": [
+    "A19 chip",
+    "256 GB as standard",
+    "MagSafe",
+    "48 MP Fusion camera",
+    "6.1\" Super Retina XDR display"
+   ],
+   "in_box": [
+    "iPhone",
+    "USB‑C charging cable (1 m)",
+    "Documentation"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "6.1\" Super Retina XDR OLED"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "A19"
+      },
+      {
+       "k": "Modem",
+       "v": "Apple C1X"
+      }
+     ]
+    },
+    {
+     "group": "Cameras",
+     "rows": [
+      {
+       "k": "Main",
+       "v": "48 MP Fusion"
+      },
+      {
+       "k": "Front",
+       "v": "12 MP"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Video playback",
+       "v": "up to 26 hours"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Material",
+       "v": "Aluminium, Ceramic Shield"
+      },
+      {
+       "k": "Water & dust resistance",
+       "v": "IP68"
+      },
+      {
+       "k": "Charging",
+       "v": "MagSafe, Qi2"
+      }
+     ]
+    }
+   ]
+  },
+  "iphone-16": {
+   "tagline": "Camera Control, Apple Intelligence and the A18 chip.",
+   "description": [
+    "iPhone 16 has the Camera Control button, the A18 chip and a 48 MP Fusion camera — an excellent choice at a reduced price.",
+    "The Action button, USB‑C and up to 22 hours of video playback still make it a complete iPhone today."
+   ],
+   "highlights": [
+    "A18 chip",
+    "Camera Control",
+    "48 MP Fusion camera",
+    "6.1\" display",
+    "Action button"
+   ],
+   "in_box": [
+    "iPhone",
+    "USB‑C charging cable (1 m)",
+    "Documentation"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "6.1\" Super Retina XDR OLED"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "A18"
+      }
+     ]
+    },
+    {
+     "group": "Cameras",
+     "rows": [
+      {
+       "k": "Main",
+       "v": "48 MP Fusion"
+      },
+      {
+       "k": "Ultra Wide",
+       "v": "12 MP"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Video playback",
+       "v": "up to 22 hours"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Material",
+       "v": "Aluminium, colour-infused glass"
+      },
+      {
+       "k": "Water & dust resistance",
+       "v": "IP68"
+      }
+     ]
+    }
+   ]
+  },
+  "macbook-neo": {
+   "tagline": "Your first Mac. In four cheerful colours.",
+   "description": [
+    "MacBook Neo is Apple's most affordable laptop: a 13\" Liquid Retina display, the A18 Pro chip and up to 16 hours of battery life, in a 1.23 kg aluminium enclosure.",
+    "Perfect for school, university and everything you do every day — with macOS, iCloud and seamless iPhone integration."
+   ],
+   "highlights": [
+    "13\" Liquid Retina display, 500 nits",
+    "A18 Pro chip",
+    "Up to 16 hours of battery life",
+    "1.23 kg",
+    "4 colours"
+   ],
+   "in_box": [
+    "MacBook Neo",
+    "USB‑C power adapter",
+    "USB‑C cable"
+   ],
+   "options": {
+    "config": {
+     "values": {
+      "256gb": "8 GB · 256 GB SSD",
+      "256gb@note": "Magic Keyboard",
+      "512gb": "8 GB · 512 GB SSD",
+      "512gb@note": "Magic Keyboard with Touch ID"
+     }
+    }
+   },
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "13\" Liquid Retina, 2408×1506, 500 nits"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "A18 Pro — 6-core CPU, 5-core GPU"
+      },
+      {
+       "k": "Unified memory",
+       "v": "8 GB"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Video streaming",
+       "v": "up to 16 hours"
+      },
+      {
+       "k": "Wireless web browsing",
+       "v": "up to 11 hours"
+      }
+     ]
+    },
+    {
+     "group": "Ports",
+     "rows": [
+      {
+       "k": "Connections",
+       "v": "USB‑C (USB 3, DisplayPort), USB‑C (USB 2), 3.5 mm headphone jack"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Weight",
+       "v": "1.23 kg"
+      },
+      {
+       "k": "Camera",
+       "v": "1080p FaceTime HD"
+      }
+     ]
+    }
+   ]
+  },
+  "macbook-air-13-m5": {
+   "tagline": "Thin, silent, with the M5 chip and 512 GB as standard.",
+   "description": [
+    "MacBook Air 13\" with the M5 chip is fast at everything — from presentations to photo editing — and completely silent, with no fan.",
+    "Up to 18 hours of battery life, Wi‑Fi 7, a 12 MP Center Stage camera and a keyboard with the Romanian layout."
+   ],
+   "highlights": [
+    "13\" Liquid Retina display",
+    "M5 chip",
+    "Up to 18 hours of battery life",
+    "Fanless design",
+    "Romanian keyboard with Touch ID"
+   ],
+   "in_box": [
+    "MacBook Air 13\"",
+    "40W Dynamic Power Adapter",
+    "USB‑C to MagSafe 3 cable (2 m)"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "13.6\" Liquid Retina, 2560×1664, 500 nits"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "Apple M5 — 10-core CPU, 16-core Neural Engine"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Video streaming",
+       "v": "up to 18 hours"
+      },
+      {
+       "k": "Wireless web browsing",
+       "v": "up to 15 hours"
+      }
+     ]
+    },
+    {
+     "group": "Ports",
+     "rows": [
+      {
+       "k": "Connections",
+       "v": "MagSafe 3, 2× Thunderbolt 4, 3.5 mm headphone jack"
+      },
+      {
+       "k": "Wireless",
+       "v": "Wi‑Fi 7, Bluetooth 6"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Weight",
+       "v": "1.23 kg"
+      },
+      {
+       "k": "Camera",
+       "v": "12 MP Center Stage, Desk View"
+      },
+      {
+       "k": "Keyboard",
+       "v": "Backlit Magic Keyboard with Touch ID, Romanian layout"
+      }
+     ]
+    }
+   ]
+  },
+  "macbook-air-15-m5": {
+   "tagline": "A big 15\" display, six speakers, the same featherweight design.",
+   "description": [
+    "MacBook Air 15\" with the M5 chip is fast at everything — from presentations to photo editing — and completely silent, with no fan.",
+    "Up to 18 hours of battery life, Wi‑Fi 7, a 12 MP Center Stage camera and a keyboard with the Romanian layout."
+   ],
+   "highlights": [
+    "15\" Liquid Retina display",
+    "M5 chip",
+    "Up to 18 hours of battery life",
+    "Fanless design",
+    "Romanian keyboard with Touch ID"
+   ],
+   "in_box": [
+    "MacBook Air 15\"",
+    "40W Dynamic Power Adapter",
+    "USB‑C to MagSafe 3 cable (2 m)"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "15.3\" Liquid Retina, 2880×1864, 500 nits"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "Apple M5 — 10-core CPU, 16-core Neural Engine"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Video streaming",
+       "v": "up to 18 hours"
+      },
+      {
+       "k": "Wireless web browsing",
+       "v": "up to 15 hours"
+      }
+     ]
+    },
+    {
+     "group": "Ports",
+     "rows": [
+      {
+       "k": "Connections",
+       "v": "MagSafe 3, 2× Thunderbolt 4, 3.5 mm headphone jack"
+      },
+      {
+       "k": "Wireless",
+       "v": "Wi‑Fi 7, Bluetooth 6"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Weight",
+       "v": "1.51 kg"
+      },
+      {
+       "k": "Camera",
+       "v": "12 MP Center Stage, Desk View"
+      },
+      {
+       "k": "Keyboard",
+       "v": "Backlit Magic Keyboard with Touch ID, Romanian layout"
+      }
+     ]
+    }
+   ]
+  },
+  "macbook-pro-14": {
+   "tagline": "M5, M5 Pro or M5 Max. Liquid Retina XDR display.",
+   "description": [
+    "MacBook Pro 14\" with the M5, M5 Pro or M5 Max chip is built for 8K video editing, software development and running AI models locally.",
+    "A Liquid Retina XDR display with up to 1600 nits in HDR, Thunderbolt 5 on Pro/Max models, HDMI, an SDXC card slot and up to 24 hours of battery life."
+   ],
+   "highlights": [
+    "14\" Liquid Retina XDR display",
+    "M5 / M5 Pro / M5 Max chips",
+    "Thunderbolt 5 (Pro/Max)",
+    "Up to 24 hours of battery life",
+    "Optional nano-texture display"
+   ],
+   "in_box": [
+    "MacBook Pro 14\"",
+    "USB‑C power adapter",
+    "USB‑C to MagSafe 3 cable (2 m)"
+   ],
+   "options": {
+    "display": {
+     "values": {
+      "standard": "Standard display",
+      "nano": "Nano-texture display",
+      "nano@note": "minimal glare"
+     }
+    }
+   },
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "14.2\" Liquid Retina XDR, ProMotion 120 Hz"
+      },
+      {
+       "k": "Brightness",
+       "v": "1000 nits SDR (outdoors), 1600 nits HDR"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "M5, M5 Pro or M5 Max (depending on configuration)"
+      }
+     ]
+    },
+    {
+     "group": "Ports",
+     "rows": [
+      {
+       "k": "Connections",
+       "v": "3× Thunderbolt, HDMI, SDXC, MagSafe 3, 3.5 mm headphone jack"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Video streaming",
+       "v": "up to 24 hours"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Weight",
+       "v": "from 1.55 kg"
+      },
+      {
+       "k": "Keyboard",
+       "v": "Magic Keyboard with Touch ID, Romanian layout"
+      }
+     ]
+    }
+   ]
+  },
+  "macbook-pro-16": {
+   "tagline": "The biggest XDR display and the most powerful chips, for professionals.",
+   "description": [
+    "MacBook Pro 16\" with the M5, M5 Pro or M5 Max chip is built for 8K video editing, software development and running AI models locally.",
+    "A Liquid Retina XDR display with up to 1600 nits in HDR, Thunderbolt 5 on Pro/Max models, HDMI, an SDXC card slot and up to 24 hours of battery life."
+   ],
+   "highlights": [
+    "16\" Liquid Retina XDR display",
+    "M5 / M5 Pro / M5 Max chips",
+    "Thunderbolt 5 (Pro/Max)",
+    "Up to 24 hours of battery life",
+    "Optional nano-texture display"
+   ],
+   "in_box": [
+    "MacBook Pro 16\"",
+    "USB‑C power adapter",
+    "USB‑C to MagSafe 3 cable (2 m)"
+   ],
+   "options": {
+    "display": {
+     "values": {
+      "standard": "Standard display",
+      "nano": "Nano-texture display",
+      "nano@note": "minimal glare"
+     }
+    }
+   },
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "16.2\" Liquid Retina XDR, ProMotion 120 Hz"
+      },
+      {
+       "k": "Brightness",
+       "v": "1000 nits SDR (outdoors), 1600 nits HDR"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "M5, M5 Pro or M5 Max (depending on configuration)"
+      }
+     ]
+    },
+    {
+     "group": "Ports",
+     "rows": [
+      {
+       "k": "Connections",
+       "v": "3× Thunderbolt, HDMI, SDXC, MagSafe 3, 3.5 mm headphone jack"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Video streaming",
+       "v": "up to 24 hours"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Weight",
+       "v": "from 2.14 kg"
+      },
+      {
+       "k": "Keyboard",
+       "v": "Magic Keyboard with Touch ID, Romanian layout"
+      }
+     ]
+    }
+   ]
+  },
+  "imac-24-m4": {
+   "tagline": "All-in-one. Seven colours. M4 chip.",
+   "description": [
+    "iMac with the M4 chip pairs a 24\" 4.5K Retina display with a design just 11.5 mm thin, in seven colours.",
+    "The 12 MP Center Stage camera, six speakers and colour-matched accessories with Touch ID make iMac the centre of your home."
+   ],
+   "highlights": [
+    "24\" 4.5K Retina display",
+    "M4 chip",
+    "12 MP Center Stage camera",
+    "Colour-matched accessories",
+    "11.5 mm thin design"
+   ],
+   "in_box": [
+    "iMac",
+    "Magic Keyboard with Touch ID",
+    "Magic Mouse",
+    "143W power adapter",
+    "USB‑C cable"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "24\" 4.5K Retina, 4480×2520, 500 nits"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "Apple M4 (8- or 10-core CPU)"
+      }
+     ]
+    },
+    {
+     "group": "Ports",
+     "rows": [
+      {
+       "k": "Connections",
+       "v": "2 or 4× Thunderbolt / USB 4"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Thickness",
+       "v": "11.5 mm"
+      },
+      {
+       "k": "Accessories",
+       "v": "Magic Keyboard with Touch ID (Romanian layout), Magic Mouse"
+      }
+     ]
+    }
+   ]
+  },
+  "mac-mini": {
+   "tagline": "M6 or M5 Pro chip in a 12.7 cm cube.",
+   "description": [
+    "The new Mac mini has the M6 chip — Apple's first 2 nm chip — or the M5 Pro, with Thunderbolt 5 and 2.5 Gb Ethernet.",
+    "USB‑C ports and a headphone jack on the front, HDMI and Thunderbolt on the back, Wi‑Fi 7 — all in a 12.7 × 12.7 cm enclosure."
+   ],
+   "highlights": [
+    "M6 (2 nm) or M5 Pro chip",
+    "Wi‑Fi 7, 2.5 Gb Ethernet",
+    "Front USB‑C ports",
+    "12.7 × 12.7 × 5 cm"
+   ],
+   "in_box": [
+    "Mac mini",
+    "Power cord"
+   ],
+   "specs": [
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "M6 (CPU 12 / GPU 12) or M5 Pro (CPU 15–18 / GPU 16–20)"
+      }
+     ]
+    },
+    {
+     "group": "Ports",
+     "rows": [
+      {
+       "k": "Front",
+       "v": "2× USB‑C (10 Gb/s), 3.5 mm headphone jack"
+      },
+      {
+       "k": "Back",
+       "v": "3× Thunderbolt, HDMI, 2.5 Gb Ethernet"
+      }
+     ]
+    },
+    {
+     "group": "Wireless",
+     "rows": [
+      {
+       "k": "Connectivity",
+       "v": "Wi‑Fi 7, Bluetooth 6, Thread"
+      }
+     ]
+    },
+    {
+     "group": "Design",
+     "rows": [
+      {
+       "k": "Dimensions",
+       "v": "12.7 × 12.7 × 5.0 cm"
+      },
+      {
+       "k": "Weight",
+       "v": "0.67 kg (M6) / 0.73 kg (M5 Pro)"
+      }
+     ]
+    }
+   ]
+  },
+  "mac-studio": {
+   "tagline": "M5 Max or M5 Ultra. Up to 512 GB of unified memory.",
+   "description": [
+    "Mac Studio with M5 Max or M5 Ultra is the compact workstation for 3D rendering, post-production and large AI models.",
+    "Thunderbolt 5, 10 Gb Ethernet, an SDXC card slot and support for up to eight Pro Display monitors."
+   ],
+   "highlights": [
+    "M5 Max or M5 Ultra",
+    "Up to 512 GB of unified memory",
+    "Thunderbolt 5",
+    "10 Gb Ethernet"
+   ],
+   "in_box": [
+    "Mac Studio",
+    "Power cord"
+   ],
+   "specs": [
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "M5 Max (CPU 18 / GPU 32–40) or M5 Ultra (CPU 30–36 / GPU 64–80)"
+      }
+     ]
+    },
+    {
+     "group": "Ports",
+     "rows": [
+      {
+       "k": "Front",
+       "v": "2× USB‑C / Thunderbolt 5, SDXC"
+      },
+      {
+       "k": "Back",
+       "v": "4× Thunderbolt 5, 2× USB‑A, HDMI, 10 Gb Ethernet, 3.5 mm headphone jack"
+      }
+     ]
+    }
+   ]
+  },
+  "studio-display": {
+   "tagline": "27\" 5K display. 12 MP camera, six speakers.",
+   "description": [
+    "Studio Display has a 27\" 5K Retina display with 600 nits, a 12 MP Center Stage camera and a six-speaker sound system.",
+    "A single Thunderbolt cable powers and connects your Mac."
+   ],
+   "highlights": [
+    "27\" 5K Retina",
+    "12 MP Center Stage camera",
+    "Six speakers, Spatial Audio",
+    "Optional nano-texture glass"
+   ],
+   "in_box": [
+    "Studio Display",
+    "Thunderbolt cable (1 m)",
+    "Polishing Cloth"
+   ],
+   "options": {
+    "glass": {
+     "values": {
+      "standard": "Standard glass",
+      "nano": "Nano-texture glass"
+     }
+    },
+    "stand": {
+     "values": {
+      "tilt": "Tilt-adjustable stand",
+      "height": "Tilt- and height-adjustable stand",
+      "vesa": "VESA mount adapter"
+     }
+    }
+   },
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "27\" 5K Retina, 5120×2880, 600 nits"
+      }
+     ]
+    },
+    {
+     "group": "Connectivity",
+     "rows": [
+      {
+       "k": "Ports",
+       "v": "Thunderbolt, 3× USB‑C"
+      }
+     ]
+    }
+   ]
+  },
+  "studio-display-xdr": {
+   "tagline": "Mini‑LED and 1600 nits HDR, for imaging professionals.",
+   "description": [
+    "Studio Display XDR delivers extreme contrast and HDR brightness for video grading and professional photography.",
+    "Factory calibration, reference modes and a Thunderbolt 5 connection."
+   ],
+   "highlights": [
+    "Mini‑LED, 1600 nits HDR",
+    "Reference modes",
+    "Thunderbolt 5"
+   ],
+   "in_box": [
+    "Studio Display XDR",
+    "Thunderbolt cable",
+    "Polishing Cloth"
+   ],
+   "options": {
+    "glass": {
+     "values": {
+      "standard": "Standard glass",
+      "nano": "Nano-texture glass"
+     }
+    },
+    "stand": {
+     "values": {
+      "height": "Tilt- and height-adjustable stand",
+      "vesa": "VESA mount adapter"
+     }
+    }
+   },
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Technology",
+       "v": "Mini‑LED, HDR, P3 wide colour"
+      }
+     ]
+    }
+   ]
+  },
+  "ipad-pro-11-m5": {
+   "tagline": "Ultra Retina XDR tandem OLED display. M5 chip.",
+   "description": [
+    "iPad Pro 11\" with the M5 chip is impossibly thin and has an Ultra Retina XDR tandem OLED display with up to 1600 nits.",
+    "It works with Apple Pencil Pro and Magic Keyboard for iPad Pro; nano-texture glass is available as an option on the 1 TB and 2 TB models."
+   ],
+   "highlights": [
+    "11\" Ultra Retina XDR display (tandem OLED)",
+    "M5 chip",
+    "Apple Pencil Pro",
+    "Wi‑Fi 7 · optional 5G",
+    "Face ID"
+   ],
+   "in_box": [
+    "iPad Pro",
+    "USB‑C cable (1 m)"
+   ],
+   "options": {
+    "glass": {
+     "values": {
+      "standard": "Standard glass",
+      "nano": "Nano-texture glass",
+      "nano@note": "minimal glare · 1 TB and 2 TB models"
+     }
+    }
+   },
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "11\" Ultra Retina XDR, ProMotion 120 Hz"
+      },
+      {
+       "k": "Brightness",
+       "v": "1000 nits SDR, 1600 nits HDR"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "Apple M5"
+      }
+     ]
+    },
+    {
+     "group": "Connectivity",
+     "rows": [
+      {
+       "k": "Port",
+       "v": "Thunderbolt / USB 4"
+      },
+      {
+       "k": "Wireless",
+       "v": "Wi‑Fi 7, optional 5G"
+      }
+     ]
+    }
+   ]
+  },
+  "ipad-pro-13-m5": {
+   "tagline": "Ultra Retina XDR tandem OLED display. M5 chip.",
+   "description": [
+    "iPad Pro 13\" with the M5 chip is impossibly thin and has an Ultra Retina XDR tandem OLED display with up to 1600 nits.",
+    "It works with Apple Pencil Pro and Magic Keyboard for iPad Pro; nano-texture glass is available as an option on the 1 TB and 2 TB models."
+   ],
+   "highlights": [
+    "13\" Ultra Retina XDR display (tandem OLED)",
+    "M5 chip",
+    "Apple Pencil Pro",
+    "Wi‑Fi 7 · optional 5G",
+    "Face ID"
+   ],
+   "in_box": [
+    "iPad Pro",
+    "USB‑C cable (1 m)"
+   ],
+   "options": {
+    "glass": {
+     "values": {
+      "standard": "Standard glass",
+      "nano": "Nano-texture glass",
+      "nano@note": "minimal glare · 1 TB and 2 TB models"
+     }
+    }
+   },
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "13\" Ultra Retina XDR, ProMotion 120 Hz"
+      },
+      {
+       "k": "Brightness",
+       "v": "1000 nits SDR, 1600 nits HDR"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "Apple M5"
+      }
+     ]
+    },
+    {
+     "group": "Connectivity",
+     "rows": [
+      {
+       "k": "Port",
+       "v": "Thunderbolt / USB 4"
+      },
+      {
+       "k": "Wireless",
+       "v": "Wi‑Fi 7, optional 5G"
+      }
+     ]
+    }
+   ]
+  },
+  "ipad-air-11-m4": {
+   "tagline": "M4 chip, 12 GB of memory, C1X modem.",
+   "description": [
+    "iPad Air 11\" with the M4 chip has 12 GB of memory, the Apple C1X modem and the N1 wireless chip for faster connections.",
+    "It works with Apple Pencil Pro and the new Magic Keyboard for iPad Air."
+   ],
+   "highlights": [
+    "11\" Liquid Retina display",
+    "M4 chip · 12 GB of memory",
+    "Apple Pencil Pro",
+    "Touch ID"
+   ],
+   "in_box": [
+    "iPad Air",
+    "USB‑C cable (1 m)"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "11\" Liquid Retina"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "Apple M4"
+      },
+      {
+       "k": "Memory",
+       "v": "12 GB"
+      }
+     ]
+    },
+    {
+     "group": "Connectivity",
+     "rows": [
+      {
+       "k": "Wireless",
+       "v": "Wi‑Fi 7 (N1), optional 5G (C1X)"
+      }
+     ]
+    }
+   ]
+  },
+  "ipad-air-13-m4": {
+   "tagline": "M4 chip, 12 GB of memory, C1X modem.",
+   "description": [
+    "iPad Air 13\" with the M4 chip has 12 GB of memory, the Apple C1X modem and the N1 wireless chip for faster connections.",
+    "It works with Apple Pencil Pro and the new Magic Keyboard for iPad Air."
+   ],
+   "highlights": [
+    "13\" Liquid Retina display",
+    "M4 chip · 12 GB of memory",
+    "Apple Pencil Pro",
+    "Touch ID"
+   ],
+   "in_box": [
+    "iPad Air",
+    "USB‑C cable (1 m)"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "13\" Liquid Retina"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "Apple M4"
+      },
+      {
+       "k": "Memory",
+       "v": "12 GB"
+      }
+     ]
+    },
+    {
+     "group": "Connectivity",
+     "rows": [
+      {
+       "k": "Wireless",
+       "v": "Wi‑Fi 7 (N1), optional 5G (C1X)"
+      }
+     ]
+    }
+   ]
+  },
+  "ipad-a16": {
+   "tagline": "The colourful iPad for the whole family.",
+   "description": [
+    "iPad with the A16 chip and an 11\" Liquid Retina display — ideal for school, films and handwritten notes with Apple Pencil (USB‑C).",
+    "Four colours, Touch ID in the top button and 128 GB of base storage."
+   ],
+   "highlights": [
+    "11\" Liquid Retina display",
+    "A16 chip",
+    "128 GB as standard",
+    "Touch ID"
+   ],
+   "in_box": [
+    "iPad",
+    "USB‑C cable (1 m)"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "11\" Liquid Retina"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "A16"
+      }
+     ]
+    }
+   ]
+  },
+  "ipad-mini": {
+   "tagline": "All of iPad, in one hand.",
+   "description": [
+    "iPad mini with the A17 Pro chip and an 8.3\" Liquid Retina display — compatible with Apple Pencil Pro.",
+    "Perfect for reading, note-taking, navigation and gaming, wherever you are."
+   ],
+   "highlights": [
+    "8.3\" Liquid Retina display",
+    "A17 Pro chip",
+    "Apple Pencil Pro",
+    "Touch ID"
+   ],
+   "in_box": [
+    "iPad mini",
+    "USB‑C cable (1 m)"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Size",
+       "v": "8.3\" Liquid Retina"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "A17 Pro"
+      }
+     ]
+    }
+   ]
+  },
+  "apple-watch-series-12": {
+   "tagline": "Brighter, smarter, with new health sensors.",
+   "description": [
+    "Apple Watch Series 12 has the S11 chip, an Always‑On display with up to 2000 nits, and hypertension and sleep apnoea notifications.",
+    "Choose an aluminium, titanium or — new — ceramic case, in 42 or 46 mm. Every watch comes with a matching Sport Band."
+   ],
+   "highlights": [
+    "S11 chip",
+    "Up to 2000-nit display",
+    "Hypertension & sleep apnoea notifications",
+    "Aluminium, titanium or ceramic",
+    "Optional 5G"
+   ],
+   "in_box": [
+    "Apple Watch",
+    "Band (size chosen at delivery)",
+    "USB‑C Magnetic Fast Charger (1 m)"
+   ],
+   "options": {
+    "material": {
+     "label": "Case"
+    }
+   },
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Type",
+       "v": "Always‑On LTPO3 Retina, up to 2000 nits"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "S11 SiP, 64 GB storage"
+      }
+     ]
+    },
+    {
+     "group": "Health",
+     "rows": [
+      {
+       "k": "Sensors",
+       "v": "ECG, heart rate, blood oxygen, temperature"
+      },
+      {
+       "k": "Notifications",
+       "v": "Hypertension, sleep apnoea, irregular rhythm"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Typical use",
+       "v": "up to 24 hours (38 h in Low Power Mode)"
+      }
+     ]
+    },
+    {
+     "group": "Water & dust resistance",
+     "rows": [
+      {
+       "k": "Water / dust",
+       "v": "WR50, IP6X"
+      }
+     ]
+    }
+   ]
+  },
+  "apple-watch-ultra-4": {
+   "tagline": "Titanium, 3000 nits, 50 hours. Made for real adventures.",
+   "description": [
+    "Apple Watch Ultra 4 has a 49 mm titanium case, a 3000-nit display and up to 50 hours of battery life (84 h in Low Power Mode).",
+    "Satellite communication, dual-frequency GPS, recreational diving to 40 m and built-in 5G."
+   ],
+   "highlights": [
+    "49 mm titanium",
+    "3000-nit display",
+    "Up to 50 hours",
+    "Satellite + 5G",
+    "Diving to 40 m"
+   ],
+   "in_box": [
+    "Apple Watch Ultra 4",
+    "Band",
+    "USB‑C Magnetic Fast Charger (1 m)"
+   ],
+   "options": {
+    "color": {
+     "values": {
+      "natural": "Natural",
+      "black": "Black"
+     }
+    }
+   },
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Type",
+       "v": "Always‑On Retina, 3000 nits, flat sapphire crystal"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "S11"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Typical use",
+       "v": "up to 50 hours (84 h in Low Power Mode)"
+      }
+     ]
+    },
+    {
+     "group": "Water & dust resistance",
+     "rows": [
+      {
+       "k": "Water",
+       "v": "WR100, recreational diving to 40 m, IP6X"
+      }
+     ]
+    },
+    {
+     "group": "Connectivity",
+     "rows": [
+      {
+       "k": "Networks",
+       "v": "5G RedCap, LTE, satellite, dual-frequency GPS"
+      }
+     ]
+    }
+   ]
+  },
+  "apple-watch-se-3": {
+   "tagline": "The Apple Watch essentials, at a great price.",
+   "description": [
+    "Apple Watch SE 3 tracks your activity, sleep and heart rate, with Crash Detection and Fall Detection.",
+    "An Always‑On display, fast charging and a temperature sensor — in 40 or 44 mm."
+   ],
+   "highlights": [
+    "Always‑On display",
+    "Fall & Crash Detection",
+    "Temperature sensor",
+    "Fast charging"
+   ],
+   "in_box": [
+    "Apple Watch SE 3",
+    "Sport Band",
+    "USB‑C Magnetic Fast Charger (1 m)"
+   ],
+   "specs": [
+    {
+     "group": "Display",
+     "rows": [
+      {
+       "k": "Type",
+       "v": "Always‑On Retina"
+      }
+     ]
+    },
+    {
+     "group": "Health",
+     "rows": [
+      {
+       "k": "Features",
+       "v": "Heart rate, sleep, temperature, sleep apnoea"
+      }
+     ]
+    },
+    {
+     "group": "Water & dust resistance",
+     "rows": [
+      {
+       "k": "Water",
+       "v": "WR50"
+      }
+     ]
+    }
+   ]
+  },
+  "airpods-pro-3": {
+   "tagline": "The best noise cancellation ever in AirPods. Heart-rate sensing during workouts.",
+   "description": [
+    "AirPods Pro 3 have next-generation Active Noise Cancellation, a heart-rate sensor for workouts and Live Translation.",
+    "Up to 8 hours of listening with ANC, IP57 and hearing health features: Hearing Test, Hearing Aid and Hearing Protection."
+   ],
+   "highlights": [
+    "Next-generation ANC",
+    "Heart-rate sensor",
+    "Up to 8 h with ANC",
+    "Live Translation",
+    "MagSafe USB‑C case"
+   ],
+   "in_box": [
+    "AirPods Pro 3",
+    "MagSafe Charging Case (USB‑C)",
+    "Silicone ear tips (XXS, XS, S, M, L)",
+    "Documentation"
+   ],
+   "specs": [
+    {
+     "group": "Audio",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "H2"
+      },
+      {
+       "k": "Features",
+       "v": "ANC, Adaptive Audio, Personalised Spatial Audio"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Earbuds",
+       "v": "up to 8 hours with ANC"
+      },
+      {
+       "k": "With case",
+       "v": "up to 24 hours"
+      }
+     ]
+    },
+    {
+     "group": "Water & dust resistance",
+     "rows": [
+      {
+       "k": "Rating",
+       "v": "IP57"
+      }
+     ]
+    }
+   ]
+  },
+  "airpods-5": {
+   "tagline": "Now with Active Noise Cancellation on the standard model.",
+   "description": [
+    "AirPods 5 have the H2 chip, Active Noise Cancellation, Adaptive Audio and Live Translation in a comfortable open-fit design.",
+    "Choose the USB‑C case or the wireless case with a speaker for Find My and Qi charging."
+   ],
+   "highlights": [
+    "ANC",
+    "H2 chip",
+    "Personalised Spatial Audio",
+    "IP57",
+    "USB‑C or wireless case"
+   ],
+   "in_box": [
+    "AirPods 5",
+    "Charging case",
+    "Documentation"
+   ],
+   "options": {
+    "case": {
+     "label": "Charging case",
+     "values": {
+      "usbc": "USB‑C case",
+      "wireless": "Wireless case",
+      "wireless@note": "Qi charging, Find My speaker"
+     }
+    }
+   },
+   "specs": [
+    {
+     "group": "Audio",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "H2"
+      },
+      {
+       "k": "Features",
+       "v": "ANC, Transparency, Adaptive Audio"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "With ANC",
+       "v": "4 h (USB‑C) / 5 h (wireless)"
+      },
+      {
+       "k": "Total with case",
+       "v": "20 h / 22 h"
+      }
+     ]
+    },
+    {
+     "group": "Water & dust resistance",
+     "rows": [
+      {
+       "k": "Rating",
+       "v": "IP57"
+      }
+     ]
+    }
+   ]
+  },
+  "airpods-max-2": {
+   "tagline": "High-fidelity audio, now with the H2 chip.",
+   "description": [
+    "AirPods Max 2 combine high-fidelity sound with next-generation ANC, Adaptive Audio and Live Translation.",
+    "Digital Crown, memory foam ear cushions and up to 20 hours of battery life."
+   ],
+   "highlights": [
+    "H2 chip",
+    "ANC & Adaptive Audio",
+    "Up to 20 hours",
+    "Five colours"
+   ],
+   "in_box": [
+    "AirPods Max 2",
+    "Smart Case",
+    "USB‑C cable"
+   ],
+   "specs": [
+    {
+     "group": "Audio",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "H2"
+      },
+      {
+       "k": "Features",
+       "v": "ANC, Transparency, Spatial Audio, Loud Sound Reduction"
+      }
+     ]
+    },
+    {
+     "group": "Battery life",
+     "rows": [
+      {
+       "k": "Listening",
+       "v": "up to 20 hours with ANC"
+      }
+     ]
+    }
+   ]
+  },
+  "apple-tv-4k": {
+   "tagline": "4K HDR films, Dolby Atmos and the heart of your smart home.",
+   "description": [
+    "Apple TV 4K with the A15 Bionic chip brings Apple TV+, Netflix, HBO Max and Disney+ in 4K Dolby Vision, with Dolby Atmos sound.",
+    "It works as a home hub for the Home app (HomeKit, Matter, Thread) and comes with the USB‑C Siri Remote."
+   ],
+   "highlights": [
+    "4K Dolby Vision · HDR10+",
+    "Dolby Atmos",
+    "USB‑C Siri Remote",
+    "Matter & Thread hub"
+   ],
+   "in_box": [
+    "Apple TV 4K",
+    "Siri Remote",
+    "USB‑C cable",
+    "Power cord"
+   ],
+   "specs": [
+    {
+     "group": "Video",
+     "rows": [
+      {
+       "k": "Format",
+       "v": "4K HDR, Dolby Vision, HDR10+"
+      }
+     ]
+    },
+    {
+     "group": "Performance",
+     "rows": [
+      {
+       "k": "Chip",
+       "v": "A15 Bionic"
+      }
+     ]
+    }
+   ]
+  },
+  "homepod": {
+   "tagline": "Spatial sound that fills the room.",
+   "description": [
+    "HomePod delivers high-fidelity audio, with a high-excursion woofer and five tweeters, automatically tuned to your room.",
+    "Temperature and humidity sensors and full smart home control."
+   ],
+   "highlights": [
+    "Computational audio",
+    "Spatial Audio",
+    "Matter & Thread hub",
+    "Siri"
+   ],
+   "in_box": [
+    "HomePod",
+    "Power cord"
+   ],
+   "specs": [
+    {
+     "group": "Audio",
+     "rows": [
+      {
+       "k": "Speakers",
+       "v": "4\" woofer, 5 beamforming tweeters"
+      }
+     ]
+    }
+   ]
+  },
+  "homepod-mini": {
+   "tagline": "Surprisingly big sound, in five colours.",
+   "description": [
+    "HomePod mini fills the room with 360° sound, controls your smart home and can be set up as a stereo pair.",
+    "Intercom, Handoff with iPhone and a temperature sensor."
+   ],
+   "highlights": [
+    "360° sound",
+    "Five colours",
+    "Matter & Thread hub",
+    "Intercom"
+   ],
+   "in_box": [
+    "HomePod mini",
+    "20W adapter"
+   ],
+   "specs": [
+    {
+     "group": "Audio",
+     "rows": [
+      {
+       "k": "Sound",
+       "v": "360°, computational audio"
+      }
+     ]
+    }
+   ]
+  },
+  "airtag": {
+   "name": "AirTag (2nd generation)",
+   "tagline": "Find your keys, luggage or bike — with precision.",
+   "description": [
+    "The new AirTag has a second-generation Ultra Wideband chip, with a longer Precision Finding range and a louder speaker.",
+    "It sets up instantly with iPhone and works through the Find My network, with protection against unwanted tracking."
+   ],
+   "highlights": [
+    "2nd-generation UWB",
+    "Louder speaker",
+    "Find My network",
+    "Replaceable battery"
+   ],
+   "in_box": [
+    "AirTag",
+    "CR2032 battery (pre-installed)"
+   ],
+   "specs": [
+    {
+     "group": "Technology",
+     "rows": [
+      {
+       "k": "Location tracking",
+       "v": "2nd-generation Ultra Wideband, Bluetooth, NFC"
+      }
+     ]
+    },
+    {
+     "group": "Water & dust resistance",
+     "rows": [
+      {
+       "k": "Rating",
+       "v": "IP67"
+      }
+     ]
+    }
+   ]
+  },
+  "beats-360": {
+   "tagline": "Beats' new over-ear headphones: knit Performance cushions, ANC and up to 50 hours of battery life.",
+   "description": [
+    "Beats' new over-ear headphones: knit Performance cushions, ANC and up to 50 hours of battery life.",
+    "Genuine Beats product, brand new and sealed. Available in 4 colours."
+   ],
+   "in_box": [
+    "Beats 360",
+    "USB‑C cable",
+    "Documentation"
+   ],
+   "text": {
+    "Căștile over-ear noi de la Beats, cu ANC și autonomie lungă.": "Beats' new over-ear headphones, with ANC and long battery life.",
+    "Beats 360 sunt căștile over-ear lansate în 2026, cu pernițe Performance din material tricotat, anulare a zgomotului și integrare rapidă cu iPhone și Android.": "Beats 360 are the over-ear headphones launched in 2026, with knit Performance cushions, noise cancellation and quick pairing with iPhone and Android."
+   }
+  },
+  "beats-flex": {
+   "tagline": "In-ear headphones with a connecting cable, magnets that keep them around your neck and 12 hours of battery life.",
+   "description": [
+    "In-ear headphones with a connecting cable, magnets that keep them around your neck and 12 hours of battery life.",
+    "Genuine Beats product, brand new and sealed. Available in 4 colours."
+   ],
+   "in_box": [
+    "Beats Flex",
+    "USB‑C cable",
+    "Documentation"
+   ]
+  },
+  "beats-pill": {
+   "options": {
+    "color": {
+     "values": {
+      "matte_black": "Matte Black"
+     }
+    }
+   },
+   "tagline": "Portable IP67 speaker with 24 hours of battery life that can charge your phone over USB‑C.",
+   "description": [
+    "Portable IP67 speaker with 24 hours of battery life that can charge your phone over USB‑C.",
+    "Genuine Beats product, brand new and sealed. Available in 3 colours."
+   ],
+   "in_box": [
+    "Beats Pill",
+    "USB‑C cable",
+    "Documentation"
+   ],
+   "text": {
+    "Boxă portabilă IP67, 24 de ore.": "Portable IP67 speaker, 24 hours of battery life.",
+    "Beats Pill are sunet puternic, rezistență IP67, 24 de ore de autonomie și poate încărca telefonul prin USB‑C.": "Beats Pill has powerful sound, IP67 dust and water resistance and 24 hours of battery life, and it can charge your phone over USB‑C."
+   }
+  },
+  "beats-solo-4": {
+   "options": {
+    "color": {
+     "values": {
+      "matte_black": "Matte Black"
+     }
+    }
+   },
+   "tagline": "On-ear, lightweight and foldable, with up to 50 hours of battery life and Spatial Audio.",
+   "description": [
+    "On-ear, lightweight and foldable, with up to 50 hours of battery life and Spatial Audio.",
+    "Genuine Beats product, brand new and sealed. Available in 3 colours."
+   ],
+   "in_box": [
+    "Beats Solo 4",
+    "USB‑C cable",
+    "Documentation"
+   ],
+   "text": {
+    "On-ear, până la 50 de ore autonomie.": "On-ear, up to 50 hours of battery life.",
+    "Beats Solo 4 sunt ușoare, pliabile și țin până la 50 de ore, cu audio spațial și încărcare rapidă Fast Fuel.": "Beats Solo 4 are lightweight and foldable and last up to 50 hours, with Spatial Audio and Fast Fuel quick charging."
+   }
+  },
+  "beats-solo-buds": {
+   "options": {
+    "color": {
+     "values": {
+      "matte_black": "Matte Black"
+     }
+    }
+   },
+   "tagline": "The smallest Beats earbuds yet, with powerful sound and up to 18 hours of listening.",
+   "description": [
+    "The smallest Beats earbuds yet, with powerful sound and up to 18 hours of listening.",
+    "Genuine Beats product, brand new and sealed. Available in 4 colours."
+   ],
+   "in_box": [
+    "Beats Solo Buds",
+    "USB‑C cable",
+    "Documentation"
+   ],
+   "text": {
+    "Cele mai mici căști Beats, până la 18 ore.": "The smallest Beats earbuds, up to 18 hours.",
+    "Beats Solo Buds sunt compacte, cu sunet puternic și până la 18 ore de ascultare.": "Beats Solo Buds are compact, with powerful sound and up to 18 hours of listening."
+   }
+  },
+  "beats-studio-buds-plus": {
+   "tagline": "In-ear with ANC, Transparency mode and up to 36 hours with the case.",
+   "description": [
+    "In-ear with ANC, Transparency mode and up to 36 hours with the case.",
+    "Genuine Beats product, brand new and sealed. Available in 3 colours."
+   ],
+   "in_box": [
+    "Beats Studio Buds +",
+    "USB‑C cable",
+    "Documentation"
+   ]
+  },
+  "beats-studio-pro": {
+   "tagline": "ANC, Personalised Spatial Audio, up to 40 hours and lossless audio over USB‑C.",
+   "description": [
+    "ANC, Personalised Spatial Audio, up to 40 hours and lossless audio over USB‑C.",
+    "Genuine Beats product, brand new and sealed. Available in 4 colours."
+   ],
+   "in_box": [
+    "Beats Studio Pro",
+    "USB‑C cable",
+    "Documentation"
+   ],
+   "options": {
+    "color": {
+     "values": {
+      "deepbrown": "Deep Brown",
+      "navy": "Navy"
+     }
+    }
+   },
+   "text": {
+    "ANC, audio spațial, până la 40 de ore.": "ANC, Spatial Audio, up to 40 hours.",
+    "Beats Studio Pro oferă sunet personalizat, anulare activă a zgomotului și audio fără pierderi prin USB‑C.": "Beats Studio Pro offers personalised sound, Active Noise Cancelling and lossless audio over USB‑C."
+   }
+  },
+  "powerbeats-fit": {
+   "tagline": "Fitness earbuds with flexible wingtips that stay put, ANC and IPX4.",
+   "description": [
+    "Fitness earbuds with flexible wingtips that stay put, ANC and IPX4.",
+    "Genuine Apple product, brand new and sealed. Available in 4 colours."
+   ],
+   "in_box": [
+    "Powerbeats Fit",
+    "USB‑C cable",
+    "Documentation"
+   ]
+  },
+  "powerbeats-pro-2": {
+   "tagline": "Sports earbuds with flexible ear hooks, ANC, a heart-rate sensor and IPX4 resistance.",
+   "description": [
+    "Sports earbuds with flexible ear hooks, ANC, a heart-rate sensor and IPX4 resistance.",
+    "Genuine Apple product, brand new and sealed. Available in 4 colours."
+   ],
+   "in_box": [
+    "Powerbeats Pro 2",
+    "USB‑C cable",
+    "Documentation"
+   ],
+   "text": {
+    "Căști sport cu senzor de puls.": "Sports earbuds with a heart-rate sensor.",
+    "Powerbeats Pro 2 au cârlige flexibile, ANC, senzor de puls și rezistență IPX4 pentru antrenamente intense.": "Powerbeats Pro 2 have flexible ear hooks, ANC, a heart-rate sensor and IPX4 resistance for intense workouts."
+   }
+  },
+  "powerbeats-pro-2-nike": {
+   "tagline": "Nike Special Edition: flexible ear hooks, ANC and a heart-rate sensor for your workouts.",
+   "description": [
+    "Nike Special Edition: flexible ear hooks, ANC and a heart-rate sensor for your workouts.",
+    "Genuine Apple product, brand new and sealed."
+   ],
+   "in_box": [
+    "Powerbeats Pro 2 – Nike Special Edition",
+    "USB‑C cable",
+    "Documentation"
+   ]
+  }
+ }
+}

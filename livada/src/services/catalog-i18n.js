@@ -12,9 +12,9 @@
 //                               "groups": { "<grup RO>": "<grup EN>" } } },
 //   "labels": { "<RO>": "<EN>" },   // generic: etichete de opțiuni („Culoare”), titluri de grupe și etichete de specificații
 //   "values": { "<RO>": "<EN>" },   // generic: valori de opțiuni (culori!) și notițele lor, valori de specificații („Da”),
-//                                   //          badge („Nou”), texte libere repetate („Documentație”)
+//                                   //          texte libere repetate („Documentație”, garanția)
 //   "products": { "<slug>": {
-//     "name"?: "…", "tagline"?: "…", "badge"?: "…", "release"?: "…",       // release = nota de lansare (release_note)
+//     "name"?: "…", "tagline"?: "…", "release"?: "…",                      // release = nota de lansare (release_note)
 //     "description"?: ["…"], "highlights"?: ["…"], "in_box"?: ["…"],      // pe poziții, ca în lista românească
 //     "specs"?: [{ "group": "…", "rows": [{ "k": "…", "v": "…" }] }],      // aceeași formă ca specificațiile RO, pe poziții
 //     "options"?: { "<cheia opțiunii>": { "label"?: "…", "note"?: "…",
@@ -27,6 +27,9 @@
 //   products.<slug>.text["<RO>"] → intrarea specifică produsului (pe poziție / pe cheie) → labels|values["<RO>"] → RO.
 // Listele (description, highlights, in_box, specs) urmează lista românească: un element RO în plus față de
 // traducere cade pe values / RO, iar elementele EN în plus sunt ignorate.
+// Nu se traduc: badge (cheie RO, tradusă în șabloane cu t()), slug-uri, chei de opțiuni / valori, prețuri.
+// Categoriile: groups devine lista tradusă (etichetele tab-urilor), group_keys păstrează numele românești
+// în aceeași ordine; listProducts({ group }) acceptă ambele forme.
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, config } from '../config.js';
@@ -132,7 +135,8 @@ export function localizeProduct(p, { force = false, miss = null } = {}) {
   const out = { ...p, [RO]: p };
   if (p.name !== undefined) out.name = tr(p.name, e.name, T, null, miss, 'name');
   if (p.tagline !== undefined) out.tagline = tr(p.tagline, e.tagline, T, V, miss, 'tagline');
-  if (p.badge) out.badge = tr(p.badge, e.badge, T, V, miss, 'badge');
+  // badge rămâne cheia românească („Nou”, „Precomandă”): șabloanele o traduc cu t() și aleg culoarea după ea
+  if (p.warranty) out.warranty = tr(p.warranty, e.warranty ?? own(L, p.warranty), T, V, miss, 'warranty');
   if (p.release_note) out.release_note = tr(p.release_note, e.release, T, V, miss, 'release');
   if (p.grp) {
     const g = (p.category_slug && o.groupEn.get(`${p.category_slug}\u0000${p.grp}`)) || o.groupEn.get(p.grp);
@@ -194,6 +198,7 @@ export function localizeCategory(c, { force = false, miss = null } = {}) {
   const pickC = (k) => { const v = str(e[k]); if (v === undefined && c[k] && miss) miss(k, c[k]); return v ?? c[k]; };
   return {
     ...c,
+    group_keys: c.groups,
     name: pickC('name'),
     title: pickC('title'),
     tagline: pickC('tagline'),

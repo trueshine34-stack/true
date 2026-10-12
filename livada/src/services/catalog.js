@@ -158,13 +158,17 @@ function enIds(terms, limit) {
 
 /**
  * căutare full-text, fără diacritice, cu prefix („husa 18” → Husă … iPhone 18).
- * Pe /en caută și în textele traduse („silicone case” → Husă din silicon), apoi în indexul românesc.
+ * Caută și în textele traduse („silicone case” → Husă din silicon), în ambele limbi:
+ * întâi potrivirile în limba paginii, apoi cealaltă. { ro: true } = doar indexul românesc.
  */
 export function search(q, limit = 24, { ro = false } = {}) {
   const terms = searchTerms(q);
   if (!terms.length) return [];
   let ids = ftsIds(terms, limit);
-  if (!ro && lang() === 'en') ids = [...new Set([...enIds(terms, limit), ...ids])].slice(0, limit);
+  if (!ro) {
+    const en = enIds(terms, limit);
+    ids = [...new Set(lang() === 'en' ? [...en, ...ids] : [...ids, ...en])].slice(0, limit);
+  }
   if (!ids.length) return [];
   return listProducts({ ids, sort: 'ids' });
 }
