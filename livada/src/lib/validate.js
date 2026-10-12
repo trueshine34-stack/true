@@ -1,8 +1,9 @@
 import { COUNTIES } from '../db/defaults.js';
+import { t } from './i18n.js';
 
 export class ValidationError extends Error {
   constructor(errors) {
-    super(Object.values(errors)[0] || 'Date invalide.');
+    super(Object.values(errors)[0] || t('Date invalide.'));
     this.status = 422;
     this.errors = errors;
   }
@@ -38,9 +39,9 @@ export function isCui(s) {
 }
 
 export function passwordProblem(pw) {
-  if (typeof pw !== 'string' || pw.length < 8) return 'Parola trebuie să aibă cel puțin 8 caractere.';
-  if (pw.length > 200) return 'Parola este prea lungă.';
-  if (!/[a-zA-ZăâîșțĂÂÎȘȚ]/.test(pw) || !/\d/.test(pw)) return 'Parola trebuie să conțină cel puțin o literă și o cifră.';
+  if (typeof pw !== 'string' || pw.length < 8) return t('Parola trebuie să aibă cel puțin 8 caractere.');
+  if (pw.length > 200) return t('Parola este prea lungă.');
+  if (!/[a-zA-ZăâîșțĂÂÎȘȚ]/.test(pw) || !/\d/.test(pw)) return t('Parola trebuie să conțină cel puțin o literă și o cifră.');
   return null;
 }
 
@@ -53,11 +54,11 @@ export function address(body, prefix = '', errors = {}) {
     first_name: f('first_name', 60), last_name: f('last_name', 60), county: f('county', 40), city: f('city', 80),
     street: f('street', 160), postcode: f('postcode', 6),
   };
-  if (!a.first_name) errors[`${prefix}first_name`] = 'Completează prenumele.';
-  if (!a.last_name) errors[`${prefix}last_name`] = 'Completează numele.';
-  if (!isCounty(a.county)) errors[`${prefix}county`] = 'Alege județul.';
-  if (a.city.length < 2) errors[`${prefix}city`] = 'Completează localitatea.';
-  if (a.street.length < 4) errors[`${prefix}street`] = 'Completează strada și numărul.';
-  if (a.postcode && !isPostcode(a.postcode)) errors[`${prefix}postcode`] = 'Codul poștal are 6 cifre.';
+  if (!a.first_name) errors[`${prefix}first_name`] = t('Completează prenumele.');
+  if (!a.last_name) errors[`${prefix}last_name`] = t('Completează numele.');
+  if (!isCounty(a.county)) errors[`${prefix}county`] = t('Alege județul.');
+  if (a.city.length < 2) errors[`${prefix}city`] = t('Completează localitatea.');
+  if (a.street.length < 4) errors[`${prefix}street`] = t('Completează strada și numărul.');
+  if (a.postcode && !isPostcode(a.postcode)) errors[`${prefix}postcode`] = t('Codul poștal are 6 cifre.');
   return a;
 }

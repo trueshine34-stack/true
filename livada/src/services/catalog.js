@@ -1,8 +1,16 @@
 import { one, all, json } from '../db/index.js';
 import { fold } from '../lib/format.js';
+import { lang } from '../lib/i18n.js';
+import { localizeProduct, localizeCategory, groupKey, roOf, overlayVersion, searchFields } from './catalog-i18n.js';
 
+// Pe paginile în engleză, tot ce întoarce serviciul trece prin overlay-ul din catalog-i18n.js
+// (textele din baza de date rămân în română; admin-ul lucrează mereu pe ele).
 export function hydrate(p) {
   if (!p) return null;
+  return localizeProduct(hydrateRo(p));
+}
+
+function hydrateRo(p) {
   return {
     ...p,
     description: json(p.description, []),
@@ -31,12 +39,12 @@ export function variantLabel(product, opts) {
 
 export function categories() {
   return all(`SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id AND p.active = 1) AS count
-              FROM categories c ORDER BY c.sort`).map((c) => ({ ...c, groups: json(c.groups, []) }));
+              FROM categories c ORDER BY c.sort`).map((c) => localizeCategory({ ...c, groups: json(c.groups, []) }));
 }
 
 export const categoryBySlug = (slug) => {
   const c = one('SELECT * FROM categories WHERE slug = ?', slug);
-  return c && { ...c, groups: json(c.groups, []) };
+  return c ? localizeCategory({ ...c, groups: json(c.groups, []) }) : c;
 };
 
 const CARD_SQL = `SELECT p.*, c.slug AS category_slug, c.name AS category_name,
@@ -73,7 +81,8 @@ export function listProducts({ category, group, sort = 'recommended', min, max, 
   const where = ['p.active = 1'];
   const params = [];
   if (category) { where.push('c.slug = ?'); params.push(category); }
-  if (group) { where.push('p.grp = ?'); params.push(group); }
+  // pe /en grupele apar traduse („Laptops”) → filtrăm după numele românesc din baza de date
+  if (group) { where.push('p.grp = ?'); params.push(groupKey(group, category)); }
   if (featured) where.push('p.featured = 1');
   if (ids?.length) { where.push(`p.id IN (${ids.map(() => '?').join(',')})`); params.push(...ids); }
   let rows = all(`${CARD_SQL} WHERE ${where.join(' AND ')} ORDER BY ${SORTS[sort] || SORTS.recommended} LIMIT ?`, ...params, limit).map(card);
@@ -82,6 +91,7 @@ export function listProducts({ category, group, sort = 'recommended', min, max, 
   if (inStock) rows = rows.filter((r) => r.in_stock);
   if (promo) rows = rows.filter((r) => r.compare_from);
   if (ids?.length && sort === 'ids') rows.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+  if (sort === 'name' && lang() === 'en') rows.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }));
   return rows;
 }
 
@@ -103,16 +113,58 @@ export const productById = (id) => {
   return r ? productBySlug(r.slug, { includeInactive: true }) : null;
 };
 
-/** căutare full-text, fără diacritice, cu prefix („husa 18” → Husă … iPhone 18) */
-export function search(q, limit = 24) {
-  const terms = fold(q).replace(/["*^():]/g, ' ').split(/[^a-z0-9]+/).filter(Boolean).slice(0, 8);
-  if (!terms.length) return [];
+const searchTerms = (q) => fold(q).replace(/["*^():]/g, ' ').split(/[^a-z0-9]+/).filter(Boolean).slice(0, 8);
+
+function ftsIds(terms, limit) {
   const match = terms.map((t) => `"${t}"*`).join(' AND ');
-  let ids = [];
   try {
-    ids = all(`SELECT product_id FROM product_search WHERE product_search MATCH ? ORDER BY bm25(product_search, 10.0, 3.0, 2.0, 2.0, 1.0) LIMIT ?`, match, limit)
+    return all(`SELECT product_id FROM product_search WHERE product_search MATCH ? ORDER BY bm25(product_search, 10.0, 3.0, 2.0, 2.0, 1.0) LIMIT ?`, match, limit)
       .map((r) => r.product_id);
-  } catch { ids = []; }
+  } catch { return []; }
+}
+
+// indexul pentru căutarea în engleză: textele traduse ale produselor active, refăcut când se schimbă
+// overlay-ul sau produsele (adăugate, ascunse, editate în admin)
+let enIndex = { key: '', docs: [] };
+const words = (s) => fold(s).split(/[^a-z0-9]+/).filter(Boolean);
+function enSearchIndex() {
+  const st = one('SELECT COUNT(*) AS n, MAX(updated_at) AS u, SUM(active) AS a FROM products');
+  const key = `${overlayVersion()}|${st.n}|${st.u}|${st.a}`;
+  if (enIndex.key !== key) {
+    const docs = all(`SELECT p.*, c.slug AS category_slug, c.name AS category_name FROM products p JOIN categories c ON c.id = p.category_id
+                      WHERE p.active = 1 ORDER BY c.sort, p.sort`).map((row) => {
+      const f = searchFields(localizeProduct(hydrateRo(row), { force: true }));
+      return { id: row.id, fields: [[10, words(f.name)], [3, words(f.tagline)], [2, words(f.grp)], [1, words(f.body)]] };
+    });
+    enIndex = { key, docs };
+  }
+  return enIndex.docs;
+}
+
+function enIds(terms, limit) {
+  const hits = [];
+  enSearchIndex().forEach((d, i) => {
+    let score = 0;
+    for (const t of terms) {
+      let best = 0;
+      for (const [w, list] of d.fields) if (w > best && list.some((x) => x.startsWith(t))) best = w;
+      if (!best) return;
+      score += best;
+    }
+    hits.push({ id: d.id, score, i });
+  });
+  return hits.sort((a, b) => b.score - a.score || a.i - b.i).slice(0, limit).map((h) => h.id);
+}
+
+/**
+ * căutare full-text, fără diacritice, cu prefix („husa 18” → Husă … iPhone 18).
+ * Pe /en caută și în textele traduse („silicone case” → Husă din silicon), apoi în indexul românesc.
+ */
+export function search(q, limit = 24, { ro = false } = {}) {
+  const terms = searchTerms(q);
+  if (!terms.length) return [];
+  let ids = ftsIds(terms, limit);
+  if (!ro && lang() === 'en') ids = [...new Set([...enIds(terms, limit), ...ids])].slice(0, limit);
   if (!ids.length) return [];
   return listProducts({ ids, sort: 'ids' });
 }
@@ -125,13 +177,15 @@ export function suggestions(q, limit = 6) {
 export function relatedFor(product, limit = 8) {
   const picks = [];
   const add = (rows) => { for (const r of rows) if (r.id !== product.id && !picks.find((x) => x.id === r.id)) picks.push(r); };
-  const acc = (q) => search(q, 12).filter((p) => p.category === 'accesorii');
-  const n = product.name;
+  // potrivirile se caută după textele românești (aceleași recomandări în ambele limbi)
+  const find = (q, n) => search(q, n, { ro: true });
+  const acc = (q) => find(q, 12).filter((p) => p.category === 'accesorii');
+  const n = roOf(product).name;
   if (/iPhone/.test(n)) {
     const model = n.replace(/^iPhone\s*/, '');
     add(acc(`iPhone ${model}`));
     add(acc('MagSafe'));
-    add(search('AirPods Pro 3', 1));
+    add(find('AirPods Pro 3', 1));
     add(acc('20 W'));
   } else if (/MacBook|iMac|Mac mini|Mac Studio/.test(n)) {
     add(acc('Magic Mouse')); add(acc('Magic Keyboard Touch ID Română')); add(acc('Multiport')); add(acc('70 W')); add(acc('MagSafe 3'));
@@ -141,9 +195,9 @@ export function relatedFor(product, limit = 8) {
   } else if (/Watch/.test(n)) {
     add(acc(/Ultra/.test(n) ? '49 mm' : '46 mm')); add(acc('Apple Watch încărcător'));
   } else if (/AirPods|Beats/.test(n)) {
-    add(acc('20 W')); add(acc('MagSafe')); add(search('AirTag', 1));
+    add(acc('20 W')); add(acc('MagSafe')); add(find('AirTag', 1));
   } else {
-    add(search('AirTag', 1)); add(acc('MagSafe')); add(acc('20 W'));
+    add(find('AirTag', 1)); add(acc('MagSafe')); add(acc('20 W'));
   }
   if (picks.length < limit) add(listProducts({ category: 'accesorii', sort: 'recommended', limit: 12 }));
   return picks.slice(0, limit);

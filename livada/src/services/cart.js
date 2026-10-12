@@ -3,6 +3,7 @@ import { sha256 } from '../lib/security.js';
 import { imageFor, variantLabel, hydrate } from './catalog.js';
 import { methodByCode, feeFor } from './shipping.js';
 import { vatIncluded } from '../lib/format.js';
+import { t, locale } from '../lib/i18n.js';
 
 export const MAX_QTY = 5;          // limită pe produs (anti-revânzare la lansări)
 export const MAX_PREORDER_QTY = 2;
@@ -30,13 +31,14 @@ function limitFor(v) {
 
 export function addItem(cartId, variantId, qty = 1, userId = null) {
   const v = variantRow(variantId);
-  if (!v || !v.active || !v.p_active) throw new CartError('Produsul nu mai este disponibil.', 404);
+  if (!v || !v.active || !v.p_active) throw new CartError(t('Produsul nu mai este disponibil.'), 404);
   const limit = limitFor(v);
-  if (limit <= 0) throw new CartError('Ne pare rău, varianta aleasă nu mai este în stoc.');
+  if (limit <= 0) throw new CartError(t('Ne pare rău, varianta aleasă nu mai este în stoc.'));
   ensureCart(cartId, userId);
   const cur = one('SELECT qty FROM cart_items WHERE cart_id = ? AND variant_id = ?', cartId, variantId)?.qty || 0;
   const next = Math.min(limit, cur + Math.max(1, Math.floor(qty)));
-  if (next === cur) throw new CartError(v.preorder ? `Poți precomanda maximum ${MAX_PREORDER_QTY} bucăți.` : `Poți comanda maximum ${limit} ${limit === 1 ? 'bucată' : 'bucăți'} din acest produs.`);
+  if (next === cur) throw new CartError(v.preorder ? t('Poți precomanda maximum {n} bucăți.', { n: MAX_PREORDER_QTY })
+    : limit === 1 ? t('Poți comanda maximum {n} bucată din acest produs.', { n: limit }) : t('Poți comanda maximum {n} bucăți din acest produs.', { n: limit }));
   run(`INSERT INTO cart_items(cart_id, variant_id, qty) VALUES (?,?,?) ON CONFLICT(cart_id, variant_id) DO UPDATE SET qty = excluded.qty`, cartId, variantId, next);
   return next;
 }
@@ -97,13 +99,13 @@ export function hasOrdered(customer) {
  * @returns {string|null} motivul pentru care codul nu se aplică
  */
 export function promoProblem(p, subtotal, customer = null) {
-  if (!p || !p.active) return 'Codul promoțional nu există.';
+  if (!p || !p.active) return t('Codul promoțional nu există.');
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  if (p.starts_at && p.starts_at > now) return 'Codul nu este încă activ.';
-  if (p.ends_at && p.ends_at < now) return 'Codul promoțional a expirat.';
-  if (p.max_uses !== null && p.used >= p.max_uses) return 'Codul a atins numărul maxim de utilizări.';
-  if (subtotal < p.min_subtotal) return `Codul se aplică la comenzi de minimum ${(p.min_subtotal / 100).toLocaleString('ro-RO')} lei.`;
-  if (p.first_order_only && hasOrdered(customer)) return `Codul ${p.code} este valabil doar la prima comandă.`;
+  if (p.starts_at && p.starts_at > now) return t('Codul nu este încă activ.');
+  if (p.ends_at && p.ends_at < now) return t('Codul promoțional a expirat.');
+  if (p.max_uses !== null && p.used >= p.max_uses) return t('Codul a atins numărul maxim de utilizări.');
+  if (subtotal < p.min_subtotal) return t('Codul se aplică la comenzi de minimum {sum} lei.', { sum: (p.min_subtotal / 100).toLocaleString(locale()) });
+  if (p.first_order_only && hasOrdered(customer)) return t('Codul {code} este valabil doar la prima comandă.', { code: p.code });
   return null;
 }
 

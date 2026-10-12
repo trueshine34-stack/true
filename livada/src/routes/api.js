@@ -5,8 +5,10 @@ import * as catalog from '../services/catalog.js';
 import * as cartSvc from '../services/cart.js';
 import { lockersPayload, searchPlaces, methodByCode, estimate } from '../services/shipping.js';
 import { toggleFavorite, favoriteIds } from '../services/users.js';
-import { summaryRows, promoForm } from '../views/store/cart.js';
+import { summaryRows } from '../views/store/cart.js';
+import { checkoutPromo } from '../views/store/checkout.js';
 import { lei } from '../lib/format.js';
+import { t } from '../lib/i18n.js';
 
 export default function apiRoutes(r) {
   r.get('/api/search', (ctx) => {
@@ -40,20 +42,21 @@ export default function apiRoutes(r) {
     // la vizitatori, emailul tastat în checkout permite verificarea codurilor „doar la prima comandă”
     const email = clean(ctx.body.email, 190);
     const customer = ctx.user ? { userId: ctx.user.id, email: ctx.user.email } : (email.includes('@') ? { email } : null);
-    const t = cartSvc.priceCart(cart, { deliveryCode, payment, customer });
+    const totals = cartSvc.priceCart(cart, { deliveryCode, payment, customer });
     const m = deliveryCode ? methodByCode(deliveryCode) : null;
+    // sumarul și termenul vin în limba paginii (antetul X-Lang sau cookie-ul lv_lang, vezi app.js)
     ctx.json({
-      rows: summaryRows(t).s, promo: cart.promo_code ? promoForm(ctx, cart, t).s : undefined, total: t.total, totalLabel: lei(t.total), codAllowed: t.codAllowed,
-      installments: Object.fromEntries([3, 6, 12].map((n) => [n, lei(Math.ceil(t.total / n))])),
-      eta: m ? `${m.type === 'pickup' ? 'Ridicare' : 'Livrare estimată'}: ${estimate(m)}` : '',
-      installmentsAllowed: t.total >= 50000,
+      rows: summaryRows(totals).s, promo: cart.promo_code ? checkoutPromo(ctx, cart, totals).s : undefined, total: totals.total, totalLabel: lei(totals.total), codAllowed: totals.codAllowed,
+      installments: Object.fromEntries([3, 6, 12].map((n) => [n, lei(Math.ceil(totals.total / n))])),
+      eta: m ? `${m.type === 'pickup' ? t('Ridicare') : t('Livrare estimată')}: ${estimate(m)}` : '',
+      installmentsAllowed: totals.total >= 50000,
     });
   });
 
   r.get('/api/favorites', (ctx) => ctx.json({ ids: ctx.user ? favoriteIds(ctx.user.id) : [] }));
   r.post('/api/favorites/:id', (ctx) => {
-    if (!ctx.user) throw new HttpError(401, 'Autentifică-te ca să salvezi produse la favorite.');
+    if (!ctx.user) throw new HttpError(401, t('Autentifică-te ca să salvezi produse la favorite.'));
     const on = toggleFavorite(ctx.user.id, Number(ctx.params.id));
-    ctx.json({ ok: true, on, message: on ? 'Adăugat la favorite.' : 'Eliminat din favorite.' });
+    ctx.json({ ok: true, on, message: on ? t('Adăugat la favorite.') : t('Eliminat din favorite.') });
   });
 }

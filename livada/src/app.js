@@ -7,7 +7,7 @@ import { sessionUser } from './services/users.js';
 import { cartIdFromToken, cartCount } from './services/cart.js';
 import { ValidationError } from './lib/validate.js';
 import { Raw } from './lib/html.js';
-import { withLang, lang, localizeHtml, localizeJson, localizePath } from './lib/i18n.js';
+import { withLang, lang, t, localizeHtml, localizeJson, localizePath } from './lib/i18n.js';
 
 import storeRoutes from './routes/store.js';
 import accountRoutes from './routes/account.js';
@@ -120,10 +120,10 @@ function checkCsrf(ctx) {
     const host = ctx.req.headers['x-forwarded-host'] || ctx.req.headers.host;
     let ok = false;
     try { ok = new URL(origin).host === host || origin === config.publicUrl; } catch { ok = false; }
-    if (!ok) throw new HttpError(403, 'Cerere respinsă (origine necunoscută).');
+    if (!ok) throw new HttpError(403, t('Cerere respinsă (origine necunoscută).'));
   }
   const token = ctx.req.headers['x-csrf-token'] || ctx.body._csrf;
-  if (!safeEqual(token, ctx.csrf)) throw new HttpError(403, 'Sesiunea formularului a expirat. Reîncarcă pagina și încearcă din nou.');
+  if (!safeEqual(token, ctx.csrf)) throw new HttpError(403, t('Sesiunea formularului a expirat. Reîncarcă pagina și încearcă din nou.'));
 }
 
 export function createApp() {
@@ -172,11 +172,11 @@ export function createApp() {
         ctx.files = files || [];
         if (m && !m.methodNotAllowed) checkCsrf(ctx);
       }
-      if (!m) throw new HttpError(404, 'Pagina nu există.');
-      if (m.methodNotAllowed) throw new HttpError(405, 'Metodă nepermisă.');
+      if (!m) throw new HttpError(404, t('Pagina nu există.'));
+      if (m.methodNotAllowed) throw new HttpError(405, t('Metodă nepermisă.'));
       ctx.params = m.params;
       await runHandlers(m.handlers, ctx);
-      if (!ctx.sent && !res.writableEnded) throw new HttpError(404, 'Pagina nu există.');
+      if (!ctx.sent && !res.writableEnded) throw new HttpError(404, t('Pagina nu există.'));
     } catch (err) {
       handleError(ctx, err);
     }
@@ -187,7 +187,7 @@ function handleError(ctx, err) {
   if (ctx.res.headersSent) { ctx.res.end(); return; }
   const status = err.status || (err instanceof ValidationError ? 422 : 500);
   if (status >= 500) console.error(`[livada] ${ctx.method} ${ctx.path}`, err);
-  const message = status >= 500 && config.production ? 'A apărut o eroare. Încearcă din nou în câteva momente.' : err.message;
+  const message = status >= 500 && config.production ? t('A apărut o eroare. Încearcă din nou în câteva momente.') : err.message;
   if (ctx.wantsJson) {
     ctx.json({ error: message, errors: err.errors || undefined }, status, err.retryAfter ? { 'Retry-After': String(err.retryAfter) } : {});
     return;

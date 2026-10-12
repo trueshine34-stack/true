@@ -6,6 +6,7 @@ import { ROOT } from '../config.js';
 import { one, all, getSetting } from '../db/index.js';
 import { fold } from '../lib/format.js';
 import { CARRIERS } from '../db/defaults.js';
+import { t, isEn } from '../lib/i18n.js';
 
 export const methods = () => all('SELECT * FROM delivery_methods WHERE active = 1 ORDER BY sort');
 export const allMethods = () => all('SELECT * FROM delivery_methods ORDER BY sort');
@@ -21,6 +22,9 @@ export function feeFor(method, subtotal, { freeShipping = false } = {}) {
 
 const DAY = ['duminică', 'luni', 'marți', 'miercuri', 'joi', 'vineri', 'sâmbătă'];
 const MONTH = ['ianuarie', 'februarie', 'martie', 'aprilie', 'mai', 'iunie', 'iulie', 'august', 'septembrie', 'octombrie', 'noiembrie', 'decembrie'];
+// în engleză (en-GB): „Tuesday 13 October”
+const DAY_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 /** ora curentă în București */
 function bucharestNow(now = new Date()) {
@@ -38,25 +42,26 @@ const addBusinessDays = (d, n) => {
   return r;
 };
 
-/** estimare de livrare în română: „mâine, marți 13 octombrie” */
+/** estimare de livrare în limba cererii: „Mâine, marți 13 octombrie” / „Tomorrow, Tuesday 13 October” */
 export function estimate(method, now = new Date()) {
   if (!method) return null;
   const store = getSetting('store') || {};
   const { date, hour } = bucharestNow(now);
   if (method.type === 'express') {
-    return hour < (store.express_cutoff_hour ?? 14) && date.getUTCDay() !== 0 ? 'Azi, între 18:00 și 22:00' : 'Mâine, între 18:00 și 22:00';
+    return hour < (store.express_cutoff_hour ?? 14) && date.getUTCDay() !== 0 ? t('Azi, între 18:00 și 22:00') : t('Mâine, între 18:00 și 22:00');
   }
   if (method.type === 'pickup') {
     const open = date.getUTCDay() !== 0 && hour < 18;
-    return open ? 'Gata de ridicare în ~2 ore' : 'Gata de ridicare de mâine, de la 10:00';
+    return open ? t('Gata de ridicare în ~2 ore') : t('Gata de ridicare de mâine, de la 10:00');
   }
   const days = /2–5|2-5/.test(method.eta) ? 3 : /2–3|48/.test(method.eta) ? 2 : 1;
   let ship = new Date(date);
   if (hour >= (store.cutoff_hour ?? 16) || ship.getUTCDay() === 0) ship = addBusinessDays(ship, 1);
   const arrive = addBusinessDays(ship, days);
   const diff = Math.round((arrive - date) / 86400000);
-  const label = `${DAY[arrive.getUTCDay()]} ${arrive.getUTCDate()} ${MONTH[arrive.getUTCMonth()]}`;
-  return diff === 1 ? `Mâine, ${label}` : `${label[0].toUpperCase()}${label.slice(1)}`;
+  const en = isEn();
+  const label = `${(en ? DAY_EN : DAY)[arrive.getUTCDay()]} ${arrive.getUTCDate()} ${(en ? MONTH_EN : MONTH)[arrive.getUTCMonth()]}`;
+  return diff === 1 ? t('Mâine, {label}', { label }) : `${label[0].toUpperCase()}${label.slice(1)}`;
 }
 
 /** „Comandă în următoarele 3 h 20 min și pleacă azi” */
@@ -67,7 +72,7 @@ export function cutoffHint(now = new Date()) {
   if (date.getUTCDay() === 0 || hour >= cutoff) return null;
   const mins = (cutoff - hour) * 60 - minute;
   const h = Math.floor(mins / 60), m = mins % 60;
-  return `Comandă în ${h ? `${h} h ` : ''}${m} min și expediem azi`;
+  return t('Comandă în {time} și expediem azi', { time: `${h ? `${h} h ` : ''}${m} min` });
 }
 
 // ─── lockere ────────────────────────────────────────────────────────────────

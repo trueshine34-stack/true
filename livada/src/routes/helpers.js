@@ -1,19 +1,21 @@
 import { HttpError } from '../lib/http.js';
 import { rateLimit } from '../lib/security.js';
 import { ValidationError } from '../lib/validate.js';
+import { t, localizePath } from '../lib/i18n.js';
 
-/** pagina de unde a venit cererea — doar de pe același site (fără open redirect prin Referer) */
+/** pagina de unde a venit cererea — doar de pe același site (fără open redirect prin Referer); „/en/…” rămâne în engleză */
 export function backUrl(ctx, fallback = '/') {
   try {
     const u = new URL(ctx.req.headers.referer);
-    if (u.host === ctx.req.headers.host) return u.pathname + u.search;
+    if (u.host === ctx.req.headers.host && u.pathname.startsWith('/') && !u.pathname.startsWith('//')) return u.pathname + u.search;
   } catch { /* fără Referer valid */ }
   return fallback;
 }
 
 /** răspuns pentru formulare: JSON pentru fetch, redirect + flash pentru formularele clasice */
 export function done(ctx, { redirect, message, type = 'success', data = {} } = {}) {
-  if (ctx.wantsJson) return ctx.json({ ok: true, redirect, message, ...data });
+  // scripturile fac location.href = redirect → adresa trebuie să rămână în limba paginii (/en/…)
+  if (ctx.wantsJson) return ctx.json({ ok: true, redirect: redirect && localizePath(redirect), message, ...data });
   if (message) ctx.flash(type, message);
   return ctx.redirect(redirect || backUrl(ctx));
 }
@@ -28,7 +30,8 @@ export function fail(ctx, err, back) {
 export function limit(ctx, bucket, max, windowMs, key = ctx.ip) {
   const r = rateLimit(`${bucket}:${key}`, max, windowMs);
   if (!r.ok) {
-    const e = new HttpError(429, `Prea multe încercări. Încearcă din nou în ${r.retryAfter < 120 ? `${r.retryAfter} secunde` : `${Math.ceil(r.retryAfter / 60)} minute`}.`);
+    const wait = r.retryAfter < 120 ? t('{n} secunde', { n: r.retryAfter }) : t('{n} minute', { n: Math.ceil(r.retryAfter / 60) });
+    const e = new HttpError(429, t('Prea multe încercări. Încearcă din nou în {wait}.', { wait }));
     e.retryAfter = r.retryAfter;
     throw e;
   }
@@ -37,7 +40,7 @@ export function limit(ctx, bucket, max, windowMs, key = ctx.ip) {
 /** gărzi */
 export const requireUser = (ctx) => {
   if (!ctx.user) {
-    if (ctx.wantsJson) throw new HttpError(401, 'Autentifică-te pentru a continua.');
+    if (ctx.wantsJson) throw new HttpError(401, t('Autentifică-te pentru a continua.'));
     ctx.redirect(`/cont/autentificare?next=${encodeURIComponent(ctx.path + ctx.url.search)}`);
     return false;
   }
@@ -47,7 +50,7 @@ export const requireUser = (ctx) => {
 export const requireVerified = (ctx) => {
   if (!requireUser(ctx)) return false;
   if (!ctx.user.email_verified_at) {
-    if (ctx.wantsJson) throw new HttpError(403, 'Confirmă-ți adresa de email.');
+    if (ctx.wantsJson) throw new HttpError(403, t('Confirmă-ți adresa de email.'));
     ctx.redirect('/cont/verificare');
     return false;
   }

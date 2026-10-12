@@ -5,6 +5,7 @@ import { ValidationError, clean, isEmail, normalizePhone, passwordProblem } from
 import { sendMail } from '../lib/mailer.js';
 import * as T from './mail-templates.js';
 import { dateTime } from '../lib/format.js';
+import { t, lang } from '../lib/i18n.js';
 
 export const VERIFY_TTL_MIN = 30;
 export const VERIFY_MAX_ATTEMPTS = 5;
@@ -24,7 +25,7 @@ export const userByEmail = (email) => one('SELECT * FROM users WHERE email = ? C
 export function describeUA(ua = '') {
   const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
   const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '';
-  return os ? `${browser} pe ${os}` : browser;
+  return os ? t('{browser} pe {os}', { browser, os }) : browser;
 }
 
 const maskIp = (ip = '') => (ip.includes('.') ? ip.replace(/\.\d+$/, '.•••') : ip.replace(/:[0-9a-f]+$/i, ':••••'));
@@ -38,22 +39,22 @@ export async function register(body, meta) {
     email: clean(body.email, 190).toLowerCase(), phone: body.phone ? normalizePhone(body.phone) : '',
     marketing: body.marketing === true || body.marketing === 'on' || body.marketing === '1',
   };
-  if (!data.first_name) errors.first_name = 'Completează prenumele.';
-  if (!data.last_name) errors.last_name = 'Completează numele.';
-  if (!isEmail(data.email)) errors.email = 'Adresa de email nu pare corectă.';
-  if (body.phone && !data.phone) errors.phone = 'Numărul de telefon nu este valid (ex: 0722 123 456).';
+  if (!data.first_name) errors.first_name = t('Completează prenumele.');
+  if (!data.last_name) errors.last_name = t('Completează numele.');
+  if (!isEmail(data.email)) errors.email = t('Adresa de email nu pare corectă.');
+  if (body.phone && !data.phone) errors.phone = t('Numărul de telefon nu este valid (ex: 0722 123 456).');
   const pwp = passwordProblem(body.password);
   if (pwp) errors.password = pwp;
-  if (!(body.terms === true || body.terms === 'on' || body.terms === '1')) errors.terms = 'Trebuie să accepți Termenii și Politica de confidențialitate.';
+  if (!(body.terms === true || body.terms === 'on' || body.terms === '1')) errors.terms = t('Trebuie să accepți Termenii și Politica de confidențialitate.');
   if (Object.keys(errors).length) throw new ValidationError(errors);
-  const taken = () => new ValidationError({ email: 'Există deja un cont cu acest email. Te poți autentifica sau reseta parola.' });
+  const taken = () => new ValidationError({ email: t('Există deja un cont cu acest email. Te poți autentifica sau reseta parola.') });
   if (userByEmail(data.email)) throw taken();
 
   const hash = await hashPassword(body.password);
   // verificăm din nou după hash (async): două trimiteri simultane nu trebuie să ajungă la constrângerea UNIQUE
   if (userByEmail(data.email)) throw taken();
-  const r = run(`INSERT INTO users(email, password_hash, first_name, last_name, phone, marketing_opt_in) VALUES (?,?,?,?,?,?)`,
-    data.email, hash, data.first_name, data.last_name, data.phone || '', data.marketing ? 1 : 0);
+  const r = run(`INSERT INTO users(email, password_hash, first_name, last_name, phone, marketing_opt_in, lang) VALUES (?,?,?,?,?,?,?)`,
+    data.email, hash, data.first_name, data.last_name, data.phone || '', data.marketing ? 1 : 0, lang());
   const user = userById(Number(r.lastInsertRowid));
   if (data.marketing) run('INSERT OR IGNORE INTO newsletter(email) VALUES (?)', data.email);
   await sendVerification(user, meta);
@@ -69,7 +70,7 @@ export async function sendVerification(user, meta, { force = false } = {}) {
   if (!force && last && !last.used_at) {
     const age = (Date.now() - Date.parse(`${last.created_at.replace(' ', 'T')}Z`)) / 1000;
     if (age < RESEND_COOLDOWN_S) {
-      const e = new Error(`Poți cere un cod nou peste ${Math.ceil(RESEND_COOLDOWN_S - age)} secunde.`);
+      const e = new Error(t('Poți cere un cod nou peste {n} secunde.', { n: Math.ceil(RESEND_COOLDOWN_S - age) }));
       e.status = 429;
       throw e;
     }
@@ -100,13 +101,13 @@ async function markVerified(userId) {
 export async function verifyCode(userId, code) {
   const v = one("SELECT * FROM email_verifications WHERE user_id = ? AND used_at IS NULL AND expires_at > datetime('now') ORDER BY id DESC LIMIT 1", userId);
   const err = (m, s = 400) => Object.assign(new Error(m), { status: s });
-  if (!v) throw err('Codul a expirat. Cere un cod nou.', 410);
-  if (v.attempts >= VERIFY_MAX_ATTEMPTS) throw err('Prea multe încercări greșite. Cere un cod nou.', 429);
+  if (!v) throw err(t('Codul a expirat. Cere un cod nou.'), 410);
+  if (v.attempts >= VERIFY_MAX_ATTEMPTS) throw err(t('Prea multe încercări greșite. Cere un cod nou.'), 429);
   const clean6 = String(code || '').replace(/\D/g, '');
   if (!safeEqual(sha256(`${userId}:${clean6}`), v.code_hash)) {
     run('UPDATE email_verifications SET attempts = attempts + 1 WHERE id = ?', v.id);
     const left = VERIFY_MAX_ATTEMPTS - v.attempts - 1;
-    throw err(left > 0 ? `Cod incorect. Mai ai ${left} ${left === 1 ? 'încercare' : 'încercări'}.` : 'Prea multe încercări greșite. Cere un cod nou.', left > 0 ? 400 : 429);
+    throw err(left > 0 ? (left === 1 ? t('Cod incorect. Mai ai {n} încercare.', { n: left }) : t('Cod incorect. Mai ai {n} încercări.', { n: left })) : t('Prea multe încercări greșite. Cere un cod nou.'), left > 0 ? 400 : 429);
   }
   return markVerified(userId);
 }
@@ -123,8 +124,8 @@ export async function verifyToken(token) {
 export async function authenticate(email, password) {
   const user = userByEmail(email);
   const ok = await verifyPassword(String(password || ''), user?.password_hash);
-  if (!user || !ok) throw Object.assign(new Error('Email sau parolă incorecte.'), { status: 401 });
-  if (user.status === 'blocked') throw Object.assign(new Error('Contul este suspendat. Contactează-ne pentru detalii.'), { status: 403 });
+  if (!user || !ok) throw Object.assign(new Error(t('Email sau parolă incorecte.')), { status: 401 });
+  if (user.status === 'blocked') throw Object.assign(new Error(t('Contul este suspendat. Contactează-ne pentru detalii.')), { status: 403 });
   return user;
 }
 
@@ -164,7 +165,7 @@ export const resetTokenValid = (token) => !!token && !!one("SELECT id FROM passw
 
 export async function resetPassword(token, password) {
   const r = one("SELECT * FROM password_resets WHERE token_hash = ? AND used_at IS NULL AND expires_at > datetime('now')", sha256(token || ''));
-  if (!r) throw Object.assign(new Error('Linkul de resetare a expirat. Cere unul nou.'), { status: 410 });
+  if (!r) throw Object.assign(new Error(t('Linkul de resetare a expirat. Cere unul nou.')), { status: 410 });
   const pwp = passwordProblem(password);
   if (pwp) throw new ValidationError({ password: pwp });
   const hash = await hashPassword(password);
@@ -179,7 +180,7 @@ export async function resetPassword(token, password) {
 }
 
 export async function changePassword(user, current, next, keepSessionId) {
-  if (!(await verifyPassword(current || '', user.password_hash))) throw new ValidationError({ current_password: 'Parola actuală nu este corectă.' });
+  if (!(await verifyPassword(current || '', user.password_hash))) throw new ValidationError({ current_password: t('Parola actuală nu este corectă.') });
   const pwp = passwordProblem(next);
   if (pwp) throw new ValidationError({ new_password: pwp });
   run('UPDATE users SET password_hash = ? WHERE id = ?', await hashPassword(next), user.id);
@@ -190,9 +191,9 @@ export function updateProfile(userId, body) {
   const errors = {};
   const first = clean(body.first_name, 60), last = clean(body.last_name, 60);
   const phone = body.phone ? normalizePhone(body.phone) : '';
-  if (!first) errors.first_name = 'Completează prenumele.';
-  if (!last) errors.last_name = 'Completează numele.';
-  if (body.phone && !phone) errors.phone = 'Numărul de telefon nu este valid.';
+  if (!first) errors.first_name = t('Completează prenumele.');
+  if (!last) errors.last_name = t('Completează numele.');
+  if (body.phone && !phone) errors.phone = t('Numărul de telefon nu este valid.');
   if (Object.keys(errors).length) throw new ValidationError(errors);
   const marketing = body.marketing === 'on' || body.marketing === true || body.marketing === '1';
   run('UPDATE users SET first_name = ?, last_name = ?, phone = ?, marketing_opt_in = ? WHERE id = ?', first, last, phone || '', marketing ? 1 : 0, userId);

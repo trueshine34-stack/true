@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Livada — скриншоты</title>
+<meta name="description" content="Скриншоты всех страниц магазина Livada: языки, темы, устройства, админка, письма и фото товаров.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='14' height='14' rx='3.5' fill='%230E1411'/%3E%3Crect y='18' width='14' height='14' rx='3.5' fill='%230E1411'/%3E%3Crect x='18' y='18' width='14' height='14' rx='3.5' fill='%230E1411'/%3E%3Cpath d='M32 0A14 14 0 0 1 18 14 14 14 0 0 1 32 0Z' fill='%231F7A4D'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/gallery.css">
+<script>
+  // tema interfeței înainte de prima randare (fără „flash”)
+  try { var m = JSON.parse(localStorage.getItem('livada-shots:v1') || '{}').mode; if (m === 'light' || m === 'dark') document.documentElement.dataset.theme = m; } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Перейти к скриншотам</a>
+<div id="app" class="app">
+  <header class="top" id="top"></header>
+  <div class="bar" id="bar"></div>
+  <div class="layout">
+    <nav class="toc" id="toc" aria-label="Разделы"></nav>
+    <main id="main" class="main" tabindex="-1"></main>
+  </div>
+  <footer class="foot" id="foot"></footer>
+</div>
+<div class="lb" id="lb" role="dialog" aria-modal="true" aria-labelledby="lb-title" hidden></div>
+<div class="sheet" id="keys" role="dialog" aria-modal="true" aria-labelledby="keys-title" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<button class="totop" id="totop" type="button" hidden></button>
+<noscript><p class="noscript">Для просмотра галереи включите JavaScript.</p></noscript>
+<script src="manifest.js"></script>
+<script src="assets/gallery.js"></script>
+</body>
+</html>

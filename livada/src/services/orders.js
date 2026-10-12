@@ -7,6 +7,7 @@ import * as T from './mail-templates.js';
 import { loadCart, priceCart, clearCart, findPromo } from './cart.js';
 import { methodByCode, lockerById, estimate, carrier } from './shipping.js';
 import { saveAddress } from './users.js';
+import { t, lang } from '../lib/i18n.js';
 
 export const STATUSES = {
   new: { label: 'Nouă', tone: 'blue' },
@@ -70,37 +71,37 @@ function nextNumber() {
  */
 export async function placeOrder({ cartId, user, body, ip }) {
   const cart = loadCart(cartId);
-  if (!cart.items.length) throw Object.assign(new Error('Coșul tău este gol.'), { status: 400 });
+  if (!cart.items.length) throw Object.assign(new Error(t('Coșul tău este gol.')), { status: 400 });
   const unavailable = cart.items.filter((i) => !i.available || i.stock_issue);
   if (unavailable.length) {
-    throw Object.assign(new Error(`Stoc insuficient pentru: ${unavailable.map((i) => i.name).join(', ')}. Actualizează coșul.`), { status: 409 });
+    throw Object.assign(new Error(t('Stoc insuficient pentru: {names}. Actualizează coșul.', { names: unavailable.map((i) => i.name).join(', ') })), { status: 409 });
   }
 
   const errors = {};
   const email = clean(body.email, 190).toLowerCase();
   const phone = normalizePhone(body.phone);
-  if (!isEmail(email)) errors.email = 'Adresa de email nu pare corectă.';
-  if (!phone) errors.phone = 'Numărul de telefon nu este valid (ex: 0722 123 456).';
+  if (!isEmail(email)) errors.email = t('Adresa de email nu pare corectă.');
+  if (!phone) errors.phone = t('Numărul de telefon nu este valid (ex: 0722 123 456).');
 
   const method = methodByCode(body.delivery_method);
-  if (!method) errors.delivery_method = 'Alege metoda de livrare.';
+  if (!method) errors.delivery_method = t('Alege metoda de livrare.');
   const customerType = body.customer_type === 'pj' ? 'pj' : 'pf';
   let delivery = null, shippingAddr = null;
   const firstName = clean(body.first_name, 60), lastName = clean(body.last_name, 60);
-  if (!firstName) errors.first_name = 'Completează prenumele.';
-  if (!lastName) errors.last_name = 'Completează numele.';
+  if (!firstName) errors.first_name = t('Completează prenumele.');
+  if (!lastName) errors.last_name = t('Completează numele.');
 
   if (method) {
     if (method.type === 'courier' || method.type === 'express') {
       shippingAddr = parseAddress({ ...body, ship_first_name: firstName, ship_last_name: lastName }, 'ship_', errors);
       if (method.type === 'express' && shippingAddr.county && !['București', 'Ilfov'].includes(shippingAddr.county)) {
-        errors.delivery_method = 'Livrarea în aceeași zi este disponibilă doar în București și Ilfov.';
+        errors.delivery_method = t('Livrarea în aceeași zi este disponibilă doar în București și Ilfov.');
       }
       delivery = { type: method.type, carrier: method.carrier, address: shippingAddr };
     } else if (method.type === 'locker') {
       const l = lockerById(clean(body.locker_id, 60));
-      if (!l) errors.locker_id = 'Alege un locker de pe hartă.';
-      else if (l.provider !== method.carrier) errors.locker_id = 'Lockerul ales nu aparține rețelei selectate.';
+      if (!l) errors.locker_id = t('Alege un locker de pe hartă.');
+      else if (l.provider !== method.carrier) errors.locker_id = t('Lockerul ales nu aparține rețelei selectate.');
       else delivery = { type: 'locker', carrier: method.carrier, locker: { id: l.id, name: l.name, address: l.address, city: l.city, county: l.county, postcode: l.postcode, lat: l.lat, lng: l.lng, hours: l.hours } };
     } else {
       delivery = { type: 'pickup', carrier: 'livada', store: getSetting('showroom') };
@@ -114,18 +115,18 @@ export async function placeOrder({ cartId, user, body, ip }) {
   let company = null;
   if (customerType === 'pj') {
     company = { name: clean(body.company_name, 120), cui: clean(body.company_cui, 14).toUpperCase().replace(/\s/g, ''), reg_com: clean(body.company_reg, 40) };
-    if (company.name.length < 2) errors.company_name = 'Completează denumirea firmei.';
-    if (!isCui(company.cui)) errors.company_cui = 'CUI invalid (verifică cifra de control).';
+    if (company.name.length < 2) errors.company_name = t('Completează denumirea firmei.');
+    if (!isCui(company.cui)) errors.company_cui = t('CUI invalid (verifică cifra de control).');
   }
 
   const payment = ['card', 'cod', 'transfer', 'installments'].includes(body.payment_method) ? body.payment_method : null;
-  if (!payment) errors.payment_method = 'Alege metoda de plată.';
-  else if (['card', 'installments'].includes(payment) && !config.paymentMock) errors.payment_method = 'Plata online nu este disponibilă momentan. Alege ramburs sau transfer bancar.';
-  if (!(body.terms === 'on' || body.terms === true)) errors.terms = 'Trebuie să accepți Termenii și condițiile.';
+  if (!payment) errors.payment_method = t('Alege metoda de plată.');
+  else if (['card', 'installments'].includes(payment) && !config.paymentMock) errors.payment_method = t('Plata online nu este disponibilă momentan. Alege ramburs sau transfer bancar.');
+  if (!(body.terms === 'on' || body.terms === true)) errors.terms = t('Trebuie să accepți Termenii și condițiile.');
 
   const totals = priceCart(cart, { deliveryCode: method?.code, payment, customer: { userId: user?.id, email } });
-  if (payment === 'cod' && !totals.codAllowed) errors.payment_method = method && !method.cod_allowed ? `Plata ramburs nu este disponibilă pentru ${method.name}.` : 'Plata ramburs nu este disponibilă pentru această valoare.';
-  if (payment === 'installments' && totals.total < ((getSetting('store') || {}).installments_min ?? 50000)) errors.payment_method = 'Ratele sunt disponibile pentru comenzi de minimum 500 lei.';
+  if (payment === 'cod' && !totals.codAllowed) errors.payment_method = method && !method.cod_allowed ? t('Plata ramburs nu este disponibilă pentru {method}.', { method: t(method.name) }) : t('Plata ramburs nu este disponibilă pentru această valoare.');
+  if (payment === 'installments' && totals.total < ((getSetting('store') || {}).installments_min ?? 50000)) errors.payment_method = t('Ratele sunt disponibile pentru comenzi de minimum 500 lei.');
   if (cart.promo_code && totals.promoError) errors.promo = totals.promoError;
   if (Object.keys(errors).length) throw new ValidationError(errors);
 
@@ -137,16 +138,16 @@ export async function placeOrder({ cartId, user, body, ip }) {
     for (const it of cart.items) {
       if (it.preorder) continue;
       const s = one('SELECT stock FROM variants WHERE id = ?', it.variant_id)?.stock ?? 0;
-      if (s < it.qty) throw Object.assign(new Error(`Stoc insuficient pentru ${it.name}.`), { status: 409 });
+      if (s < it.qty) throw Object.assign(new Error(t('Stoc insuficient pentru {name}.', { name: it.name })), { status: 409 });
     }
     const number = nextNumber();
     const token = randomToken(18);
     const r = run(`INSERT INTO orders(number, public_token, user_id, email, phone, first_name, last_name, customer_type, company, billing,
         delivery_method, delivery, payment_method, payment_status, status, subtotal, discount, shipping_fee, cod_fee, total, vat,
-        promo_code, notes, installments, ip) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'new', ?,?,?,?,?,?,?,?,?,?)`,
+        promo_code, notes, installments, ip, lang) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'new', ?,?,?,?,?,?,?,?,?,?,?)`,
     number, token, user?.id ?? null, email, phone, firstName, lastName, customerType, company ? JSON.stringify(company) : null,
     JSON.stringify(billing), method.code, JSON.stringify(delivery), payment, payment === 'cod' ? 'cod' : 'pending',
-    totals.subtotal, totals.discount, totals.shipping || 0, totals.codFee, totals.total, totals.vat, totals.promo?.code || null, notes, installments, ip || '');
+    totals.subtotal, totals.discount, totals.shipping || 0, totals.codFee, totals.total, totals.vat, totals.promo?.code || null, notes, installments, ip || '', lang());
     const orderId = Number(r.lastInsertRowid);
     for (const it of cart.items) {
       run(`INSERT INTO order_items(order_id, product_id, variant_id, sku, mpn, name, variant_label, image, slug, unit_price, qty, line_total)

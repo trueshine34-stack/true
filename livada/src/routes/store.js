@@ -1,5 +1,5 @@
 import { html } from '../lib/html.js';
-import { localizePath } from '../lib/i18n.js';
+import { localizePath, t } from '../lib/i18n.js';
 import { config } from '../config.js';
 import { HttpError } from '../lib/http.js';
 import { run, all } from '../db/index.js';
@@ -34,7 +34,7 @@ export default function storeRoutes(r) {
   // ─── catalog ───────────────────────────────────────────────────────────
   r.get('/produs/:slug', (ctx) => {
     const p = catalog.productBySlug(ctx.params.slug);
-    if (!p) throw new HttpError(404, 'Produsul nu există.');
+    if (!p) throw new HttpError(404, t('Produsul nu există.'));
     ctx.html(productPage(ctx, p, catalog.relatedFor(p)));
   });
 
@@ -48,18 +48,18 @@ export default function storeRoutes(r) {
     if (params.promo) products = products.filter((p) => p.compare_from);
     if (params.sort === 'price-asc') products.sort((a, b) => a.price_from - b.price_from);
     if (params.sort === 'price-desc') products.sort((a, b) => b.price_from - a.price_from);
-    ctx.html(listingPage(ctx, { title: q ? `Rezultate pentru „${q}”` : 'Caută', metaTitle: q ? `Căutare: ${q}` : 'Caută', products, base: '/cautare',
-      query: ctx.query, crumbs: [{ label: 'Căutare' }], tagline: q ? '' : 'Scrie numele unui produs în bara de căutare.' }));
+    ctx.html(listingPage(ctx, { title: q ? t('Rezultate pentru „{q}”', { q }) : t('Caută'), metaTitle: q ? t('Căutare: {q}', { q }) : t('Caută'), products, base: '/cautare',
+      query: ctx.query, crumbs: [{ label: t('Căutare') }], tagline: q ? '' : t('Scrie numele unui produs în bara de căutare.') }));
   });
 
   r.get('/oferte', (ctx) => {
     const products = catalog.listProducts({ ...listingParams(ctx.query), promo: true });
-    ctx.html(listingPage(ctx, { title: 'Oferte', tagline: 'Reduceri reale la produse Apple noi și sigilate.', products, base: '/oferte', query: ctx.query, crumbs: [{ label: 'Oferte' }] }));
+    ctx.html(listingPage(ctx, { title: t('Oferte'), tagline: t('Reduceri reale la produse Apple noi și sigilate.'), products, base: '/oferte', query: ctx.query, crumbs: [{ label: t('Oferte') }] }));
   });
 
   r.get('/noutati', (ctx) => {
     const products = catalog.listProducts({ ...listingParams(ctx.query), sort: ctx.query.get('sort') || 'new' }).filter((p) => p.badge || p.featured);
-    ctx.html(listingPage(ctx, { title: 'Noutăți', tagline: 'Cele mai noi produse Apple, inclusiv precomenzi.', products, base: '/noutati', query: ctx.query, crumbs: [{ label: 'Noutăți' }] }));
+    ctx.html(listingPage(ctx, { title: t('Noutăți'), tagline: t('Cele mai noi produse Apple, inclusiv precomenzi.'), products, base: '/noutati', query: ctx.query, crumbs: [{ label: t('Noutăți') }] }));
   });
 
   // ─── coș ───────────────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ export default function storeRoutes(r) {
       return ctx.redirect(backUrl(ctx, '/cos'));
     }
     const count = cartSvc.cartCount(cartId);
-    return done(ctx, { redirect: '/cos', message: 'Produsul a fost adăugat în coș.', data: { count } });
+    return done(ctx, { redirect: '/cos', message: t('Produsul a fost adăugat în coș.'), data: { count } });
   });
 
   r.post('/cos/actualizeaza', (ctx) => {
@@ -124,7 +124,7 @@ export default function storeRoutes(r) {
       return ctx.redirect('/cos');
     }
     cartSvc.setPromo(cartId, code);
-    return done(ctx, { redirect: ctx.req.headers.referer?.includes('/checkout') ? '/checkout' : '/cos', message: `Codul ${code} a fost aplicat.` });
+    return done(ctx, { redirect: ctx.req.headers.referer?.includes('/checkout') ? '/checkout' : '/cos', message: t('Codul {code} a fost aplicat.', { code }) });
   });
 
   r.post('/cos/promo/sterge', (ctx) => {
@@ -142,7 +142,7 @@ export default function storeRoutes(r) {
 
   r.post('/checkout', async (ctx) => {
     limit(ctx, 'checkout', 12, 10 * 60_000);
-    if (!ctx.cartId) throw new HttpError(400, 'Coșul tău este gol.');
+    if (!ctx.cartId) throw new HttpError(400, t('Coșul tău este gol.'));
     let order;
     try {
       order = await orders.placeOrder({ cartId: ctx.cartId, user: ctx.user, body: ctx.body, ip: ctx.ip });
@@ -158,7 +158,7 @@ export default function storeRoutes(r) {
   // ─── comandă + plată ───────────────────────────────────────────────────
   r.get('/comanda/:token', (ctx) => {
     const o = orders.orderByToken(ctx.params.token);
-    if (!o) throw new HttpError(404, 'Comanda nu există.');
+    if (!o) throw new HttpError(404, t('Comanda nu există.'));
     ctx.html(orderPage(ctx, o, orders.orderItems(o.id), orders.orderEvents(o.id), { fresh: ctx.query.get('nou') === '1' }));
   });
 
@@ -168,7 +168,7 @@ export default function storeRoutes(r) {
 
   r.get('/plata/:token', (ctx) => {
     const o = orders.orderByToken(ctx.params.token);
-    if (!o || !config.paymentMock) throw new HttpError(404, 'Comanda nu există.');
+    if (!o || !config.paymentMock) throw new HttpError(404, t('Comanda nu există.'));
     if (o.payment_status === 'paid' || !['card', 'installments'].includes(o.payment_method)) return ctx.redirect(`/comanda/${o.public_token}`);
     ctx.html(paymentPage(ctx, o));
   });
@@ -176,10 +176,10 @@ export default function storeRoutes(r) {
   r.post('/plata/:token', async (ctx) => {
     limit(ctx, 'pay', 10, 10 * 60_000);
     const o = orders.orderByToken(ctx.params.token);
-    if (!o || !config.paymentMock) throw new HttpError(404, 'Comanda nu există.');
+    if (!o || !config.paymentMock) throw new HttpError(404, t('Comanda nu există.'));
     if (!payable(o)) return ctx.redirect(`/comanda/${o.public_token}`);
     if (ctx.body.result === 'fail') {
-      ctx.flash('error', 'Plata a fost respinsă de bancă. Poți încerca din nou sau alege altă metodă.');
+      ctx.flash('error', t('Plata a fost respinsă de bancă. Poți încerca din nou sau alege altă metodă.'));
       return ctx.redirect(`/plata/${o.public_token}`);
     }
     await orders.completeCardPayment(o);
@@ -192,12 +192,12 @@ export default function storeRoutes(r) {
   r.get('/contact', (ctx) => ctx.html(contactPage(ctx)));
   r.post('/contact', async (ctx) => {
     limit(ctx, 'contact', 5, 10 * 60_000);
-    if (ctx.body.website) return done(ctx, { redirect: '/contact', message: 'Mesaj trimis.' }); // honeypot
+    if (ctx.body.website) return done(ctx, { redirect: '/contact', message: t('Mesaj trimis.') }); // honeypot
     const data = { name: clean(ctx.body.name, 80), email: clean(ctx.body.email, 190), phone: clean(ctx.body.phone, 20), topic: clean(ctx.body.topic, 120), message: cleanText(ctx.body.message, 2000) };
     const errors = {};
-    if (data.name.length < 2) errors.name = 'Completează numele.';
-    if (!isEmail(data.email)) errors.email = 'Adresa de email nu pare corectă.';
-    if (data.message.length < 10) errors.message = 'Scrie-ne câteva cuvinte (minimum 10 caractere).';
+    if (data.name.length < 2) errors.name = t('Completează numele.');
+    if (!isEmail(data.email)) errors.email = t('Adresa de email nu pare corectă.');
+    if (data.message.length < 10) errors.message = t('Scrie-ne câteva cuvinte (minimum 10 caractere).');
     if (Object.keys(errors).length) {
       if (ctx.wantsJson) throw new ValidationError(errors);
       return ctx.html(contactPage(ctx, { errors, values: data }), 422);
@@ -205,16 +205,16 @@ export default function storeRoutes(r) {
     run('INSERT INTO contact_messages(name, email, phone, topic, message) VALUES (?,?,?,?,?)', data.name, data.email, data.phone, data.topic, data.message);
     const m = T.contactReceived({ name: data.name });
     await sendMail({ to: data.email, subject: m.subject, html: m.html, text: m.text, template: 'contact' });
-    if (ctx.wantsJson) return ctx.json({ ok: true, replace: contactSentBlock().s, message: 'Mesajul a fost trimis. Mulțumim!' });
+    if (ctx.wantsJson) return ctx.json({ ok: true, replace: contactSentBlock().s, message: t('Mesajul a fost trimis. Mulțumim!') });
     return ctx.html(contactPage(ctx, { sent: true }));
   });
 
   r.post('/newsletter', (ctx) => {
     limit(ctx, 'newsletter', 5, 10 * 60_000);
     const email = clean(ctx.body.email, 190).toLowerCase();
-    if (!isEmail(email)) throw new ValidationError({ email: 'Adresa de email nu pare corectă.' });
+    if (!isEmail(email)) throw new ValidationError({ email: t('Adresa de email nu pare corectă.') });
     run('INSERT OR IGNORE INTO newsletter(email) VALUES (?)', email);
-    return done(ctx, { message: 'Gata! Te-ai abonat la noutățile Livada.' });
+    return done(ctx, { message: t('Gata! Te-ai abonat la noutățile Livada.') });
   });
 
   // ─── SEO ───────────────────────────────────────────────────────────────
@@ -244,11 +244,13 @@ export default function storeRoutes(r) {
   // ─── categorii (ultimele: /:slug generic) ───────────────────────────────
   r.get('/:category', (ctx) => {
     const c = catalog.categoryBySlug(ctx.params.category);
-    if (!c) throw new HttpError(404, 'Pagina nu există.');
+    if (!c) throw new HttpError(404, t('Pagina nu există.'));
     const params = listingParams(ctx.query);
     const products = catalog.listProducts({ category: c.slug, ...params });
-    ctx.html(listingPage(ctx, { category: c, title: c.title, tagline: c.tagline, groups: c.groups.filter((g) => catalog.listProducts({ category: c.slug, group: g }).length),
-      products, base: `/${c.slug}`, query: ctx.query, crumbs: [{ label: c.title }], description: `${c.title} la Livada: ${c.tagline} Livrare în 24h în toată România, retur 30 de zile, rate 0%.`,
+    // titlul și sloganul categoriei vin din baza de date (în română) → traduse la afișare
+    const title = t(c.title), tagline = t(c.tagline);
+    ctx.html(listingPage(ctx, { category: c, title, tagline, groups: c.groups.filter((g) => catalog.listProducts({ category: c.slug, group: g }).length),
+      products, base: `/${c.slug}`, query: ctx.query, crumbs: [{ label: title }], description: t('{title} la Livada: {tagline} Livrare în 24h în toată România, retur 30 de zile, rate 0%.', { title, tagline }),
       canonical: `/${c.slug}` }));
   });
 }
