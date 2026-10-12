@@ -9,3 +9,4 @@ __pycache__/
 public/img/products/**/*.src
 /screenshots/
 /screenshots.zip
+/screenshots-web/

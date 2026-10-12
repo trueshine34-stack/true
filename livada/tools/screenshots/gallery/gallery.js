@@ -9,6 +9,11 @@
   var M = window.MANIFEST;
   var KEY = 'livada-shots:v1';
   var doc = document.documentElement;
+  // versiunea publicată online: imaginile stau în pachete (assets/pk.js le extrage la cerere)
+  var PK = window.PK || null;
+  // online lipsesc fișierele originale și legăturile spre o vedere anume: scoatem din ajutor ce nu merge acolo
+  function online(list, kind) { return !PK ? list : kind === 'kb' ? list.filter(function (k) { return k[0] !== 'O'; }) : list.slice(0, -1); }
+  function srcA(f) { return (PK ? 'data-pk="' : 'src="') + esc(f) + '"'; }
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
@@ -287,8 +292,8 @@
           (photos.length ? stat(fmt(photos.length), t('st').photos, fmt(prods.length) + ' ' + plural(prods.length, 'products')) : '') +
         '</dl>' +
         '<details class="howto"' + (S.howto ? ' open' : '') + '><summary>' + icon('info') + '<span>' + esc(t('howto')) + '</span>' + icon('next', 'howto__chev') + '</summary>' +
-          '<div class="howto__body"><ul class="howto__tips">' + t('tips').map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>' +
-          '<ul class="kb">' + t('kb').map(function (k) { return '<li>' + k[0].split(' ').map(function (x) { return '<kbd>' + esc(x) + '</kbd>'; }).join('') + '<span>' + esc(k[1]) + '</span></li>'; }).join('') + '</ul></div>' +
+          '<div class="howto__body"><ul class="howto__tips">' + online(t('tips'), 'tips').map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>' +
+          '<ul class="kb">' + online(t('kb'), 'kb').map(function (k) { return '<li>' + k[0].split(' ').map(function (x) { return '<kbd>' + esc(x) + '</kbd>'; }).join('') + '<span>' + esc(k[1]) + '</span></li>'; }).join('') + '</ul></div>' +
         '</details>' +
       '</div>';
     elFoot.innerHTML = '<div class="wrap foot__in"><span class="brand brand--sm">' + MARK + '<span>Livada</span></span><span>' + esc(t('footer')) + (genTxt ? ' · ' + esc(genTxt) : '') + '</span><span class="mono">manifest.json · ' + fmt(shots.length) + ' ' + plural(shots.length, 'shots') + '</span></div>';
@@ -410,7 +415,7 @@
 
   // ─── cardurile ───────────────────────────────────────────────────────────
   function frameHTML(s, alt, eager) {
-    var img = '<img class="shot" ' + (eager ? 'src' : 'data-src') + '="' + esc(s.thumb) + '" alt="' + esc(alt) + '" width="480" height="' + thumbH(s) + '" style="aspect-ratio:480/' + thumbH(s) + '" decoding="async" loading="lazy" draggable="false">';
+    var img = '<img class="shot" ' + (eager ? srcA(s.thumb) : 'data-src="' + esc(s.thumb) + '"') + ' alt="' + esc(alt) + '" width="480" height="' + thumbH(s) + '" style="aspect-ratio:480/' + thumbH(s) + '" decoding="async" loading="lazy" draggable="false">';
     if (s.device === 'mobile') return '<div class="dev dev--phone is-' + s.theme + '"><div class="dev__screen"><span class="dev__island" aria-hidden="true"></span>' + img + '</div></div>';
     return '<div class="dev dev--desk is-' + s.theme + '"><div class="dev__bar" aria-hidden="true"><i></i><i></i><i></i><span class="dev__url">' + esc((s.lang && s.lang !== 'ro' && s.group !== 'admin' && s.group !== 'email' ? '/' + s.lang : '') + (s.url || '/')) + '</span></div><div class="dev__screen">' + img + '</div></div>';
   }
@@ -780,9 +785,9 @@
         (sw ? '<div class="lb__sw">' + sw + '</div>' : '') +
         '<div class="lb__act">' +
           lbBtn('zoom', LB.zoom === 'fit' ? 'zoom' : 'fit', LB.zoom === 'fit' ? t('zoomActual') : t('zoomFit')) +
-          '<a class="lbbtn" data-lb="orig" href="' + esc(file) + '" target="_blank" rel="noopener" title="' + esc(t('original')) + '" aria-label="' + esc(t('original')) + '">' + icon('external') + '</a>' +
-          '<a class="lbbtn" data-lb="dl" href="' + esc(file) + '" download="' + esc(dlName) + '" title="' + esc(t('download')) + '" aria-label="' + esc(t('download')) + '">' + icon('download') + '</a>' +
-          lbBtn('copy', 'copy', t('copyPath')) + lbBtn('link', 'link', t('copyLink')) +
+          '<a class="lbbtn" data-lb="orig"' + (PK ? ' hidden' : '') + ' href="' + esc(file) + '" target="_blank" rel="noopener" title="' + esc(t('original')) + '" aria-label="' + esc(t('original')) + '">' + icon('external') + '</a>' +
+          (PK ? '' : '<a class="lbbtn" data-lb="dl" href="' + esc(file) + '" download="' + esc(dlName) + '" title="' + esc(t('download')) + '" aria-label="' + esc(t('download')) + '">' + icon('download') + '</a>') +
+          lbBtn('copy', 'copy', t('copyPath')) + (PK ? '' : lbBtn('link', 'link', t('copyLink'))) +
           '<span class="lb__sep"></span>' + lbBtn('close', 'close', t('close'), ' data-close') +
         '</div>' +
       '</div>' +
@@ -798,8 +803,8 @@
     var ratio = s.w && s.h ? s.w + ' / ' + s.h : null;
     return '<section class="pane' + (s.theme === 'dark' ? ' is-dark' : '') + '">' + (cap ? '<p class="pane__cap">' + cap + '</p>' : '') +
       '<div class="pane__scroll" tabindex="0" aria-label="' + esc(variantLabel(s)) + '"><div class="pane__img is-loading" data-file="' + esc(s.file) + '"' + (ratio ? ' style="aspect-ratio:' + ratio + '"' : '') + '>' +
-      '<img class="pane__ph" src="' + esc(s.thumb) + '" alt="" aria-hidden="true" draggable="false">' +
-      '<img class="pane__full" src="' + esc(s.file) + '" alt="' + esc(L(LB.p.title) + ' — ' + variantLabel(s)) + '" draggable="false">' +
+      '<img class="pane__ph" ' + srcA(s.thumb) + ' alt="" aria-hidden="true" draggable="false">' +
+      '<img class="pane__full" ' + srcA(s.file) + ' alt="' + esc(L(LB.p.title) + ' — ' + variantLabel(s)) + '" draggable="false">' +
       '<span class="pane__spin" aria-hidden="true"></span></div></div></section>';
   }
   function capFor(s, d) { return DIMS.map(function (x) { return '<span class="' + (x === d ? 'on' : '') + '">' + (x === 'lang' ? '' : dimIcon(x, s[x])) + esc(dimLabel(x, s[x])) + '</span>'; }).join(''); }
@@ -808,8 +813,8 @@
     if (LB.kind === 'photo') {
       var ph = LB.ph, pr = prodBy[ph.slug];
       box.innerHTML = '<section class="pane pane--photo"><div class="pane__scroll" tabindex="0"><div class="pane__img pane__img--photo is-loading">' +
-        '<img class="pane__ph" src="' + esc(ph.thumb) + '" alt="" aria-hidden="true"><img class="pane__full" src="' + esc(ph.file) + '" alt="' + esc((ph.product || '') + ' — ' + (ph.variant || '')) + '"><span class="pane__spin" aria-hidden="true"></span></div></div>' +
-        (pr && pr.items.length > 1 ? '<div class="strip" role="group">' + pr.items.map(function (x) { return '<button type="button" class="strip__it" data-lb="ph" data-i="' + x.i + '" aria-pressed="' + (x === ph) + '" title="' + esc(x.variant || '') + '"><img src="' + esc(x.thumb) + '" alt="' + esc(x.variant || '') + '" loading="lazy"></button>'; }).join('') + '</div>' : '') + '</section>';
+        '<img class="pane__ph" ' + srcA(ph.thumb) + ' alt="" aria-hidden="true"><img class="pane__full" ' + srcA(ph.file) + ' alt="' + esc((ph.product || '') + ' — ' + (ph.variant || '')) + '"><span class="pane__spin" aria-hidden="true"></span></div></div>' +
+        (pr && pr.items.length > 1 ? '<div class="strip" role="group">' + pr.items.map(function (x) { return '<button type="button" class="strip__it" data-lb="ph" data-i="' + x.i + '" aria-pressed="' + (x === ph) + '" title="' + esc(x.variant || '') + '"><img ' + srcA(x.thumb) + ' alt="' + esc(x.variant || '') + '" loading="lazy"></button>'; }).join('') + '</div>' : '') + '</section>';
       wirePanes(box); return;
     }
     var s = LB.s, b = LB.split ? otherVal(LB.p, LB.split, s) : null;
@@ -949,7 +954,7 @@
   // ─── fereastra cu scurtături ─────────────────────────────────────────────
   function openKeys() {
     elKeys.innerHTML = '<div class="sheet__card"><div class="sheet__head"><h2 id="keys-title">' + icon('keyboard') + esc(t('keys')) + '</h2>' + '<button type="button" class="iconbtn" data-close aria-label="' + esc(t('close')) + '">' + icon('close') + '</button></div>' +
-      '<ul class="kb kb--sheet">' + t('kb').map(function (k) { return '<li>' + k[0].split(' ').map(function (x) { return '<kbd>' + esc(x) + '</kbd>'; }).join('') + '<span>' + esc(k[1]) + '</span></li>'; }).join('') + '</ul><p class="sheet__note">' + esc(t('kbNote')) + '</p></div>';
+      '<ul class="kb kb--sheet">' + online(t('kb'), 'kb').map(function (k) { return '<li>' + k[0].split(' ').map(function (x) { return '<kbd>' + esc(x) + '</kbd>'; }).join('') + '<span>' + esc(k[1]) + '</span></li>'; }).join('') + '</ul><p class="sheet__note">' + esc(t('kbNote')) + '</p></div>';
     elKeys.hidden = false; requestAnimationFrame(function () { elKeys.classList.add('is-open'); });
     keysOpener = document.activeElement; $('[data-close]', elKeys).focus();
   }
@@ -975,7 +980,7 @@
       if (e.code === 'KeyD') return lbFlip('device');
       if (e.code === 'KeyZ' || e.code === 'KeyF') return lbZoom();
       if (e.code === 'KeyC' && LB.kind === 'page') { var opts = DIMS.filter(function (d) { return LB.p[d].length > 1; }); if (!opts.length) return; LB.split = LB.split ? null : (opts.indexOf(S.dims[0]) >= 0 ? S.dims[0] : opts[0]); renderLb(false); replaceHash(lbHash()); return; }
-      if (e.code === 'KeyO') { var a = $('[data-lb="orig"]', elLb); if (a) window.open(a.getAttribute('href'), '_blank', 'noopener'); return; }
+      if (e.code === 'KeyO') { var a = $('[data-lb="orig"]', elLb); if (a && !PK) window.open(a.getAttribute('href'), '_blank', 'noopener'); return; }
       if (e.code === 'KeyP') { var a2 = $('[data-lb="orig"]', elLb); if (a2) copy(a2.getAttribute('href'), t('copied')); return; }
       if (e.code === 'KeyJ' || e.code === 'KeyK') { var sc = $('.pane__scroll', elLb); if (sc) sc.scrollBy({ top: (e.code === 'KeyJ' ? 1 : -1) * sc.clientHeight * 0.8, behavior: 'smooth' }); return; }
       if (e.key === '?') { return openKeys(); }

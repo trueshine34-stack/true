@@ -21,3 +21,13 @@ Opțiuni: `--only=store|admin|email|<grup>` (grupuri: store, catalog, product, c
 - Rulările sunt reluabile: fișierele existente sunt sărite; manifestul cuprinde mereu tot ce există pe disc.
 - Necesită Playwright cu Chromium (local, global sau `PLAYWRIGHT_PATH`) și Python 3 cu Pillow (`webp.py` face conversia în WebP).
 - Capturile mai înalte de 16 000 px (limita WebP e 16 383 px) se salvează micșorate în `file`, iar la rezoluție completă în `parts`.
+
+## Versiunea online
+
+Un artefact publicat admite cel mult 511 fișiere și 256 MB, iar setul complet are ~5000 de imagini și ~320 MB.
+`python3 tools/screenshots/pack_web.py screenshots <ieșire>` face din el o versiune de ~240 MB în ~290 de fișiere:
+miniaturile se lipesc în foi WebP 4×4, capturile întregi se micșorează la cât se vede pe ecran (calculator 920 px,
+telefon 450 px) și stau în pachete JSON de câțiva MB, fotografiile mari devin 640 px. `gallery/pk.js` le extrage în
+browser la cerere (și eliberează foile și pachetele nefolosite), galeria rămâne aceeași; online lipsesc doar
+„Deschide originalul”, descărcarea și linkul spre o vedere. `batches.json` din ieșire împarte fișierele în loturi
+de publicare (≤ 60 MB fiecare).
