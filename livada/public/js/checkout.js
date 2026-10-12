@@ -1,5 +1,5 @@
-import { $, $$, api, toast, showErrors } from './app.js';
-import { createLockerPicker } from './lockers.js';
+import { $, $$, api, toast, showErrors, tr, href, langHeaders } from './app.js';
+import { createLockerPicker, hoursText } from './lockers.js';
 
 const form = $('[data-checkout]');
 const cfg = JSON.parse($('#checkout-data')?.textContent || '{}');
@@ -78,14 +78,14 @@ if (form) {
     $('[data-pay-cod] small', form).dataset.base ||= $('[data-pay-cod] small', form).textContent;
     const card = form.querySelector('input[name="payment_method"][value="card"]');
     $('[data-pay-cod] small', form).textContent = codOk ? $('[data-pay-cod] small', form).dataset.base
-      : `Indisponibil pentru metoda de livrare aleasă${card ? ' — plătești cu cardul la comandă' : ''}.`;
+      : card ? tr('Indisponibil pentru metoda de livrare aleasă — plătești cu cardul la comandă.') : tr('Indisponibil pentru metoda de livrare aleasă.');
     if (!codOk && cod.checked) (card || form.querySelector('input[name="payment_method"][value="transfer"]')).checked = true;
     updatePlaceLabel();
   }
 
   function updatePlaceLabel() {
     const p = payInput()?.value;
-    $('[data-place-label]', form).textContent = p === 'card' || p === 'installments' ? 'Continuă spre plată' : 'Plasează comanda';
+    $('[data-place-label]', form).textContent = p === 'card' || p === 'installments' ? tr('Continuă spre plată') : tr('Plasează comanda');
   }
 
   // ─── recalculare totaluri ───────────────────────────────────────────
@@ -122,7 +122,7 @@ if (form) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (shipType === 'locker' && !picked) {
-      showErrors(form, { locker_id: 'Alege un locker de pe hartă.' });
+      showErrors(form, { locker_id: tr('Alege un locker de pe hartă.') });
       return;
     }
     const btn = $('[data-place-order]', form);
@@ -131,19 +131,19 @@ if (form) {
       const fd = new FormData(form);
       if (shipType === 'courier' && form.elements.billing_same.checked) fd.set('billing_same', 'on');
       else fd.delete('billing_same');
-      const res = await fetch(form.action, { method: 'POST', body: new URLSearchParams(fd), headers: { Accept: 'application/json', 'X-CSRF-Token': fd.get('_csrf') } });
+      const res = await fetch(form.action, { method: 'POST', body: new URLSearchParams(fd), headers: langHeaders({ Accept: 'application/json', 'X-CSRF-Token': fd.get('_csrf') }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const errs = data.errors || {};
         // erorile câmpurilor de adresă de facturare sunt afișate doar dacă secțiunea e vizibilă
         if (Object.keys(errs).some((k) => k.startsWith('bill_'))) { $('[data-billing]', form).hidden = false; }
         showErrors(form, errs, data.error);
-        if (!Object.keys(errs).length) toast(data.error || 'Nu am putut plasa comanda.', { type: 'error' });
+        if (!Object.keys(errs).length) toast(data.error || tr('Nu am putut plasa comanda.'), { type: 'error' });
         return;
       }
-      location.href = data.redirect;
+      location.href = href(data.redirect);
     } catch {
-      toast('Conexiunea a eșuat. Verifică internetul și încearcă din nou.', { type: 'error' });
+      toast(tr('Conexiunea a eșuat. Verifică internetul și încearcă din nou.'), { type: 'error' });
     } finally { btn.classList.remove('is-loading'); }
   });
 
@@ -163,13 +163,13 @@ if (form) {
     const box = $('[data-locker-picked]', form);
     box.innerHTML = `<span class="carrier" style="--cs:48px"><img src="${n.mark}" alt=""></span>
       <span class="locker-pick__main">
-        <small class="locker-pick__net">${esc(n.name)} · ${l.point ? 'punct de ridicare' : 'locker non-stop'}</small>
+        <small class="locker-pick__net">${esc(n.name)} · ${l.point ? tr('punct de ridicare') : tr('locker non-stop')}</small>
         <b>${esc(l.name)}</b><span>${esc(l.address)}, ${esc(l.city)}${l.county && l.county !== l.city ? `, ${esc(l.county)}` : ''}</span>
         ${l.note ? `<small>${esc(l.note)}</small>` : ''}
-        <small>${l.point ? esc(l.hours || '') + ' · ' : ''}${esc(n.eta)} · ${n.price ? `${(n.price / 100).toFixed(2).replace('.', ',')} lei` : 'livrare gratuită'}</small>
-        ${n.cod ? '' : '<small class="warn">Plata ramburs nu e disponibilă în această rețea.</small>'}
+        <small>${l.point ? esc(hoursText(l.hours)) + ' · ' : ''}${esc(n.eta)} · ${n.price ? `${(n.price / 100).toFixed(2).replace('.', ',')} lei` : tr('livrare gratuită')}</small>
+        ${n.cod ? '' : `<small class="warn">${tr('Plata ramburs nu e disponibilă în această rețea.')}</small>`}
       </span>
-      <button type="button" class="btn btn--ghost btn--sm" data-open-lockers>Schimbă</button>`;
+      <button type="button" class="btn btn--ghost btn--sm" data-open-lockers>${tr('Schimbă')}</button>`;
     box.hidden = false;
     $('[data-locker-find]', form).hidden = true;
     $('.locker-open', form).hidden = true;

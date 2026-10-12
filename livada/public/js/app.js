@@ -5,14 +5,54 @@ export const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 export const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// ─── limbă: română implicit, engleză sub /en/… ──────────────────────────
+// Textele din scripturi rămân în română și sunt cheia traducerii: tr('Vezi coșul') → „View bag” pe /en.
+// Dicționarul vine de la server în pagină (<script type="application/json" id="i18n">, din src/i18n/en/client.json).
+export const LANG = document.documentElement.lang === 'en' ? 'en' : 'ro';
+export const LOCALE = LANG === 'en' ? 'en-GB' : 'ro-RO';
+let dict = null;
+function dictionary() {
+  if (!dict) {
+    try { dict = LANG === 'en' ? JSON.parse(document.getElementById('i18n')?.textContent || '{}') || {} : {}; } catch { dict = {}; }
+  }
+  return dict;
+}
+export const missingTr = new Set(); // texte negăsite în dicționar (pentru verificări din consolă)
+
+/** traduce un text din română în limba paginii; variabile: tr('Doar {n} în stoc', { n }). Lipsă → textul românesc */
+export function tr(s, vars) {
+  let out = s;
+  if (LANG === 'en' && s) {
+    const v = dictionary()[s];
+    if (typeof v === 'string') out = v;
+    else missingTr.add(s);
+  }
+  return vars ? String(out).replace(/\{(\w+)\}/g, (m, k) => (vars[k] !== undefined && vars[k] !== null ? String(vars[k]) : m)) : out;
+}
+
+// căi fără versiune pe limbă (fișiere, API, admin) — aceleași reguli ca localizePath() din src/lib/i18n.js
+const NEUTRAL = /^\/(?:en|ro|img|css|js|vendor|fonts|uploads|api|admin|dev|favicon|robots\.txt|sitemap|manifest|apple-touch|icon-|og-|\.well-known)(?:[/.?#-]|$)/;
+/** adresă internă în limba paginii: „/produs/x” → „/en/produs/x” pe paginile în engleză */
+export function href(p) {
+  if (LANG !== 'en' || typeof p !== 'string' || !p.startsWith('/') || p.startsWith('//') || NEUTRAL.test(p)) return p;
+  return p === '/' ? '/en' : `/en${p}`;
+}
+
+/** numere și date în formatul limbii paginii (prețurile rămân „7.649,99 lei”, ca pe server) */
+export const num = (n, o) => Number(n).toLocaleString(LOCALE, o);
+export const dateFmt = (d, o = { day: 'numeric', month: 'long', year: 'numeric' }) => new Intl.DateTimeFormat(LOCALE, { timeZone: 'Europe/Bucharest', ...o }).format(d instanceof Date ? d : new Date(d));
+
+/** antetele trimise la fiecare cerere: serverul răspunde la API / fragmente în limba paginii */
+export const langHeaders = (h = {}) => ({ 'X-Lang': LANG, ...h });
+
 export async function api(url, { method = 'GET', body, form } = {}) {
-  const opts = { method, headers: { Accept: 'application/json', 'X-CSRF-Token': csrf() }, credentials: 'same-origin' };
+  const opts = { method, headers: langHeaders({ Accept: 'application/json', 'X-CSRF-Token': csrf() }), credentials: 'same-origin' };
   if (form) opts.body = new URLSearchParams(new FormData(form));
   else if (body) { opts.body = JSON.stringify(body); opts.headers['Content-Type'] = 'application/json'; }
   const res = await fetch(url, opts);
   let data = {};
   try { data = await res.json(); } catch { /* răspuns fără JSON */ }
-  if (!res.ok) { const e = new Error(data.error || 'A apărut o eroare. Încearcă din nou.'); e.data = data; e.status = res.status; throw e; }
+  if (!res.ok) { const e = new Error(data.error || tr('A apărut o eroare. Încearcă din nou.')); e.data = data; e.status = res.status; throw e; }
   return data;
 }
 
@@ -82,10 +122,10 @@ sInput?.addEventListener('input', () => {
       const { results } = await api(`/api/search?q=${encodeURIComponent(q)}`);
       if (seq !== sSeq) return;
       sResults.innerHTML = results.length
-        ? `<p class="eyebrow">Produse</p><div class="sresults">${results.map((r) => `<a class="sresult" href="/produs/${esc(r.slug)}">
+        ? `<p class="eyebrow">${tr('Produse')}</p><div class="sresults">${results.map((r) => `<a class="sresult" href="${esc(href(`/produs/${r.slug}`))}">
             <img src="${esc(r.image || '')}" alt="" width="56" height="56"><span><b>${esc(r.name)}</b><small>${esc(r.category)}</small></span><span class="sresult__price">${esc(r.price)}</span></a>`).join('')}
-            </div><a class="link-arrow" href="/cautare?q=${encodeURIComponent(q)}">Toate rezultatele pentru „${esc(q)}” →</a>`
-        : `<p class="muted">Niciun rezultat pentru „${esc(q)}”. Încearcă „iPhone”, „MacBook” sau „husă”.</p>`;
+            </div><a class="link-arrow" href="${esc(href(`/cautare?q=${encodeURIComponent(q)}`))}">${tr('Toate rezultatele pentru „{q}” →', { q: esc(q) })}</a>`
+        : `<p class="muted">${tr('Niciun rezultat pentru „{q}”. Încearcă „iPhone”, „MacBook” sau „husă”.', { q: esc(q) })}</p>`;
     } catch { /* ignoră */ }
   }, 160);
 });
@@ -118,7 +158,7 @@ export function setCartCount(n) {
 }
 export async function refreshDrawer() {
   if (!drawer) return;
-  const d = await api('/cos/drawer');
+  const d = await api(href('/cos/drawer'));
   $('[data-cart-body]', drawer).innerHTML = d.body;
   const foot = $('[data-cart-foot]', drawer);
   foot.innerHTML = d.foot;
@@ -130,7 +170,7 @@ export async function openCart() {
   try { await refreshDrawer(); } catch { /* */ }
 }
 $$('[data-open-cart]').forEach((a) => a.addEventListener('click', (e) => {
-  if (location.pathname === '/cos' || location.pathname === '/checkout') return;
+  if (location.pathname === href('/cos') || location.pathname === href('/checkout')) return;
   e.preventDefault();
   openCart();
 }));
@@ -159,17 +199,17 @@ document.addEventListener('submit', async (e) => {
   const fd = new FormData(form);
   if (e.submitter?.name) fd.set(e.submitter.name, e.submitter.value);
   try {
-    const res = await fetch(form.action, { method: 'POST', body: new URLSearchParams(fd), headers: { Accept: 'application/json', 'X-CSRF-Token': csrf() } });
+    const res = await fetch(form.action, { method: 'POST', body: new URLSearchParams(fd), headers: langHeaders({ Accept: 'application/json', 'X-CSRF-Token': csrf() }) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.errors ? Object.values(data.errors)[0] : data.error);
     if (data.message && isPromo) toast(data.message);
     // reîmprospătare fragmente
     const page = $('[data-cart-page]');
-    if (page) page.outerHTML = await (await fetch('/cos/fragment', { headers: { Accept: 'text/html' } })).text();
+    if (page) page.outerHTML = await (await fetch(href('/cos/fragment'), { headers: langHeaders({ Accept: 'text/html' }) })).text();
     if (drawer && !drawer.hidden) await refreshDrawer();
     else if (typeof data.count === 'number') setCartCount(data.count);
-    if (location.pathname === '/checkout' && isPromo) location.reload();
-  } catch (err) { toast(err.message || 'Nu am putut actualiza coșul.', { type: 'error' }); }
+    if (location.pathname === href('/checkout') && isPromo) location.reload();
+  } catch (err) { toast(err.message || tr('Nu am putut actualiza coșul.'), { type: 'error' }); }
 });
 
 // ─── formulare AJAX cu erori pe câmpuri ──────────────────────────────────
@@ -205,7 +245,7 @@ document.addEventListener('submit', async (e) => {
     showErrors(form, {});
     if (form.matches('[data-reset]')) form.reset();
     if (data.replace) { (form.closest('.panel, .auth__card') || form).innerHTML = data.replace; }
-    if (data.redirect) { location.href = data.redirect; return; }
+    if (data.redirect) { location.href = href(data.redirect); return; }
     if (data.message) toast(data.message);
     form.dispatchEvent(new CustomEvent('ajax:done', { detail: data }));
   } catch (err) {
@@ -232,7 +272,7 @@ document.addEventListener('click', (e) => {
   const input = b.parentElement.querySelector('input');
   const show = input.type === 'password';
   input.type = show ? 'text' : 'password';
-  b.setAttribute('aria-label', show ? 'Ascunde parola' : 'Arată parola');
+  b.setAttribute('aria-label', show ? tr('Ascunde parola') : tr('Arată parola'));
 });
 
 // ─── favorite ───────────────────────────────────────────────────────────
@@ -247,9 +287,9 @@ $$('[data-favorite]').forEach(async (btn) => {
     try {
       const r = await api(`/api/favorites/${btn.dataset.favorite}`, { method: 'POST' });
       btn.setAttribute('aria-pressed', String(r.on));
-      toast(r.message, { action: r.on ? { href: '/cont/favorite', label: 'Vezi' } : undefined });
+      toast(r.message, { action: r.on ? { href: href('/cont/favorite'), label: tr('Vezi') } : undefined });
     } catch (err) {
-      if (err.status === 401) location.href = `/cont/autentificare?next=${encodeURIComponent(location.pathname)}`;
+      if (err.status === 401) location.href = href(`/cont/autentificare?next=${encodeURIComponent(location.pathname)}`);
       else toast(err.message, { type: 'error' });
     }
   });

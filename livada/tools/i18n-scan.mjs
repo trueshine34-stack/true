@@ -11,7 +11,9 @@ const RO_WORDS = /\b(și|în|pentru|către|până|după|fără|cu|din|sau|este|s
 const DIACRITICS = /[ăâîșțşţĂÂÎȘȚŞŢ]/;
 // nume proprii care rămân la fel în engleză (adrese, localități, firme, rețele)
 const IGNORE = [/București/, /Dorobanți/, /Polonă/, /Bucharest/, /Cluj|Brașov|Timișoara|Iași|Constanța|Craiova|Galați|Oradea|Ploiești|Sibiu|Arad|Târgu|Mureș|Bacău|Pitești|Suceava|Botoșani|Brăila|Buzău|Satu Mare|Râmnicu|Vâlcea|Neamț|Argeș|Dâmbovița|Ialomița|Călărași|Mehedinți|Bistrița|Năsăud|Sălaj|Caraș|Hunedoara|Maramureș|Covasna|Harghita|Teleorman|Giurgiu|Olt|Dolj|Gorj|Vaslui|Vrancea|Tulcea|Alba|Bihor|Prahova|Ilfov|Timiș/,
-  /Livada Digital S\.R\.L\./, /Poșta Română/, /Banca Transilvania/, /S\.R\.L\./, /RO\d{2} /, /Str\.|Calea|Bulevardul|Strada|Șoseaua|Aleea/, /ANPC|SOL/, /lei\b/];
+  /Livada Digital S\.R\.L\./, /Poșta Română/, /Banca Transilvania/, /S\.R\.L\./, /RO\d{2} /, /Str\.|Calea|Bulevardul|Strada|Șoseaua|Aleea/, /ANPC|SOL/, /lei\b/,
+  // comutatorul de limbă e în română intenționat (numele limbii în limba ei)
+  /Versiunea în română/, /\bRomână\b/];
 
 function texts(html) {
   const out = [];
@@ -52,6 +54,7 @@ for (const p of paths) {
   if (!html) { console.error(`! ${p}: nu s-a putut încărca`); continue; }
   for (const s of texts(html)) {
     if (!(DIACRITICS.test(s) || RO_WORDS.test(s))) continue;
+    if (/^(?:https?:\/\/|\/)\S*$/.test(s)) continue; // adrese (og:url, canonical): slugurile rămân în română
     const cleaned = IGNORE.reduce((x, re) => x.replace(new RegExp(re.source, 'g'), ''), s);
     if (!(DIACRITICS.test(cleaned) || RO_WORDS.test(cleaned))) continue;
     const e = found.get(s) || { n: 0, pages: new Set() };

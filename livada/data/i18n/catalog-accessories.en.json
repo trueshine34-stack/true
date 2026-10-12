@@ -1,0 +1,2637 @@
+{
+ "labels": {
+  "24 de luni garanție (garanția legală de conformitate) + 14 zile drept de retur.": "24-month warranty (statutory guarantee of conformity) + 14-day right of return.",
+  "40 mm": "40mm",
+  "42 mm": "42mm",
+  "46 mm": "46mm",
+  "Audio": "Audio",
+  "Cabluri și adaptoare": "Cables & Adapters",
+  "Carcasă": "Case",
+  "Cataramă": "Buckle",
+  "Compatibilitate": "Compatibility",
+  "Conector": "Connector",
+  "Culoare": "Colour",
+  "Curele Apple Watch": "Apple Watch Bands",
+  "Diverse": "Other Accessories",
+  "Huse iPhone": "iPhone Cases",
+  "Lungime": "Length",
+  "Model": "Model",
+  "Modele": "Models",
+  "Mărime": "Size",
+  "Tastaturi și mouse": "Keyboards & Mice",
+  "Tastatură": "Keyboard layout",
+  "iPad și Apple Pencil": "iPad & Apple Pencil",
+  "Încărcare": "Charging"
+ },
+ "values": {
+  "0": "0",
+  "1": "1",
+  "1 m": "1 m",
+  "1,5 m": "1.5 m",
+  "1,8 m": "1.8 m",
+  "10": "10",
+  "11": "11",
+  "12": "12",
+  "2": "2",
+  "2 m": "2 m",
+  "20 cm": "20 cm",
+  "3": "3",
+  "3 m": "3 m",
+  "4": "4",
+  "40 mm": "40mm",
+  "42 mm": "42mm",
+  "46 mm": "46mm",
+  "5": "5",
+  "6": "6",
+  "7": "7",
+  "8": "8",
+  "9": "9",
+  "Acvamarin": "Aquamarine",
+  "After Dark Black": "After Dark Black",
+  "Alb": "White",
+  "Alb crem": "Ivory",
+  "Albastru": "Blue",
+  "Albastru ardezie": "Slate Blue",
+  "Albastru cer": "Sky Blue",
+  "Albastru chambray": "Chambray Blue",
+  "Albastru clar": "Crisp Blue",
+  "Albastru deschis": "Light Blue",
+  "Albastru flacără": "Flame Blue",
+  "Albastru furtună": "Storm Blue",
+  "Albastru gheață": "Frost",
+  "Albastru iarnă": "Winter Blue",
+  "Albastru maree": "Riptide Blue",
+  "Albastru marin": "Anchor Blue",
+  "Albastru stâncă": "Bedrock Blue",
+  "Albastru turbo": "Nitro Navy",
+  "Albastru zambilă": "Wildflower Blue",
+  "Albastru/Negru": "Blue/Black",
+  "Antracit": "Charcoal Grey",
+  "Argintiu": "Silver",
+  "Auriu strălucitor": "Radiant Gold",
+  "Black Unity – Unity Connection": "Black Unity – Unity Connection",
+  "Black Unity – Unity Rhythm": "Black Unity – Unity Rhythm",
+  "Bleumarin": "Navy Blue",
+  "Bronz închis": "Dark Bronze",
+  "Bujor": "Peony",
+  "Burgundia": "Burgundy",
+  "Burgundia carouri": "Burgundy Plaid",
+  "Calcar": "Lime Stone",
+  "Carambola": "Starfruit",
+  "Cer": "Sky",
+  "Chalk Calm": "Chalk Calm",
+  "Cămilă": "Camel",
+  "Denim": "Denim",
+  "Dud": "Mulberry",
+  "Engleză (Marea Britanie)": "British English",
+  "Engleză (SUA)": "US English",
+  "Engleză (internațională)": "International English",
+  "Espresso": "Deep Brown",
+  "Essential White": "Essential White",
+  "Franceză": "French",
+  "Fucsia": "Fuchsia",
+  "Galben cald": "Sunshine",
+  "Galben neon": "Neon Yellow",
+  "Galben yuzu": "Yuzu Yellow",
+  "Germană": "German",
+  "Green Spark": "Green Spark",
+  "Gresie": "Sandstone",
+  "Gri alpin": "Alpine Grey",
+  "Gri deschis": "Light Grey",
+  "Gri energie": "Surge Stone",
+  "Gri fum": "Smoke Grey",
+  "Gri furtună": "Storm Grey",
+  "Gri granit": "Granite Grey",
+  "Gri piatră": "Stone Grey",
+  "Gri pietriș": "Gravel Grey",
+  "Gri spațial": "Space Grey",
+  "Gri translucid": "Translucent Grey",
+  "Hiperviolet": "Hyper Purple",
+  "Indigo": "Indigo",
+  "Italiană": "Italian",
+  "Jack 3,5 mm": "3.5mm Headphone Plug",
+  "L": "L",
+  "Lavandă luminoasă": "Electric Lavender",
+  "Lightning": "Lightning",
+  "Liliac apus": "Sunset Purple",
+  "Limonadă": "Lemonade",
+  "M": "M",
+  "M/L": "M/L",
+  "Magenta": "Magenta",
+  "Maghiară": "Hungarian",
+  "Mandarină": "Tangerine",
+  "Maro lut": "Clay",
+  "Mentă pal": "Soft Mint",
+  "Miezul nopții": "Midnight",
+  "Migdală": "Tan",
+  "Mărime unică": "One size",
+  "Măsliniu închis": "Dark Olive",
+  "Natural": "Natural",
+  "Negru": "Black",
+  "Negru Beats": "Beats Black",
+  "Negru Power": "Bolt Black",
+  "Negru diamant": "Jet Black",
+  "Negru mat": "Matt Black",
+  "Negru noapte": "Midnight Black",
+  "Negru spațial": "Space Black",
+  "Negru translucid": "Translucent Black",
+  "Negru/Auriu": "Black/Gold",
+  "Nevada Orange": "Sierra Orange",
+  "Nisip": "Sand",
+  "Nisip de deșert": "Desert",
+  "Nisip mișcător": "Quick Sand",
+  "Noapte montană": "Everest Black",
+  "Nor": "Cloud",
+  "Oliv": "Olive",
+  "Pavement Grey": "Pavement Grey",
+  "Pepene roșu": "Watermelon",
+  "Piatră de vârf": "Summit Stone",
+  "Portocaliu": "Orange",
+  "Portocaliu aprins": "Spark Orange",
+  "Portocaliu neon": "Electric Orange",
+  "Power Pink": "Power Pink",
+  "Pride Edition": "Pride Edition",
+  "Prună": "Plum",
+  "Rocky Mountain Blue": "Rocky Blue",
+  "Română": "Romanian",
+  "Roz": "Pink",
+  "Roz cretă": "Chalk Pink",
+  "Roz deschis": "Soft Pink",
+  "Roz guava": "Bright Guava",
+  "Roz nor": "Cloud Pink",
+  "Roz pietricică": "Pebble Pink",
+  "Roșu": "Red",
+  "Roșu fulger": "Rapid Red",
+  "Roșu semnal": "Statement Red",
+  "Roșu transparent": "Transparent Red",
+  "Rusă": "Russian",
+  "S": "S",
+  "S/M": "S/M",
+  "Salvie": "Sage",
+  "Siena": "Sienna",
+  "Spaniolă": "Spanish",
+  "Steaua polară": "Starlight",
+  "Suprafață Multi‑Touch albă": "White Multi‑Touch Surface",
+  "Suprafață Multi‑Touch neagră": "Black Multi‑Touch Surface",
+  "Taste albe": "White Keys",
+  "Taste negre": "Black Keys",
+  "Taupe": "Taupe",
+  "Teracotă": "Terra Cotta",
+  "Titan natural": "Natural Titanium",
+  "Titan negru": "Black Titanium",
+  "Transparent": "Transparent",
+  "USB‑C": "USB‑C",
+  "Ucraineană": "Ukrainian",
+  "Ultramarin": "Ultramarine",
+  "Umbră": "Shadow",
+  "Umbră deschisă carouri": "Light Umber Plaid",
+  "Umbră închisă": "Dark Umber",
+  "Vanilie": "Vanilla",
+  "Verde": "Green",
+  "Verde agavă pal": "Pale Succulent",
+  "Verde alge translucid": "Translucent Kelp",
+  "Verde mare": "Lake Green",
+  "Verde mușchi deschis": "Light Moss",
+  "Violet": "Purple",
+  "Violet ceață": "Purple Fog",
+  "Violet deschis": "Light Violet",
+  "Violet polar": "Arctic Purple",
+  "Viorea": "Violet",
+  "Volt": "Volt",
+  "XL": "XL",
+  "XS": "XS",
+  "XXS": "XXS",
+  "iPad Air 11\" (M4)": "iPad Air 11-inch (M4)",
+  "iPad Air 13\" (M4)": "iPad Air 13-inch (M4)",
+  "iPad Pro 11\" (M5)": "iPad Pro 11-inch (M5)",
+  "iPad Pro 13\" (M5)": "iPad Pro 13-inch (M5)",
+  "iPhone 17": "iPhone 17",
+  "iPhone 17 Pro": "iPhone 17 Pro",
+  "iPhone 17 Pro Max": "iPhone 17 Pro Max",
+  "iPhone 18 Pro": "iPhone 18 Pro",
+  "iPhone 18 Pro Max": "iPhone 18 Pro Max",
+  "iPhone Air": "iPhone Air",
+  "pentru carcase de 38, 40 și 41 mm": "fits 38mm, 40mm and 41mm cases",
+  "pentru carcase de 38, 40, 41 și 42 mm": "fits 38mm, 40mm, 41mm and 42mm cases",
+  "pentru carcase de 44, 45, 46 și 49 mm": "fits 44mm, 45mm, 46mm and 49mm cases",
+  "Șampanie": "Champagne Gold"
+ },
+ "products": {
+  "adaptor-de-alimentare-usb-c-140-w": {
+   "name": "140W USB‑C Power Adapter",
+   "tagline": "Fast, safe charging for your Apple devices.",
+   "description": [
+    "Fast, safe charging for your Apple devices.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-de-alimentare-usb-c-20-w": {
+   "name": "20W USB‑C Power Adapter",
+   "tagline": "Fast, safe charging for your Apple devices.",
+   "description": [
+    "Fast, safe charging for your Apple devices.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-de-alimentare-usb-c-70-w": {
+   "name": "70W USB‑C Power Adapter",
+   "tagline": "Fast, safe charging for your Apple devices.",
+   "description": [
+    "Fast, safe charging for your Apple devices.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-de-alimentare-usb-c-96-w": {
+   "name": "96W USB‑C Power Adapter",
+   "tagline": "Fast, safe charging for your Apple devices.",
+   "description": [
+    "Fast, safe charging for your Apple devices.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-dual-usb-c-35-w": {
+   "name": "35W Dual USB‑C Port Power Adapter",
+   "tagline": "Two USB‑C ports for charging two devices at once.",
+   "description": [
+    "Two USB‑C ports for charging two devices at once.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-dynamic-40-w-max-60-w": {
+   "name": "40W Dynamic Power Adapter with 60W Max",
+   "tagline": "Charges iPhone 18 Pro to 50% in about 15 minutes.",
+   "description": [
+    "Charges iPhone 18 Pro to 50% in about 15 minutes.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-lightning-digital-av": {
+   "name": "Lightning Digital AV Adapter",
+   "tagline": "Mirror your screen to a TV over HDMI.",
+   "description": [
+    "Mirror your screen to a TV over HDMI.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-lightning-la-usb-3-pentru-camera": {
+   "name": "Lightning to USB 3 Camera Adapter",
+   "tagline": "Import photos and connect USB accessories.",
+   "description": [
+    "Import photos and connect USB accessories.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-thunderbolt-3-usb-c-la-thunderbolt-2": {
+   "name": "Thunderbolt 3 (USB‑C) to Thunderbolt 2 Adapter",
+   "tagline": "For Thunderbolt 2 accessories and displays.",
+   "description": [
+    "For Thunderbolt 2 accessories and displays.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-usb-c-digital-av-multiport": {
+   "name": "USB‑C Digital AV Multiport Adapter",
+   "tagline": "4K60 HDMI, USB‑A and a USB‑C charging port.",
+   "description": [
+    "4K60 HDMI, USB‑A and a USB‑C charging port.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-usb-c-la-apple-pencil": {
+   "name": "USB‑C to Apple Pencil Adapter",
+   "tagline": "Pair and charge Apple Pencil (1st generation) via USB‑C.",
+   "description": [
+    "Pair and charge Apple Pencil (1st generation) via USB‑C.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-usb-c-la-jack-35-mm": {
+   "name": "USB‑C to 3.5mm Headphone Jack Adapter",
+   "tagline": "For your wired headphones.",
+   "description": [
+    "For your wired headphones.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-usb-c-la-lightning": {
+   "name": "USB‑C to Lightning Adapter",
+   "tagline": "Use your Lightning accessories with USB‑C devices.",
+   "description": [
+    "Use your Lightning accessories with USB‑C devices.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "adaptor-usb-c-la-usb": {
+   "name": "USB‑C to USB Adapter",
+   "tagline": "Connect USB‑A flash drives and accessories.",
+   "description": [
+    "Connect USB‑A flash drives and accessories.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "apple-pencil-a-doua-generatie": {
+   "name": "Apple Pencil (2nd generation)",
+   "tagline": "For iPad models that charge the pencil magnetically (previous generations).",
+   "description": [
+    "For iPad models that charge the pencil magnetically (previous generations).",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "apple-pencil-prima-generatie": {
+   "name": "Apple Pencil (1st generation)",
+   "tagline": "For older iPad models with a Lightning or USB‑C port (with adapter).",
+   "description": [
+    "For older iPad models with a Lightning or USB‑C port (with adapter).",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "apple-pencil-pro": {
+   "name": "Apple Pencil Pro",
+   "tagline": "Squeeze, barrel roll, haptic feedback and Find My.",
+   "description": [
+    "Squeeze, barrel roll, haptic feedback and Find My.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "apple-pencil-usb-c": {
+   "name": "Apple Pencil (USB‑C)",
+   "tagline": "Pixel-perfect precision, with pairing and charging via USB‑C.",
+   "description": [
+    "Pixel-perfect precision, with pairing and charging via USB‑C.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "baterie-magsafe-pentru-iphone-air": {
+   "name": "iPhone Air MagSafe Battery",
+   "tagline": "A slim battery that attaches magnetically and charges wirelessly.",
+   "description": [
+    "A slim battery that attaches magnetically and charges wirelessly.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "bratara-cu-zale": {
+   "name": "Link Bracelet",
+   "tagline": "Stainless steel with more than 100 components, adjustable without tools.",
+   "description": [
+    "Stainless steel with more than 100 components, adjustable without tools.",
+    "Genuine Apple product, new and sealed. Available in 2 colours, 4 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "radiantgold": "Radiant Gold",
+      "natural": "Natural"
+     }
+    }
+   }
+  },
+  "breloc-finewoven-pentru-airtag": {
+   "name": "AirTag FineWoven Key Ring",
+   "tagline": "A FineWoven key ring that keeps your AirTag on show.",
+   "description": [
+    "A FineWoven key ring that keeps your AirTag on show.",
+    "Genuine Apple product, new and sealed. Available in 5 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "darkolive": "Dark Olive",
+      "burgundy": "Burgundy",
+      "wildflowerblue": "Wildflower Blue",
+      "navy": "Navy",
+      "black": "Black"
+     }
+    }
+   }
+  },
+  "bumper-pentru-iphone-air": {
+   "name": "iPhone Air Bumper",
+   "tagline": "Edge protection that leaves the back uncovered and keeps the ultra-thin profile.",
+   "description": [
+    "Edge protection that leaves the back uncovered and keeps the ultra-thin profile.",
+    "Genuine Apple product, new and sealed. Available in 4 colours."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone Air"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "light_blue": "Light Blue",
+      "tan": "Tan",
+      "lightgray": "Light Grey",
+      "black": "Black"
+     }
+    }
+   }
+  },
+  "cablu-audio-usb-c-la-jack-35-mm-12-m": {
+   "name": "USB‑C to 3.5mm Audio Cable (1.2 m)",
+   "tagline": "Connect iPhone or Mac to audio systems with a 3.5mm input.",
+   "description": [
+    "Connect iPhone or Mac to audio systems with a 3.5mm input.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "cablu-de-incarcare-usb-c-240-w": {
+   "name": "240W USB‑C Charge Cable",
+   "tagline": "A woven cable that works with every USB‑C device.",
+   "description": [
+    "A woven cable that works with every USB‑C device.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "cablu-de-incarcare-usb-c-60-w": {
+   "name": "60W USB‑C Charge Cable",
+   "tagline": "A woven cable that works with every USB‑C device.",
+   "description": [
+    "A woven cable that works with every USB‑C device.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "cablu-lightning-la-usb": {
+   "name": "Lightning to USB Cable",
+   "tagline": "For chargers and computers with USB‑A.",
+   "description": [
+    "For chargers and computers with USB‑A.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "cablu-magnetic-de-incarcare-apple-watch": {
+   "name": "Apple Watch Magnetic Charging Cable",
+   "tagline": "The classic charging cable for Apple Watch.",
+   "description": [
+    "The classic charging cable for Apple Watch.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "cablu-prelungitor-pentru-adaptorul-de-alimentare": {
+   "name": "Power Adapter Extension Cable",
+   "tagline": "Extends your MacBook power adapter by 1.8 m.",
+   "description": [
+    "Extends your MacBook power adapter by 1.8 m.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "cablu-tesut-beats-usb-a-la-usb-c": {
+   "name": "Beats USB‑A to USB‑C Woven Cable",
+   "tagline": "A tangle-resistant woven cable.",
+   "description": [
+    "A tangle-resistant woven cable.",
+    "Genuine Beats product, new and sealed. Available in 4 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "boltblack": "Bolt Black",
+      "surgestone": "Surge Stone",
+      "rapidred": "Rapid Red",
+      "power_pink": "Power Pink"
+     }
+    }
+   }
+  },
+  "cablu-tesut-beats-usb-c-la-lightning": {
+   "name": "Beats USB‑C to Lightning Woven Cable",
+   "tagline": "A tangle-resistant woven cable.",
+   "description": [
+    "A tangle-resistant woven cable.",
+    "Genuine Beats product, new and sealed. Available in 3 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "boltblack": "Bolt Black",
+      "surgestone": "Surge Stone",
+      "rapidred": "Rapid Red"
+     }
+    }
+   }
+  },
+  "cablu-tesut-beats-usb-c-la-usb-c": {
+   "name": "Beats USB‑C to USB‑C Woven Cable",
+   "tagline": "A tangle-resistant woven cable in several lengths.",
+   "description": [
+    "A tangle-resistant woven cable in several lengths.",
+    "Genuine Beats product, new and sealed. Available in 5 colours, 11 variants in total."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "boltblack": "Bolt Black",
+      "surgestone": "Surge Stone",
+      "nitronavy": "Nitro Navy",
+      "rapidred": "Rapid Red",
+      "power_pink": "Power Pink"
+     }
+    },
+    "length": {
+     "label": "Length",
+     "values": {
+      "1_5meters": "1.5 m",
+      "0_2meters": "20 cm"
+     }
+    }
+   }
+  },
+  "cablu-thunderbolt-4-usb-c-pro": {
+   "name": "Thunderbolt 4 (USB‑C) Pro Cable",
+   "tagline": "Data at up to 40Gb/s and support for 6K displays, in a woven cable.",
+   "description": [
+    "Data at up to 40Gb/s and support for 6K displays, in a woven cable.",
+    "Genuine Apple product, new and sealed. Available in 2 variants."
+   ],
+   "options": {
+    "length": {
+     "label": "Length",
+     "values": {
+      "1_8meters": "1.8 m",
+      "3meters": "3 m"
+     }
+    }
+   }
+  },
+  "cablu-thunderbolt-5-usb-c-pro": {
+   "name": "Thunderbolt 5 (USB‑C) Pro Cable",
+   "tagline": "Data transfer at up to 120Gb/s and charging at up to 240W.",
+   "description": [
+    "Data transfer at up to 120Gb/s and charging at up to 240W.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "cablu-usb-c-la-lightning": {
+   "name": "USB‑C to Lightning Cable",
+   "tagline": "Charge and sync your devices with a Lightning port.",
+   "description": [
+    "Charge and sync your devices with a Lightning port.",
+    "Genuine Apple product, new and sealed. Available in 2 variants."
+   ],
+   "options": {
+    "length": {
+     "label": "Length",
+     "values": {
+      "1meter": "1 m",
+      "2meters": "2 m"
+     }
+    }
+   }
+  },
+  "cablu-usb-c-la-magsafe-3-2-m": {
+   "name": "USB‑C to MagSafe 3 Cable (2 m)",
+   "tagline": "For MacBook Air and MacBook Pro, in a colour to match your laptop.",
+   "description": [
+    "For MacBook Air and MacBook Pro, in a colour to match your laptop.",
+    "Genuine Apple product, new and sealed. Available in 6 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "skyblue": "Sky Blue",
+      "midnight": "Midnight",
+      "spaceblack": "Space Black",
+      "starlight": "Starlight",
+      "silver": "Silver",
+      "space_gray": "Space Grey"
+     }
+    }
+   }
+  },
+  "cititor-de-carduri-usb-c-la-sd": {
+   "name": "USB‑C to SD Card Reader",
+   "tagline": "Fast transfers from your camera.",
+   "description": [
+    "Fast transfers from your camera.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "curea-alpine-loop": {
+   "name": "Alpine Loop",
+   "tagline": "For Ultra: a two-layer weave with a titanium hook.",
+   "description": [
+    "For Ultra: a two-layer weave with a titanium hook.",
+    "Genuine Apple product, new and sealed. Available in 4 colours, 21 variants in total."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "indigo": "Indigo",
+      "darkolive": "Dark Olive",
+      "burgundy": "Burgundy",
+      "desert": "Desert"
+     }
+    },
+    "finish": {
+     "label": "Buckle",
+     "values": {
+      "natural": "Natural Titanium",
+      "black": "Black Titanium"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "values": {
+      "small": "S",
+      "medium": "M",
+      "large": "L"
+     }
+    }
+   }
+  },
+  "curea-crossbody-pentru-iphone": {
+   "name": "Crossbody Strap for iPhone",
+   "tagline": "An adjustable strap that attaches to your case so you can carry your iPhone over your shoulder.",
+   "description": [
+    "An adjustable strap that attaches to your case so you can carry your iPhone over your shoulder.",
+    "Genuine Apple product, new and sealed. Available in 9 colours."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "burgundy": "Burgundy",
+      "olive": "Olive",
+      "crispblue": "Crisp Blue",
+      "navyblue": "Navy Blue",
+      "taupe": "Taupe",
+      "magenta": "Magenta",
+      "lightgray": "Light Grey",
+      "black": "Black",
+      "sand": "Sand"
+     }
+    }
+   }
+  },
+  "curea-cu-catarama-moderna": {
+   "name": "Modern Buckle",
+   "tagline": "French leather with a two-piece magnetic buckle.",
+   "description": [
+    "French leather with a two-piece magnetic buckle.",
+    "Genuine Apple product, new and sealed. Available in 4 colours, 12 variants in total."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "navyblue": "Navy Blue",
+      "mulberry": "Mulberry",
+      "sage": "Sage",
+      "camel": "Camel"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "values": {
+      "small": "S",
+      "medium": "M",
+      "large": "L"
+     }
+    }
+   }
+  },
+  "curea-cu-inchidere-magnetica": {
+   "name": "Magnetic Link",
+   "tagline": "Fine leather with a hidden magnetic closure.",
+   "description": [
+    "Fine leather with a hidden magnetic closure.",
+    "Genuine Apple product, new and sealed. Available in 4 colours, 16 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "midnight": "Midnight",
+      "burgundy": "Burgundy",
+      "wildflowerblue": "Wildflower Blue",
+      "camel": "Camel"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "values": {
+      "s_m": "S/M",
+      "m_l": "M/L"
+     }
+    }
+   }
+  },
+  "curea-de-mana-pentru-iphone": {
+   "name": "Wrist Strap for iPhone",
+   "tagline": "A short wrist loop that attaches to compatible cases.",
+   "description": [
+    "A short wrist loop that attaches to compatible cases.",
+    "Genuine Apple product, new and sealed. Available in 6 colours."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "burgundy": "Burgundy",
+      "olive": "Olive",
+      "crispblue": "Crisp Blue",
+      "taupe": "Taupe",
+      "magenta": "Magenta",
+      "black": "Black"
+     }
+    }
+   }
+  },
+  "curea-milanese-loop": {
+   "name": "Milanese Loop",
+   "tagline": "Stainless steel mesh with an adjustable magnetic closure.",
+   "description": [
+    "Stainless steel mesh with an adjustable magnetic closure.",
+    "Genuine Apple product, new and sealed. Available in 3 colours, 12 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "40mm",
+       "v": "38mm, 40mm and 41mm cases"
+      },
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "40mm": "40mm",
+      "40mm@note": "fits 38mm, 40mm and 41mm cases",
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "darkbronze": "Dark Bronze",
+      "radiantgold": "Radiant Gold",
+      "natural": "Natural"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "values": {
+      "onesize": "One size",
+      "s_m": "S/M",
+      "m_l": "M/L"
+     }
+    }
+   }
+  },
+  "curea-milanese-loop-din-titan": {
+   "name": "Titanium Milanese Loop",
+   "tagline": "For Ultra: titanium mesh with an adjustable closure.",
+   "description": [
+    "For Ultra: titanium mesh with an adjustable closure.",
+    "Genuine Apple product, new and sealed. Available in 2 colours, 6 variants in total."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "black": "Black",
+      "natural": "Natural"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "values": {
+      "small": "S",
+      "medium": "M",
+      "large": "L"
+     }
+    }
+   }
+  },
+  "curea-ocean": {
+   "name": "Ocean Band",
+   "tagline": "For Ultra: an elastomer band made for water sports and diving.",
+   "description": [
+    "For Ultra: an elastomer band made for water sports and diving.",
+    "Genuine Apple product, new and sealed. Available in 3 colours, 6 variants in total."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "translucentblack": "Translucent Black",
+      "translucentkelp": "Translucent Kelp",
+      "translucentgray": "Translucent Grey"
+     }
+    },
+    "finish": {
+     "label": "Buckle",
+     "values": {
+      "natural": "Natural Titanium",
+      "black": "Black Titanium"
+     }
+    }
+   }
+  },
+  "curea-solo-loop": {
+   "name": "Solo Loop",
+   "tagline": "Stretchable one-piece silicone, with no buckle.",
+   "description": [
+    "Stretchable one-piece silicone, with no buckle.",
+    "Genuine Apple product, new and sealed. Available in 5 colours, 115 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "burgundy": "Burgundy",
+      "olive": "Olive",
+      "navyblue": "Navy Blue",
+      "wildflowerblue": "Wildflower Blue",
+      "black": "Black"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "note": "The Solo Loop has no buckle, so choose the size that matches your wrist circumference (Apple’s size guide measures it in a minute).",
+     "values": {
+      "0": "0",
+      "1": "1",
+      "2": "2",
+      "3": "3",
+      "4": "4",
+      "5": "5",
+      "6": "6",
+      "7": "7",
+      "8": "8",
+      "9": "9",
+      "10": "10",
+      "11": "11",
+      "12": "12"
+     }
+    }
+   }
+  },
+  "curea-solo-loop-impletita": {
+   "name": "Braided Solo Loop",
+   "tagline": "Recycled yarn braided with silicone threads; stretchable, with no buckle.",
+   "description": [
+    "Recycled yarn braided with silicone threads; stretchable, with no buckle.",
+    "Genuine Apple product, new and sealed. Available in 6 colours, 138 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "burgundy": "Burgundy",
+      "olive": "Olive",
+      "navyblue": "Navy Blue",
+      "wildflowerblue": "Wildflower Blue",
+      "magenta": "Magenta",
+      "black": "Black"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "note": "The Solo Loop has no buckle, so choose the size that matches your wrist circumference (Apple’s size guide measures it in a minute).",
+     "values": {
+      "0": "0",
+      "1": "1",
+      "2": "2",
+      "3": "3",
+      "4": "4",
+      "5": "5",
+      "6": "6",
+      "7": "7",
+      "8": "8",
+      "9": "9",
+      "10": "10",
+      "11": "11",
+      "12": "12"
+     }
+    }
+   }
+  },
+  "curea-solo-loop-impletita--black-unity": {
+   "name": "Black Unity Braided Solo Loop",
+   "tagline": "Black Unity edition: stretchable braided yarn, with no buckle.",
+   "description": [
+    "Black Unity edition: stretchable braided yarn, with no buckle.",
+    "Genuine Apple product, new and sealed. Available in 23 variants."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "note": "The Solo Loop has no buckle, so choose the size that matches your wrist circumference (Apple’s size guide measures it in a minute).",
+     "values": {
+      "0": "0",
+      "1": "1",
+      "2": "2",
+      "3": "3",
+      "4": "4",
+      "5": "5",
+      "6": "6",
+      "7": "7",
+      "8": "8",
+      "9": "9",
+      "10": "10",
+      "11": "11",
+      "12": "12"
+     }
+    }
+   }
+  },
+  "curea-solo-loop-impletita--pride-edition": {
+   "name": "Pride Edition Braided Solo Loop",
+   "tagline": "Pride Edition: stretchable braided recycled yarn, with no buckle.",
+   "description": [
+    "Pride Edition: stretchable braided recycled yarn, with no buckle.",
+    "Genuine Apple product, new and sealed. Available in 23 variants."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "note": "The Solo Loop has no buckle, so choose the size that matches your wrist circumference (Apple’s size guide measures it in a minute).",
+     "values": {
+      "0": "0",
+      "1": "1",
+      "2": "2",
+      "3": "3",
+      "4": "4",
+      "5": "5",
+      "6": "6",
+      "7": "7",
+      "8": "8",
+      "9": "9",
+      "10": "10",
+      "11": "11",
+      "12": "12"
+     }
+    }
+   }
+  },
+  "curea-sport": {
+   "name": "Sport Band",
+   "tagline": "Soft, durable fluoroelastomer with a pin-and-tuck closure.",
+   "description": [
+    "Soft, durable fluoroelastomer with a pin-and-tuck closure.",
+    "Genuine Apple product, new and sealed. Available in 8 colours, 49 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "40mm",
+       "v": "38mm, 40mm and 41mm cases"
+      },
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "40mm": "40mm",
+      "40mm@note": "fits 38mm, 40mm and 41mm cases",
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "burgundy": "Burgundy",
+      "olive": "Olive",
+      "navyblue": "Navy Blue",
+      "wildflowerblue": "Wildflower Blue",
+      "magenta": "Magenta",
+      "black": "Black",
+      "sand": "Sand",
+      "palesucculent": "Pale Succulent"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "values": {
+      "s_m": "S/M",
+      "m_l": "M/L",
+      "extralarge": "XL"
+     }
+    }
+   }
+  },
+  "curea-sport-loop": {
+   "name": "Sport Loop",
+   "tagline": "A soft, breathable weave with quick hook-and-loop adjustment.",
+   "description": [
+    "A soft, breathable weave with quick hook-and-loop adjustment.",
+    "Genuine Apple product, new and sealed. Available in 7 colours, 22 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "40mm",
+       "v": "38mm, 40mm and 41mm cases"
+      },
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "40mm": "40mm",
+      "40mm@note": "fits 38mm, 40mm and 41mm cases",
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "burgundyplaid": "Burgundy Plaid",
+      "burgundy": "Burgundy",
+      "olive": "Olive",
+      "magenta": "Magenta",
+      "lightumberplaid": "Light Umber Plaid",
+      "chambrayblue": "Chambray Blue",
+      "limestonewhite": "Limestone"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "values": {
+      "onesize": "One size",
+      "extralarge": "XL"
+     }
+    }
+   }
+  },
+  "curea-sport-loop--black-unity": {
+   "name": "Black Unity Sport Loop",
+   "tagline": "Black Unity edition: a soft weave with a hook-and-loop fastener.",
+   "description": [
+    "Black Unity edition: a soft weave with a hook-and-loop fastener.",
+    "Genuine Apple product, new and sealed. Available in 2 variants."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    }
+   }
+  },
+  "curea-sport-loop--pride-edition": {
+   "name": "Pride Edition Sport Loop",
+   "tagline": "Pride Edition: a soft weave in the colours of the rainbow.",
+   "description": [
+    "Pride Edition: a soft weave in the colours of the rainbow.",
+    "Genuine Apple product, new and sealed. Available in 3 variants."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "40mm",
+       "v": "38mm, 40mm and 41mm cases"
+      },
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "40mm": "40mm",
+      "40mm@note": "fits 38mm, 40mm and 41mm cases",
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    }
+   }
+  },
+  "curea-sport-loop-nike": {
+   "name": "Nike Sport Loop",
+   "tagline": "A soft, breathable weave with reflective thread and quick adjustment.",
+   "description": [
+    "A soft, breathable weave with reflective thread and quick adjustment.",
+    "Genuine Apple product, new and sealed. Available in 5 colours, 15 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "40mm",
+       "v": "38mm, 40mm and 41mm cases"
+      },
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "40mm": "40mm",
+      "40mm@note": "fits 38mm, 40mm and 41mm cases",
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "afterdarkblack": "After Dark Black",
+      "pavementgrey": "Pavement Grey",
+      "chalkcalm": "Chalk Calm",
+      "essentialwhite": "Essential White",
+      "greenspark": "Green Spark"
+     }
+    }
+   }
+  },
+  "curea-sport-nike": {
+   "name": "Nike Sport Band",
+   "tagline": "Fluoroelastomer with perforations for breathability, in a Nike design.",
+   "description": [
+    "Fluoroelastomer with perforations for breathability, in a Nike design.",
+    "Genuine Apple product, new and sealed. Available in 5 colours, 30 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "40mm",
+       "v": "38mm, 40mm and 41mm cases"
+      },
+      {
+       "k": "42mm",
+       "v": "38mm, 40mm, 41mm and 42mm cases"
+      },
+      {
+       "k": "46mm",
+       "v": "44mm, 45mm, 46mm and 49mm cases"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "case": {
+     "label": "Case size",
+     "values": {
+      "40mm": "40mm",
+      "40mm@note": "fits 38mm, 40mm and 41mm cases",
+      "42mm": "42mm",
+      "42mm@note": "fits 38mm, 40mm, 41mm and 42mm cases",
+      "46mm": "46mm",
+      "46mm@note": "fits 44mm, 45mm, 46mm and 49mm cases"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "afterdarkblack": "After Dark Black",
+      "pavementgrey": "Pavement Grey",
+      "chalkcalm": "Chalk Calm",
+      "essentialwhite": "Essential White",
+      "greenspark": "Green Spark"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "values": {
+      "s_m": "S/M",
+      "m_l": "M/L"
+     }
+    }
+   }
+  },
+  "curea-trail-loop": {
+   "name": "Trail Loop",
+   "tagline": "For Ultra: thin, light and quick to adjust.",
+   "description": [
+    "For Ultra: thin, light and quick to adjust.",
+    "Genuine Apple product, new and sealed. Available in 4 colours, 14 variants in total."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "darkumber": "Dark Umber",
+      "burgundy": "Burgundy",
+      "sand": "Sand",
+      "blue_black": "Blue/Black"
+     }
+    },
+    "finish": {
+     "label": "Buckle",
+     "values": {
+      "natural": "Natural Titanium",
+      "black": "Black Titanium"
+     }
+    },
+    "size": {
+     "label": "Size",
+     "values": {
+      "s_m": "S/M",
+      "m_l": "M/L"
+     }
+    }
+   }
+  },
+  "dopuri-airpods-pro-2-2-perechi": {
+   "name": "AirPods Pro 2 Ear Tips (2 pairs)",
+   "tagline": "Replacement silicone ear tips in a single size.",
+   "description": [
+    "Replacement silicone ear tips in a single size.",
+    "Genuine Apple product, new and sealed. Available in 4 variants."
+   ],
+   "options": {
+    "size": {
+     "label": "Size",
+     "values": {
+      "extrasmall": "XS",
+      "small": "S",
+      "medium": "M",
+      "large": "L"
+     }
+    }
+   }
+  },
+  "dopuri-airpods-pro-3-2-perechi": {
+   "name": "AirPods Pro 3 Ear Tips (2 pairs)",
+   "tagline": "Replacement silicone ear tips in a single size.",
+   "description": [
+    "Replacement silicone ear tips in a single size.",
+    "Genuine Apple product, new and sealed. Available in 5 variants."
+   ],
+   "options": {
+    "size": {
+     "label": "Size",
+     "values": {
+      "extraextrasmall": "XXS",
+      "extrasmall": "XS",
+      "small": "S",
+      "medium": "M",
+      "large": "L"
+     }
+    }
+   }
+  },
+  "earpods": {
+   "name": "EarPods",
+   "tagline": "Wired earphones with a built-in remote and microphone.",
+   "description": [
+    "Wired earphones with a built-in remote and microphone.",
+    "Genuine Apple product, new and sealed. Available in 3 variants."
+   ],
+   "options": {
+    "conn": {
+     "label": "Connector",
+     "values": {
+      "lighting_connector": "Lightning",
+      "3_5mmjack": "3.5mm Headphone Plug",
+      "usbc": "USB‑C"
+     }
+    }
+   }
+  },
+  "husa-beats-cu-magsafe-pentru-iphone-16": {
+   "name": "Beats iPhone 16 Case with MagSafe",
+   "tagline": "A slim Beats case with drop protection, MagSafe and Camera Control.",
+   "description": [
+    "A slim Beats case with drop protection, MagSafe and Camera Control.",
+    "Genuine Beats product, new and sealed. Available in 4 colours."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 16"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "midnightblack_beats": "Midnight Black",
+      "summitstone": "Summit Stone",
+      "riptideblue": "Riptide Blue",
+      "sunsetpurple": "Sunset Purple"
+     }
+    }
+   }
+  },
+  "husa-beats-cu-magsafe-pentru-iphone-17e": {
+   "name": "Beats iPhone 17e Case with MagSafe",
+   "tagline": "A slim Beats case with drop protection, MagSafe and Camera Control.",
+   "description": [
+    "A slim Beats case with drop protection, MagSafe and Camera Control.",
+    "Genuine Beats product, new and sealed. Available in 2 colours."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 17e"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "limestone": "Lime Stone",
+      "bedrockblue": "Bedrock Blue"
+     }
+    }
+   }
+  },
+  "husa-beats-cu-magsafe-pentru-iphone-air-17-17-pro-si-17-pro-max": {
+   "name": "Beats Case with MagSafe for iPhone Air, 17, 17 Pro and 17 Pro Max",
+   "tagline": "A slim Beats case with drop protection, MagSafe and Camera Control.",
+   "description": [
+    "A slim Beats case with drop protection, MagSafe and Camera Control.",
+    "Genuine Beats product, new and sealed. Available in 4 colours, 16 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone Air, iPhone 17, iPhone 17 Pro, iPhone 17 Pro Max"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "model": {
+     "label": "Model",
+     "values": {
+      "iPhone Air": "iPhone Air",
+      "iPhone 17": "iPhone 17",
+      "iPhone 17 Pro": "iPhone 17 Pro",
+      "iPhone 17 Pro Max": "iPhone 17 Pro Max"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "limestone": "Lime Stone",
+      "pebblepink": "Pebble Pink",
+      "bedrockblue": "Bedrock Blue",
+      "granitegray": "Granite Grey"
+     }
+    }
+   }
+  },
+  "husa-beats-cu-suport-si-magsafe-pentru-iphone-17-17-pro-si-17-pro-max": {
+   "name": "Beats Kickstand Case with MagSafe for iPhone 17, 17 Pro and 17 Pro Max",
+   "tagline": "Built-in kickstand for films and video calls, drop protection and Camera Control.",
+   "description": [
+    "Built-in kickstand for films and video calls, drop protection and Camera Control.",
+    "Genuine Beats product, new and sealed. Available in 4 colours, 12 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 17, iPhone 17 Pro, iPhone 17 Pro Max"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "model": {
+     "label": "Model",
+     "values": {
+      "iPhone 17": "iPhone 17",
+      "iPhone 17 Pro": "iPhone 17 Pro",
+      "iPhone 17 Pro Max": "iPhone 17 Pro Max"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "limestone": "Lime Stone",
+      "pebblepink": "Pebble Pink",
+      "bedrockblue": "Bedrock Blue",
+      "granitegray": "Granite Grey"
+     }
+    }
+   }
+  },
+  "husa-beats-rugged-cu-magsafe-pentru-iphone-17-17-pro-si-17-pro-max": {
+   "name": "Beats Rugged Case with MagSafe for iPhone 17, 17 Pro and 17 Pro Max",
+   "tagline": "Extra drop protection, reinforced edges and a loop for a lanyard.",
+   "description": [
+    "Extra drop protection, reinforced edges and a loop for a lanyard.",
+    "Genuine Beats product, new and sealed. Available in 4 colours, 12 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 17, iPhone 17 Pro, iPhone 17 Pro Max"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "model": {
+     "label": "Model",
+     "values": {
+      "iPhone 17": "iPhone 17",
+      "iPhone 17 Pro": "iPhone 17 Pro",
+      "iPhone 17 Pro Max": "iPhone 17 Pro Max"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "sierraorange": "Sierra Orange",
+      "rockyblue": "Rocky Blue",
+      "alpinegray": "Alpine Grey",
+      "everestblack": "Everest Black"
+     }
+    }
+   }
+  },
+  "husa-cu-magsafe-pentru-iphone-air": {
+   "name": "iPhone Air Case with MagSafe",
+   "tagline": "Thin and light, it keeps the 5.6 mm design of iPhone Air.",
+   "description": [
+    "Thin and light, it keeps the 5.6 mm design of iPhone Air.",
+    "Genuine Apple product, new and sealed. Available in 2 colours."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone Air"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "frost": "Frost",
+      "shadow": "Shadow"
+     }
+    }
+   }
+  },
+  "husa-din-silicon-cu-magsafe-pentru-iphone-16": {
+   "name": "iPhone 16 Silicone Case with MagSafe",
+   "tagline": "Silky-soft silicone, a microfibre lining and perfectly aligned MagSafe magnets.",
+   "description": [
+    "Silky-soft silicone, a microfibre lining and perfectly aligned MagSafe magnets.",
+    "Genuine Apple product, new and sealed. Available in 6 colours."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 16"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "ultramarine": "Ultramarine",
+      "fuchsia": "Fuchsia",
+      "lakegreen": "Lake Green",
+      "black": "Black",
+      "stonegray": "Stone Grey",
+      "denim": "Denim"
+     }
+    }
+   }
+  },
+  "husa-din-silicon-cu-magsafe-pentru-iphone-17-17-pro-si-17-pro-max": {
+   "name": "Silicone Case with MagSafe for iPhone 17, 17 Pro and 17 Pro Max",
+   "tagline": "Silky-soft silicone, a microfibre lining and perfectly aligned MagSafe magnets.",
+   "description": [
+    "Silky-soft silicone, a microfibre lining and perfectly aligned MagSafe magnets.",
+    "Genuine Apple product, new and sealed. Available in 11 colours, 24 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 17, iPhone 17 Pro, iPhone 17 Pro Max"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "model": {
+     "label": "Model",
+     "values": {
+      "iPhone 17": "iPhone 17",
+      "iPhone 17 Pro": "iPhone 17 Pro",
+      "iPhone 17 Pro Max": "iPhone 17 Pro Max"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "brightguava": "Bright Guava",
+      "vanilla": "Vanilla",
+      "electriclavender": "Electric Lavender",
+      "neonyellow": "Neon Yellow",
+      "lightmoss": "Light Moss",
+      "anchorblue": "Anchor Blue",
+      "purplefog": "Purple Fog",
+      "black": "Black",
+      "orange": "Orange",
+      "terracotta": "Terra Cotta",
+      "midnight": "Midnight"
+     }
+    }
+   }
+  },
+  "husa-din-silicon-cu-magsafe-pentru-iphone-17e": {
+   "name": "iPhone 17e Silicone Case with MagSafe",
+   "tagline": "Silky-soft silicone, a microfibre lining and perfectly aligned MagSafe magnets.",
+   "description": [
+    "Silky-soft silicone, a microfibre lining and perfectly aligned MagSafe magnets.",
+    "Genuine Apple product, new and sealed. Available in 6 colours."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 17e"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "soft_pink": "Soft Pink",
+      "brightguava": "Bright Guava",
+      "vanilla": "Vanilla",
+      "lightmoss": "Light Moss",
+      "anchorblue": "Anchor Blue",
+      "black": "Black"
+     }
+    }
+   }
+  },
+  "husa-din-silicon-cu-magsafe-pentru-iphone-18-pro-si-18-pro-max": {
+   "name": "Silicone Case with MagSafe for iPhone 18 Pro and 18 Pro Max",
+   "tagline": "Silky-soft silicone, a microfibre lining and perfectly aligned MagSafe magnets.",
+   "description": [
+    "Silky-soft silicone, a microfibre lining and perfectly aligned MagSafe magnets.",
+    "Genuine Apple product, new and sealed. Available in 6 colours, 12 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 18 Pro, iPhone 18 Pro Max"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "model": {
+     "label": "Model",
+     "values": {
+      "iPhone 18 Pro": "iPhone 18 Pro",
+      "iPhone 18 Pro Max": "iPhone 18 Pro Max"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "burgundy": "Burgundy",
+      "olive": "Olive",
+      "crispblue": "Crisp Blue",
+      "navyblue": "Navy Blue",
+      "magenta": "Magenta",
+      "black": "Black"
+     }
+    }
+   }
+  },
+  "husa-folio-cu-suport-pentru-iphone-duo": {
+   "name": "iPhone Duo Folio with Kickstand",
+   "tagline": "Protects both halves and turns into a stand in tablet mode.",
+   "description": [
+    "Protects both halves and turns into a stand in tablet mode.",
+    "Genuine Apple product, new and sealed. Available in 2 colours."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone Duo"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "navyblue": "Navy Blue",
+      "taupe": "Taupe"
+     }
+    }
+   }
+  },
+  "husa-pentru-iphone-duo": {
+   "name": "iPhone Duo Case",
+   "tagline": "Protection for both halves with the hinge left free; MagSafe compatible.",
+   "description": [
+    "Protection for both halves with the hinge left free; MagSafe compatible.",
+    "Genuine Apple product, new and sealed. Available in 2 colours."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone Duo"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "navyblue": "Navy Blue",
+      "sand": "Sand"
+     }
+    }
+   }
+  },
+  "husa-techwoven-cu-magsafe-pentru-iphone-17-pro-si-17-pro-max": {
+   "name": "TechWoven Case with MagSafe for iPhone 17 Pro and 17 Pro Max",
+   "tagline": "A durable fabric that’s soft to the touch, with a sapphire crystal button for Camera Control.",
+   "description": [
+    "A durable fabric that’s soft to the touch, with a sapphire crystal button for Camera Control.",
+    "Genuine Apple product, new and sealed. Available in 5 colours, 10 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 17 Pro, iPhone 17 Pro Max"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "model": {
+     "label": "Model",
+     "values": {
+      "iPhone 17 Pro": "iPhone 17 Pro",
+      "iPhone 17 Pro Max": "iPhone 17 Pro Max"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "blue": "Blue",
+      "purple": "Purple",
+      "sienna": "Sienna",
+      "green": "Green",
+      "black": "Black"
+     }
+    }
+   }
+  },
+  "husa-techwoven-cu-magsafe-pentru-iphone-18-pro-si-18-pro-max": {
+   "name": "TechWoven Case with MagSafe for iPhone 18 Pro and 18 Pro Max",
+   "tagline": "A durable fabric that’s soft to the touch, with a sapphire crystal button for Camera Control.",
+   "description": [
+    "A durable fabric that’s soft to the touch, with a sapphire crystal button for Camera Control.",
+    "Genuine Apple product, new and sealed. Available in 6 colours, 12 variants in total."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 18 Pro, iPhone 18 Pro Max"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "model": {
+     "label": "Model",
+     "values": {
+      "iPhone 18 Pro": "iPhone 18 Pro",
+      "iPhone 18 Pro Max": "iPhone 18 Pro Max"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "burgundy": "Burgundy",
+      "olive": "Olive",
+      "taupe": "Taupe",
+      "chambrayblue": "Chambray Blue",
+      "mulberry": "Mulberry",
+      "black": "Black"
+     }
+    }
+   }
+  },
+  "husa-transparenta-cu-magsafe-pentru-iphone-16": {
+   "name": "iPhone 16 Clear Case with MagSafe",
+   "tagline": "Optically clear polycarbonate that resists yellowing and shows off the colour of your iPhone.",
+   "description": [
+    "Optically clear polycarbonate that resists yellowing and shows off the colour of your iPhone.",
+    "Genuine Apple product, new and sealed."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 16"
+      }
+     ]
+    }
+   ]
+  },
+  "husa-transparenta-cu-magsafe-pentru-iphone-17-17-pro-si-17-pro-max": {
+   "name": "Clear Case with MagSafe for iPhone 17, 17 Pro and 17 Pro Max",
+   "tagline": "Optically clear polycarbonate that resists yellowing and shows off the colour of your iPhone.",
+   "description": [
+    "Optically clear polycarbonate that resists yellowing and shows off the colour of your iPhone.",
+    "Genuine Apple product, new and sealed. Available in 3 variants."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 17, iPhone 17 Pro, iPhone 17 Pro Max"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "model": {
+     "label": "Model",
+     "values": {
+      "iPhone 17": "iPhone 17",
+      "iPhone 17 Pro": "iPhone 17 Pro",
+      "iPhone 17 Pro Max": "iPhone 17 Pro Max"
+     }
+    }
+   }
+  },
+  "husa-transparenta-cu-magsafe-pentru-iphone-17e": {
+   "name": "iPhone 17e Clear Case with MagSafe",
+   "tagline": "Optically clear polycarbonate that resists yellowing and shows off the colour of your iPhone.",
+   "description": [
+    "Optically clear polycarbonate that resists yellowing and shows off the colour of your iPhone.",
+    "Genuine Apple product, new and sealed."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 17e"
+      }
+     ]
+    }
+   ]
+  },
+  "husa-transparenta-cu-magsafe-pentru-iphone-18-pro-si-18-pro-max": {
+   "name": "Clear Case with MagSafe for iPhone 18 Pro and 18 Pro Max",
+   "tagline": "Optically clear polycarbonate that resists yellowing and shows off the colour of your iPhone.",
+   "description": [
+    "Optically clear polycarbonate that resists yellowing and shows off the colour of your iPhone.",
+    "Genuine Apple product, new and sealed. Available in 2 variants."
+   ],
+   "specs": [
+    {
+     "group": "Compatibility",
+     "rows": [
+      {
+       "k": "Models",
+       "v": "iPhone 18 Pro, iPhone 18 Pro Max"
+      }
+     ]
+    }
+   ],
+   "options": {
+    "model": {
+     "label": "Model",
+     "values": {
+      "iPhone 18 Pro": "iPhone 18 Pro",
+      "iPhone 18 Pro Max": "iPhone 18 Pro Max"
+     }
+    }
+   }
+  },
+  "incarcator-magnetic-rapid-apple-watch-usb-c": {
+   "name": "Apple Watch Magnetic Fast Charger (USB‑C)",
+   "tagline": "Fast charging for Apple Watch.",
+   "description": [
+    "Fast charging for Apple Watch.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "incarcator-magsafe": {
+   "name": "MagSafe Charger",
+   "tagline": "Fast wireless charging at up to 25W.",
+   "description": [
+    "Fast wireless charging at up to 25W.",
+    "Genuine Apple product, new and sealed. Available in 2 variants."
+   ],
+   "options": {
+    "length": {
+     "label": "Length",
+     "values": {
+      "1meter": "1 m",
+      "2meters": "2 m"
+     }
+    }
+   }
+  },
+  "kit-de-zale-pentru-bratara-cu-zale": {
+   "name": "Link Bracelet Kit",
+   "tagline": "Extra links to adjust the size of your Link Bracelet.",
+   "description": [
+    "Extra links to adjust the size of your Link Bracelet.",
+    "Genuine Apple product, new and sealed. Available in 2 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "radiantgold": "Radiant Gold",
+      "natural": "Natural"
+     }
+    }
+   }
+  },
+  "kit-pernite-beats-360--performance": {
+   "name": "Beats 360 Cushion Kit – Performance",
+   "tagline": "Ear cushions and headband in a breathable knit, made for workouts.",
+   "description": [
+    "Ear cushions and headband in a breathable knit, made for workouts.",
+    "Genuine Beats product, new and sealed. Available in 6 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "black": "Black",
+      "cloud_beats": "Cloud",
+      "pink_beats": "Pink",
+      "sky_beats": "Sky",
+      "navy_beats": "Navy",
+      "volt_beats": "Volt"
+     }
+    }
+   }
+  },
+  "kit-pernite-beats-360--ultraplush": {
+   "name": "Beats 360 Cushion Kit – UltraPlush",
+   "tagline": "Soft vegan leather cushions for all-day comfort.",
+   "description": [
+    "Soft vegan leather cushions for all-day comfort.",
+    "Genuine Beats product, new and sealed. Available in 2 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "black": "Black",
+      "cloud_beats": "Cloud"
+     }
+    }
+   }
+  },
+  "laveta-de-curatare-apple": {
+   "name": "Apple Polishing Cloth",
+   "tagline": "A non-abrasive cloth for displays, including nano-texture glass.",
+   "description": [
+    "A non-abrasive cloth for displays, including nano-texture glass.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "magic-keyboard-cu-touch-id": {
+   "name": "Magic Keyboard with Touch ID",
+   "tagline": "Wireless and compact, with Touch ID for Mac models with Apple silicon.",
+   "description": [
+    "Wireless and compact, with Touch ID for Mac models with Apple silicon.",
+    "Genuine Apple product, new and sealed. Available in 2 variants."
+   ],
+   "options": {
+    "layout": {
+     "label": "Keyboard layout",
+     "values": {
+      "ro": "Romanian",
+      "en": "International English"
+     }
+    }
+   }
+  },
+  "magic-keyboard-cu-touch-id-si-tastatura-numerica": {
+   "name": "Magic Keyboard with Touch ID and Numeric Keypad",
+   "tagline": "Wireless, with Touch ID for Mac models with Apple silicon and a numeric keypad.",
+   "description": [
+    "Wireless, with Touch ID for Mac models with Apple silicon and a numeric keypad.",
+    "Genuine Apple product, new and sealed. Available in 2 colours, 4 variants in total."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "whitekeys": "White Keys",
+      "blackkeys": "Black Keys"
+     }
+    },
+    "layout": {
+     "label": "Keyboard layout",
+     "values": {
+      "ro": "Romanian",
+      "en": "International English"
+     }
+    }
+   }
+  },
+  "magic-keyboard-folio-pentru-ipad-a16": {
+   "name": "Magic Keyboard Folio for iPad (A16)",
+   "tagline": "Two pieces: a detachable keyboard with trackpad and a back panel with an adjustable stand.",
+   "description": [
+    "Two pieces: a detachable keyboard with trackpad and a back panel with an adjustable stand.",
+    "Genuine Apple product, new and sealed. Available in 2 variants."
+   ],
+   "options": {
+    "layout": {
+     "label": "Keyboard layout",
+     "values": {
+      "ro": "Romanian",
+      "en": "International English"
+     }
+    }
+   }
+  },
+  "magic-keyboard-pentru-ipad-air-m4": {
+   "name": "Magic Keyboard for iPad Air (M4)",
+   "tagline": "A full keyboard with a trackpad and a row of function keys.",
+   "description": [
+    "A full keyboard with a trackpad and a row of function keys.",
+    "Genuine Apple product, new and sealed. Available in 2 colours, 8 variants in total."
+   ],
+   "options": {
+    "model": {
+     "label": "Model",
+     "values": {
+      "iPad Air 11\" (M4)": "iPad Air 11-inch (M4)",
+      "iPad Air 13\" (M4)": "iPad Air 13-inch (M4)"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "white": "White",
+      "black": "Black"
+     }
+    },
+    "layout": {
+     "label": "Keyboard layout",
+     "values": {
+      "ro": "Romanian",
+      "en": "International English"
+     }
+    }
+   }
+  },
+  "magic-keyboard-pentru-ipad-pro-m5": {
+   "name": "Magic Keyboard for iPad Pro (M5)",
+   "tagline": "Aluminium design, a glass trackpad with haptic feedback and a row of function keys.",
+   "description": [
+    "Aluminium design, a glass trackpad with haptic feedback and a row of function keys.",
+    "Genuine Apple product, new and sealed. Available in 2 colours, 8 variants in total."
+   ],
+   "options": {
+    "model": {
+     "label": "Model",
+     "values": {
+      "iPad Pro 11\" (M5)": "iPad Pro 11-inch (M5)",
+      "iPad Pro 13\" (M5)": "iPad Pro 13-inch (M5)"
+     }
+    },
+    "color": {
+     "label": "Colour",
+     "values": {
+      "white": "White",
+      "black": "Black"
+     }
+    },
+    "layout": {
+     "label": "Keyboard layout",
+     "values": {
+      "ro": "Romanian",
+      "en": "International English"
+     }
+    }
+   }
+  },
+  "magic-keyboard-usb-c": {
+   "name": "Magic Keyboard (USB‑C)",
+   "tagline": "Wireless and compact; charges via USB‑C.",
+   "description": [
+    "Wireless and compact; charges via USB‑C.",
+    "Genuine Apple product, new and sealed. Available in 2 variants."
+   ],
+   "options": {
+    "layout": {
+     "label": "Keyboard layout",
+     "values": {
+      "ro": "Romanian",
+      "en": "International English"
+     }
+    }
+   }
+  },
+  "magic-mouse-usb-c": {
+   "name": "Magic Mouse (USB‑C)",
+   "tagline": "A Multi‑Touch surface for gestures, with USB‑C charging.",
+   "description": [
+    "A Multi‑Touch surface for gestures, with USB‑C charging.",
+    "Genuine Apple product, new and sealed. Available in 2 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "white_mts": "White Multi‑Touch Surface",
+      "black_mts": "Black Multi‑Touch Surface"
+     }
+    }
+   }
+  },
+  "magic-trackpad-usb-c": {
+   "name": "Magic Trackpad (USB‑C)",
+   "tagline": "Force Touch and Multi‑Touch gestures on a large glass surface.",
+   "description": [
+    "Force Touch and Multi‑Touch gestures on a large glass surface.",
+    "Genuine Apple product, new and sealed. Available in 2 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "white_mts": "White Multi‑Touch Surface",
+      "black_mts": "Black Multi‑Touch Surface"
+     }
+    }
+   }
+  },
+  "pernite-airpods-max": {
+   "name": "AirPods Max Ear Cushions",
+   "tagline": "Memory foam ear cushions that attach magnetically.",
+   "description": [
+    "Memory foam ear cushions that attach magnetically.",
+    "Genuine Apple product, new and sealed. Available in 5 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "blue": "Blue",
+      "purple": "Purple",
+      "midnight": "Midnight",
+      "starlight": "Starlight",
+      "orange": "Orange"
+     }
+    }
+   }
+  },
+  "pernite-airpods-max-lightning": {
+   "name": "AirPods Max Ear Cushions (Lightning)",
+   "tagline": "Memory foam ear cushions for AirPods Max with a Lightning port.",
+   "description": [
+    "Memory foam ear cushions for AirPods Max with a Lightning port.",
+    "Genuine Apple product, new and sealed. Available in 5 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "skyblue": "Sky Blue",
+      "silver": "Silver",
+      "green": "Green",
+      "black": "Black",
+      "red": "Red"
+     }
+    }
+   }
+  },
+  "portofel-finewoven-cu-magsafe": {
+   "name": "iPhone FineWoven Wallet with MagSafe",
+   "tagline": "Holds up to three cards and shows you in Find My where you left it.",
+   "description": [
+    "Holds up to three cards and shows you in Find My where you left it.",
+    "Genuine Apple product, new and sealed. Available in 6 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "darkolive": "Dark Olive",
+      "burgundy": "Burgundy",
+      "wildflowerblue": "Wildflower Blue",
+      "magenta": "Magenta",
+      "navy": "Navy",
+      "black": "Black"
+     }
+    }
+   }
+  },
+  "prelungitor-pentru-curea-ocean": {
+   "name": "Ocean Band Extension",
+   "tagline": "Lets you wear the Ocean Band over a wetsuit.",
+   "description": [
+    "Lets you wear the Ocean Band over a wetsuit.",
+    "Genuine Apple product, new and sealed. Available in 3 colours, 6 variants in total."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "translucentblack": "Translucent Black",
+      "translucentkelp": "Translucent Kelp",
+      "translucentgray": "Translucent Grey"
+     }
+    },
+    "finish": {
+     "label": "Buckle",
+     "values": {
+      "natural": "Natural Titanium",
+      "black": "Black Titanium"
+     }
+    }
+   }
+  },
+  "set-2-cabluri-tesute-beats-usb-a-la-usb-c": {
+   "name": "Beats USB‑A to USB‑C Woven Cables (two-pack)",
+   "tagline": "Two durable woven cables, 1.5 m each.",
+   "description": [
+    "Two durable woven cables, 1.5 m each.",
+    "Genuine Beats product, new and sealed."
+   ]
+  },
+  "set-2-cabluri-tesute-beats-usb-c-la-usb-c": {
+   "name": "Beats USB‑C to USB‑C Woven Cables (two-pack)",
+   "tagline": "Two durable woven cables, 1.5 m each.",
+   "description": [
+    "Two durable woven cables, 1.5 m each.",
+    "Genuine Beats product, new and sealed."
+   ]
+  },
+  "set-dopuri-airpods-pro-2-4-perechi": {
+   "name": "AirPods Pro 2 Ear Tips (4 pairs)",
+   "tagline": "One pair in each size: XS, S, M and L.",
+   "description": [
+    "One pair in each size: XS, S, M and L.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "set-dopuri-airpods-pro-3-5-perechi": {
+   "name": "AirPods Pro 3 Ear Tips (5 pairs)",
+   "tagline": "One pair in each size: XXS, XS, S, M and L.",
+   "description": [
+    "One pair in each size: XXS, XS, S, M and L.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "siri-remote": {
+   "name": "Siri Remote",
+   "tagline": "The remote for Apple TV 4K, with a touch-enabled clickpad and USB‑C charging.",
+   "description": [
+    "The remote for Apple TV 4K, with a touch-enabled clickpad and USB‑C charging.",
+    "Genuine Apple product, new and sealed."
+   ]
+  },
+  "smart-folio-pentru-ipad-a16": {
+   "name": "Smart Folio for iPad (A16)",
+   "tagline": "Front and back protection, automatic wake and a stand for typing or watching.",
+   "description": [
+    "Front and back protection, automatic wake and a stand for typing or watching.",
+    "Genuine Apple product, new and sealed. Available in 4 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "sky": "Sky",
+      "white": "White",
+      "watermelon": "Watermelon",
+      "lemonade": "Lemonade"
+     }
+    }
+   }
+  },
+  "smart-folio-pentru-ipad-air-11-m4": {
+   "name": "Smart Folio for iPad Air 11-inch (M4)",
+   "tagline": "Front and back protection, automatic wake and a stand for typing or watching.",
+   "description": [
+    "Front and back protection, automatic wake and a stand for typing or watching.",
+    "Genuine Apple product, new and sealed. Available in 4 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "charcoalgray": "Charcoal Grey",
+      "sage": "Sage",
+      "denim": "Denim",
+      "lightviolet": "Light Violet"
+     }
+    }
+   }
+  },
+  "smart-folio-pentru-ipad-air-13-m4": {
+   "name": "Smart Folio for iPad Air 13-inch (M4)",
+   "tagline": "Front and back protection, automatic wake and a stand for typing or watching.",
+   "description": [
+    "Front and back protection, automatic wake and a stand for typing or watching.",
+    "Genuine Apple product, new and sealed. Available in 4 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "charcoalgray": "Charcoal Grey",
+      "sage": "Sage",
+      "denim": "Denim",
+      "lightviolet": "Light Violet"
+     }
+    }
+   }
+  },
+  "smart-folio-pentru-ipad-mini-a17-pro": {
+   "name": "Smart Folio for iPad mini (A17 Pro)",
+   "tagline": "Front and back protection, automatic wake and a stand for typing or watching.",
+   "description": [
+    "Front and back protection, automatic wake and a stand for typing or watching.",
+    "Genuine Apple product, new and sealed. Available in 4 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "charcoalgray": "Charcoal Grey",
+      "sage": "Sage",
+      "denim": "Denim",
+      "lightviolet": "Light Violet"
+     }
+    }
+   }
+  },
+  "smart-folio-pentru-ipad-pro-11-m5": {
+   "name": "Smart Folio for iPad Pro 11-inch (M5)",
+   "tagline": "Front and back protection, automatic wake and a stand for typing or watching.",
+   "description": [
+    "Front and back protection, automatic wake and a stand for typing or watching.",
+    "Genuine Apple product, new and sealed. Available in 3 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "white": "White",
+      "black": "Black",
+      "denim": "Denim"
+     }
+    }
+   }
+  },
+  "smart-folio-pentru-ipad-pro-13-m5": {
+   "name": "Smart Folio for iPad Pro 13-inch (M5)",
+   "tagline": "Front and back protection, automatic wake and a stand for typing or watching.",
+   "description": [
+    "Front and back protection, automatic wake and a stand for typing or watching.",
+    "Genuine Apple product, new and sealed. Available in 3 colours."
+   ],
+   "options": {
+    "color": {
+     "label": "Colour",
+     "values": {
+      "white": "White",
+      "black": "Black",
+      "denim": "Denim"
+     }
+    }
+   }
+  },
+  "varfuri-apple-pencil-4-bucati": {
+   "name": "Apple Pencil Tips (4-pack)",
+   "tagline": "Replacement tips for every Apple Pencil model.",
+   "description": [
+    "Replacement tips for every Apple Pencil model.",
+    "Genuine Apple product, new and sealed."
+   ]
+  }
+ }
+}

@@ -1,4 +1,4 @@
-import { $, $$ } from './app.js';
+import { $, $$, tr } from './app.js';
 
 // ─── cod OTP pe 6 căsuțe: tastare, lipire, ștergere, trimitere automată ───
 const otp = $('[data-otp]');
@@ -49,7 +49,7 @@ if (resend) {
   let iv;
   const tick = () => {
     btn.disabled = left > 0;
-    timer.textContent = left > 0 ? ` (în ${left} s)` : '';
+    timer.textContent = left > 0 ? ` (${tr('în {n} s', { n: left })})` : '';
     if (left <= 0) clearInterval(iv);
     left--;
   };

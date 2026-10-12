@@ -1,5 +1,6 @@
 import { html, cx, attr, raw } from '../lib/html.js';
 import { lei } from '../lib/format.js';
+import { t } from '../lib/i18n.js';
 import { icon } from './icons.js';
 import { carrier } from '../services/shipping.js';
 
@@ -9,21 +10,21 @@ export function productCard(p, { size = 'md', eager = false, heading = 3 } = {})
   return html`<article class=${cx('pcard', `pcard--${size}`)} data-product-card>
     <a class="pcard__link" href=${`/produs/${p.slug}`}>
       <div class="pcard__media">
-        ${p.badge ? html`<span class=${cx('badge', p.badge === 'Precomandă' ? 'badge--dark' : 'badge--leaf')}>${p.badge}</span>` : sale ? html`<span class="badge badge--sale">−${pct}%</span>` : ''}
+        ${p.badge ? html`<span class=${cx('badge', p.badge === 'Precomandă' ? 'badge--dark' : 'badge--leaf')}>${t(p.badge)}</span>` : sale ? html`<span class="badge badge--sale">−${pct}%</span>` : ''}
         ${p.image ? html`<img src=${p.image} srcset=${`${p.image} 480w, ${p.image_lg} 1000w`} sizes="(max-width: 700px) 50vw, 25vw" alt=${p.name} width="480" height="480" ${raw(eager ? 'fetchpriority="high"' : 'loading="lazy"')} decoding="async" data-card-img>` : ''}
       </div>
       <div class="pcard__body">
-        ${p.colors?.length > 1 ? html`<div class="swatches swatches--sm" aria-label=${`${p.colors.length} culori`}>
+        ${p.colors?.length > 1 ? html`<div class="swatches swatches--sm" aria-label=${t('{n} culori', { n: p.colors.length })}>
           ${p.colors.slice(0, 6).map((c) => html`<span class="swatch" style=${`--c:${c.hex}`} title=${c.label} data-swatch-img=${c.image || ''}></span>`)}
           ${p.colors.length > 6 ? html`<span class="swatches__more">+${p.colors.length - 6}</span>` : ''}
         </div>` : ''}
         ${heading === 2 ? html`<h2 class="pcard__name">${p.name}</h2>` : html`<h3 class="pcard__name">${p.name}</h3>`}
         ${size !== 'sm' ? html`<p class="pcard__tag">${p.tagline}</p>` : ''}
         <p class="pcard__price">
-          ${p.variant_count > 1 && p.price_to > p.price_from ? html`<span class="pcard__from">de la</span>` : ''}
+          ${p.variant_count > 1 && p.price_to > p.price_from ? html`<span class="pcard__from">${t('de la')}</span>` : ''}
           ${sale ? html`<s>${lei(p.compare_from)}</s>` : ''}<b class=${cx(sale && 'is-sale')}>${lei(p.price_from)}</b>
         </p>
-        ${!p.in_stock ? html`<p class="pcard__stock is-out">Stoc epuizat</p>` : p.preorder ? html`<p class="pcard__stock is-pre">Precomandă</p>` : ''}
+        ${!p.in_stock ? html`<p class="pcard__stock is-out">${t('Stoc epuizat')}</p>` : p.preorder ? html`<p class="pcard__stock is-pre">${t('Precomandă')}</p>` : ''}
       </div>
     </a>
   </article>`;
@@ -33,7 +34,7 @@ export const productGrid = (items, opts = {}) => html`<div class=${cx('pgrid', o
 
 export function breadcrumbs(items) {
   return html`<nav class="crumbs" aria-label="Breadcrumb"><ol>
-    <li><a href="/">Acasă</a></li>
+    <li><a href="/">${t('Acasă')}</a></li>
     ${items.map((it, i) => html`<li>${icon('chevron-right', { size: 14 })}${it.href && i < items.length - 1 ? html`<a href=${it.href}>${it.label}</a>` : html`<span aria-current="page">${it.label}</span>`}</li>`)}
   </ol></nav>`;
 }
@@ -60,13 +61,13 @@ export function field({ name, label, type = 'text', value = '', error, required 
   const id = `f-${name}`;
   return html`<div class=${cx('field', error && 'has-error', cls)}>
     <input id=${id} name=${name} type=${type} value=${value ?? ''} placeholder=${placeholder}${attr('required', required)}${attr('autocomplete', !!autocomplete, autocomplete)}${attr('inputmode', !!inputmode, inputmode)}${attr('pattern', !!pattern, pattern)}${attr('maxlength', !!maxlength, maxlength)} ${raw(attrs)}${attr('aria-invalid', !!error, 'true')}${attr('aria-describedby', !!(error || hint), `${id}-msg`)}>
-    <label for=${id}>${label}${required ? '' : html` <span class="opt">(opțional)</span>`}</label>
-    ${type === 'password' ? html`<button class="field__eye" type="button" aria-label="Arată parola" data-toggle-password>${icon('eye', { size: 18 })}</button>` : ''}
+    <label for=${id}>${label}${required ? '' : html` <span class="opt">${t('(opțional)')}</span>`}</label>
+    ${type === 'password' ? html`<button class="field__eye" type="button" aria-label=${t('Arată parola')} data-toggle-password>${icon('eye', { size: 18 })}</button>` : ''}
     <p class="field__msg" id=${`${id}-msg`} data-error-for=${name}>${error || hint || ''}</p>
   </div>`;
 }
 
-export function selectField({ name, label, options, value = '', error, required = false, placeholder = 'Alege…' }) {
+export function selectField({ name, label, options, value = '', error, required = false, placeholder = t('Alege…') }) {
   const id = `f-${name}`;
   return html`<div class=${cx('field field--select', error && 'has-error', value && 'has-value')}>
     <select id=${id} name=${name}${attr('required', required)}${attr('aria-invalid', !!error, 'true')}>

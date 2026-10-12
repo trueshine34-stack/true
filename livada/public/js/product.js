@@ -1,4 +1,4 @@
-import { $, $$, api, toast, openCart, setCartCount } from './app.js';
+import { $, $$, api, toast, openCart, setCartCount, tr, href } from './app.js';
 
 const data = JSON.parse($('#product-data')?.textContent || 'null');
 const form = $('[data-add-to-cart]');
@@ -44,7 +44,7 @@ if (data && form) {
         const delta = card?.querySelector('[data-delta]');
         if (delta) {
           const d = target ? target.price - current.price : 0;
-          delta.textContent = out ? 'stoc epuizat' : !target || target.id === current.id || d === 0 ? '' : `${d > 0 ? '+' : '−'}${lei(Math.abs(d))}`;
+          delta.textContent = out ? tr('stoc epuizat') : !target || target.id === current.id || d === 0 ? '' : `${d > 0 ? '+' : '−'}${lei(Math.abs(d))}`;
         }
       }
     }
@@ -60,7 +60,7 @@ if (data && form) {
     track.innerHTML = imgs.map((im, i) => `<figure class="gallery__slide"><img src="${esc(im['1000'])}" alt="${esc(alt)}" width="1000" height="1000" ${i ? 'loading="lazy"' : ''}></figure>`).join('');
     track.scrollLeft = 0;
     const thumbs = $('[data-gallery-thumbs]');
-    if (thumbs) thumbs.innerHTML = imgs.length > 1 ? imgs.map((im, i) => `<button type="button" class="gallery__thumb ${i ? '' : 'is-active'}" aria-label="Imaginea ${i + 1}" data-index="${i}"><img src="${esc(im['480'])}" alt="" width="80" height="80"></button>`).join('') : '';
+    if (thumbs) thumbs.innerHTML = imgs.length > 1 ? imgs.map((im, i) => `<button type="button" class="gallery__thumb ${i ? '' : 'is-active'}" aria-label="${esc(tr('Imaginea {n}', { n: i + 1 }))}" data-index="${i}"><img src="${esc(im['480'])}" alt="" width="80" height="80"></button>`).join('') : '';
     gallery.classList.remove('is-swapping'); void gallery.offsetWidth; gallery.classList.add('is-swapping');
   }
 
@@ -70,10 +70,10 @@ if (data && form) {
     const barBtn = $('[data-buybar-add]');
     let html;
     if (data.preorder) html = box.innerHTML;
-    else if (current.stock <= 0) html = `<p class="stock stock--out"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.4"/></svg><span><b>Stoc epuizat</b> în această configurație. Alege altă variantă.</span></p>`;
+    else if (current.stock <= 0) html = `<p class="stock stock--out"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.6v.4"/></svg><span>${tr('<b>Stoc epuizat</b> în această configurație. Alege altă variantă.')}</span></p>`;
     else {
       const eta = data.eta || '';
-      html = `<p class="stock ${current.stock <= 3 ? 'stock--low' : 'stock--in'}"><span class="dot dot--live"></span><span><b>${current.stock <= 3 ? `Doar ${current.stock} în stoc` : 'În stoc'}.</b>${eta ? ` Livrare estimată: ${eta}` : ''}</span></p>`;
+      html = `<p class="stock ${current.stock <= 3 ? 'stock--low' : 'stock--in'}"><span class="dot dot--live"></span><span><b>${current.stock <= 3 ? tr('Doar {n} în stoc', { n: current.stock }) : tr('În stoc')}.</b>${eta ? ` ${tr('Livrare estimată: {eta}', { eta })}` : ''}</span></p>`;
     }
     box.innerHTML = html;
     const disabled = !available(current);
@@ -134,7 +134,7 @@ if (data && form) {
       const r = await api(form.action, { method: 'POST', form });
       setCartCount(r.count);
       const img = data.images[current.options[data.image_key]]?.[0]?.['480'] || Object.values(data.images)[0]?.[0]?.['480'];
-      toast(`${data.name} a fost adăugat în coș`, { image: img, action: { href: '/cos', label: 'Vezi coșul' } });
+      toast(tr('{name} a fost adăugat în coș', { name: data.name }), { image: img, action: { href: href('/cos'), label: tr('Vezi coșul') } });
       openCart();
     } catch (err) {
       toast(err.message, { type: 'error' });

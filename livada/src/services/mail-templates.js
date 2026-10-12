@@ -6,6 +6,20 @@ import { getSetting } from '../db/index.js';
 import { esc } from '../lib/html.js';
 import { lei, dateTime, phone as fmtPhone } from '../lib/format.js';
 import { CARRIERS } from '../db/defaults.js';
+import { t, lang, withLang, localizePath } from '../lib/i18n.js';
+
+// Emailurile se scriu în limba destinatarului: a comenzii (orders.lang) sau a contului (users.lang).
+// Fără limbă cunoscută rămâne limba cererii curente. Emailurile din admin sunt mereu în română.
+const inLang = (l, fn) => (l === 'ro' || l === 'en' ? withLang(l, fn) : fn());
+
+/** linkurile spre magazin primesc prefixul limbii în emailurile în engleză (/comanda/x → /en/comanda/x) */
+function loc(u) {
+  if (typeof u !== 'string' || !u.startsWith(config.publicUrl)) return u;
+  const rest = u.slice(config.publicUrl.length) || '/';
+  if (!rest.startsWith('/')) return u;
+  const p = localizePath(rest);
+  return p === rest ? u : `${config.publicUrl}${p}`;
+}
 
 const C = {
   ink: '#0E1411', ink2: '#3A433E', muted: '#6B746F', line: '#E3E7E0', mist: '#F4F5F1', page: '#ECEEE8',
@@ -65,7 +79,7 @@ function layout({ preheader, topRight = '', body, footerNote }) {
   const co = getSetting('company') || {};
   const year = new Date().getFullYear();
   return `<!doctype html>
-<html lang="ro" xmlns="http://www.w3.org/1999/xhtml">
+<html lang="${lang()}" xmlns="http://www.w3.org/1999/xhtml">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
@@ -86,7 +100,7 @@ function layout({ preheader, topRight = '', body, footerNote }) {
   <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px">
     <tr><td style="padding:0 8px 22px">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-        <td valign="middle"><a href="${esc(config.publicUrl)}" target="_blank" style="text-decoration:none"><img src="cid:livada-logo" width="121" height="30" alt="Livada" style="display:block;border:0;width:121px;height:30px"></a></td>
+        <td valign="middle"><a href="${esc(loc(config.publicUrl))}" target="_blank" style="text-decoration:none"><img src="cid:livada-logo" width="121" height="30" alt="Livada" style="display:block;border:0;width:121px;height:30px"></a></td>
         <td valign="middle" align="right" class="t-mute" style="font-family:${SANS};font-size:12px;color:${C.muted}">${topRight}</td>
       </tr></table>
     </td></tr>
@@ -94,11 +108,11 @@ function layout({ preheader, topRight = '', body, footerNote }) {
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${body}</table>
     </td></tr>
     <tr><td style="padding:28px 12px 0" align="center">
-      <p style="margin:0 0 6px;font-family:${SERIF};font-style:italic;font-size:19px;color:${C.ink2}" class="t-mute">Tehnologia Apple, culeasă cu grijă.</p>
+      <p style="margin:0 0 6px;font-family:${SERIF};font-style:italic;font-size:19px;color:${C.ink2}" class="t-mute">${t('Tehnologia Apple, culeasă cu grijă.')}</p>
       <p style="margin:0 0 14px;font-family:${SANS};font-size:12px;line-height:20px;color:${C.muted}" class="t-mute">
-        <a href="${esc(config.publicUrl)}/ajutor" style="color:${C.ink2};text-decoration:none">Ajutor</a> &nbsp;·&nbsp;
-        <a href="${esc(config.publicUrl)}/livrare" style="color:${C.ink2};text-decoration:none">Livrare</a> &nbsp;·&nbsp;
-        <a href="${esc(config.publicUrl)}/retur" style="color:${C.ink2};text-decoration:none">Retur 30 de zile</a> &nbsp;·&nbsp;
+        <a href="${esc(loc(`${config.publicUrl}/ajutor`))}" style="color:${C.ink2};text-decoration:none">${t('Ajutor')}</a> &nbsp;·&nbsp;
+        <a href="${esc(loc(`${config.publicUrl}/livrare`))}" style="color:${C.ink2};text-decoration:none">${t('Livrare')}</a> &nbsp;·&nbsp;
+        <a href="${esc(loc(`${config.publicUrl}/retur`))}" style="color:${C.ink2};text-decoration:none">${t('Retur 30 de zile')}</a> &nbsp;·&nbsp;
         <a href="tel:${esc((co.phone || '').replace(/\s/g, ''))}" style="color:${C.ink2};text-decoration:none">${esc(co.phone || '')}</a>
       </p>
       <p style="margin:0;font-family:${SANS};font-size:11px;line-height:18px;color:#8A928D" class="t-mute">
@@ -112,79 +126,97 @@ function layout({ preheader, topRight = '', body, footerNote }) {
 </body></html>`;
 }
 
-const h1 = (text, accent) => `<tr><td style="padding:18px 0 14px"><h1 class="h1 t-ink" style="margin:0;font-family:${SANS};font-size:32px;line-height:1.12;letter-spacing:-0.025em;font-weight:700;color:${C.ink}">${text}${accent ? ` <span style="font-family:${SERIF};font-style:italic;font-weight:400;letter-spacing:-0.01em">${accent}</span>` : ''}</h1></td></tr>`;
+const accentSpan = (accent) => `<span style="font-family:${SERIF};font-style:italic;font-weight:400;letter-spacing:-0.01em">${accent}</span>`;
+const h1 = (text, accent) => `<tr><td style="padding:18px 0 14px"><h1 class="h1 t-ink" style="margin:0;font-family:${SANS};font-size:32px;line-height:1.12;letter-spacing:-0.025em;font-weight:700;color:${C.ink}">${text}${accent ? ` ${accentSpan(accent)}` : ''}</h1></td></tr>`;
 const p = (text, { size = 16, color = C.ink2, pad = '0 0 14px' } = {}) => `<tr><td class="t-mute" style="padding:${pad};font-family:${SANS};font-size:${size}px;line-height:1.6;color:${color}">${text}</td></tr>`;
+
+// „Safari pe iPhone” (din describeUA) → „Safari on iPhone”
+function deviceText(d) {
+  const m = /^(.+) pe (.+)$/.exec(d);
+  if (m) return t('{browser} pe {os}', { browser: m[1], os: m[2] });
+  return d === 'trimis de echipa Livada' ? t(d) : d;
+}
 
 function securityBox(meta) {
   if (!meta) return '';
-  const rows = [meta.when && `<b>Când:</b> ${esc(meta.when)}`, meta.device && `<b>Dispozitiv:</b> ${esc(meta.device)}`, meta.ip && `<b>IP:</b> ${esc(meta.ip)}`].filter(Boolean).join('<br>');
+  const rows = [meta.when && `<b>${t('Când:')}</b> ${esc(meta.when)}`, meta.device && `<b>${t('Dispozitiv:')}</b> ${esc(deviceText(meta.device))}`, meta.ip && `<b>IP:</b> ${esc(meta.ip)}`].filter(Boolean).join('<br>');
   return `<tr><td style="padding:26px 0 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="box" bgcolor="${C.mist}" style="background:${C.mist};border-radius:18px;padding:18px 20px;font-family:${SANS};font-size:13px;line-height:1.65;color:${C.ink2}">
-<span style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${C.muted}">Detaliile cererii</span><br>${rows}<br>
-<span style="color:${C.muted}">Nu ai fost tu? Ignoră acest mesaj — fără confirmare, nimic nu se activează.</span></td></tr></table></td></tr>`;
+<span style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${C.muted}">${t('Detaliile cererii')}</span><br>${rows}<br>
+<span style="color:${C.muted}">${t('Nu ai fost tu? Ignoră acest mesaj — fără confirmare, nimic nu se activează.')}</span></td></tr></table></td></tr>`;
 }
 
 // ─── 1. confirmare email ────────────────────────────────────────────────────
 export function verifyEmail({ user, code, link, meta }) {
-  const name = esc(user.first_name || 'acolo');
+  return inLang(user.lang, () => verifyEmailIn({ user, code, link: loc(link), meta }));
+}
+function verifyEmailIn({ user, code, link, meta }) {
+  const name = esc(user.first_name || t('acolo'));
   const pretty = `${code.slice(0, 3)} ${code.slice(3)}`;
   const body = `
-<tr><td>${pill('Confirmare email')}</td></tr>
-${h1(`Bun venit în Livada,`, `${name}.`)}
-${p('Mai e un singur pas. Introdu codul de mai jos pe pagina deschisă în browser sau apasă butonul ca să-ți confirmi adresa de email.')}
+<tr><td>${pill(t('Confirmare email'))}</td></tr>
+${h1(t('Bun venit în Livada,'), `${name}.`)}
+${p(t('Mai e un singur pas. Introdu codul de mai jos pe pagina deschisă în browser sau apasă butonul ca să-ți confirmi adresa de email.'))}
 <tr><td style="padding:16px 0 10px" align="center">${codeTiles(code).replaceAll(`bgcolor="${C.mist}" style="width:50px`, `bgcolor="${C.mist}" class="tile" style="width:50px`)}</td></tr>
-<tr><td align="center" class="t-mute" style="padding:4px 0 26px;font-family:${SANS};font-size:13px;color:${C.muted}">Codul expiră în <b style="color:${C.ink}">30 de minute</b> și poate fi folosit o singură dată.</td></tr>
-<tr><td align="center" style="padding:0 0 4px">${button(link, 'Confirmă adresa de email')}</td></tr>
-<tr><td align="center" class="t-mute" style="padding:14px 0 0;font-family:${SANS};font-size:12px;line-height:1.6;color:${C.muted}">Butonul nu funcționează? Copiază linkul în browser:<br><a href="${esc(link)}" style="color:${C.leaf};word-break:break-all">${esc(link)}</a></td></tr>
+<tr><td align="center" class="t-mute" style="padding:4px 0 26px;font-family:${SANS};font-size:13px;color:${C.muted}">${t('Codul expiră în {time} și poate fi folosit o singură dată.', { time: `<b style="color:${C.ink}">${t('30 de minute')}</b>` })}</td></tr>
+<tr><td align="center" style="padding:0 0 4px">${button(link, t('Confirmă adresa de email'))}</td></tr>
+<tr><td align="center" class="t-mute" style="padding:14px 0 0;font-family:${SANS};font-size:12px;line-height:1.6;color:${C.muted}">${t('Butonul nu funcționează? Copiază linkul în browser:')}<br><a href="${esc(link)}" style="color:${C.leaf};word-break:break-all">${esc(link)}</a></td></tr>
 ${securityBox(meta)}`;
   return {
-    subject: `${pretty} este codul tău de confirmare Livada`,
-    html: layout({ preheader: `Codul tău: ${pretty}. Expiră în 30 de minute.`, topRight: 'Cont nou', body,
-      footerNote: 'Ai primit acest email pentru că cineva a creat un cont Livada cu această adresă.' }),
-    text: `Bun venit în Livada, ${user.first_name || ''}!\n\nCodul tău de confirmare: ${pretty}\nExpiră în 30 de minute.\n\nSau confirmă direct: ${link}\n\nNu ai creat tu contul? Ignoră acest mesaj.\n— Livada`,
+    subject: t('{code} este codul tău de confirmare Livada', { code: pretty }),
+    html: layout({ preheader: t('Codul tău: {code}. Expiră în 30 de minute.', { code: pretty }), topRight: t('Cont nou'), body,
+      footerNote: t('Ai primit acest email pentru că cineva a creat un cont Livada cu această adresă.') }),
+    text: [t('Bun venit în Livada, {name}!', { name: user.first_name || '' }), '', t('Codul tău de confirmare: {code}', { code: pretty }), t('Expiră în 30 de minute.'), '',
+      t('Sau confirmă direct: {link}', { link }), '', t('Nu ai creat tu contul? Ignoră acest mesaj.'), '— Livada'].join('\n'),
   };
 }
 
 // ─── 2. bun venit (după confirmare) ─────────────────────────────────────────
 export function welcome({ user }) {
+  return inLang(user.lang, () => welcomeIn({ user }));
+}
+function welcomeIn({ user }) {
   const perks = [
-    ['Livrare gratuită', 'de la 500 lei, la adresă sau în easybox / FANbox.'],
-    ['Retur 30 de zile', 'gratuit, fără întrebări, pentru produsele nedesigilate.'],
-    ['Rate 0%', 'până la 12 luni cu cardurile partenere.'],
-  ].map(([t, d]) => `<tr><td style="padding:0 0 12px"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+    [t('Livrare gratuită'), t('de la 500 lei, la adresă sau în easybox / FANbox.')],
+    [t('Retur 30 de zile'), t('gratuit, fără întrebări, pentru produsele nedesigilate.')],
+    [t('Rate 0%'), t('până la 12 luni cu cardurile partenere.')],
+  ].map(([k, d]) => `<tr><td style="padding:0 0 12px"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
 <td valign="top" style="padding:3px 12px 0 0"><div style="width:10px;height:10px;border-radius:3px 10px 3px 10px;background:${C.leaf}"></div></td>
-<td class="t-mute" style="font-family:${SANS};font-size:15px;line-height:1.5;color:${C.ink2}"><b class="t-ink" style="color:${C.ink}">${t}</b> ${d}</td></tr></table></td></tr>`).join('');
+<td class="t-mute" style="font-family:${SANS};font-size:15px;line-height:1.5;color:${C.ink2}"><b class="t-ink" style="color:${C.ink}">${k}</b> ${d}</td></tr></table></td></tr>`).join('');
   const body = `
-<tr><td>${pill('Cont confirmat')}</td></tr>
-${h1('Totul e pregătit,', `${esc(user.first_name || '')}.`)}
-${p('Contul tău Livada este activ. De acum îți poți urmări comenzile, salva adresele de livrare și primi facturile direct aici.')}
+<tr><td>${pill(t('Cont confirmat'))}</td></tr>
+${h1(t('Totul e pregătit,'), `${esc(user.first_name || '')}.`)}
+${p(t('Contul tău Livada este activ. De acum îți poți urmări comenzile, salva adresele de livrare și primi facturile direct aici.'))}
 <tr><td style="padding:10px 0 8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${C.ink}" style="background:${C.ink};border-radius:20px;padding:24px 26px">
-  <p style="margin:0 0 6px;font-family:${SANS};font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8EE0AE">Cadou de bun venit</p>
-  <p style="margin:0 0 14px;font-family:${SANS};font-size:22px;line-height:1.3;font-weight:700;color:#FFFFFF;letter-spacing:-0.02em">50 lei reducere la prima comandă de peste 500 lei</p>
+  <p style="margin:0 0 6px;font-family:${SANS};font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#8EE0AE">${t('Cadou de bun venit')}</p>
+  <p style="margin:0 0 14px;font-family:${SANS};font-size:22px;line-height:1.3;font-weight:700;color:#FFFFFF;letter-spacing:-0.02em">${t('50 lei reducere la prima comandă de peste 500 lei')}</p>
   <span style="display:inline-block;padding:10px 16px;border:1px dashed #5E6B64;border-radius:12px;font-family:${MONO};font-size:18px;font-weight:700;letter-spacing:0.14em;color:#FFFFFF">BUNVENIT50</span>
 </td></tr></table></td></tr>
 ${hairline(22)}
 ${perks}
-<tr><td style="padding:14px 0 0">${button(`${config.publicUrl}/`, 'Descoperă noutățile')}</td></tr>`;
+<tr><td style="padding:14px 0 0">${button(loc(`${config.publicUrl}/`), t('Descoperă noutățile'))}</td></tr>`;
   return {
-    subject: `Contul tău Livada e activ — ai 50 lei cadou`,
-    html: layout({ preheader: 'Codul BUNVENIT50 îți aduce 50 lei reducere la prima comandă.', topRight: 'Bun venit', body }),
-    text: `Contul tău Livada este activ.\n\nCadou: 50 lei reducere la prima comandă de peste 500 lei cu codul BUNVENIT50.\n\n${config.publicUrl}`,
+    subject: t('Contul tău Livada e activ — ai 50 lei cadou'),
+    html: layout({ preheader: t('Codul BUNVENIT50 îți aduce 50 lei reducere la prima comandă.'), topRight: t('Bun venit'), body }),
+    text: `${t('Contul tău Livada este activ.')}\n\n${t('Cadou: 50 lei reducere la prima comandă de peste 500 lei cu codul BUNVENIT50.')}\n\n${loc(config.publicUrl)}`,
   };
 }
 
 // ─── 3. resetare parolă ─────────────────────────────────────────────────────
 export function passwordReset({ user, link, meta }) {
+  return inLang(user.lang, () => passwordResetIn({ user, link: loc(link), meta }));
+}
+function passwordResetIn({ user, link, meta }) {
   const body = `
-<tr><td>${pill('Securitate cont', { bg: '#FBEFE6', fg: C.warn })}</td></tr>
-${h1('Resetează-ți parola')}
-${p(`Bună, ${esc(user.first_name || '')}! Am primit o cerere de resetare a parolei pentru contul tău Livada. Linkul este valabil <b>60 de minute</b>.`)}
-<tr><td style="padding:12px 0 6px">${button(link, 'Alege o parolă nouă')}</td></tr>
-<tr><td class="t-mute" style="padding:14px 0 0;font-family:${SANS};font-size:12px;line-height:1.6;color:${C.muted}">Sau copiază linkul: <a href="${esc(link)}" style="color:${C.leaf};word-break:break-all">${esc(link)}</a></td></tr>
+<tr><td>${pill(t('Securitate cont'), { bg: '#FBEFE6', fg: C.warn })}</td></tr>
+${h1(t('Resetează-ți parola'))}
+${p(t('Bună, {name}! Am primit o cerere de resetare a parolei pentru contul tău Livada. Linkul este valabil {time}.', { name: esc(user.first_name || ''), time: `<b>${t('60 de minute')}</b>` }))}
+<tr><td style="padding:12px 0 6px">${button(link, t('Alege o parolă nouă'))}</td></tr>
+<tr><td class="t-mute" style="padding:14px 0 0;font-family:${SANS};font-size:12px;line-height:1.6;color:${C.muted}">${t('Sau copiază linkul:')} <a href="${esc(link)}" style="color:${C.leaf};word-break:break-all">${esc(link)}</a></td></tr>
 ${securityBox(meta)}`;
   return {
-    subject: 'Resetarea parolei Livada',
-    html: layout({ preheader: 'Linkul de resetare este valabil 60 de minute.', topRight: 'Securitate', body }),
-    text: `Resetează-ți parola Livada (valabil 60 de minute):\n${link}\n\nNu ai cerut tu? Ignoră acest mesaj.`,
+    subject: t('Resetarea parolei Livada'),
+    html: layout({ preheader: t('Linkul de resetare este valabil 60 de minute.'), topRight: t('Securitate'), body }),
+    text: `${t('Resetează-ți parola Livada (valabil 60 de minute):')}\n${link}\n\n${t('Nu ai cerut tu? Ignoră acest mesaj.')}`,
   };
 }
 
@@ -192,7 +224,7 @@ ${securityBox(meta)}`;
 const PAYMENT_LABEL = { card: 'Card online', cod: 'Ramburs (numerar sau card la livrare)', transfer: 'Transfer bancar (OP)', installments: 'Rate fără dobândă cu cardul' };
 
 function tracker(status) {
-  const steps = [['new', 'Plasată'], ['confirmed', 'Confirmată'], ['shipped', 'Expediată'], ['delivered', 'Livrată']];
+  const steps = [['new', t('Plasată')], ['confirmed', t('Confirmată')], ['shipped', t('Expediată')], ['delivered', t('Livrată')]];
   const order = { new: 0, confirmed: 1, processing: 1, ready: 2, shipped: 2, delivered: 3 };
   const at = order[status] ?? 0;
   const cells = steps.map(([, label], i) => {
@@ -214,12 +246,12 @@ function itemsTable(items) {
 function totals(o) {
   const row = (k, v, strong) => `<tr><td class="${strong ? 't-ink' : 't-mute'}" style="padding:4px 0;font-family:${SANS};font-size:${strong ? 17 : 14}px;${strong ? 'font-weight:700;' : ''}color:${strong ? C.ink : C.ink2}">${k}</td><td align="right" class="t-ink" style="padding:4px 0;font-family:${SANS};font-size:${strong ? 17 : 14}px;${strong ? 'font-weight:700;' : ''}color:${C.ink};white-space:nowrap">${v}</td></tr>`;
   return `<tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-${row('Subtotal', lei(o.subtotal))}
-${o.discount ? row(`Reducere${o.promo_code ? ` (${esc(o.promo_code)})` : ''}`, `−${lei(o.discount)}`) : ''}
-${row('Livrare', o.shipping_fee ? lei(o.shipping_fee) : 'Gratuită')}
-${o.cod_fee ? row('Taxă ramburs', lei(o.cod_fee)) : ''}
-${row('Total', lei(o.total), true)}
-<tr><td colspan="2" class="t-mute" style="padding:2px 0 0;font-family:${SANS};font-size:12px;color:${C.muted}">din care TVA 21%: ${lei(o.vat)}</td></tr>
+${row(t('Subtotal'), lei(o.subtotal))}
+${o.discount ? row(`${t('Reducere')}${o.promo_code ? ` (${esc(o.promo_code)})` : ''}`, `−${lei(o.discount)}`) : ''}
+${row(t('Livrare'), o.shipping_fee ? lei(o.shipping_fee) : t('Gratuită'))}
+${o.cod_fee ? row(t('Taxă ramburs'), lei(o.cod_fee)) : ''}
+${row(t('Total'), lei(o.total), true)}
+<tr><td colspan="2" class="t-mute" style="padding:2px 0 0;font-family:${SANS};font-size:12px;color:${C.muted}">${t('din care TVA 21%: {vat}', { vat: lei(o.vat) })}</td></tr>
 </table></td></tr>`;
 }
 
@@ -232,34 +264,39 @@ export function deliveryText(o, { withTitle = true } = {}) {
     return `${name}, ${d.locker.address}, ${d.locker.city}`;
   }
   if (d.type === 'pickup') return `${d.store?.name || 'Showroom Livada'} · ${d.store?.address || ''}`;
+  // în engleză, numele metodei de livrare vine din dicționar („Livrare în aceeași zi” → „Same-day delivery”)
   const a = d.address || {};
   // curierul rămâne vizibil când diferă de titlu (ex. „Livrare în aceeași zi” · Sameday)
-  const label = withTitle ? o.delivery_label || o.delivery_title || '' : (o.delivery_label !== o.delivery_title ? o.delivery_label || '' : '');
-  return `${label}${label ? ' · ' : ''}${a.street}, ${a.city}, jud. ${a.county}${a.postcode ? `, ${a.postcode}` : ''}`;
+  const label = withTitle ? o.delivery_label || t(o.delivery_title || '') : (o.delivery_label !== o.delivery_title ? o.delivery_label || '' : '');
+  return `${label}${label ? ' · ' : ''}${a.street}, ${a.city}, ${t('jud. {county}', { county: a.county })}${a.postcode ? `, ${a.postcode}` : ''}`;
 }
 
 function infoBlocks(o) {
   const co = getSetting('company') || {};
   let payExtra = '';
   if (o.payment_method === 'transfer') {
-    payExtra = `<br><span style="font-size:13px">Plătește <b>${lei(o.total)}</b> în contul <b>${esc(co.iban)}</b> (${esc(co.bank)}), beneficiar ${esc(co.legal_name)}, cu explicația <b>${esc(o.number)}</b>. Expediem după confirmarea plății.</span>`;
+    payExtra = `<br><span style="font-size:13px">${t('Plătește {total} în contul {iban} ({bank}), beneficiar {name}, cu explicația {ref}. Expediem după confirmarea plății.', {
+      total: `<b>${lei(o.total)}</b>`, iban: `<b>${esc(co.iban)}</b>`, bank: esc(co.bank), name: esc(co.legal_name), ref: `<b>${esc(o.number)}</b>` })}</span>`;
   } else if (o.payment_method === 'cod') {
-    payExtra = `<br><span style="font-size:13px">Achiți <b>${lei(o.total)}</b> la livrare, numerar sau cu cardul.</span>`;
+    payExtra = `<br><span style="font-size:13px">${t('Achiți {total} la livrare, numerar sau cu cardul.', { total: `<b>${lei(o.total)}</b>` })}</span>`;
   }
   const block = (title, html) => `<td class="stack box" valign="top" width="50%" bgcolor="${C.mist}" style="background:${C.mist};border-radius:18px;padding:18px 20px;font-family:${SANS};font-size:14px;line-height:1.55;color:${C.ink2}">
 <span style="font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${C.muted}">${title}</span><br>${html}</td>`;
   return `<tr><td style="padding:6px 0 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-${block('Livrare', `${carrierImg(o.delivery?.carrier)}<b class="t-ink" style="color:${C.ink}">${esc(o.delivery_title || '')}</b><br>${esc(deliveryText(o, { withTitle: false }))}${o.delivery_eta ? `<br><span style="color:${C.leaf};font-weight:600">${esc(o.delivery_eta)}</span>` : ''}`)}
+${block(t('Livrare'), `${carrierImg(o.delivery?.carrier)}<b class="t-ink" style="color:${C.ink}">${esc(t(o.delivery_title || ''))}</b><br>${esc(deliveryText(o, { withTitle: false }))}${o.delivery_eta ? `<br><span style="color:${C.leaf};font-weight:600">${esc(o.delivery_eta)}</span>` : ''}`)}
 <td width="12" class="stack sgap" style="font-size:0;line-height:0">&nbsp;</td>
-${block('Plată', `<b class="t-ink" style="color:${C.ink}">${esc(PAYMENT_LABEL[o.payment_method] || o.payment_method)}</b>${payExtra}`)}
+${block(t('Plată'), `<b class="t-ink" style="color:${C.ink}">${esc(PAYMENT_LABEL[o.payment_method] ? t(PAYMENT_LABEL[o.payment_method]) : o.payment_method)}</b>${payExtra}`)}
 </tr></table></td></tr>`;
 }
 
 export function orderConfirmation({ order, items, link }) {
+  return inLang(order.lang, () => orderConfirmationIn({ order, items, link: loc(link) }));
+}
+function orderConfirmationIn({ order, items, link }) {
   const body = `
-<tr><td>${pill('Comandă plasată')}</td></tr>
-${h1(`Mulțumim, ${esc(order.first_name)}!`, 'Comanda e în livadă.')}
-${p(`Am înregistrat comanda <b class="t-ink" style="color:${C.ink}">${esc(order.number)}</b> din ${esc(dateTime(order.created_at))}. Îți scriem din nou când pleacă spre tine.`)}
+<tr><td>${pill(t('Comandă plasată'))}</td></tr>
+${h1(t('Mulțumim, {name}!', { name: esc(order.first_name) }), t('Comanda e în livadă.'))}
+${p(t('Am înregistrat comanda {number} din {date}. Îți scriem din nou când pleacă spre tine.', { number: `<b class="t-ink" style="color:${C.ink}">${esc(order.number)}</b>`, date: esc(dateTime(order.created_at)) }))}
 ${tracker(order.status)}
 ${hairline(22)}
 ${itemsTable(items)}
@@ -267,12 +304,13 @@ ${hairline(10)}
 ${totals(order)}
 <tr><td style="padding:22px 0 0"></td></tr>
 ${infoBlocks(order)}
-<tr><td style="padding:26px 0 0">${button(link, 'Vezi comanda')}</td></tr>`;
+<tr><td style="padding:26px 0 0">${button(link, t('Vezi comanda'))}</td></tr>`;
   return {
-    subject: `Comanda ${order.number} a fost înregistrată`,
-    html: layout({ preheader: `Total ${lei(order.total)} · ${items.length} ${items.length === 1 ? 'produs' : 'produse'}`, topRight: esc(order.number), body,
-      footerNote: 'Ai 30 de zile să returnezi gratuit produsele. Factura fiscală se emite la expediere.' }),
-    text: `Mulțumim! Comanda ${order.number} a fost înregistrată.\n\n${items.map((i) => `- ${i.name} ${i.variant_label ? `(${i.variant_label}) ` : ''}× ${i.qty}: ${lei(i.line_total)}`).join('\n')}\n\nTotal: ${lei(order.total)}\nLivrare: ${deliveryText(order)}\nPlată: ${PAYMENT_LABEL[order.payment_method]}\n\nDetalii: ${link}`,
+    subject: t('Comanda {number} a fost înregistrată', { number: order.number }),
+    html: layout({ preheader: `${t('Total')} ${lei(order.total)} · ${items.length} ${items.length === 1 ? t('produs') : t('produse')}`, topRight: esc(order.number), body,
+      footerNote: t('Ai 30 de zile să returnezi gratuit produsele. Factura fiscală se emite la expediere.') }),
+    text: `${t('Mulțumim! Comanda {number} a fost înregistrată.', { number: order.number })}\n\n${items.map((i) => `- ${i.name} ${i.variant_label ? `(${i.variant_label}) ` : ''}× ${i.qty}: ${lei(i.line_total)}`).join('\n')}\n\n`
+      + `${t('Total')}: ${lei(order.total)}\n${t('Livrare')}: ${deliveryText(order)}\n${t('Plată')}: ${PAYMENT_LABEL[order.payment_method] ? t(PAYMENT_LABEL[order.payment_method]) : PAYMENT_LABEL[order.payment_method]}\n\n${t('Detalii:')} ${link}`,
   };
 }
 
@@ -287,12 +325,16 @@ const STATUS_COPY = {
 };
 
 export function orderStatus({ order, items, link, note }) {
-  const [tag, title, text] = STATUS_COPY[order.status] || ['Actualizare', 'Comanda ta a fost actualizată', ''];
+  // trimis și din admin: limba vine din comandă, nu din cerere
+  return inLang(order.lang, () => orderStatusIn({ order, items, link: loc(link), note }));
+}
+function orderStatusIn({ order, items, link, note }) {
+  const [tag, title, text] = (STATUS_COPY[order.status] || ['Actualizare', 'Comanda ta a fost actualizată', '']).map((x) => t(x));
   const carrier = CARRIERS[order.delivery?.carrier];
   const track = order.awb && carrier?.track ? carrier.track.replace('{awb}', encodeURIComponent(order.awb)) : null;
   const body = `
 <tr><td>${pill(tag, order.status === 'cancelled' ? { bg: '#FBEFE6', fg: C.warn } : undefined)}</td></tr>
-${h1(title, order.status === 'shipped' ? `${esc(order.first_name)}.` : '')}
+${order.status === 'shipped' ? h1(t('Comanda e pe drum {name}', { name: accentSpan(`${esc(order.first_name)}.`) })) : h1(title)}
 ${p(`${text}${note ? `<br><br><i>${esc(note)}</i>` : ''}`)}
 ${['cancelled', 'returned'].includes(order.status) ? '' : tracker(order.status)}
 ${order.awb ? `<tr><td style="padding:16px 0 4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="box" bgcolor="${C.mist}" style="background:${C.mist};border-radius:18px;padding:18px 20px;font-family:${SANS}">
@@ -300,15 +342,19 @@ ${order.awb ? `<tr><td style="padding:16px 0 4px"><table role="presentation" wid
 <span class="t-ink" style="font-family:${MONO};font-size:22px;font-weight:700;letter-spacing:0.06em;color:${C.ink}">${esc(order.awb)}</span></td></tr></table></td></tr>` : ''}
 ${hairline(20)}
 ${itemsTable(items)}
-<tr><td style="padding:10px 0 0">${button(track || link, track ? 'Urmărește coletul' : 'Vezi comanda')}</td></tr>`;
+<tr><td style="padding:10px 0 0">${button(track || link, track ? t('Urmărește coletul') : t('Vezi comanda'))}</td></tr>`;
   return {
-    subject: `${tag}: comanda ${order.number}`,
+    subject: t('{tag}: comanda {number}', { tag, number: order.number }),
     html: layout({ preheader: `${title} — ${order.number}`, topRight: esc(order.number), body }),
-    text: `${title} — comanda ${order.number}\n${text}${order.awb ? `\nAWB: ${order.awb}${track ? ` (${track})` : ''}` : ''}\n\n${link}`,
+    text: `${t('{title} — comanda {number}', { title, number: order.number })}\n${text}${order.awb ? `\nAWB: ${order.awb}${track ? ` (${track})` : ''}` : ''}\n\n${link}`,
   };
 }
 
 export function adminNewOrder({ order, items, link }) {
+  // notificarea pentru echipă rămâne în română, indiferent de limba clientului
+  return withLang('ro', () => adminNewOrderIn({ order, items, link }));
+}
+function adminNewOrderIn({ order, items, link }) {
   const body = `
 <tr><td>${pill('Comandă nouă', { bg: '#E8EEF9', fg: '#1F4BB4' })}</td></tr>
 ${h1(`${esc(order.number)} · ${lei(order.total)}`)}
@@ -323,12 +369,15 @@ ${infoBlocks(order)}
   };
 }
 
-export function contactReceived({ name }) {
-  const body = `
-<tr><td>${pill('Mesaj primit')}</td></tr>
-${h1(`Mulțumim, ${esc(name)}.`)}
-${p('Am primit mesajul tău și revenim cu un răspuns în cel mult o zi lucrătoare. Pentru comenzi urgente ne poți suna în programul afișat mai jos.')}`;
-  return { subject: 'Am primit mesajul tău — Livada', html: layout({ preheader: 'Revenim în cel mult o zi lucrătoare.', body }), text: 'Am primit mesajul tău. Revenim în cel mult o zi lucrătoare. — Livada' };
+/** `lang` opțional; implicit limba paginii de pe care s-a trimis formularul */
+export function contactReceived({ name, lang: l }) {
+  return inLang(l, () => {
+    const body = `
+<tr><td>${pill(t('Mesaj primit'))}</td></tr>
+${h1(t('Mulțumim, {name}.', { name: esc(name) }))}
+${p(t('Am primit mesajul tău și revenim cu un răspuns în cel mult o zi lucrătoare. Pentru comenzi urgente ne poți suna în programul afișat mai jos.'))}`;
+    return { subject: t('Am primit mesajul tău — Livada'), html: layout({ preheader: t('Revenim în cel mult o zi lucrătoare.'), body }), text: t('Am primit mesajul tău. Revenim în cel mult o zi lucrătoare. — Livada') };
+  });
 }
 
 export const TEMPLATES = { verifyEmail, welcome, passwordReset, orderConfirmation, orderStatus, adminNewOrder, contactReceived };

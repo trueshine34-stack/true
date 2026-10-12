@@ -1,13 +1,26 @@
 // Harta lockerelor și a punctelor de ridicare: căutare după localitate / stradă / cod poștal, filtre pe rețele,
 // pini cu sigla curierului, grupuri colorate după rețea, listă sortată după distanță și fișa punctului.
 // Folosită la checkout (alegerea lockerului) și pe pagina „Livrare” (explorare).
-import { $, $$, toast } from './app.js';
+import { $, $$, toast, tr, num, langHeaders, LANG, LOCALE } from './app.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fold = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const nf = (n) => Number(n).toLocaleString('ro-RO');
+const nf = (n) => num(n);
 const leiFmt = (bani) => `${(bani / 100).toFixed(2).replace('.', ',')} lei`;
-const distLabel = (d) => (d < 1 ? `${Math.max(10, Math.round(d * 100) * 10)} m` : `${d.toFixed(d < 10 ? 1 : 0).replace('.', ',')} km`);
+const dec = (x, f) => (LANG === 'en' ? x.toFixed(f) : x.toFixed(f).replace('.', ','));
+const distLabel = (d) => (d < 1 ? `${Math.max(10, Math.round(d * 100) * 10)} m` : `${dec(d, d < 10 ? 1 : 0)} km`);
+
+// programul punctului („L–V 08:00–20:00, S–D închis”) în limba paginii; în română rămâne neschimbat
+const DAYS = { L: 0, Ma: 1, Mi: 2, J: 3, V: 4, S: 5, D: 6 };
+let dayNames = null;
+export function hoursText(h) {
+  if (!h || LANG === 'ro') return h || '';
+  if (h === 'Non-stop') return tr('Non-stop');
+  // 1 ianuarie 2024 a fost luni → numele scurte ale zilelor în limba paginii
+  dayNames ||= Array.from({ length: 7 }, (_, i) => new Intl.DateTimeFormat(LOCALE, { weekday: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, 0, 1 + i))));
+  return h.replace(/(^|[\s,–])(Ma|Mi|L|J|V|S|D)(?=[\s–]|$)/g, (m, a, d) => a + dayNames[DAYS[d]])
+    .replace(/închis/g, tr('închis')).replace(/non-stop/gi, tr('non-stop'));
+}
 const I = {
   pin: '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"/><circle cx="12" cy="10" r="2.4"/>',
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
@@ -34,7 +47,7 @@ const loadJs = (src) => new Promise((ok, ko) => { const s = document.createEleme
 let dataPromise = null;
 /** lista compactă de la server (o singură descărcare pe pagină; serverul o trimite comprimată, cu ETag) */
 function loadLockers() {
-  dataPromise ||= fetch('/api/lockers').then((r) => { if (!r.ok) throw new Error('lockers'); return r.json(); }).then((d) => {
+  dataPromise ||= fetch('/api/lockers', { headers: langHeaders() }).then((r) => { if (!r.ok) throw new Error('lockers'); return r.json(); }).then((d) => {
     const ix = Object.fromEntries(d.fields.map((f, i) => [f, i]));
     return d.rows.map((r) => ({
       id: r[ix.id], provider: r[ix.provider], point: r[ix.kind] === 1, name: r[ix.name], address: r[ix.address], city: r[ix.city],
@@ -73,7 +86,7 @@ export function createLockerPicker({ modal, cfg, onChoose }) {
     }
     map = L.map(els.map, { zoomControl: false, attributionControl: true, minZoom: 6, maxZoom: 19, maxBounds: [[42.6, 18.8], [49.2, 31.2]], worldCopyJump: false })
       .setView([45.94, 24.97], 7);
-    L.control.zoom({ position: 'bottomright', zoomInTitle: 'Mărește', zoomOutTitle: 'Micșorează' }).addTo(map);
+    L.control.zoom({ position: 'bottomright', zoomInTitle: tr('Mărește'), zoomOutTitle: tr('Micșorează') }).addTo(map);
     L.tileLayer(cfg.map.tiles, { attribution: cfg.map.attribution, subdomains: 'abcd', maxZoom: 19, detectRetina: true }).addTo(map);
     map.attributionControl.setPrefix(false);
     refLayer = L.layerGroup().addTo(map);
@@ -155,7 +168,7 @@ export function createLockerPicker({ modal, cfg, onChoose }) {
         continue;
       }
       const ll = map.layerPointToLatLng([g.x, g.y]);
-      const m = L.marker(ll, { icon: clusterIcon(g.items), title: `${g.items.length} puncte`, keyboard: true });
+      const m = L.marker(ll, { icon: clusterIcon(g.items), title: tr('{n} puncte', { n: g.items.length }), keyboard: true });
       m.on('click', (e) => {
         L.DomEvent.stopPropagation(e);
         const b = L.latLngBounds(g.items.map((x) => [x.lat, x.lng]));
@@ -172,7 +185,7 @@ export function createLockerPicker({ modal, cfg, onChoose }) {
   function refPoint() {
     if (ref) return ref;
     const c = map.getCenter();
-    return { lat: c.lat, lng: c.lng, label: 'centrul hărții' };
+    return { lat: c.lat, lng: c.lng, label: tr('centrul hărții') };
   }
 
   function item(l, d) {
@@ -181,8 +194,8 @@ export function createLockerPicker({ modal, cfg, onChoose }) {
     return `<li><button type="button" class="litem${on ? ' is-active' : ''}${picked?.id === l.id ? ' is-picked' : ''}" data-lid="${esc(l.id)}" aria-pressed="${on}">
       <span class="carrier" style="--cs:36px"><img src="${n.mark}" alt=""></span>
       <span class="litem__main"><b>${esc(l.name)}</b><span>${esc(l.address)}, ${esc(l.city)}</span>
-        <small>${l.point ? `${svg('store', 13)} Punct de ridicare · ${esc(l.hours || 'program afișat la punct')}` : `${svg('locker', 13)} Locker · ${esc(l.hours)}`}</small></span>
-      <span class="litem__side">${d !== undefined ? `<span class="litem__dist">${distLabel(d)}</span>` : ''}<span class="litem__price">${n.price ? leiFmt(n.price) : 'Gratuit'}</span></span>
+        <small>${l.point ? `${svg('store', 13)} ${tr('Punct de ridicare')} · ${esc(hoursText(l.hours) || tr('program afișat la punct'))}` : `${svg('locker', 13)} ${tr('Locker')} · ${esc(hoursText(l.hours))}`}</small></span>
+      <span class="litem__side">${d !== undefined ? `<span class="litem__dist">${distLabel(d)}</span>` : ''}<span class="litem__price">${n.price ? leiFmt(n.price) : tr('Gratuit')}</span></span>
     </button></li>`;
   }
 
@@ -195,13 +208,13 @@ export function createLockerPicker({ modal, cfg, onChoose }) {
     const by = {};
     for (const l of lockers) if (shown(l)) by[l.provider] = (by[l.provider] || 0) + 1;
     els.list.innerHTML = `<div class="lstart">
-      <p class="lstart__title"><b>Unde vrei să ridici coletul?</b><span>Caută localitatea (merge și cu satele), strada sau codul poștal — ori apasă „Lângă mine”.</span></p>
-      <p class="lstart__label">Orașe mari</p>
+      <p class="lstart__title"><b>${tr('Unde vrei să ridici coletul?')}</b><span>${tr('Caută localitatea (merge și cu satele), strada sau codul poștal — ori apasă „Lângă mine”.')}</span></p>
+      <p class="lstart__label">${tr('Orașe mari')}</p>
       <div class="lstart__cities">${CITIES.map(([n, lat, lng]) => `<button type="button" class="chip" data-goto="${lat},${lng}" data-goto-label="${esc(n)}">${esc(n)}</button>`).join('')}</div>
-      <p class="lstart__label">Rețele pe hartă</p>
+      <p class="lstart__label">${tr('Rețele pe hartă')}</p>
       <ul class="lstart__nets">${Object.entries(nets).filter(([k]) => by[k]).map(([k, n]) => `<li><span class="carrier" style="--cs:32px"><img src="${n.mark}" alt=""></span>
-        <span><b>${esc(n.name)}</b><small>${nf(by[k])} ${by[k] === 1 ? 'punct' : 'puncte'}${n.brand ? ` · ${esc(n.brand)}` : ''}</small></span>
-        ${browse ? '' : `<em>${n.price ? leiFmt(n.price) : 'Gratuit'}</em>`}</li>`).join('')}</ul>
+        <span><b>${esc(n.name)}</b><small>${tr(by[k] === 1 ? '{n} punct' : '{n} puncte', { n: nf(by[k]) })}${n.brand ? ` · ${esc(n.brand)}` : ''}</small></span>
+        ${browse ? '' : `<em>${n.price ? leiFmt(n.price) : tr('Gratuit')}</em>`}</li>`).join('')}</ul>
     </div>`;
     if (els.count) els.count.textContent = nf(inView.length);
   }
@@ -213,21 +226,21 @@ export function createLockerPicker({ modal, cfg, onChoose }) {
     let rows, head;
     if (subset) {
       rows = subset.map((l) => ({ l, d: distKm(r, l) })).sort((a, b) => a.d - b.d);
-      head = `<p class="llist__head"><b>${rows.length} puncte în același loc</b><button type="button" class="link-btn" data-subset-clear>Toată zona</button></p>`;
+      head = `<p class="llist__head"><b>${tr('{n} puncte în același loc', { n: rows.length })}</b><button type="button" class="link-btn" data-subset-clear>${tr('Toată zona')}</button></p>`;
     } else {
       inView ||= lockers.filter((l) => shown(l) && map.getBounds().contains([l.lat, l.lng]));
       rows = inView.map((l) => ({ l, d: distKm(r, l) })).sort((a, b) => a.d - b.d).slice(0, 60);
       if (!rows.length) {
         const near = lockers.filter(shown).map((l) => ({ l, d: distKm(r, l) })).sort((a, b) => a.d - b.d).slice(0, 8);
         rows = near;
-        head = `<p class="llist__head">Niciun punct în zona hărții. <b>Cele mai apropiate de ${esc(r.label)}:</b></p>`;
+        head = `<p class="llist__head">${tr('Niciun punct în zona hărții.')} <b>${tr('Cele mai apropiate de {label}:', { label: esc(r.label) })}</b></p>`;
       } else {
-        head = `<p class="llist__head"><b>${nf(inView.length)} ${inView.length === 1 ? 'punct' : 'puncte'} în zona hărții</b> · după distanța față de ${esc(r.label)}</p>`;
+        head = `<p class="llist__head"><b>${tr(inView.length === 1 ? '{n} punct în zona hărții' : '{n} puncte în zona hărții', { n: nf(inView.length) })}</b> · ${tr('după distanța față de {label}', { label: esc(r.label) })}</p>`;
       }
     }
     if (els.count) els.count.textContent = subset ? subset.length : nf(inView?.length ?? rows.length);
     els.list.innerHTML = rows.length ? `${head}<ul class="llist">${rows.map(({ l, d }) => item(l, d)).join('')}</ul>`
-      : '<p class="llist__empty">Nicio rețea selectată. Activează cel puțin o rețea din filtrele de mai sus.</p>';
+      : `<p class="llist__empty">${tr('Nicio rețea selectată. Activează cel puțin o rețea din filtrele de mai sus.')}</p>`;
   }
 
   // ─── fișa punctului ───────────────────────────────────────────────────
@@ -239,20 +252,20 @@ export function createLockerPicker({ modal, cfg, onChoose }) {
     els.card.innerHTML = `
       <div class="lcard__head">
         <span class="carrier" style="--cs:44px"><img src="${n.mark}" alt=""></span>
-        <span class="lcard__net"><b>${esc(n.name)}</b><small>${l.point ? 'Punct de ridicare' : 'Locker automat'}${n.brand ? ` · ${esc(n.brand)}` : ''}${d !== null ? ` · ${distLabel(d)} de ${esc(ref.label)}` : ''}</small></span>
-        <button type="button" class="icon-btn icon-btn--sm" data-card-close aria-label="Închide fișa">${svg('close', 18)}</button>
+        <span class="lcard__net"><b>${esc(n.name)}</b><small>${l.point ? tr('Punct de ridicare') : tr('Locker automat')}${n.brand ? ` · ${esc(n.brand)}` : ''}${d !== null ? ` · ${tr('{dist} de {label}', { dist: distLabel(d), label: esc(ref.label) })}` : ''}</small></span>
+        <button type="button" class="icon-btn icon-btn--sm" data-card-close aria-label="${esc(tr('Închide fișa'))}">${svg('close', 18)}</button>
       </div>
       <h3 class="lcard__name">${esc(l.name)}</h3>
-      <p class="lcard__addr">${esc(l.address)}<br>${esc(l.city)}, ${l.county === 'București' ? 'București' : `jud. ${esc(l.county)}`}${l.postcode ? ` · ${esc(l.postcode)}` : ''}</p>
+      <p class="lcard__addr">${esc(l.address)}<br>${esc(l.city)}, ${l.county === 'București' ? 'București' : tr('jud. {county}', { county: esc(l.county) })}${l.postcode ? ` · ${esc(l.postcode)}` : ''}</p>
       ${l.note ? `<p class="lcard__note">${svg('info', 15)}<span>${esc(l.note)}</span></p>` : ''}
       <ul class="lcard__facts">
-        <li>${svg('clock', 15)}<span>${l.hours === 'Non-stop' ? '<b class="ok">Non-stop</b>, 24/7' : esc(l.hours || 'Program afișat la punct')}</span></li>
-        ${browse ? '' : `<li>${svg('truck', 15)}<span>${esc(n.eta)} · <b>${n.price ? leiFmt(n.price) : 'livrare gratuită'}</b></span></li>`}
-        ${browse ? '' : `<li>${svg(n.cod ? 'check' : 'info', 15)}<span>${n.cod ? 'Poți plăti ramburs' + (l.point ? ' la punct' : ', cu cardul la locker') : 'Plata ramburs nu e disponibilă în această rețea'}</span></li>`}
+        <li>${svg('clock', 15)}<span>${l.hours === 'Non-stop' ? tr('<b class="ok">Non-stop</b>, 24/7') : esc(hoursText(l.hours) || tr('Program afișat la punct'))}</span></li>
+        ${browse ? '' : `<li>${svg('truck', 15)}<span>${esc(n.eta)} · <b>${n.price ? leiFmt(n.price) : tr('livrare gratuită')}</b></span></li>`}
+        ${browse ? '' : `<li>${svg(n.cod ? 'check' : 'info', 15)}<span>${n.cod ? (l.point ? tr('Poți plăti ramburs la punct') : tr('Poți plăti ramburs, cu cardul la locker')) : tr('Plata ramburs nu e disponibilă în această rețea')}</span></li>`}
       </ul>
       <div class="lcard__actions">
-        ${browse ? '' : `<button type="button" class="btn btn--dark" data-pick="${esc(l.id)}">${picked?.id === l.id ? `${svg('check', 18)} Ales` : 'Alege acest punct'}</button>`}
-        <a class="btn btn--ghost" href="https://www.google.com/maps/dir/?api=1&destination=${l.lat},${l.lng}" target="_blank" rel="noopener">${svg('route', 16)} Traseu</a>
+        ${browse ? '' : `<button type="button" class="btn btn--dark" data-pick="${esc(l.id)}">${picked?.id === l.id ? `${svg('check', 18)} ${tr('Ales')}` : tr('Alege acest punct')}</button>`}
+        <a class="btn btn--ghost" href="https://www.google.com/maps/dir/?api=1&destination=${l.lat},${l.lng}" target="_blank" rel="noopener">${svg('route', 16)} ${tr('Traseu')}</a>
       </div>`;
     els.card.hidden = false;
     modal.classList.add('has-card');
@@ -292,7 +305,7 @@ export function createLockerPicker({ modal, cfg, onChoose }) {
     let places = placeCache.get(fq);
     if (!places) {
       try {
-        places = (await (await fetch(`/api/places?q=${encodeURIComponent(q.trim())}`)).json()).places || [];
+        places = (await (await fetch(`/api/places?q=${encodeURIComponent(q.trim())}`, { headers: langHeaders() })).json()).places || [];
         placeCache.set(fq, places);
       } catch { places = []; }
     }
@@ -300,20 +313,20 @@ export function createLockerPicker({ modal, cfg, onChoose }) {
     sugItems = [...places.map((p) => ({ type: 'place', p })), ...lockerHits.map((l) => ({ type: 'locker', l }))];
     sugIndex = sugItems.length ? 0 : -1;
     if (!sugItems.length) {
-      els.suggest.innerHTML = '<li class="lsug__empty">Nu am găsit localitatea sau punctul. Încearcă numele orașului sau codul poștal.</li>';
+      els.suggest.innerHTML = `<li class="lsug__empty">${tr('Nu am găsit localitatea sau punctul. Încearcă numele orașului sau codul poștal.')}</li>`;
       els.suggest.hidden = false;
       els.search.setAttribute('aria-expanded', 'true');
       return;
     }
     let lastType = '';
     els.suggest.innerHTML = sugItems.map((s, i) => {
-      const head = s.type !== lastType ? `<li class="lsug__group" role="presentation">${s.type === 'place' ? 'Localități' : 'Lockere și puncte'}</li>` : '';
+      const head = s.type !== lastType ? `<li class="lsug__group" role="presentation">${s.type === 'place' ? tr('Localități') : tr('Lockere și puncte')}</li>` : '';
       lastType = s.type;
       if (s.type === 'place') {
         const p = s.p;
         return `${head}<li role="option" id="lsug-${i}" class="lsug${i === sugIndex ? ' is-on' : ''}" data-sug="${i}">
-          <span class="lsug__ico">${svg('pin', 18)}</span><span class="lsug__main"><b>${esc(p.name)}</b><small>${p.county === 'București' ? 'Municipiul București' : `jud. ${esc(p.county)}`}</small></span>
-          <span class="lsug__meta">${p.near ? `${nf(p.near)} ${p.near === 1 ? 'punct' : 'puncte'} în zonă` : 'cele mai apropiate'}</span></li>`;
+          <span class="lsug__ico">${svg('pin', 18)}</span><span class="lsug__main"><b>${esc(p.name)}</b><small>${p.county === 'București' ? tr('Municipiul București') : tr('jud. {county}', { county: esc(p.county) })}</small></span>
+          <span class="lsug__meta">${p.near ? tr(p.near === 1 ? '{n} punct în zonă' : '{n} puncte în zonă', { n: nf(p.near) }) : tr('cele mai apropiate')}</span></li>`;
       }
       const l = s.l, n = nets[l.provider];
       return `${head}<li role="option" id="lsug-${i}" class="lsug${i === sugIndex ? ' is-on' : ''}" data-sug="${i}">
@@ -373,17 +386,17 @@ export function createLockerPicker({ modal, cfg, onChoose }) {
 
   // ─── geolocalizare ────────────────────────────────────────────────────
   function locate() {
-    if (!navigator.geolocation) { toast('Browserul nu permite localizarea. Caută după localitate.', { type: 'error' }); return; }
+    if (!navigator.geolocation) { toast(tr('Browserul nu permite localizarea. Caută după localitate.'), { type: 'error' }); return; }
     const btn = $('[data-locker-locate]', modal);
     btn?.classList.add('is-loading');
     navigator.geolocation.getCurrentPosition((pos) => {
       btn?.classList.remove('is-loading');
-      const me = { lat: pos.coords.latitude, lng: pos.coords.longitude, label: 'tine', kind: 'me' };
-      if (!(me.lat > 43 && me.lat < 48.5 && me.lng > 20 && me.lng < 30)) { toast('Ești în afara României — caută localitatea de livrare.', { type: 'error' }); return; }
+      const me = { lat: pos.coords.latitude, lng: pos.coords.longitude, label: tr('tine'), kind: 'me' };
+      if (!(me.lat > 43 && me.lat < 48.5 && me.lng > 20 && me.lng < 30)) { toast(tr('Ești în afara României — caută localitatea de livrare.'), { type: 'error' }); return; }
       els.search.value = '';
       subset = null;
       goTo(me, lockers.some((l) => shown(l) && distKm(me, l) < 3) ? 1 : 0);
-    }, () => { btn?.classList.remove('is-loading'); toast('Nu am putut afla locația. Caută după localitate sau stradă.', { type: 'error' }); },
+    }, () => { btn?.classList.remove('is-loading'); toast(tr('Nu am putut afla locația. Caută după localitate sau stradă.'), { type: 'error' }); },
     { enableHighAccuracy: true, timeout: 9000, maximumAge: 120000 });
   }
 
@@ -448,7 +461,7 @@ export function createLockerPicker({ modal, cfg, onChoose }) {
       else if (focusSearch && matchMedia('(min-width: 900px)').matches) els.search?.focus();
     } catch {
       ready = null;
-      els.list.innerHTML = '<p class="llist__empty">Harta nu s-a putut încărca. Verifică conexiunea și încearcă din nou.</p>';
+      els.list.innerHTML = `<p class="llist__empty">${tr('Harta nu s-a putut încărca. Verifică conexiunea și încearcă din nou.')}</p>`;
     }
   }
   function close() {

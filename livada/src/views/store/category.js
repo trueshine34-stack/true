@@ -3,7 +3,9 @@ import { page } from '../layout.js';
 import { productGrid, breadcrumbs, emptyState } from '../components.js';
 import { icon } from '../icons.js';
 import { plural } from '../../lib/format.js';
+import { t } from '../../lib/i18n.js';
 
+// etichetele sunt chei de traducere (t() la afișare)
 const SORT_LABELS = { recommended: 'Recomandate', new: 'Cele mai noi', 'price-asc': 'Preț crescător', 'price-desc': 'Preț descrescător', name: 'Nume A–Z' };
 const PRICE_BANDS = [[0, 500], [500, 1500], [1500, 5000], [5000, 10000], [10000, null]];
 
@@ -38,8 +40,8 @@ export function listingPage(ctx, o) {
         </div>
         <p class="listing-head__count">${plural(o.products.length, 'produs', 'produse', 'de produse')}</p>
       </div>
-      ${o.groups?.length ? html`<div class="tabs" role="tablist" aria-label="Subcategorii">
-        <a class=${cx('tab', !group && 'is-active')} href=${qs(o.base, params, { grup: null })} role="tab" aria-selected=${String(!group)}>Toate</a>
+      ${o.groups?.length ? html`<div class="tabs" role="tablist" aria-label=${t('Subcategorii')}>
+        <a class=${cx('tab', !group && 'is-active')} href=${qs(o.base, params, { grup: null })} role="tab" aria-selected=${String(!group)}>${t('Toate')}</a>
         ${o.groups.map((g) => html`<a class=${cx('tab', group === g && 'is-active')} href=${qs(o.base, params, { grup: g })} role="tab" aria-selected=${String(group === g)}>${g}</a>`)}
       </div>` : ''}
     </div>
@@ -48,33 +50,33 @@ export function listingPage(ctx, o) {
     <div class="wrap">
       ${o.showFilters === false ? '' : html`<div class="toolbar">
         <details class="filters" ${attr('open', false)}>
-          <summary class="btn btn--ghost btn--sm">${icon('filter', { size: 16 })} Filtre${activeFilters ? html` <span class="filters__count">${activeFilters}</span>` : ''}</summary>
+          <summary class="btn btn--ghost btn--sm">${icon('filter', { size: 16 })} ${t('Filtre')}${activeFilters ? html` <span class="filters__count">${activeFilters}</span>` : ''}</summary>
           <form class="filters__panel" method="get" action=${o.base}>
             ${group ? html`<input type="hidden" name="grup" value=${group}>` : ''}
             ${q.get('q') ? html`<input type="hidden" name="q" value=${q.get('q')}>` : ''}
             <input type="hidden" name="sort" value=${sort}>
-            <fieldset><legend>Preț</legend>
-              <label class="radio-chip"><input type="radio" name="pret" value=""${attr('checked', !band)}><span>Orice preț</span></label>
+            <fieldset><legend>${t('Preț')}</legend>
+              <label class="radio-chip"><input type="radio" name="pret" value=""${attr('checked', !band)}><span>${t('Orice preț')}</span></label>
               ${PRICE_BANDS.map(([a, b]) => {
     const v = `${a}-${b ?? ''}`;
-    return html`<label class="radio-chip"><input type="radio" name="pret" value=${v}${attr('checked', band === v)}><span>${b ? `${a.toLocaleString('ro-RO')} – ${b.toLocaleString('ro-RO')} lei` : `peste ${a.toLocaleString('ro-RO')} lei`}</span></label>`;
+    return html`<label class="radio-chip"><input type="radio" name="pret" value=${v}${attr('checked', band === v)}><span>${b ? `${a.toLocaleString('ro-RO')} – ${b.toLocaleString('ro-RO')} lei` : t('peste {n} lei', { n: a.toLocaleString('ro-RO') })}</span></label>`;
   })}
             </fieldset>
-            <fieldset><legend>Disponibilitate</legend>
-              <label class="switch"><input type="checkbox" name="stoc" value="1"${attr('checked', inStock)}><span></span>Doar produse în stoc</label>
-              <label class="switch"><input type="checkbox" name="oferte" value="1"${attr('checked', promo)}><span></span>Doar oferte</label>
+            <fieldset><legend>${t('Disponibilitate')}</legend>
+              <label class="switch"><input type="checkbox" name="stoc" value="1"${attr('checked', inStock)}><span></span>${t('Doar produse în stoc')}</label>
+              <label class="switch"><input type="checkbox" name="oferte" value="1"${attr('checked', promo)}><span></span>${t('Doar oferte')}</label>
             </fieldset>
-            <div class="filters__actions"><a class="btn btn--ghost btn--sm" href=${qs(o.base, { ...(group ? { grup: group } : {}), ...(q.get('q') ? { q: q.get('q') } : {}) }, {})}>Resetează</a><button class="btn btn--dark btn--sm" type="submit">Aplică</button></div>
+            <div class="filters__actions"><a class="btn btn--ghost btn--sm" href=${qs(o.base, { ...(group ? { grup: group } : {}), ...(q.get('q') ? { q: q.get('q') } : {}) }, {})}>${t('Resetează')}</a><button class="btn btn--dark btn--sm" type="submit">${t('Aplică')}</button></div>
           </form>
         </details>
         <form class="sort" method="get" action=${o.base} data-autosubmit>
           ${Object.entries(params).filter(([k]) => k !== 'sort').map(([k, v]) => html`<input type="hidden" name=${k} value=${v}>`)}
-          <label for="sort-select" class="visually-hidden">Sortează</label>
-          <select id="sort-select" name="sort">${Object.entries(SORT_LABELS).map(([v, l]) => html`<option value=${v}${attr('selected', v === sort)}>${l}</option>`)}</select>
+          <label for="sort-select" class="visually-hidden">${t('Sortează')}</label>
+          <select id="sort-select" name="sort">${Object.entries(SORT_LABELS).map(([v, l]) => html`<option value=${v}${attr('selected', v === sort)}>${t(l)}</option>`)}</select>
           ${icon('chevron-down', { size: 16 })}
         </form>
       </div>`}
-      ${o.products.length ? productGrid(o.products, { eager: true, heading: 2 }) : emptyState({ iconName: 'search', title: 'Niciun produs nu se potrivește', text: 'Încearcă alte filtre sau caută după numele modelului.', cta: 'Vezi toate produsele', href: o.base })}
+      ${o.products.length ? productGrid(o.products, { eager: true, heading: 2 }) : emptyState({ iconName: 'search', title: t('Niciun produs nu se potrivește'), text: t('Încearcă alte filtre sau caută după numele modelului.'), cta: t('Vezi toate produsele'), href: o.base })}
     </div>
   </section>`;
   return page(ctx, { title: o.metaTitle || o.title, description: o.description, body, active: o.category?.slug, canonical: o.canonical });
