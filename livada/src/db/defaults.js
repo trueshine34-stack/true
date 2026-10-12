@@ -71,7 +71,7 @@ export const CARRIERS = {
   dpd: { name: 'DPD', ...L('dpd'), color: '#DC0032', track: 'https://tracking.dpd.ro/?shipmentNumber={awb}' },
   gls: { name: 'GLS', ...L('gls'), color: '#061AB1', track: 'https://gls-group.com/RO/ro/urmarire-colet?match={awb}' },
   posta: { name: 'Poșta Română', ...L('posta'), color: '#EA0029', track: 'https://www.posta-romana.ro/track-trace.html?id={awb}' },
-  easybox: { name: 'easybox', network: 'Sameday', ...L('sameday'), color: '#E92427', track: 'https://sameday.ro/#awb={awb}' },
+  easybox: { name: 'easybox', network: 'Sameday', ...L('easybox'), color: '#EB222A', track: 'https://sameday.ro/#awb={awb}' },
   fanbox: { name: 'FANbox', network: 'FAN Courier', ...L('fan'), color: '#0F2345', track: 'https://www.fancourier.ro/awb-tracking/?tracking={awb}' },
   packeta: { name: 'Packeta', ...L('packeta'), color: '#BA1B02', track: 'https://tracking.packeta.com/ro/?id={awb}' },
   livada: { name: 'Livada', logo: '/img/brand/logo.svg', mark: '/img/brand/mark.svg', email: '/img/brand/email-logo.png', color: '#0E1411', track: '' },

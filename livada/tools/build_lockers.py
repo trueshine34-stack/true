@@ -44,7 +44,9 @@ URLS = {
     "dpd_office": "https://services.dpd.ro/officesmap_v2/getOfficeDetails.php",
     "sameday_auth": "https://api.sameday.ro/api/authenticate",
     "sameday_lockers": "https://api.sameday.ro/api/client/lockers",
-    "packeta": "https://www.zasilkovna.cz/api/v4/{key}/branch.json?lang=ro",
+    # Packeta v5: punctele de ridicare și Z-BOX-urile sunt în fluxuri separate
+    "packeta_branch": "https://pickup-point.api.packeta.com/v5/{key}/branch.json?lang=ro",
+    "packeta_box": "https://pickup-point.api.packeta.com/v5/{key}/box.json?lang=ro",
 }
 
 COUNTIES = ["Alba", "Arad", "Argeș", "Bacău", "Bihor", "Bistrița-Năsăud", "Botoșani", "Brașov", "Brăila", "București", "Buzău",
@@ -417,49 +419,95 @@ def src_easybox(a, places):
     return out
 
 
+def http_json(url, data=None, headers=None, timeout=60):
+    h = {"User-Agent": UA, "Accept": "application/json"}
+    h.update(headers or {})
+    req = urllib.request.Request(url, data=data, headers=h, method="POST" if data is not None else "GET")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8-sig") or "null")
+
+
 def easybox_api(user, pwd):
-    """API-ul Sameday (cont de client): autentificare → lista paginată a lockerelor easybox."""
-    req = urllib.request.Request(URLS["sameday_auth"], data=b"remember_me=1", method="POST", headers={
-        "X-AUTH-USERNAME": user, "X-AUTH-PASSWORD": pwd, "Content-Type": "application/x-www-form-urlencoded", "User-Agent": UA})
-    token = json.loads(urllib.request.urlopen(req, timeout=30).read())["token"]
+    """
+    API-ul Sameday pentru clienți (ca în SDK-ul oficial sameday-courier/php-sdk):
+      POST /api/authenticate  antete X-AUTH-USERNAME / X-AUTH-PASSWORD, corp remember_me=1 → {token, expire_at}
+      GET  /api/client/lockers?page=N&countPerPage=M  antet X-AUTH-TOKEN
+           → {data: [{lockerId, name, county, city, address, postalCode, lat, lng, phone, email, supportedPayment,
+                      clientVisible, availableBoxes: [{size, number}], schedule: [{day (1 = luni … 7 = duminică), openingHour, closingHour}]}],
+              total, currentPage, pages, perPage}
+    """
+    token = http_json(URLS["sameday_auth"], data=b"remember_me=1", headers={
+        "X-AUTH-USERNAME": user, "X-AUTH-PASSWORD": pwd, "Content-Type": "application/x-www-form-urlencoded"}, timeout=30)["token"]
     out, page = [], 1
     while True:
         q = urllib.parse.urlencode({"page": page, "countPerPage": 500})
-        req = urllib.request.Request(f"{URLS['sameday_lockers']}?{q}", headers={"X-AUTH-TOKEN": token, "User-Agent": UA})
-        d = json.loads(urllib.request.urlopen(req, timeout=60).read())
+        d = http_json(f"{URLS['sameday_lockers']}?{q}", headers={"X-AUTH-TOKEN": token}) or {}
         for x in d.get("data") or []:
+            if "clientVisible" in x and not x.get("clientVisible"):
+                continue  # lockere ascunse clienților (în service, rezervate)
             days = [None] * 7
-            for s in x.get("schedule") or []:
-                k = int(s.get("day") or 0)
+            for sch in x.get("schedule") or []:
+                k = int(sch.get("day") or 0)
                 if 1 <= k <= 7:
-                    days[k - 1] = (s.get("openingHour"), s.get("closingHour"))
-            out.append(dict(id=f"easybox-{x.get('lockerId') or x.get('id')}", provider="easybox", kind="locker",
-                            name=tidy(x.get("name") or ""), address=tidy(x.get("address") or ""), city=x.get("city") or "",
-                            county=county_name(x.get("county")), postcode=str(x.get("postalCode") or x.get("postcode") or ""),
-                            lat=float(x.get("lat") or x.get("latitude")), lng=float(x.get("lng") or x.get("long") or x.get("longitude")),
-                            hours=hours_from_days(days) or "Non-stop", note=note_text(x.get("details") or "")))
-        if page >= int(d.get("pages") or 1):
+                    days[k - 1] = (sch.get("openingHour"), sch.get("closingHour"))
+            name = tidy(x.get("name") or "")
+            out.append(dict(id=f"easybox-{x.get('lockerId')}", provider="easybox", kind="locker",
+                            name=name if fold(name).startswith("easybox") else f"easybox {name}".strip(),
+                            address=tidy(x.get("address") or ""), city=x.get("city") or "", county=county_name(x.get("county")),
+                            postcode=str(x.get("postalCode") or ""), lat=float(x["lat"]), lng=float(x["lng"]),
+                            hours=hours_from_days(days) or "Non-stop", note=""))
+        pages = int(d.get("pages") or 1)
+        if page >= pages or not d.get("data"):
             break
         page += 1
     return out
 
 
+def _packeta_hours(oh):
+    """openingHours din fluxul Packeta: {regular: {monday: "08:00–18:00", …}} sau text; → zilele L…D"""
+    if isinstance(oh, str):
+        return oh.strip()
+    reg = (oh or {}).get("regular") if isinstance(oh, dict) else None
+    if not isinstance(reg, dict):
+        return ""
+    days = []
+    for d in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"):
+        v = re.findall(r"\d{1,2}:\d{2}", str(reg.get(d) or ""))
+        days.append((v[0].zfill(5), v[-1].zfill(5)) if len(v) >= 2 else None)
+    return hours_from_days(days)
+
+
 def src_packeta(a):
+    """
+    Packeta, fluxurile v5 cu cheia API a magazinului (PACKETA_API_KEY):
+      https://pickup-point.api.packeta.com/v5/<key>/branch.json?lang=ro  — puncte de ridicare
+      https://pickup-point.api.packeta.com/v5/<key>/box.json?lang=ro     — Z-BOX (lockere)
+    Răspuns: {data: {<id>: {...}}} sau {data: [...]}; câmpuri: id, name, place, street, city, zip, country,
+    latitude, longitude, openingHours, directions. Păstrăm doar România (country = ro).
+    """
     key = os.environ.get("PACKETA_API_KEY")
     if not key or a.offline:
         return []
-    d = json.loads(fetch(URLS["packeta"].format(key=urllib.parse.quote(key)), a.cache, "packeta.json"))
-    rows = d.get("data") or {}
-    rows = rows.values() if isinstance(rows, dict) else rows
     out = []
-    for x in rows:
-        if (x.get("country") or "").lower() != "ro":
-            continue
-        locker = "z-box" in fold(x.get("name")) or x.get("type") == "zbox"
-        out.append(dict(id=f"packeta-{x['id']}", provider="packeta", kind="locker" if locker else "point", name=tidy(x.get("name") or ""),
-                        address=tidy(x.get("street") or ""), city=x.get("city") or x.get("place") or "", county="",
-                        postcode=str(x.get("zip") or "").replace(" ", ""), lat=float(x["latitude"]), lng=float(x["longitude"]),
-                        hours="Non-stop" if locker else "", note=note_text(x.get("directions") or "")))
+    for kind, url, cache_name in (("point", URLS["packeta_branch"], "packeta-branch.json"), ("locker", URLS["packeta_box"], "packeta-box.json")):
+        d = json.loads(fetch(url.format(key=urllib.parse.quote(key)), a.cache, cache_name))
+        rows = d.get("data") if isinstance(d, dict) else d
+        rows = rows.values() if isinstance(rows, dict) else (rows or [])
+        for x in rows:
+            if (x.get("country") or "").lower() != "ro":
+                continue
+            lat = x.get("latitude") or (x.get("gps") or {}).get("lat")
+            lng = x.get("longitude") or (x.get("gps") or {}).get("lon")
+            if lat is None or lng is None:
+                continue
+            locker = kind == "locker" or "z-box" in fold(x.get("name")) or "zbox" in fold(x.get("name"))
+            raw = re.sub(r"(?i)^(packeta\s+)?(z-?box\s*)?", "", x.get("place") or x.get("name") or "").strip(" ,-")
+            out.append(dict(id=f"packeta-{x['id']}", provider="packeta", kind="locker" if locker else "point",
+                            name=f"{'Packeta Z-BOX' if locker else 'Packeta'} {tidy(raw)}".strip(), address=tidy(x.get("street") or ""),
+                            city=x.get("city") or "", county="", postcode=str(x.get("zip") or "").replace(" ", ""),
+                            lat=float(lat), lng=float(lng),
+                            hours="Non-stop" if locker and not x.get("openingHours") else _packeta_hours(x.get("openingHours")),
+                            note=note_text(x.get("directions") or "")))
     return out
 
 
@@ -582,7 +630,7 @@ def main():
             continue
         sources[net] = {
             "url": {"fanbox": URLS["fanbox"], "gls": URLS["gls"], "cargus": URLS["cargus"], "dpd": "https://services.dpd.ro/officesmap_v2/",
-                    "easybox": "OpenStreetMap (ODbL)" if easy_osm else URLS["sameday_lockers"], "packeta": "Packeta API"}[net],
+                    "easybox": "OpenStreetMap (ODbL)" if easy_osm else URLS["sameday_lockers"], "packeta": "https://pickup-point.api.packeta.com/v5/"}[net],
             "lockers": sum(r["kind"] == "locker" for r in mine), "points": sum(r["kind"] == "point" for r in mine),
             "counties": len({r["county"] for r in mine}), "cities": len({(r["county"], r["city"]) for r in mine}),
             "complete": not (net == "easybox" and easy_osm),

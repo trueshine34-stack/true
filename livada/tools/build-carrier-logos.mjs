@@ -8,6 +8,7 @@
 //   packeta.svg  packeta.ro (logo din antet)
 //   posta.svg    Poșta Română, logo 2025 (Wikimedia Commons)
 //   cargus.png   cargus.ro/wp-content/uploads/CG_LOGO_OGB_RGB-1.svg (Cargus îl publică doar ca imagine)
+//   easybox.svg  commons.wikimedia.org/wiki/File:Sameday_easybox_logo.svg (domeniu public)
 // Pentru fiecare: logo întreg (<cheie>.svg) și semn compact pentru pini și insigne (<cheie>-mark.svg),
 // plus PNG-uri pentru emailuri (clienții de email nu afișează SVG).
 import fs from 'node:fs';
@@ -22,13 +23,17 @@ const OUT = path.join(ROOT, 'public/img/carriers');
 fs.mkdirSync(OUT, { recursive: true });
 
 /** curăță un SVG primit din afară: fără scripturi, handlere, referințe externe, metadate de editor */
-function sanitize(svg, { viewBox, dropPatterns = false } = {}) {
+function sanitize(svg, { viewBox, dropPatterns = false, keep } = {}) {
   let s = svg
     .replace(/<\?xml[^>]*>/g, '').replace(/<!DOCTYPE[^>]*>/gi, '').replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '')
     .replace(/<metadata[\s\S]*?<\/metadata>/gi, '').replace(/<sodipodi:[\s\S]*?\/>/gi, '').replace(/<inkscape:[\s\S]*?\/>/gi, '')
     .replace(/\s(?:on\w+|sodipodi:\w+|inkscape:\w+|data-[\w-]+)(?:="[^"]*")?/gi, '')
     .replace(/\s(?:xlink:)?href="(?!#|data:image\/(?:png|jpeg);base64,)[^"]*"/gi, '');
+  if (keep) {
+    // semnul compact: păstrăm doar desenele numite (ex.: cutia din sigla easybox, fără literele de lângă ea)
+    s = s.replace(/<path\b[^>]*\/>/g, (m) => (keep.some((id) => m.includes(`id="${id}"`)) ? m : ''));
+  }
   if (dropPatterns) {
     // umbrele raster din logo-ul Sameday (sute de KB) nu se văd la dimensiunea unei insigne
     s = s.replace(/<rect[^>]*fill="url\(#pattern[^"]*\)"[^>]*\/>/g, '').replace(/<defs>[\s\S]*<\/defs>/g, '');
@@ -53,6 +58,8 @@ const LOGOS = {
   sameday: { full: [read('sameday.svg'), { dropPatterns: true }], mark: [read('sameday.svg'), { viewBox: '5.7 -0.6 38.5 36.4', dropPatterns: true }] },
   packeta: { full: [read('packeta.svg'), { viewBox: '0 0.5 145 40' }], mark: [read('packeta.svg'), { viewBox: '-1 0.5 38 40' }] },
   posta: { full: [read('posta.svg'), {}], mark: [read('posta.svg'), {}] },
+  // easybox: sigla de pe Wikimedia Commons („Sameday easybox logo.svg”, domeniu public — doar text și formă simplă)
+  easybox: { full: [read('easybox.svg'), { viewBox: '0 0 1001 252.25' }], mark: [read('easybox.svg'), { viewBox: '818 -6 189 200', keep: ['pzjKD9vdy', 'pioNowzeZ'] }] },
 };
 for (const [key, { full, mark }] of Object.entries(LOGOS)) {
   write(`${key}.svg`, sanitize(...full));
