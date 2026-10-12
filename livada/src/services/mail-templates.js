@@ -52,13 +52,15 @@ function carrierImg(code, h = 22) {
   const d = logoSize.get(code);
   if (!d) return '';
   const w = Math.round((d.w / d.h) * h);
-  return `<img src="${esc(abs(c.email))}" width="${w}" height="${h}" alt="${esc(c.name)}" style="display:block;border:0;width:${w}px;height:${h}px;margin:6px 0 8px">`;
+  // pe un cartonaș alb: siglele curierilor au părți închise la culoare, invizibile în modul întunecat
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 8px"><tr><td bgcolor="#ffffff" style="background:#ffffff;border-radius:8px;padding:5px 8px">`
+    + `<img src="${esc(abs(c.email))}" width="${w}" height="${h}" alt="${esc(c.name)}" style="display:block;border:0;width:${w}px;height:${h}px"></td></tr></table>`;
 }
 
 function button(href, label, { dark = true } = {}) {
   const bg = dark ? C.ink : C.paper;
   const fg = dark ? '#FFFFFF' : C.ink;
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${bg}" style="border-radius:999px;${dark ? '' : `border:1px solid ${C.line};`}">
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="${bg}" class="${dark ? 'btn' : 'btn2'}" style="border-radius:999px;${dark ? '' : `border:1px solid ${C.line};`}">
 <a href="${esc(href)}" target="_blank" style="display:inline-block;padding:15px 30px;font-family:${SANS};font-size:15px;font-weight:600;color:${fg};text-decoration:none;border-radius:999px;letter-spacing:-0.01em">${esc(label)}&nbsp;&nbsp;→</a>
 </td></tr></table>`;
 }
@@ -87,9 +89,17 @@ function layout({ preheader, topRight = '', body, footerNote }) {
 <title>${esc(preheader)}</title>
 <style>
   @media (max-width:620px){ .card{padding:28px 22px !important} .h1{font-size:28px !important} .px{padding-left:16px !important;padding-right:16px !important} .stack{display:block !important;width:100% !important;box-sizing:border-box !important} .sgap{height:10px !important} }
+  .logo-night{display:none;max-height:0;overflow:hidden}
   @media (prefers-color-scheme: dark){
     .page{background:#0B0F0D !important} .card{background:#141A17 !important} .t-ink{color:#F2F4EF !important} .t-mute{color:#A3ABA6 !important}
     .tile{background:#1C2420 !important;border-color:#2A332E !important;color:#F2F4EF !important} .box{background:#1C2420 !important}
+    .logo-day{display:none !important} .logo-night{display:block !important;max-height:none !important}
+    .btn{background:#F2F4EF !important} .btn a{color:#0E1411 !important} .btn2{background:#1C2420 !important;border-color:#2A332E !important}
+    /* culorile scrise inline (texte, chenare, fundaluri deschise) au și ele perechea întunecată */
+    .page [style*="color:${C.ink}"]{color:#F2F4EF !important} .page [style*="color:${C.ink2}"]{color:#C9CFCA !important}
+    .page [style*="color:${C.muted}"]{color:#A3ABA6 !important}
+    .page [bgcolor="${C.mist}"], .page [style*="background:${C.mist}"]{background:#1C2420 !important}
+    .page [style*="background:${C.line}"]{background:#2A332E !important} .page [style*="solid ${C.line}"]{border-color:#2A332E !important}
   }
   a{color:${C.leaf}}
 </style>
@@ -101,7 +111,7 @@ function layout({ preheader, topRight = '', body, footerNote }) {
   <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px">
     <tr><td style="padding:0 8px 22px">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-        <td valign="middle"><a href="${esc(loc(config.publicUrl))}" target="_blank" style="text-decoration:none"><img src="cid:livada-logo" width="121" height="30" alt="Livada" style="display:block;border:0;width:121px;height:30px"></a></td>
+        <td valign="middle"><a href="${esc(loc(config.publicUrl))}" target="_blank" style="text-decoration:none"><img src="cid:livada-logo" class="logo-day" width="121" height="30" alt="Livada" style="display:block;border:0;width:121px;height:30px"><!--[if !mso]><!--><img src="cid:livada-night" class="logo-night" width="121" height="30" alt="Livada" style="display:none;border:0;width:121px;height:30px"><!--<![endif]--></a></td>
         <td valign="middle" align="right" class="t-mute" style="font-family:${SANS};font-size:12px;color:${C.muted}">${topRight}</td>
       </tr></table>
     </td></tr>

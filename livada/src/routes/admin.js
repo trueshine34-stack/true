@@ -7,7 +7,7 @@ import { one, all, run, tx, json, getSetting, setSetting, audit } from '../db/in
 import { requireStaff, requireAdmin, limit, safeNext, backUrl } from './helpers.js';
 import { clean, cleanText, isEmail } from '../lib/validate.js';
 import { toBani, slugify } from '../lib/format.js';
-import { sendMail } from '../lib/mailer.js';
+import { sendMail, logosFromSite } from '../lib/mailer.js';
 import * as T from '../services/mail-templates.js';
 import * as orders from '../services/orders.js';
 import * as users from '../services/users.js';
@@ -367,7 +367,7 @@ export default function adminRoutes(r) {
   r.get('/admin/emailuri/previzualizare/:key', requireStaff, (ctx) => {
     const m = sampleMail(ctx.params.key, ctx.user);
     if (!m) throw new HttpError(404, 'Șablon inexistent.');
-    ctx.send('text/html; charset=utf-8', m.html.replaceAll('cid:livada-logo', '/img/brand/email-logo.png'), 200, {
+    ctx.send('text/html; charset=utf-8', logosFromSite(m.html), 200, {
       'Content-Security-Policy': "default-src 'none'; img-src 'self' data: https: http:; style-src 'unsafe-inline'", 'Cache-Control': 'no-store' });
   });
   r.post('/admin/emailuri/test', requireStaff, async (ctx) => {

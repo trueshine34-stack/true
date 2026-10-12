@@ -121,7 +121,10 @@ export function smtpSend({ host, port, secure, user, pass, from, to, message, ti
   });
 }
 
-const LOGO_FILE = path.join(ROOT, 'public/img/brand/email-logo.png');
+// siglele atașate inline: pe fundal deschis și, pentru clienții în modul întunecat, varianta deschisă la culoare
+const LOGOS = { 'livada-logo': '/img/brand/email-logo.png', 'livada-night': '/img/brand/email-logo-night.png' };
+/** în outbox și în previzualizări, siglele vin de pe site în loc de atașamentele cid: */
+export const logosFromSite = (html, base = '') => Object.entries(LOGOS).reduce((h, [cid, p]) => h.replaceAll(`cid:${cid}"`, `${base}${p}"`), html);
 
 /**
  * Trimite un email. Fără SMTP configurat, mesajul ajunge doar în outbox (var/outbox) — vizibil la /dev/mail
@@ -131,13 +134,14 @@ export async function sendMail({ to, subject, html, text, template = 'generic' }
   const id = `${new Date().toISOString().replace(/[:.]/g, '-')}_${crypto.randomBytes(3).toString('hex')}`;
   const file = path.join(config.outboxDir, `${id}.html`);
   // în outbox, logo-ul vine de pe site; în emailul real e atașat inline (cid:logo)
-  fs.writeFileSync(file, html.replaceAll('cid:livada-logo', '/img/brand/email-logo.png'));
+  fs.writeFileSync(file, logosFromSite(html));
   fs.writeFileSync(path.join(config.outboxDir, `${id}.json`), JSON.stringify({ id, to, subject, template, text, date: new Date().toISOString() }));
   let status = 'outbox';
   let error = null;
   if (config.smtp.host) {
     try {
-      const inline = fs.existsSync(LOGO_FILE) ? [{ cid: 'livada-logo', filename: 'livada.png', type: 'image/png', data: fs.readFileSync(LOGO_FILE) }] : [];
+      const inline = Object.entries(LOGOS).map(([cid, p]) => [cid, path.join(ROOT, 'public', p)]).filter(([, f]) => fs.existsSync(f))
+        .map(([cid, f]) => ({ cid, filename: path.basename(f), type: 'image/png', data: fs.readFileSync(f) }));
       const message = buildMime({ from: config.smtp.from, to, subject, text, html, inline,
         headers: { 'X-Mailer': 'Livada', 'Auto-Submitted': 'auto-generated' } });
       await smtpSend({ ...config.smtp, from: config.smtp.from, to, message });

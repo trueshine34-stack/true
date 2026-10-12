@@ -666,7 +666,7 @@ for (const lang of ['ro', 'en']) {
     try {
       const m = I18N.withLang ? I18N.withLang(lang, () => fn(lang)) : fn(lang);
       const file = path.join(OUTDIR, lang, key + '.html');
-      fs.writeFileSync(file, m.html.replaceAll('cid:livada-logo', pub + '/img/brand/email-logo.png'));
+      fs.writeFileSync(file, m.html.replaceAll('cid:livada-night"', pub + '/img/brand/email-logo-night.png"').replaceAll('cid:livada-logo"', pub + '/img/brand/email-logo.png"'));
       (res.emails[key] ||= {})[lang] = { file, subject: m.subject };
     } catch (e) { res.errors.push(lang + '/' + key + ': ' + e.message); }
   }

@@ -26,6 +26,7 @@ async function shot(name, w, h, body, { transparent = false, scale = 1 } = {}) {
 }
 
 await shot('email-logo.png', 121, 30, `<div style="width:121px;height:30px">${svg('logo.svg').replace(/width="\d+" height="32"/, 'width="121" height="30"')}</div>`, { transparent: true, scale: 4 });
+await shot('email-logo-night.png', 121, 30, `<div style="width:121px;height:30px">${svg('logo-light.svg').replace(/width="\d+" height="32"/, 'width="121" height="30"')}</div>`, { transparent: true, scale: 4 });
 await shot('apple-touch-icon.png', 180, 180, svg('app-icon.svg').replace('<svg ', '<svg width="180" height="180" '));
 await shot('icon-512.png', 512, 512, svg('app-icon.svg').replace('<svg ', '<svg width="512" height="512" '));
 await shot('icon-192.png', 192, 192, svg('app-icon.svg').replace('<svg ', '<svg width="192" height="192" '));
