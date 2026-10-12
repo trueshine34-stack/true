@@ -20,4 +20,4 @@ Opțiuni: `--only=store|admin|email|<grup>` (grupuri: store, catalog, product, c
   un client confirmat cu trei comenzi, un cont neconfirmat, coșuri de vizitator și doi administratori (RO și RU).
 - Rulările sunt reluabile: fișierele existente sunt sărite; manifestul cuprinde mereu tot ce există pe disc.
 - Necesită Playwright cu Chromium (local, global sau `PLAYWRIGHT_PATH`) și Python 3 cu Pillow (`webp.py` face conversia în WebP).
-- Capturile mai înalte de 16 383 px (limita WebP) se salvează micșorate în `file`, iar la rezoluție completă în `parts`.
+- Capturile mai înalte de 16 000 px (limita WebP e 16 383 px) se salvează micșorate în `file`, iar la rezoluție completă în `parts`.

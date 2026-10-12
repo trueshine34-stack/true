@@ -347,10 +347,15 @@ function buildDefs(S) {
   add({ id: 'catalog.new', group: 'catalog', section: sec.lists, title: tt('Новинки', 'New arrivals'), url: '/noutati' });
 
   // produse
-  const prods = SAMPLE ? PRODUCTS.filter((p) => SAMPLE_PRODUCTS.includes(p.slug)) : PRODUCTS;
+  // ordinea categoriilor din catalog (o secțiune = o categorie, fără întreruperi)
+  const catIdx = Object.fromEntries(CATALOG.categories.map((c, i) => [c.slug, i]));
+  const prods = (SAMPLE ? PRODUCTS.filter((p) => SAMPLE_PRODUCTS.includes(p.slug)) : PRODUCTS)
+    .map((p, i) => [p, i]).sort((a, b) => (catIdx[a[0].category] ?? 99) - (catIdx[b[0].category] ?? 99) || a[1] - b[1]).map(([p]) => p);
   for (const p of prods) {
     const section = CATEGORY[p.category] || tt(p.category);
-    const name = tt(p.name, E.name(p.slug, p.name));
+    // numele englezesc (Apple) e mai ușor de citit și pentru ru; cel românesc rămâne în `ro` (căutare)
+    const enName = E.name(p.slug, p.name);
+    const name = { ru: enName, en: enName, ro: p.name };
     add({ id: `product.${p.slug}`, group: 'product', section, title: name, url: `/produs/${p.slug}` });
     if (COLOUR_STATES.includes(p.slug) && p.image_key) {
       const o = p.options.find((x) => x.key === p.image_key);
@@ -358,7 +363,7 @@ function buildDefs(S) {
       const v = p.variants.find((x) => x.options[p.image_key] === val.value);
       if (v) {
         const en = E.optionLabel(p.slug, o.key, val.value, val.label);
-        add({ id: `product.${p.slug}.colour`, group: 'product', section, title: name, state: tt(`Выбран цвет «${val.label}»`, `${en} selected`), url: `/produs/${p.slug}?v=${encodeURIComponent(v.sku)}` });
+        add({ id: `product.${p.slug}.colour`, group: 'product', section, title: name, state: { ru: `Выбран цвет «${en}»`, en: `${en} selected`, ro: `Culoarea ${val.label}` }, url: `/produs/${p.slug}?v=${encodeURIComponent(v.sku)}` });
       }
     }
   }
@@ -747,6 +752,8 @@ async function settle(page, { scroll = true } = {}) {
     await document.fonts.ready;
     const pending = [...document.images].filter((i) => (i.currentSrc || i.getAttribute('src')) && !i.complete);
     await Promise.race([Promise.all(pending.map((i) => new Promise((r) => { i.addEventListener('load', r, { once: true }); i.addEventListener('error', r, { once: true }); }))), wait(10_000)]);
+    // și decodate, ca să nu apară goale în captură
+    await Promise.race([Promise.all([...document.images].filter((i) => i.complete && i.naturalWidth).map((i) => i.decode().catch(() => {}))), wait(5000)]);
     if (doScroll) scrollTo(0, 0);
   }, scroll);
   await page.waitForLoadState('networkidle', { timeout: 6000 }).catch(() => {});
@@ -862,7 +869,9 @@ async function writeManifest(allJobs, photos) {
   const manifest = {
     generated: new Date().toISOString(), site: 'Livada',
     counts: { shots: shots.length, pages: new Set(shots.map((s) => s.id)).size, photos: photos.length },
-    groups: GROUPS, variants: { store: LANGS_OF.store, admin: LANGS_OF.admin, email: LANGS_OF.email, themes: ['light', 'dark'], devices: ['desktop', 'mobile'] },
+    groups: GROUPS,
+    photoCategories: CATALOG.categories.map((c) => ({ id: c.slug, title: CATEGORY[c.slug] || tt(c.name) })),
+    variants: { store: LANGS_OF.store, admin: LANGS_OF.admin, email: LANGS_OF.email, themes: ['light', 'dark'], devices: ['desktop', 'mobile'] },
     shots, photos,
   };
   fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 1));

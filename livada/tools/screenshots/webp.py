@@ -3,7 +3,7 @@
 Proces de lungă durată: citește de pe stdin câte o comandă JSON pe linie și răspunde cu o linie JSON.
   {"op": "convert", "src": "a.png", "out": "img/x.webp", "thumb": "thumb/x.webp", "q": 72, "tq": 70}
   {"op": "dims", "files": ["img/x.webp", ...]}
-WebP are limita de 16383 px pe latură: o captură mai înaltă se salvează micșorată (cât să încapă) în `out`,
+WebP are limita de 16 383 px pe latură: o captură mai înaltă de 16 000 px se salvează micșorată (cât să încapă) în `out`,
 iar la rezoluția completă în bucăți `out` → `x.p1.webp`, `x.p2.webp` … (câmpul `parts` din răspuns).
 """
 import json
@@ -13,7 +13,7 @@ import sys
 from PIL import Image
 
 Image.MAX_IMAGE_PIXELS = None
-MAX = 16383
+MAX = 16000  # limita WebP e 16 383 px; păstrăm o marjă
 PART = 16000
 THUMB_W, THUMB_H = 480, 640
 
