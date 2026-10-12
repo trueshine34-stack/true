@@ -646,18 +646,19 @@ const ids = {
 const load = (id) => { const o = O.orderById(id); return { o, items: O.orderItems(id), link: O.orderLink(o) }; };
 const pub = process.env.PUBLIC_URL;
 const meta = (lang) => ({ when: new Date().toLocaleString(lang === 'en' ? 'en-GB' : 'ro-RO', { timeZone: 'Europe/Bucharest' }), device: 'Safari pe iPhone', ip: '86.120.14.•••' });
-const status = (id, st) => { const { o, items, link } = load(id); return T.orderStatus({ order: { ...o, status: st, awb: st === 'shipped' ? (o.awb || '2345678901') : o.awb }, items, link }); };
-const placed = (id) => { const { o, items, link } = load(id); return T.orderConfirmation({ order: { ...o, status: 'new' }, items, link }); };
+// limba emailului = limba destinatarului (users.lang / orders.lang), ca în aplicație
+const status = (id, st, l) => { const { o, items, link } = load(id); return T.orderStatus({ order: { ...o, lang: l, status: st, awb: st === 'shipped' ? (o.awb || '2345678901') : o.awb }, items, link }); };
+const placed = (id, l) => { const { o, items, link } = load(id); return T.orderConfirmation({ order: { ...o, lang: l, status: 'new' }, items, link }); };
 const MAILS = {
-  verify: (l) => T.verifyEmail({ user, code: '482913', link: pub + '/cont/confirma?token=exemplu', meta: meta(l) }),
-  welcome: () => T.welcome({ user }),
-  reset: (l) => T.passwordReset({ user, link: pub + '/cont/parola-noua?token=exemplu', meta: meta(l) }),
-  'order-courier': () => placed(ids.courier), 'order-locker': () => placed(ids.locker), 'order-pickup': () => placed(ids.pickup), 'order-transfer': () => placed(ids.transfer),
-  'status-confirmed': () => status(ids.courier, 'confirmed'), 'status-processing': () => status(ids.courier, 'processing'),
-  'status-shipped': () => status(ids.locker, 'shipped'), 'status-ready': () => status(ids.pickup, 'ready'),
-  'status-delivered': () => status(ids.courier, 'delivered'), 'status-cancelled': () => status(ids.courier, 'cancelled'), 'status-returned': () => status(ids.courier, 'returned'),
+  verify: (l) => T.verifyEmail({ user: { ...user, lang: l }, code: '482913', link: pub + '/cont/confirma?token=exemplu', meta: meta(l) }),
+  welcome: (l) => T.welcome({ user: { ...user, lang: l } }),
+  reset: (l) => T.passwordReset({ user: { ...user, lang: l }, link: pub + '/cont/parola-noua?token=exemplu', meta: meta(l) }),
+  'order-courier': (l) => placed(ids.courier, l), 'order-locker': (l) => placed(ids.locker, l), 'order-pickup': (l) => placed(ids.pickup, l), 'order-transfer': (l) => placed(ids.transfer, l),
+  'status-confirmed': (l) => status(ids.courier, 'confirmed', l), 'status-processing': (l) => status(ids.courier, 'processing', l),
+  'status-shipped': (l) => status(ids.locker, 'shipped', l), 'status-ready': (l) => status(ids.pickup, 'ready', l),
+  'status-delivered': (l) => status(ids.courier, 'delivered', l), 'status-cancelled': (l) => status(ids.courier, 'cancelled', l), 'status-returned': (l) => status(ids.courier, 'returned', l),
   'admin-order': () => { const { o, items } = load(ids.courier); return T.adminNewOrder({ order: o, items, link: pub + '/admin/comenzi/' + o.id }); },
-  contact: () => T.contactReceived({ name: user.first_name }),
+  contact: (l) => T.contactReceived({ name: user.first_name, lang: l }),
 };
 for (const lang of ['ro', 'en']) {
   fs.mkdirSync(path.join(OUTDIR, lang), { recursive: true });
@@ -738,15 +739,18 @@ async function makeContext(browser, j) {
 async function settle(page, { scroll = true } = {}) {
   await page.evaluate(async (doScroll) => {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    // două cadre randate: IntersectionObserver își calculează intersecțiile la randare
+    const frames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     document.querySelectorAll('img[loading="lazy"]').forEach((i) => { i.loading = 'eager'; });
     if (doScroll) {
       // derulăm toată pagina: imagini „lazy”, animații la scroll
       const step = Math.max(400, innerHeight * 0.9);
       let y = 0;
-      for (; y < document.documentElement.scrollHeight; y += step) { scrollTo(0, y); await wait(25); }
+      for (; y < document.documentElement.scrollHeight; y += step) { scrollTo(0, y); await frames(); }
       // înapoi tot în pași: IntersectionObserver trebuie să vadă elementele trecând prin ecran (ex. bara de cumpărare)
-      for (; y > 0; y -= step) { scrollTo(0, y); await wait(15); }
+      for (; y > 0; y -= step) { scrollTo(0, y); await frames(); }
       scrollTo(0, 0);
+      await frames();
       await wait(60);
     }
     await document.fonts.ready;
@@ -782,6 +786,17 @@ async function shoot(ctx, j) {
     if (j.def.act) {
       await j.def.act(page, { lang: j.lang, device: j.device, mobile: j.device === 'mobile' });
       await settle(page, { scroll: false });
+    }
+    if (!j.def.viewport) {
+      // elementele fixe ascunse în afara ecranului (ex. bara de cumpărare mobilă, translateY(110%)) ar apărea
+      // în captura întregii pagini chiar sub primul ecran → le ascundem pe durata capturii
+      await page.evaluate(() => {
+        for (const el of document.querySelectorAll('body *')) {
+          if (getComputedStyle(el).position !== 'fixed') continue;
+          const r = el.getBoundingClientRect();
+          if (r.top >= innerHeight - 1 || r.bottom <= 1 || r.left >= innerWidth - 1 || r.right <= 1) el.style.setProperty('visibility', 'hidden', 'important');
+        }
+      });
     }
     const png = path.join(TMP, 'png', `${process.hrtime.bigint()}.png`);
     await page.screenshot({ path: png, fullPage: !j.def.viewport, animations: 'disabled', caret: 'hide', timeout: 60_000 });
