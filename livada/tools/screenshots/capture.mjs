@@ -124,36 +124,23 @@ const CATALOG = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/catalog.json'),
 const PRODUCTS = CATALOG.products;
 const bySlug = Object.fromEntries(PRODUCTS.map((p) => [p.slug, p]));
 
-/** traducerile din dicționare (src/i18n/en/*.json) și eventualele fișiere data/i18n/catalog-*.en.json */
+/** catalogul în engleză: data/i18n/catalog-*.en.json (formatul din src/services/catalog-i18n.js), combinate în ordine alfabetică */
 function loadEnglish() {
-  const dict = {};
-  const products = {};
-  const files = [];
-  const dDir = path.join(ROOT, 'src/i18n/en');
-  if (fs.existsSync(dDir)) files.push(...fs.readdirSync(dDir).filter((f) => f.endsWith('.json')).map((f) => path.join(dDir, f)));
-  const cDir = path.join(ROOT, 'data/i18n');
-  if (fs.existsSync(cDir)) files.push(...fs.readdirSync(cDir).filter((f) => /^catalog.*\.en\.json$/.test(f)).map((f) => path.join(cDir, f)));
-  for (const f of files) {
-    let j;
-    try { j = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; }
-    const walkProducts = (src) => {
-      if (Array.isArray(src)) src.forEach((p) => p?.slug && (products[p.slug] = { ...products[p.slug], ...p }));
-      else if (src && typeof src === 'object') for (const [k, v] of Object.entries(src)) if (v && typeof v === 'object' && !Array.isArray(v)) products[k] = { ...products[k], ...v };
-    };
-    if (j.products) walkProducts(j.products);
-    for (const [k, v] of Object.entries(j)) {
-      if (typeof v === 'string') dict[k] = v;
-      else if (k !== 'products' && v && typeof v === 'object' && !Array.isArray(v) && bySlug[k]) walkProducts({ [k]: v });
-      else if (k !== 'products' && v && typeof v === 'object' && !Array.isArray(v)) for (const [k2, v2] of Object.entries(v)) if (typeof v2 === 'string') dict[k2] ??= v2;
-    }
-  }
-  const optionLabel = (slug, key, value, ro) => {
-    const p = products[slug];
-    const o = (p?.options || []).find((x) => x.key === key);
-    const v = (o?.values || []).find((x) => x.value === value);
-    return v?.label || (o?.values && !Array.isArray(o.values) ? o.values[value] : null) || dict[ro] || ro;
+  const O = { labels: {}, values: {}, products: {} };
+  const dir = path.join(ROOT, 'data/i18n');
+  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /^catalog-.+\.en\.json$/.test(f)).sort() : [];
+  const merge = (a, b) => {
+    for (const [k, v] of Object.entries(b)) a[k] = v && typeof v === 'object' && !Array.isArray(v) && a[k] && typeof a[k] === 'object' ? merge(a[k], v) : v;
+    return a;
   };
-  return { dict, products, name: (slug, ro) => products[slug]?.name || dict[ro] || ro, optionLabel };
+  for (const f of files) {
+    try { merge(O, JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))); } catch { /* fișier invalid: ignorat */ }
+  }
+  const P = (slug) => O.products[slug] || {};
+  return {
+    name: (slug, ro) => P(slug).name || P(slug).text?.[ro] || ro,
+    optionLabel: (slug, key, value, ro) => P(slug).options?.[key]?.values?.[value] || P(slug).text?.[ro] || O.values[ro] || O.labels[ro] || ro,
+  };
 }
 
 const SAMPLE_PRODUCTS = ['iphone-17', 'iphone-18-pro', 'iphone-duo', 'macbook-air-13-m5', 'ipad-air-11-m4', 'apple-watch-series-12', 'airpods-pro-3',
@@ -206,7 +193,9 @@ async function openLockers(page) {
   await page.click('[data-ship-tab=locker]');
   await page.click('.lfind__search');
   await vis(page, '[data-locker-modal]');
-  await page.waitForSelector('.leaflet-marker-icon, .lstart', { timeout: 15_000 });
+  // primul element vizibil dintre markere / ecranul de start (pe telefon lista e ascunsă sub hartă)
+  await page.waitForFunction(() => [...document.querySelectorAll('.leaflet-marker-icon, .lstart')]
+    .some((e) => e.getBoundingClientRect().width > 0 && getComputedStyle(e).visibility !== 'hidden'), null, { timeout: 15_000 });
   await waitTiles(page);
 }
 async function waitTiles(page) {
@@ -748,8 +737,12 @@ async function settle(page, { scroll = true } = {}) {
     if (doScroll) {
       // derulăm toată pagina: imagini „lazy”, animații la scroll
       const step = Math.max(400, innerHeight * 0.9);
-      for (let y = 0; y < document.documentElement.scrollHeight; y += step) { scrollTo(0, y); await wait(25); }
+      let y = 0;
+      for (; y < document.documentElement.scrollHeight; y += step) { scrollTo(0, y); await wait(25); }
+      // înapoi tot în pași: IntersectionObserver trebuie să vadă elementele trecând prin ecran (ex. bara de cumpărare)
+      for (; y > 0; y -= step) { scrollTo(0, y); await wait(15); }
       scrollTo(0, 0);
+      await wait(60);
     }
     await document.fonts.ready;
     const pending = [...document.images].filter((i) => (i.currentSrc || i.getAttribute('src')) && !i.complete);
@@ -788,6 +781,9 @@ async function shoot(ctx, j) {
     const r = await convert({ op: 'convert', src: png, out: j.file, thumb: j.thumb, q: 72, tq: 70, removeSrc: true });
     results.set(j.file, r);
     return r;
+  } catch (e) {
+    if (errors.length) e.message += ` [JS: ${errors.slice(0, 2).join(' | ')}]`;
+    throw e;
   } finally {
     await page.close().catch(() => {});
   }
@@ -830,13 +826,7 @@ async function runJobs(browser, jobs) {
 }
 
 // ─── manifest, fotografii, galerie ──────────────────────────────────────────
-function readOldManifest() {
-  try { return JSON.parse(fs.readFileSync(path.join(OUT, 'manifest.json'), 'utf8')); } catch { return null; }
-}
-
 async function writeManifest(allJobs, photos) {
-  const old = readOldManifest();
-  const oldByFile = new Map((old?.shots || []).map((s) => [s.file, s]));
   const shots = [];
   const needDims = [];
   for (const j of allJobs) {
@@ -849,15 +839,25 @@ async function writeManifest(allJobs, photos) {
     if (r) {
       Object.assign(s, { w: r.w, h: r.h });
       if (r.parts) Object.assign(s, { scaled: r.scaled, fullW: r.fullW, fullH: r.fullH, parts: r.parts.map((p) => ({ file: rel(p.path), w: p.w, h: p.h })) });
-    } else if (oldByFile.get(file)?.w) {
-      const o = oldByFile.get(file);
-      for (const k of ['w', 'h', 'scaled', 'fullW', 'fullH', 'parts']) if (o[k] !== undefined) s[k] = o[k];
-    } else needDims.push([s, j.file]);
+    } else {
+      // captură din altă rulare: dimensiunile (și bucățile la rezoluție completă) se citesc de pe disc
+      const parts = [];
+      for (let n = 1; fs.existsSync(j.file.replace(/\.webp$/, `.p${n}.webp`)); n++) parts.push(j.file.replace(/\.webp$/, `.p${n}.webp`));
+      needDims.push([s, j.file, parts]);
+    }
     shots.push(s);
   }
   if (needDims.length) {
-    const r = await convert({ op: 'dims', files: needDims.map(([, f]) => f) });
-    for (const [s, f] of needDims) [s.w, s.h] = r.dims[f] || [0, 0];
+    const r = await convert({ op: 'dims', files: needDims.flatMap(([, f, parts]) => [f, ...parts]) });
+    for (const [s, f, parts] of needDims) {
+      [s.w, s.h] = r.dims[f] || [0, 0];
+      if (parts.length) {
+        s.parts = parts.map((p) => ({ file: rel(p), w: r.dims[p]?.[0] || 0, h: r.dims[p]?.[1] || 0 }));
+        s.fullW = s.parts[0].w;
+        s.fullH = s.parts.reduce((a, p) => a + p.h, 0);
+        s.scaled = Math.round((s.w / s.fullW) * 1e4) / 1e4;
+      }
+    }
   }
   const manifest = {
     generated: new Date().toISOString(), site: 'Livada',
@@ -942,6 +942,15 @@ function copyGallery() {
     index = index.replace(new RegExp(`((?:href|src)=["'])(?:\\./)?${esc}(["'?#])`, 'g'), `$1assets/${f}$2`);
   }
   fs.writeFileSync(path.join(OUT, 'index.html'), index);
+  // fonturile cerute de CSS-ul galeriei (url('fonts/…')) vin din public/fonts, dacă galeria nu le are
+  for (const css of walk(assets).filter((f) => f.endsWith('.css'))) {
+    const text = fs.readFileSync(path.join(assets, css), 'utf8');
+    for (const [, ref] of text.matchAll(/url\(['"]?(fonts\/[\w.-]+\.woff2)['"]?\)/g)) {
+      const to = path.join(assets, path.dirname(css), ref);
+      const from = path.join(ROOT, 'public', ref);
+      if (!fs.existsSync(to) && fs.existsSync(from)) { fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(from, to); }
+    }
+  }
   return true;
 }
 

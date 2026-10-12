@@ -32,6 +32,13 @@ def convert(c):
     w, h = im.size
     res = {'ok': True, 'fullW': w, 'fullH': h, 'bytes': 0}
     out = c['out']
+    base = out[:-5]
+    # bucățile unei capturi mai vechi (pagina poate fi mai scurtă acum)
+    d = os.path.dirname(out) or '.'
+    if os.path.isdir(d):
+        for f in os.listdir(d):
+            if f.startswith(os.path.basename(base) + '.p') and f.endswith('.webp') and f[len(os.path.basename(base)) + 2:-5].isdigit():
+                os.remove(os.path.join(d, f))
     if h > MAX or w > MAX:
         k = min(MAX / h, MAX / w)
         small = im.resize((max(1, round(w * k)), max(1, round(h * k))), Image.LANCZOS)
@@ -39,7 +46,6 @@ def convert(c):
         res['w'], res['h'] = small.size
         res['scaled'] = round(k, 4)
         parts = []
-        base = out[:-5]
         for i, y in enumerate(range(0, h, PART)):
             p = f'{base}.p{i + 1}.webp'
             piece = im.crop((0, y, w, min(h, y + PART)))
