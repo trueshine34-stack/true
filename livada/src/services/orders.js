@@ -6,8 +6,9 @@ import { sendMail } from '../lib/mailer.js';
 import * as T from './mail-templates.js';
 import { loadCart, priceCart, clearCart, findPromo } from './cart.js';
 import { methodByCode, lockerById, estimate, carrier } from './shipping.js';
-import { saveAddress } from './users.js';
-import { t, lang } from '../lib/i18n.js';
+import { saveAddress, setUserLang } from './users.js';
+import { hydrate, variantLabel } from './catalog.js';
+import { t, lang, withLang } from '../lib/i18n.js';
 
 export const STATUSES = {
   new: { label: 'Nouă', tone: 'blue' },
@@ -50,6 +51,26 @@ export function hydrateOrder(o) {
 }
 
 export const orderItems = (orderId) => all('SELECT * FROM order_items WHERE order_id = ? ORDER BY id', orderId);
+
+/**
+ * Liniile comenzii se salvează în română (forma canonică, ca în admin). Pe /en (sau în withLang('en') la emailuri)
+ * numele și varianta se traduc prin catalog, dacă produsul există încă și textul salvat e cel din catalog.
+ */
+export function localizeItems(items) {
+  if (lang() === 'ro') return items;
+  return items.map((it) => {
+    const row = it.product_id && one('SELECT slug, name, options FROM products WHERE id = ?', it.product_id);
+    if (!row) return it;
+    const opts = json(it.variant_id ? one('SELECT options FROM variants WHERE id = ?', it.variant_id)?.options : null, {});
+    const base = { slug: row.slug, name: row.name, options: row.options, images: '{}', description: '[]', highlights: '[]', specs: '[]', in_box: '[]' };
+    const ro = withLang('ro', () => hydrate(base));
+    const en = hydrate(base);
+    const out = { ...it };
+    if (it.name === ro.name) out.name = en.name;
+    if (it.variant_label && it.variant_label === variantLabel(ro, opts)) out.variant_label = variantLabel(en, opts);
+    return out;
+  });
+}
 export const orderEvents = (orderId) => all('SELECT * FROM order_events WHERE order_id = ? ORDER BY id', orderId);
 export const orderById = (id) => hydrateOrder(one('SELECT * FROM orders WHERE id = ?', id));
 export const orderByToken = (t) => (t ? hydrateOrder(one('SELECT * FROM orders WHERE public_token = ?', t)) : null);
@@ -149,15 +170,19 @@ export async function placeOrder({ cartId, user, body, ip }) {
     JSON.stringify(billing), method.code, JSON.stringify(delivery), payment, payment === 'cod' ? 'cod' : 'pending',
     totals.subtotal, totals.discount, totals.shipping || 0, totals.codFee, totals.total, totals.vat, totals.promo?.code || null, notes, installments, ip || '', lang());
     const orderId = Number(r.lastInsertRowid);
+    // numele și varianta produselor se salvează în forma canonică (română), ca în panoul de administrare
+    const canonical = new Map(withLang('ro', () => loadCart(cartId)).items.map((i) => [i.variant_id, i]));
     for (const it of cart.items) {
+      const ro = canonical.get(it.variant_id) || it;
       run(`INSERT INTO order_items(order_id, product_id, variant_id, sku, mpn, name, variant_label, image, slug, unit_price, qty, line_total)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, orderId, it.product_id, it.variant_id, it.sku, it.mpn, it.name, it.label, it.image, it.slug, it.price, it.qty, it.line);
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, orderId, it.product_id, it.variant_id, it.sku, it.mpn, ro.name, ro.label, it.image, it.slug, it.price, it.qty, it.line);
       if (!it.preorder) run('UPDATE variants SET stock = stock - ? WHERE id = ?', it.qty, it.variant_id);
     }
     if (totals.promo) run('UPDATE promo_codes SET used = used + 1 WHERE code = ? COLLATE NOCASE', totals.promo.code);
     run("INSERT INTO order_events(order_id, status, note, actor) VALUES (?, 'new', 'Comandă plasată pe site', 'customer')", orderId);
     if (user && shippingAddr) saveAddress(user.id, { ...shippingAddr, phone });
     if (user && !user.phone) run('UPDATE users SET phone = ? WHERE id = ?', phone, user.id);
+    if (user) setUserLang(user.id);
     clearCart(cartId);
     return orderById(orderId);
   });

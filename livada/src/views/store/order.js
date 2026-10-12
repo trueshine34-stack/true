@@ -4,7 +4,7 @@ import { csrfInput, carrierBadge, pill } from '../components.js';
 import { icon } from '../icons.js';
 import { lei, dateTime, phone as fmtPhone } from '../../lib/format.js';
 import { getSetting } from '../../db/index.js';
-import { STATUSES, PAYMENT_METHODS, PAYMENT_STATUSES } from '../../services/orders.js';
+import { STATUSES, PAYMENT_METHODS, PAYMENT_STATUSES, localizeItems } from '../../services/orders.js';
 import { carrier } from '../../services/shipping.js';
 import { deliveryText } from '../../services/mail-templates.js';
 import { t, tHtml } from '../../lib/i18n.js';
@@ -26,6 +26,7 @@ export function timeline(order, events = []) {
 }
 
 export function orderDetails(order, items) {
+  items = localizeItems(items);
   const co = getSetting('company') || {};
   const d = order.delivery;
   const c = carrier(d.carrier);

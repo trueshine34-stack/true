@@ -132,15 +132,16 @@ export function loadCart(cartId) {
       FROM cart_items ci JOIN variants v ON v.id = ci.variant_id JOIN products p ON p.id = v.product_id JOIN categories c ON c.id = p.category_id
       WHERE ci.cart_id = ? ORDER BY ci.added_at`, cartId) : [];
   const items = rows.map((r) => {
-    const product = hydrate({ options: r.p_options, images: r.images, image_key: r.image_key, description: '[]', highlights: '[]', specs: '[]', in_box: '[]' });
+    // pe /en, hydrate() traduce numele, nota de lansare și opțiunile (overlay-ul din catalog-i18n.js)
+    const product = hydrate({ slug: r.slug, name: r.name, release_note: r.release_note, options: r.p_options, images: r.images, image_key: r.image_key, description: '[]', highlights: '[]', specs: '[]', in_box: '[]' });
     const opts = json(r.options, {});
     const limit = r.preorder ? MAX_PREORDER_QTY : Math.min(MAX_QTY, r.stock);
     const available = r.active && r.p_active && (r.preorder || r.stock > 0);
     return {
-      variant_id: r.variant_id, product_id: r.product_id, sku: r.sku, mpn: r.mpn, slug: r.slug, name: r.name, category: r.category,
+      variant_id: r.variant_id, product_id: r.product_id, sku: r.sku, mpn: r.mpn, slug: r.slug, name: product.name, category: r.category,
       options: opts, label: variantLabel(product, opts), image: imageFor(product, opts, '480'),
       price: r.price, compare_at: r.compare_at, qty: r.qty, max: Math.max(1, limit), line: r.price * r.qty,
-      preorder: !!r.preorder, release_note: r.release_note, available, stock_issue: available && !r.preorder && r.qty > r.stock,
+      preorder: !!r.preorder, release_note: product.release_note, available, stock_issue: available && !r.preorder && r.qty > r.stock,
     };
   });
   return { id: cartId, promo_code: cart?.promo_code || null, items };

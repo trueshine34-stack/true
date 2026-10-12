@@ -3,7 +3,7 @@ import { Router, runHandlers } from './lib/router.js';
 import { HttpError, parseCookies, serializeCookie, parseBody, sendBuffer, clientIp } from './lib/http.js';
 import { securityHeaders, csrfFor, randomToken, safeEqual, signJson, verifyJson } from './lib/security.js';
 import { serveStatic, importMap } from './lib/static.js';
-import { sessionUser } from './services/users.js';
+import { sessionUser, setUserLang } from './services/users.js';
 import { cartIdFromToken, cartCount } from './services/cart.js';
 import { ValidationError } from './lib/validate.js';
 import { Raw } from './lib/html.js';
@@ -99,6 +99,8 @@ function loadSession(ctx) {
   const u = sessionUser(ctx.sessionToken);
   if (ctx.sessionToken && !u) ctx.clearCookie('lv_sid');
   ctx.user = u || null;
+  // clientul autentificat a schimbat limba magazinului → emailurile următoare vin în limba nouă
+  if (u && u.lang !== ctx.lang && ctx.method === 'GET' && !ctx.isApi && !/^\/(?:admin|dev)(?:\/|$)/.test(ctx.path)) { setUserLang(u.id, ctx.lang); u.lang = ctx.lang; }
   ctx.cartToken = ctx.cookies.lv_cart && /^[\w-]{20,64}$/.test(ctx.cookies.lv_cart) ? ctx.cookies.lv_cart : null;
   ctx.cartId = ctx.user ? `user:${ctx.user.id}` : cartIdFromToken(ctx.cartToken);
   ctx.cartCount = () => (ctx._cc ??= cartCount(ctx.cartId));

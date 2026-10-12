@@ -19,6 +19,8 @@ export const publicUser = (u) => u && ({
 });
 
 export const userById = (id) => one('SELECT * FROM users WHERE id = ?', id);
+/** limba magazinului pentru emailurile clientului: se actualizează la autentificare, la comandă și la schimbarea limbii */
+export const setUserLang = (userId, l = lang()) => userId && run('UPDATE users SET lang = ? WHERE id = ? AND lang IS NOT ?', l, userId, l);
 export const userByEmail = (email) => one('SELECT * FROM users WHERE email = ? COLLATE NOCASE', String(email || '').trim());
 
 /** descriere scurtă a dispozitivului pentru emailurile de securitate */

@@ -7,6 +7,7 @@ import { esc } from '../lib/html.js';
 import { lei, dateTime, phone as fmtPhone } from '../lib/format.js';
 import { CARRIERS } from '../db/defaults.js';
 import { t, lang, withLang, localizePath } from '../lib/i18n.js';
+import { localizeItems } from './orders.js'; // import circular, folosit doar la apel
 
 // Emailurile se scriu în limba destinatarului: a comenzii (orders.lang) sau a contului (users.lang).
 // Fără limbă cunoscută rămâne limba cererii curente. Emailurile din admin sunt mereu în română.
@@ -293,6 +294,7 @@ export function orderConfirmation({ order, items, link }) {
   return inLang(order.lang, () => orderConfirmationIn({ order, items, link: loc(link) }));
 }
 function orderConfirmationIn({ order, items, link }) {
+  items = localizeItems(items); // numele produselor salvate în română → limba clientului
   const body = `
 <tr><td>${pill(t('Comandă plasată'))}</td></tr>
 ${h1(t('Mulțumim, {name}!', { name: esc(order.first_name) }), t('Comanda e în livadă.'))}
@@ -329,6 +331,7 @@ export function orderStatus({ order, items, link, note }) {
   return inLang(order.lang, () => orderStatusIn({ order, items, link: loc(link), note }));
 }
 function orderStatusIn({ order, items, link, note }) {
+  items = localizeItems(items); // numele produselor salvate în română → limba clientului
   const [tag, title, text] = (STATUS_COPY[order.status] || ['Actualizare', 'Comanda ta a fost actualizată', '']).map((x) => t(x));
   const carrier = CARRIERS[order.delivery?.carrier];
   const track = order.awb && carrier?.track ? carrier.track.replace('{awb}', encodeURIComponent(order.awb)) : null;

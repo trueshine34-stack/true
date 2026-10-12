@@ -247,8 +247,8 @@ export default function storeRoutes(r) {
     if (!c) throw new HttpError(404, t('Pagina nu există.'));
     const params = listingParams(ctx.query);
     const products = catalog.listProducts({ category: c.slug, ...params });
-    // titlul și sloganul categoriei vin din baza de date (în română) → traduse la afișare
-    const title = t(c.title), tagline = t(c.tagline);
+    // categoryBySlug() întoarce deja titlul și sloganul în limba paginii (overlay-ul din catalog-i18n.js)
+    const { title, tagline } = c;
     ctx.html(listingPage(ctx, { category: c, title, tagline, groups: c.groups.filter((g) => catalog.listProducts({ category: c.slug, group: g }).length),
       products, base: `/${c.slug}`, query: ctx.query, crumbs: [{ label: title }], description: t('{title} la Livada: {tagline} Livrare în 24h în toată România, retur 30 de zile, rate 0%.', { title, tagline }),
       canonical: `/${c.slug}` }));

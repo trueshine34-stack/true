@@ -15,6 +15,7 @@ export function signIn(ctx, user, { remember = true } = {}) {
   if (ctx.sessionToken) users.destroySession(ctx.sessionToken);
   const { token, maxAge } = users.createSession(user.id, { ip: ctx.ip, ua: ctx.req.headers['user-agent'], remember });
   ctx.setCookie('lv_sid', token, { maxAge });
+  users.setUserLang(user.id);
   const anon = cartSvc.cartIdFromToken(ctx.cookies.lv_cart);
   if (anon) { cartSvc.mergeCarts(anon, `user:${user.id}`, user.id); ctx.clearCookie('lv_cart'); }
   ctx.user = user;

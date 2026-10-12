@@ -9,7 +9,10 @@ import { getSetting } from '../../db/index.js';
 import { estimate } from '../../services/shipping.js';
 import { lockerNetworks, lockerConfig, lockerModal, networkRows } from './lockers.js';
 import { summaryRows } from './cart.js';
-import { t, tHtml, locale } from '../../lib/i18n.js';
+import { t, tHtml, locale, pick } from '../../lib/i18n.js';
+
+// „Nume” din formulare = numele de familie (în formularul de contact „Nume” e numele complet → altă traducere)
+const LAST_NAME = () => pick({ ro: 'Nume', en: 'Last name' });
 
 const price = (m, subtotal) => (m.free_over !== null && subtotal >= m.free_over ? 0 : m.price);
 
@@ -79,7 +82,7 @@ export function checkoutPage(ctx, { cart, totals, methods, addresses, user, pref
             </header>
             <div class="grid2">
               ${field({ name: 'first_name', label: t('Prenume'), value: v('first_name', user?.first_name), required: true, autocomplete: 'given-name' })}
-              ${field({ name: 'last_name', label: t('Nume'), value: v('last_name', user?.last_name), required: true, autocomplete: 'family-name' })}
+              ${field({ name: 'last_name', label: LAST_NAME(), value: v('last_name', user?.last_name), required: true, autocomplete: 'family-name' })}
               ${field({ name: 'email', label: t('Email'), type: 'email', value: v('email', user?.email), required: true, autocomplete: 'email', hint: t('Aici trimitem confirmarea și factura.') })}
               ${field({ name: 'phone', label: t('Telefon'), type: 'tel', value: v('phone', user?.phone), required: true, autocomplete: 'tel', inputmode: 'tel', hint: t('Pentru curier (ex: 0722 123 456).') })}
             </div>

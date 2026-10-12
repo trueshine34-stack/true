@@ -6,7 +6,10 @@ import { lei, dateShort, dateTime, phone as fmtPhone, plural } from '../../lib/f
 import { COUNTIES } from '../../db/defaults.js';
 import { STATUSES } from '../../services/orders.js';
 import { timeline, orderDetails } from './order.js';
-import { t, tHtml } from '../../lib/i18n.js';
+import { t, tHtml, pick } from '../../lib/i18n.js';
+
+// „Nume” din formulare = numele de familie (în formularul de contact „Nume” e numele complet → altă traducere)
+const LAST_NAME = () => pick({ ro: 'Nume', en: 'Last name' });
 
 const NAV = [['/cont', 'Prezentare', 'home'], ['/cont/comenzi', 'Comenzi', 'package'], ['/cont/favorite', 'Favorite', 'heart'],
   ['/cont/adrese', 'Adrese', 'pin'], ['/cont/profil', 'Profil și securitate', 'settings']];
@@ -91,7 +94,7 @@ export function addressesPage(ctx, addresses, { errors = {}, values = {} } = {})
         ${csrfInput(ctx)}
         <div class="grid2">
           ${field({ name: 'first_name', label: t('Prenume'), value: values.first_name ?? ctx.user.first_name, error: errors.first_name, required: true })}
-          ${field({ name: 'last_name', label: t('Nume'), value: values.last_name ?? ctx.user.last_name, error: errors.last_name, required: true })}
+          ${field({ name: 'last_name', label: LAST_NAME(), value: values.last_name ?? ctx.user.last_name, error: errors.last_name, required: true })}
           ${field({ name: 'phone', label: t('Telefon'), type: 'tel', value: values.phone ?? ctx.user.phone, error: errors.phone, required: true })}
           ${selectField({ name: 'county', label: t('Județ'), options: COUNTIES, value: values.county, error: errors.county, required: true })}
           ${field({ name: 'city', label: t('Localitate'), value: values.city, error: errors.city, required: true })}
@@ -112,7 +115,7 @@ export function profilePage(ctx, { errors = {}, saved } = {}) {
         ${csrfInput(ctx)}
         <div class="grid2">
           ${field({ name: 'first_name', label: t('Prenume'), value: u.first_name, error: errors.first_name, required: true })}
-          ${field({ name: 'last_name', label: t('Nume'), value: u.last_name, error: errors.last_name, required: true })}
+          ${field({ name: 'last_name', label: LAST_NAME(), value: u.last_name, error: errors.last_name, required: true })}
           ${field({ name: 'email', label: t('Email'), type: 'email', value: u.email, attrs: 'disabled', hint: t(u.email_verified_at ? '✓ Confirmat' : 'Neconfirmat') })}
           ${field({ name: 'phone', label: t('Telefon'), type: 'tel', value: u.phone, error: errors.phone })}
         </div>

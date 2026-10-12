@@ -13,7 +13,7 @@ const DIACRITICS = /[ăâîșțşţĂÂÎȘȚŞŢ]/;
 const IGNORE = [/București/, /Dorobanți/, /Polonă/, /Bucharest/, /Cluj|Brașov|Timișoara|Iași|Constanța|Craiova|Galați|Oradea|Ploiești|Sibiu|Arad|Târgu|Mureș|Bacău|Pitești|Suceava|Botoșani|Brăila|Buzău|Satu Mare|Râmnicu|Vâlcea|Neamț|Argeș|Dâmbovița|Ialomița|Călărași|Mehedinți|Bistrița|Năsăud|Sălaj|Caraș|Hunedoara|Maramureș|Covasna|Harghita|Teleorman|Giurgiu|Olt|Dolj|Gorj|Vaslui|Vrancea|Tulcea|Alba|Bihor|Prahova|Ilfov|Timiș/,
   /Livada Digital S\.R\.L\./, /Poșta Română/, /Banca Transilvania/, /S\.R\.L\./, /RO\d{2} /, /Str\.|Calea|Bulevardul|Strada|Șoseaua|Aleea/, /ANPC|SOL/, /lei\b/,
   // comutatorul de limbă e în română intenționat (numele limbii în limba ei)
-  /Versiunea în română/, /\bRomână\b/];
+  /Versiunea în română/, /Română/];
 
 function texts(html) {
   const out = [];

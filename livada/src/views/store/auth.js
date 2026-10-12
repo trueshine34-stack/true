@@ -2,7 +2,10 @@ import { html, cx } from '../../lib/html.js';
 import { page } from '../layout.js';
 import { field, checkbox, csrfInput } from '../components.js';
 import { icon, mark } from '../icons.js';
-import { t, tHtml } from '../../lib/i18n.js';
+import { t, tHtml, pick } from '../../lib/i18n.js';
+
+// „Nume” din formulare = numele de familie (în formularul de contact „Nume” e numele complet → altă traducere)
+const LAST_NAME = () => pick({ ro: 'Nume', en: 'Last name' });
 
 function shell(ctx, { title, sub, body, side = true, titleText }) {
   const content = html`<section class="auth">
@@ -52,7 +55,7 @@ export function registerPage(ctx, { next = '' } = {}) {
       <p class="form-error" role="alert" hidden data-form-error></p>
       <div class="grid2">
         ${field({ name: 'first_name', label: t('Prenume'), required: true, autocomplete: 'given-name' })}
-        ${field({ name: 'last_name', label: t('Nume'), required: true, autocomplete: 'family-name' })}
+        ${field({ name: 'last_name', label: LAST_NAME(), required: true, autocomplete: 'family-name' })}
       </div>
       ${field({ name: 'email', label: t('Email'), type: 'email', required: true, autocomplete: 'email', hint: t('Îți trimitem un cod de confirmare.') })}
       ${field({ name: 'phone', label: t('Telefon'), type: 'tel', autocomplete: 'tel', inputmode: 'tel' })}

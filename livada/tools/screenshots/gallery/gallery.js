@@ -52,7 +52,7 @@
   // ─── textele interfeței (RU implicit, EN la cerere) ──────────────────────
   var T = {
     ru: {
-      title: 'Livada — скриншоты', skip: 'Перейти к скриншотам', sub: 'Скриншоты всех страниц',
+      title: 'Livada — скриншоты', filters: 'Вкладки и фильтры', skip: 'Перейти к скриншотам', sub: 'Скриншоты всех страниц',
       h1: 'Все страницы <em>Livada</em> в одном месте',
       updated: 'Снято', uiLang: 'Язык интерфейса', mode: { auto: 'Тема интерфейса: как в системе', light: 'Тема интерфейса: светлая', dark: 'Тема интерфейса: тёмная' },
       keys: 'Горячие клавиши', tabs: { pages: 'Страницы', compare: 'Сравнение', photos: 'Фото товаров' },
@@ -89,7 +89,7 @@
       footer: 'Скриншоты Livada', pl: { shots: ['скриншот', 'скриншота', 'скриншотов'], pages: ['страница', 'страницы', 'страниц'], photos: ['фото', 'фото', 'фото'], products: ['товар', 'товара', 'товаров'] }
     },
     en: {
-      title: 'Livada — screenshots', skip: 'Skip to screenshots', sub: 'Screenshots of every page',
+      title: 'Livada — screenshots', filters: 'Tabs and filters', skip: 'Skip to screenshots', sub: 'Screenshots of every page',
       h1: 'Every <em>Livada</em> page in one place',
       updated: 'Captured', uiLang: 'Interface language', mode: { auto: 'Interface theme: system', light: 'Interface theme: light', dark: 'Interface theme: dark' },
       keys: 'Keyboard shortcuts', tabs: { pages: 'Pages', compare: 'Compare', photos: 'Product photos' },
@@ -183,6 +183,7 @@
     (GROUPS[gIdx(p.group)] && typeof GROUPS[gIdx(p.group)].title === 'object') && parts.push(GROUPS[gIdx(p.group)].title.ru, GROUPS[gIdx(p.group)].title.en);
     p.hay = norm(parts.join(' '));
   });
+  if (!saved.device && window.innerWidth < 720 && VALS.device.indexOf('mobile') >= 0) S.device = 'mobile';
   DIMS.forEach(function (d) { if (VALS[d].indexOf(S[d]) < 0) S[d] = VALS[d][0]; });
   if (S.group !== 'all' && gIdx(S.group) < 0) S.group = 'all';
   S.dims = S.dims.filter(function (d) { return DIMS.indexOf(d) >= 0; }); if (!S.dims.length) S.dims = ['lang'];
@@ -256,6 +257,7 @@
     doc.lang = S.ui;
     document.title = t('title');
     $('.skip').textContent = t('skip');
+    elBar.setAttribute('aria-label', t('filters'));
     var gen = M && M.generated ? new Date(M.generated) : null;
     var genTxt = gen && !isNaN(gen) ? gen.toLocaleString(S.ui === 'en' ? 'en-GB' : 'ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
     var langNames = VALS.lang.map(function (l) { return t('langName')[l] || l; });
@@ -331,6 +333,7 @@
         '</div>' +
       '</div>';
     renderChips();
+    fitBar();
   }
   function renderChips() {
     var box = $('#chips'); if (!box) return;
@@ -391,17 +394,23 @@
 
   // încărcarea leneșă a miniaturilor (IntersectionObserver + loading="lazy")
   var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (ents) {
-    ents.forEach(function (e) { if (e.isIntersecting) { var im = e.target; io.unobserve(im); if (im.dataset.src && !im.getAttribute('src')) im.src = im.dataset.src; } });
+    ents.forEach(function (e) { if (e.isIntersecting) { io.unobserve(e.target); load(e.target); } });
   }, { rootMargin: '900px 0px' }) : null;
-  function observe(root) {
-    $$('img[data-src]:not([src])', root).forEach(function (im) { if (io) io.observe(im); else im.src = im.dataset.src; });
+  // pornește încărcarea: scheletul „sclipește” doar cât timp chiar se încarcă ceva
+  function load(im) {
+    if (!im.dataset.src || im.getAttribute('src')) return;
+    im.parentNode.classList.add('is-ld');
+    im.src = im.dataset.src;
   }
-  document.addEventListener('load', function (e) { var im = e.target; if (im.tagName === 'IMG' && im.classList.contains('shot')) im.classList.add('is-in'); }, true);
-  document.addEventListener('error', function (e) { var im = e.target; if (im.tagName === 'IMG' && im.classList.contains('shot')) { im.classList.add('is-err'); im.parentNode && im.parentNode.classList.add('is-err'); } }, true);
+  function observe(root) {
+    $$('img[data-src]:not([src])', root).forEach(function (im) { if (io) io.observe(im); else load(im); });
+  }
+  document.addEventListener('load', function (e) { var im = e.target; if (im.tagName === 'IMG' && im.classList.contains('shot')) { im.classList.add('is-in'); im.parentNode.classList.remove('is-ld'); im.parentNode.classList.add('is-done'); } }, true);
+  document.addEventListener('error', function (e) { var im = e.target; if (im.tagName === 'IMG' && im.classList.contains('shot')) { im.classList.add('is-err'); im.parentNode.classList.remove('is-ld'); im.parentNode.classList.add('is-err'); } }, true);
 
   // ─── cardurile ───────────────────────────────────────────────────────────
   function frameHTML(s, alt, eager) {
-    var img = '<img class="shot" ' + (eager ? 'src' : 'data-src') + '="' + esc(s.thumb) + '" alt="' + esc(alt) + '" width="480" height="' + thumbH(s) + '" decoding="async" loading="lazy" draggable="false">';
+    var img = '<img class="shot" ' + (eager ? 'src' : 'data-src') + '="' + esc(s.thumb) + '" alt="' + esc(alt) + '" width="480" height="' + thumbH(s) + '" style="aspect-ratio:480/' + thumbH(s) + '" decoding="async" loading="lazy" draggable="false">';
     if (s.device === 'mobile') return '<div class="dev dev--phone is-' + s.theme + '"><div class="dev__screen"><span class="dev__island" aria-hidden="true"></span>' + img + '</div></div>';
     return '<div class="dev dev--desk is-' + s.theme + '"><div class="dev__bar" aria-hidden="true"><i></i><i></i><i></i><span class="dev__url">' + esc((s.lang && s.lang !== 'ro' && s.group !== 'admin' && s.group !== 'email' ? '/' + s.lang : '') + (s.url || '/')) + '</span></div><div class="dev__screen">' + img + '</div></div>';
   }
@@ -432,7 +441,7 @@
       '<div class="card__tools">' + miniToggles(p, s) + '</div></div></article>';
   }
   function nearView(el, m) { var r = el.getBoundingClientRect(); return r.bottom > -(m || 200) && r.top < innerHeight + (m || 200); }
-  function updateCard(card) {
+  function updateCard(card, vis) {
     var p = byId[card.dataset.id]; if (!p) return;
     var w = want(p), s = resolve(p, w);
     var old = $('.stage', card);
@@ -440,15 +449,29 @@
     if (old && old.dataset.file === s.file) { var tmp0 = document.createElement('div'); tmp0.innerHTML = stageHTML(p, s, w); var n0 = $('.stage__note', tmp0), o0 = $('.stage__note', old); if (o0) o0.remove(); if (n0) old.insertBefore(n0, $('.stage__zoom', old)); return; }
     var tmp = document.createElement('div'); tmp.innerHTML = stageHTML(p, s, w);
     var ns = tmp.firstChild, im = $('img.shot', ns);
-    if (!old || !nearView(card)) { old ? old.replaceWith(ns) : card.prepend(ns); observe(ns); return; }
+    if (!old || !(vis != null ? vis : nearView(card))) { old ? old.replaceWith(ns) : card.prepend(ns); observe(ns); return; }
     // vizibil: preîncărcăm, apoi schimbăm fără „pâlpâire”
     var swapped = false;
-    var swap = function () { if (swapped) return; swapped = true; im.classList.add('is-in'); ns.classList.add('is-swap'); if (old.parentNode) old.replaceWith(ns); };
+    var swap = function () { if (swapped) return; swapped = true; im.classList.add('is-in'); im.parentNode.classList.add('is-done'); ns.classList.add('is-swap'); if (old.parentNode) old.replaceWith(ns); };
     im.src = im.dataset.src;
     if (im.decode) im.decode().then(swap, swap); else im.onload = im.onerror = swap;
     setTimeout(swap, 900);
   }
-  function updateAllCards() { $$('.card', elMain).forEach(updateCard); $$('.crow', elMain).forEach(updateRow); }
+  // întâi citim pozițiile (o singură reflow), apoi actualizăm: vizibilele imediat, restul pe bucăți
+  var upd = 0;
+  function updateAllCards() {
+    flush();
+    var els = $$('.card, .crow', elMain), h = innerHeight, my = ++upd;
+    var vis = els.map(function (el) { var r = el.getBoundingClientRect(); return r.bottom > -300 && r.top < h + 300; });
+    var rest = [];
+    els.forEach(function (el, i) { if (vis[i]) el.classList.contains('crow') ? updateRow(el, true) : updateCard(el, true); else rest.push(el); });
+    (function step() {
+      if (my !== upd) return;
+      var t0 = performance.now();
+      while (rest.length && performance.now() - t0 < 8) { var el = rest.shift(); el.classList.contains('crow') ? updateRow(el, false) : updateCard(el, false); }
+      if (rest.length) requestAnimationFrame(step);
+    })();
+  }
 
   // ─── vizualizarea „Pagini” ───────────────────────────────────────────────
   function renderPages() {
@@ -502,12 +525,12 @@
       return '<figure class="panel">' + (s ? stageHTML(p, s, null) : '<div class="stage stage--none">' + icon('alert') + '<span>' + esc(t('noShot')) + '</span></div>') + '<figcaption>' + cap + '</figcaption></figure>';
     }).join('');
   }
-  function updateRow(row) {
+  function updateRow(row, vis) {
     var p = byId[row.dataset.id]; if (!p) return;
     var box = $('.crow__panels', row), cs = combos(p);
     box.className = 'crow__panels n-' + Math.min(cs.length, 8);
     box.innerHTML = panelsHTML(p, cs, S.dims.filter(function (d) { return p[d].length > 1; }));
-    $$('img.shot', box).forEach(function (im) { if (nearView(row, 400)) im.src = im.dataset.src; });
+    if (vis != null ? vis : nearView(row, 400)) $$('img.shot', box).forEach(load);
     observe(box);
   }
 
@@ -583,7 +606,13 @@
     }, { rootMargin: '-' + (barH() + 10) + 'px 0px -70% 0px' });
     $$('.sec', elMain).forEach(function (s) { spy.observe(s); });
   }
-  function barH() { return elBar.getBoundingClientRect().height || 0; }
+  function barH() { return (elBar.getBoundingClientRect().height || 0) + barTop(); }
+  function barTop() { return parseFloat(elBar.style.top) || 0; }
+  function fitBar() {
+    var ctl = $('.bar__ctl', elBar);
+    elBar.style.top = innerWidth < 720 && ctl && S.tab !== 'photos' ? -Math.max(0, ctl.offsetTop - 8) + 'px' : innerWidth < 720 && S.tab === 'photos' && $('#chips', elBar) ? -Math.max(0, $('.bar__row--chips', elBar).offsetTop - 8) + 'px' : '';
+    doc.style.setProperty('--bar-h', barH() + 'px');
+  }
 
   function renderMain() {
     if (!M) return;
@@ -634,8 +663,19 @@
     if (ds.open) { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return; e.preventDefault(); var pp = byId[ds.open]; var f = ds.file; openPage(pp, findByFile(pp, f) || resolve(pp, want(pp)), b.closest('.crow') ? S.dims.filter(function (d) { return pp[d].length > 1; })[0] : null, b); return; }
     if (ds.split) { var ps = byId[ds.split]; openPage(ps, resolve(ps, combos(ps)[0]), S.dims.filter(function (d) { return ps[d].length > 1; })[0], b); return; }
     if (ds.ph != null && b.classList.contains('tile')) { if (e.metaKey || e.ctrlKey || e.shiftKey) return; e.preventDefault(); openPhoto(photos[+ds.ph], b); return; }
-    if (ds.toc) { e.preventDefault(); flush(); var sec = document.getElementById(ds.toc); if (sec) scrollTo({ top: sec.getBoundingClientRect().top + scrollY - barH() - 12, behavior: 'smooth' }); return; }
+    if (ds.toc) { e.preventDefault(); flush(); jumpTo(document.getElementById(ds.toc)); return; }
   });
+  // salt la secțiune; cardurile cu content-visibility își corectează înălțimea la randare → ajustăm câteva cadre
+  function jumpTo(sec) {
+    if (!sec) return;
+    var n = 0;
+    (function fix() {
+      var d = sec.getBoundingClientRect().top - barH() - 8;
+      if (Math.abs(d) > 2) scrollTo(0, scrollY + d);
+      if (++n < 12) requestAnimationFrame(fix);
+    })();
+    var a = $('a[data-toc="' + sec.id + '"]', elToc); if (a) { $$('a.is-on', elToc).forEach(function (x) { x.classList.remove('is-on'); }); a.classList.add('is-on'); }
+  }
   function findByFile(p, f) { for (var k in p.v) if (p.v[k].file === f) return p.v[k]; return null; }
 
   var qTimer = 0;
@@ -714,7 +754,8 @@
       file = ph.file; dlName = 'livada-' + ph.file.split('/').slice(-2).join('-');
     } else {
       var p = LB.p, s = LB.s;
-      eyebrow = gTitle(p.group) + (p.section && L(p.section) !== gTitle(p.group) ? ' · ' + L(p.section) : '');
+      var gt = gTitle(p.group), st = p.section ? L(p.section) : '';
+      eyebrow = !st || st === gt ? gt : st.indexOf(gt) === 0 ? st : gt + ' · ' + st;
       title = esc(L(p.title)) + (p.state ? '<span class="lb__state"> — ' + esc(L(p.state)) + '</span>' : '');
       sub = '<code>' + esc(p.url || p.id) + '</code><span class="lb__dim">' + fmt(s.w || 0) + ' × ' + fmt(s.h || 0) + ' px</span>';
       file = s.file; dlName = 'livada-' + p.id + '-' + s.lang + '-' + s.theme + '-' + s.device + '.webp';
@@ -734,7 +775,7 @@
     var nav = function (dir) { return '<button type="button" class="lb__nav lb__nav--' + dir + '" data-lb="' + dir + '" title="' + esc(isPh ? t(dir + 'Photo') : t(dir)) + '" aria-label="' + esc(isPh ? t(dir + 'Photo') : t(dir)) + '"' + (list.length < 2 ? ' disabled' : '') + '>' + icon(dir) + '</button>'; };
     elLb.className = 'lb' + (LB.open ? ' is-open' : '') + (isPh ? ' lb--photo' : '') + (LB.split ? ' is-split' : '') + (isPh && LB.zoom !== 'fit' ? ' is-zoomed' : '');
     elLb.innerHTML =
-      '<header class="lb__top">' +
+      '<div class="lb__top">' +
         '<div class="lb__info"><p class="lb__eyebrow">' + esc(eyebrow) + '</p><h2 id="lb-title" class="lb__title">' + title + '</h2><p class="lb__sub">' + sub + '</p></div>' +
         (sw ? '<div class="lb__sw">' + sw + '</div>' : '') +
         '<div class="lb__act">' +
@@ -744,10 +785,10 @@
           lbBtn('copy', 'copy', t('copyPath')) + lbBtn('link', 'link', t('copyLink')) +
           '<span class="lb__sep"></span>' + lbBtn('close', 'close', t('close'), ' data-close') +
         '</div>' +
-      '</header>' +
+      '</div>' +
       '<div class="lb__stage">' + nav('prev') + '<div class="lb__panes" id="panes"></div>' + nav('next') + '</div>' +
-      '<footer class="lb__foot"><span class="lb__pos">' + pos + '</span><span class="lb__file" title="' + esc(file) + '">' + esc(file) + '</span>' +
-        '<span class="lb__keys">' + (isPh ? '<kbd>←</kbd><kbd>→</kbd> ' + esc(t('photoOf')) : '<kbd>←</kbd><kbd>→</kbd><kbd>L</kbd><kbd>T</kbd><kbd>D</kbd><kbd>C</kbd><kbd>Z</kbd>') + ' <kbd>Esc</kbd></span></footer>';
+      '<div class="lb__foot"><span class="lb__pos">' + pos + '</span><span class="lb__file" title="' + esc(file) + '">' + esc(file) + '</span>' +
+        '<span class="lb__keys">' + (isPh ? '<kbd>←</kbd><kbd>→</kbd> ' + esc(t('photoOf')) : '<kbd>←</kbd><kbd>→</kbd><kbd>L</kbd><kbd>T</kbd><kbd>D</kbd><kbd>C</kbd><kbd>Z</kbd>') + ' <kbd>Esc</kbd></span></div>';
     renderPanes(first);
     var fe = (fsel && $(fsel, elLb)) || ((first || fa === document.body || (fa && !document.contains(fa))) && $('.pane__scroll', elLb));
     if (fe) fe.focus({ preventScroll: true });
@@ -837,7 +878,8 @@
   function lbCycle(dir) {
     if (LB.kind !== 'page') return;
     var p = LB.p, all = [];
-    p.device.forEach(function (dv) { p.lang.forEach(function (l) { p.theme.forEach(function (th) { var s = p.v[l + '|' + th + '|' + dv]; if (s) all.push(s); }); }); });
+    // ↑ ↓ trec prin limbi × teme pe același dispozitiv (dispozitivul se schimbă cu D)
+    p.lang.forEach(function (l) { p.theme.forEach(function (th) { var s = p.v[l + '|' + th + '|' + LB.s.device]; if (s) all.push(s); }); });
     var i = all.indexOf(LB.s);
     var n = all[(i + dir + all.length) % all.length];
     if (n && n !== LB.s) { lbSetVariant(n); toast(variantLabel(n)); }
@@ -906,7 +948,7 @@
 
   // ─── fereastra cu scurtături ─────────────────────────────────────────────
   function openKeys() {
-    elKeys.innerHTML = '<div class="sheet__card"><header><h2 id="keys-title">' + icon('keyboard') + esc(t('keys')) + '</h2>' + '<button type="button" class="iconbtn" data-close aria-label="' + esc(t('close')) + '">' + icon('close') + '</button></header>' +
+    elKeys.innerHTML = '<div class="sheet__card"><div class="sheet__head"><h2 id="keys-title">' + icon('keyboard') + esc(t('keys')) + '</h2>' + '<button type="button" class="iconbtn" data-close aria-label="' + esc(t('close')) + '">' + icon('close') + '</button></div>' +
       '<ul class="kb kb--sheet">' + t('kb').map(function (k) { return '<li>' + k[0].split(' ').map(function (x) { return '<kbd>' + esc(x) + '</kbd>'; }).join('') + '<span>' + esc(k[1]) + '</span></li>'; }).join('') + '</ul><p class="sheet__note">' + esc(t('kbNote')) + '</p></div>';
     elKeys.hidden = false; requestAnimationFrame(function () { elKeys.classList.add('is-open'); });
     keysOpener = document.activeElement; $('[data-close]', elKeys).focus();
@@ -1000,7 +1042,7 @@
   function toast(msg) { elToast.textContent = msg; elToast.classList.add('is-on'); clearTimeout(toastT); toastT = setTimeout(function () { elToast.classList.remove('is-on'); }, 1600); }
   elTotop.addEventListener('click', function () { scrollTo({ top: 0, behavior: 'smooth' }); var q = $('#q'); if (q && innerWidth >= 720) q.focus({ preventScroll: true }); });
 
-  var lastY = scrollY, ticking = false;
+  var ticking = false;
   addEventListener('scroll', function () {
     if (ticking) return; ticking = true;
     requestAnimationFrame(function () {
@@ -1008,23 +1050,17 @@
       var y = scrollY;
       elTotop.hidden = y < 1400;
       elBar.classList.toggle('is-stuck', y > elTop.offsetHeight - 2);
-      // pe telefon bara se ascunde la derularea în jos și revine la derularea în sus
-      if (innerWidth < 720 && !LB.open) {
-        if (y > lastY + 6 && y > elTop.offsetHeight + 200 && document.activeElement && document.activeElement.id !== 'q') elBar.classList.add('is-hidden');
-        else if (y < lastY - 6) elBar.classList.remove('is-hidden');
-      } else elBar.classList.remove('is-hidden');
-      lastY = y;
     });
   }, { passive: true });
   var rzT = 0;
-  addEventListener('resize', function () { clearTimeout(rzT); rzT = setTimeout(function () { layoutPanes(); doc.style.setProperty('--bar-h', barH() + 'px'); }, 80); });
+  addEventListener('resize', function () { clearTimeout(rzT); rzT = setTimeout(function () { layoutPanes(); fitBar(); }, 80); });
   if (window.matchMedia) { var mq = matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener && mq.addEventListener('change', function () { if (S.mode === 'auto') renderTop(); }); }
 
   // ─── pornire ─────────────────────────────────────────────────────────────
   function renderAll() {
     renderTop(); renderBar(); renderMain();
     if (LB.open) renderLb(false);
-    doc.style.setProperty('--bar-h', barH() + 'px');
+    fitBar();
   }
   applyMode();
   if (!M || !shots.length && !photos.length) {
@@ -1036,5 +1072,5 @@
   if (h0.tab && ['pages', 'compare', 'photos'].indexOf(h0.tab) >= 0 && (h0.tab !== 'photos' || photos.length)) S.tab = h0.tab;
   renderAll();
   if (h0.id || h0.photo) fromHash(true);
-  if ('ResizeObserver' in window) new ResizeObserver(function () { doc.style.setProperty('--bar-h', barH() + 'px'); }).observe(elBar);
+  if ('ResizeObserver' in window) new ResizeObserver(function () { fitBar(); }).observe(elBar);
 })();

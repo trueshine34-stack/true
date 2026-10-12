@@ -1,5 +1,6 @@
 import zlib from 'node:zlib';
 import { config } from '../config.js';
+import { t } from './i18n.js';
 
 export class HttpError extends Error {
   constructor(status, message, details) {
@@ -41,7 +42,7 @@ export function readBody(req, limit = MAX_BODY) {
     req.on('data', (c) => {
       size += c.length;
       if (size > limit) {
-        reject(new HttpError(413, 'Cererea este prea mare.'));
+        reject(new HttpError(413, t('Cererea este prea mare.')));
         req.destroy();
         return;
       }
@@ -95,7 +96,7 @@ export async function parseBody(req) {
   const type = (req.headers['content-type'] || '').toLowerCase();
   if (type.startsWith('multipart/form-data')) {
     const boundary = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(req.headers['content-type']);
-    if (!boundary) throw new HttpError(400, 'Formular invalid.');
+    if (!boundary) throw new HttpError(400, t('Formular invalid.'));
     const buf = await readBody(req, MAX_UPLOAD);
     const { fields, files } = parseMultipart(buf, boundary[1] || boundary[2]);
     return { body: fields, files };
@@ -103,7 +104,7 @@ export async function parseBody(req) {
   const buf = await readBody(req);
   if (!buf.length) return { body: {}, files: [] };
   if (type.includes('application/json')) {
-    try { return { body: JSON.parse(buf.toString('utf8')), files: [] }; } catch { throw new HttpError(400, 'JSON invalid.'); }
+    try { return { body: JSON.parse(buf.toString('utf8')), files: [] }; } catch { throw new HttpError(400, t('JSON invalid.')); }
   }
   if (type.includes('application/x-www-form-urlencoded')) {
     return { body: formToObject(new URLSearchParams(buf.toString('utf8'))), files: [] };
