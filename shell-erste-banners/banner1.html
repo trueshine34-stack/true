@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="hu"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=block" rel="stylesheet">
+<style>
+:root{--y:#FFD500;--y2:#FFC400;--r:#DD1D21;--rd:#A8090D;--b:#2870ED;--bd:#0B2C7A;--k:#141414}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1350px;overflow:hidden;background:var(--y)}
+body{font-family:'Archivo',sans-serif;position:relative;color:var(--k)}
+.bg{position:absolute;inset:0;background:
+ radial-gradient(900px 700px at 20% 18%,#FFE866 0%,rgba(255,232,102,0) 70%),
+ radial-gradient(800px 800px at 100% 70%,#FFB800 0%,rgba(255,184,0,0) 70%),var(--y)}
+.dots{position:absolute;inset:0;background-image:radial-gradient(rgba(221,29,33,.22) 2.6px,transparent 3px);background-size:22px 22px;
+ -webkit-mask-image:radial-gradient(620px 520px at 92% 30%,#000 0%,transparent 75%)}
+.rays{position:absolute;left:-200px;top:-260px;width:1500px;height:1500px;opacity:.16;
+ background:repeating-conic-gradient(from 0deg at 50% 50%,#fff 0deg 6deg,transparent 6deg 18deg);
+ -webkit-mask-image:radial-gradient(circle at 50% 50%,#000 10%,transparent 62%)}
+.band{position:absolute;left:-120px;top:770px;width:1400px;height:170px;background:var(--k);transform:rotate(-6deg);box-shadow:0 18px 0 var(--r)}
+header{position:absolute;top:56px;left:64px;right:64px;display:flex;align-items:center;justify-content:space-between}
+.logos{display:flex;align-items:center;gap:22px}
+.shell{display:flex;align-items:center;gap:12px;background:#fff;border-radius:999px;padding:12px 26px 12px 14px;box-shadow:0 6px 0 rgba(0,0,0,.12)}
+.shell i{width:44px;height:44px;border-radius:50%;background:var(--r);display:grid;place-items:center}
+.shell i:after{content:"";width:22px;height:22px;border-radius:50% 50% 4px 4px;background:var(--y)}
+.shell b{font-weight:900;font-size:38px;color:var(--r);letter-spacing:-.5px}
+.x{font-weight:300;font-size:40px}
+.erste{background:var(--b);color:#fff;border-radius:999px;padding:14px 30px;font-weight:800;font-size:38px;letter-spacing:-.5px;box-shadow:0 6px 0 rgba(0,0,0,.12)}
+.date{background:var(--k);color:var(--y);border-radius:18px;padding:14px 24px;text-align:center;line-height:1;transform:rotate(3deg)}
+.date small{display:block;font-size:20px;font-weight:700;letter-spacing:4px;color:#fff;margin-bottom:6px}
+.date b{font-size:44px;font-weight:900;font-stretch:110%}
+.kicker{position:absolute;top:196px;left:64px;font-weight:900;font-stretch:125%;font-size:96px;letter-spacing:-2px;line-height:1}
+.big{position:absolute;top:288px;left:48px;display:flex;align-items:flex-start}
+.n25{font-weight:900;font-stretch:100%;font-size:500px;line-height:.86;letter-spacing:-30px;color:var(--r);
+ -webkit-text-stroke:10px var(--k);paint-order:stroke fill;text-shadow:22px 22px 0 var(--k)}
+.side{margin-left:34px;margin-top:34px;display:flex;flex-direction:column;align-items:flex-start;gap:20px}
+.liter{font-weight:900;font-stretch:100%;font-size:90px;line-height:.9;letter-spacing:-3px}
+.sticker{background:var(--r);color:#fff;font-weight:900;font-size:40px;line-height:1.05;padding:18px 22px;border-radius:16px;transform:rotate(-7deg);
+ border:5px solid var(--k);box-shadow:8px 8px 0 var(--k);text-align:center;margin-top:8px;margin-left:6px}
+.sticker span{display:block;font-size:22px;letter-spacing:2px;font-weight:700}
+.ingyen{position:absolute;top:772px;left:0;right:0;transform:rotate(-6deg);text-align:center;color:var(--y);font-weight:900;font-stretch:125%;
+ font-size:152px;line-height:170px;letter-spacing:4px}
+.ingyen em{font-style:normal;color:#fff}
+.panel{position:absolute;left:40px;right:40px;bottom:40px;height:312px;background:var(--b);border-radius:36px;color:#fff;padding:44px 48px;overflow:hidden;
+ box-shadow:0 14px 0 var(--bd)}
+.panel:before{content:"";position:absolute;right:-120px;top:-160px;width:460px;height:460px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.18),transparent 70%)}
+.panel h2{font-weight:800;font-size:58px;line-height:1.04;letter-spacing:-1px}
+.panel h2 b{color:var(--y)}
+.row{position:absolute;left:48px;right:48px;bottom:40px;display:flex;align-items:center;justify-content:space-between}
+.cta{background:var(--y);color:var(--k);font-weight:900;font-size:36px;padding:20px 34px;border-radius:999px;display:flex;align-items:center;gap:14px;box-shadow:0 6px 0 var(--bd)}
+.fine{font-size:20px;font-weight:500;opacity:.85;line-height:1.35}
+.nozzle{position:absolute;right:20px;top:930px;width:330px;transform:rotate(-12deg)}
+</style></head><body>
+<div class="bg"></div><div class="rays"></div><div class="dots"></div>
+<header>
+ <div class="logos"><div class="shell"><i></i><b>Shell</b></div><span class="x">×</span><div class="erste">Erste</div></div>
+ <div class="date"><small>OKTÓBER</small><b>18–30.</b></div>
+</header>
+<div class="kicker">TANKOLJ</div>
+<div class="big"><div class="n25">25</div>
+ <div class="side"><div class="liter">LITERT</div><div class="sticker"><span>ÜZEMANYAG</span>AJÁNDÉKBA</div></div></div>
+<div class="band"></div>
+<div class="ingyen">INGYEN<em>!</em></div>
+<section class="panel">
+ <h2>Erste ügyfeleknek<br><b>a Shell töltőállomásain</b></h2>
+ <div class="row"><div class="fine">2026. október 18–30.<br>Feltételek: erstebank.hu</div><div class="cta">Részletek <span>→</span></div></div>
+</section>
+</body></html>

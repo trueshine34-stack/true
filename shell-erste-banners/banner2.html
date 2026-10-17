@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="hu"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&display=block" rel="stylesheet">
+<style>
+:root{--y:#FFD500;--o:#FF8A00;--r:#E8262B;--b:#2870ED;--n:#050E24}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1350px;overflow:hidden;background:var(--n)}
+body{font-family:'Sora',sans-serif;color:#fff;position:relative}
+.bg{position:absolute;inset:0;background:
+ radial-gradient(620px 520px at 50% 40%,rgba(255,180,0,.22),transparent 70%),
+ radial-gradient(900px 700px at 0% 0%,rgba(40,112,237,.55),transparent 65%),
+ radial-gradient(800px 600px at 100% 100%,rgba(40,112,237,.35),transparent 70%),
+ linear-gradient(180deg,#071634 0%,#040B1E 100%)}
+.grain{position:absolute;inset:0;opacity:.08;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E")}
+.trails{position:absolute;left:0;right:0;bottom:0;height:520px;overflow:hidden}
+.trails i{position:absolute;height:6px;border-radius:6px;filter:blur(1.5px);transform-origin:left center}
+header{position:absolute;top:60px;left:64px;right:64px;display:flex;justify-content:space-between;align-items:center}
+.logos{display:flex;align-items:center;gap:18px;padding:12px 26px 12px 14px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(8px)}
+.shell{display:flex;align-items:center;gap:10px;font-weight:800;font-size:30px;color:var(--y)}
+.shell i{width:40px;height:40px;border-radius:50%;background:var(--r);display:grid;place-items:center}
+.shell i:after{content:"";width:20px;height:20px;border-radius:50% 50% 4px 4px;background:var(--y)}
+.sep{width:1px;height:34px;background:rgba(255,255,255,.3)}
+.erste{font-weight:800;font-size:30px;color:#fff;display:flex;align-items:center;gap:10px}
+.erste i{width:16px;height:16px;border-radius:50%;background:var(--b);box-shadow:0 0 0 5px rgba(40,112,237,.35)}
+.tag{font-size:20px;letter-spacing:5px;font-weight:600;color:rgba(255,255,255,.7)}
+.gauge{position:absolute;left:50%;top:150px;width:860px;transform:translateX(-50%)}
+.center{position:absolute;left:0;right:0;top:330px;text-align:center}
+.center .num{font-weight:800;font-size:280px;line-height:.82;letter-spacing:-16px;background:linear-gradient(180deg,#fff 30%,#FFE58A 100%);-webkit-background-clip:text;color:transparent;
+ filter:drop-shadow(0 0 40px rgba(255,200,0,.35))}
+.center .num sup{font-size:96px;letter-spacing:0;vertical-align:top;position:relative;top:34px;margin-left:16px;color:var(--y);-webkit-text-fill-color:var(--y)}
+.center .lbl{margin-top:26px;font-size:24px;letter-spacing:7px;font-weight:600;color:var(--y)}
+h1{position:absolute;left:64px;right:64px;top:730px;text-align:center;font-weight:800;font-size:92px;line-height:1;letter-spacing:-3px}
+h1 span{background:linear-gradient(90deg,var(--y),var(--o));-webkit-background-clip:text;color:transparent}
+.sub{position:absolute;left:100px;right:100px;top:948px;text-align:center;font-size:34px;line-height:1.35;font-weight:300;color:rgba(255,255,255,.88)}
+.sub b{font-weight:700;color:#fff}
+.bottom{position:absolute;left:64px;right:64px;bottom:72px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+.datecard{display:flex;align-items:center;gap:20px;padding:20px 28px;border-radius:24px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(10px)}
+.cal{width:62px;height:66px;border-radius:12px;background:#fff;overflow:hidden;text-align:center;color:var(--n)}
+.cal small{display:block;background:var(--r);color:#fff;font-size:13px;font-weight:700;letter-spacing:2px;padding:4px 0}
+.cal b{font-size:28px;font-weight:800;line-height:44px}
+.datecard div p{font-size:18px;letter-spacing:3px;color:rgba(255,255,255,.65);font-weight:600}
+.datecard div strong{font-size:38px;font-weight:800;letter-spacing:-1px}
+.cta{display:flex;align-items:center;gap:16px;background:linear-gradient(180deg,#FFE04D,var(--y));color:var(--n);font-weight:800;font-size:34px;padding:28px 40px;border-radius:999px;
+ box-shadow:0 0 0 6px rgba(255,213,0,.18),0 20px 50px rgba(255,190,0,.35)}
+.fine{position:absolute;left:0;right:0;bottom:30px;text-align:center;font-size:17px;color:rgba(255,255,255,.5);letter-spacing:.5px}
+</style></head><body>
+<div class="bg"></div>
+<div class="trails" id="tr"></div>
+<div class="grain"></div>
+<header>
+ <div class="logos"><div class="shell"><i></i>Shell</div><div class="sep"></div><div class="erste"><i></i>Erste</div></div>
+ <div class="tag">KÖZÖS AKCIÓ</div>
+</header>
+<svg class="gauge" viewBox="0 0 860 600" xmlns="http://www.w3.org/2000/svg">
+ <defs>
+  <linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E8262B"/><stop offset=".45" stop-color="#FF8A00"/><stop offset="1" stop-color="#FFD500"/></linearGradient>
+  <filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="14" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ </defs>
+ <g id="ticks"></g>
+ <path id="track" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="34" stroke-linecap="round"/>
+ <path id="arc" fill="none" stroke="url(#g)" stroke-width="34" stroke-linecap="round" filter="url(#glow)"/>
+ <text id="E" font-family="Sora" font-weight="700" font-size="34" fill="rgba(255,255,255,.55)" text-anchor="middle">E</text>
+ <text id="F" font-family="Sora" font-weight="800" font-size="34" fill="#FFD500" text-anchor="middle">F</text>
+ <g id="needle" filter="url(#glow)"></g>
+</svg>
+<div class="center"><div class="num">25<sup>L</sup></div><div class="lbl">ÜZEMANYAG AJÁNDÉKBA</div></div>
+<h1>Tankolj bátran,<br><span>rajtunk a számla.</span></h1>
+<p class="sub">Erste ügyfeleknek <b>25 liter ingyen tankolás</b><br>a Shell töltőállomásain.</p>
+<div class="bottom">
+ <div class="datecard"><div class="cal"><small>OKT</small><b>18</b></div><div><p>AKCIÓ IDEJE</p><strong>Október 18–30.</strong></div></div>
+ <div class="cta">Részletek <span>→</span></div>
+</div>
+<div class="fine">2026. október 18–30. · A részvétel feltételei: erstebank.hu</div>
+<script>
+const cx=430,cy=420,R=330,a0=200,a1=-20,rad=d=>d*Math.PI/180,pt=(r,d)=>[cx+r*Math.cos(rad(d)),cy-r*Math.sin(rad(d))];
+const arc=(r,from,to)=>{const[x0,y0]=pt(r,from),[x1,y1]=pt(r,to);return`M${x0} ${y0} A${r} ${r} 0 ${from-to>180?1:0} 1 ${x1} ${y1}`};
+track.setAttribute('d',arc(R,a0,a1));arc_=document.getElementById('arc');arc_.setAttribute('d',arc(R,a0,a1));
+let t='';for(let i=0;i<=40;i++){const d=a0-(a0-a1)*i/40,big=i%10==0,[x0,y0]=pt(R-36,d),[x1,y1]=pt(R-(big?62:48),d);
+t+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="rgba(255,255,255,${big?.7:.25})" stroke-width="${big?5:3}" stroke-linecap="round"/>`}
+ticks.innerHTML=t;
+let [ex,ey]=pt(R-70,a0-1);E.setAttribute('x',ex+6);E.setAttribute('y',ey+56);let [fx,fy]=pt(R-70,a1+1);F.setAttribute('x',fx-6);F.setAttribute('y',fy+56);
+const nd=-8,[nx,ny]=pt(R-30,nd),[bx1,by1]=pt(14,nd+90),[bx2,by2]=pt(14,nd-90);
+needle.innerHTML=`<path d="M${bx1} ${by1} L${nx} ${ny} L${bx2} ${by2} Z" fill="#FFD500" opacity="0"/>`;
+// light trails
+let sd=7;Math.random=()=>((sd=sd*16807%2147483647)/2147483647);const tr=document.getElementById('tr');const cols=['#FFD500','#FF8A00','#E8262B','#ffffff','#2870ED'];let h='';
+for(let i=0;i<26;i++){const y=200+Math.random()*320,w=300+Math.random()*900,x=-200+Math.random()*1200,c=cols[i%5],o=.18+Math.random()*.45,rot=-4+Math.random()*3,hh=2+Math.random()*5;
+h+=`<i style="left:${x}px;top:${y}px;width:${w}px;height:${hh}px;opacity:${o};transform:rotate(${rot}deg);background:linear-gradient(90deg,transparent,${c},transparent);box-shadow:0 0 18px ${c}"></i>`}
+tr.innerHTML=h;
+</script>
+</body></html>
