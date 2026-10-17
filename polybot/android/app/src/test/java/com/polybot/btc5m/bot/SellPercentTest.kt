@@ -160,4 +160,67 @@ class SellPercentTest {
         assertEquals(8.0, SellPercent.sliceSize(8.0, 5.0, 5.0), 1e-9)
         assertEquals(12.0, SellPercent.sliceSize(12.0, null, 5.0), 1e-9)
     }
+    // ------------------------------------------- one purchase at a time
+
+    private fun lot(shares: Double, price: Double, at: Long = 0L) =
+        OrderLog.Lot(shares, price, at)
+
+    @Test
+    fun theNextSliceIsTheOldestPurchaseAtItsOwnPrice() {
+        val slice = SellPercent.nextSlice(
+            listOf(lot(15.0, 0.56), lot(13.0, 0.66)),
+            minimumOrderSize = 5.0,
+            free = 28.0,
+        )
+        // Not 28 shares at the average of the two: fifteen, priced off the 56c
+        // they were actually bought at. The thirteen come up on the next pass.
+        assertEquals(15.0, slice!!.first, 1e-9)
+        assertEquals(0.56, slice.second, 1e-9)
+    }
+
+    @Test
+    fun aPurchaseTooSmallToSellAloneTakesTheNextOneWithIt() {
+        val slice = SellPercent.nextSlice(
+            listOf(lot(2.0, 0.30), lot(4.0, 0.40), lot(9.0, 0.35)),
+            minimumOrderSize = 5.0,
+            free = 15.0,
+        )
+        // Two is below the venue's floor, so the four join it — and the price
+        // is the dearer of them, because the sale has to be a profit on both.
+        assertEquals(6.0, slice!!.first, 1e-9)
+        assertEquals(0.40, slice.second, 1e-9)
+    }
+
+    @Test
+    fun itNeverOffersMoreThanIsFree() {
+        val slice = SellPercent.nextSlice(
+            listOf(lot(20.0, 0.44)),
+            minimumOrderSize = 5.0,
+            free = 8.0,
+        )
+        // Twelve of them are already resting under an offer; only eight are
+        // left to arrange.
+        assertEquals(8.0, slice!!.first, 1e-9)
+        assertEquals(0.44, slice.second, 1e-9)
+    }
+
+    @Test
+    fun nothingLeftToArrangeIsNoSlice() {
+        assertNull(SellPercent.nextSlice(emptyList(), 5.0, 10.0))
+        // Everything is spoken for: free is under the venue's floor.
+        assertNull(SellPercent.nextSlice(listOf(lot(9.0, 0.44)), 5.0, 2.0))
+        // And what is left of the lots cannot be made into an order.
+        assertNull(SellPercent.nextSlice(listOf(lot(2.0, 0.44)), 5.0, 9.0))
+    }
+
+    @Test
+    fun eachSliceAsksForItsOwnMargin() {
+        val cheap = SellPercent.targetPrice(0.56, 0.10, 0.01)
+        val dear = SellPercent.targetPrice(0.66, 0.10, 0.01)
+        // The whole point: two purchases, two prices, the dearer asking more.
+        assertTrue(dear > cheap)
+        assertTrue(SellPercent.netSell(cheap) >= 0.56 * 1.10 - 0.01)
+        assertTrue(SellPercent.netSell(dear) >= 0.66 * 1.10 - 0.01)
+    }
+
 }

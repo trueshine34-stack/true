@@ -60,6 +60,42 @@ object SellPercent {
 
     private const val FEE_RATE = 0.07
 
+    /**
+     * The next purchase to arrange an exit for, out of the ones still uncovered.
+     *
+     * Two buys a dime apart are two trades, not one averaged trade: a target
+     * worked out from the first of them asks for a margin the second never had,
+     * and sells it for less than the rule was told to take. So they are covered
+     * one purchase at a time, oldest first, each priced off what it actually
+     * paid.
+     *
+     * A lot too small for the venue to take an order for is merged with the
+     * ones behind it until it is big enough, and then the dearest of them sets
+     * the price — a merged sale has to be a profit on every purchase inside it,
+     * and the dearest price is the only one that is.
+     *
+     * Null when what is left cannot be made into an order at all, which is the
+     * answer meaning "nothing further to arrange".
+     */
+    fun nextSlice(
+        lots: List<OrderLog.Lot>,
+        minimumOrderSize: Double,
+        free: Double,
+    ): Pair<Double, Double>? {
+        if (free < minimumOrderSize - 1e-6) return null
+        var shares = 0.0
+        var cost = 0.0
+        for (lot in lots) {
+            if (lot.shares <= 1e-9) continue
+            if (lot.price > cost) cost = lot.price
+            shares += lot.shares
+            if (shares >= minimumOrderSize - 1e-9) break
+        }
+        val size = minOf(shares, free)
+        if (size < minimumOrderSize - 1e-6 || cost <= 0.0) return null
+        return size to cost
+    }
+
     /** What one share pays out after the taker fee. */
     fun netSell(price: Double): Double =
         if (price <= 0.0 || price >= 1.0) price else price - FEE_RATE * price * (1 - price)

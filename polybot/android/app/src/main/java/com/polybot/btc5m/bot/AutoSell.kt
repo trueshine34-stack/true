@@ -1384,10 +1384,39 @@ class AutoSell(
     }
 
     /** What one share of this position cost, as well as the app knows it. */
-    private fun costOf(position: Position): Double =
-        engine.log.heldLots(position.asset).firstOrNull()?.price
-            ?: engine.log.uncoveredLots(position.asset).firstOrNull()?.price
-            ?: position.avgPrice
+    /**
+     * The next purchase that still needs an exit, and what it cost.
+     *
+     * Two buys a dime apart are two trades, not one averaged trade: a target
+     * worked out from the first of them asks for a margin on the second that it
+     * never had, and sells it for less than the rule was told to take. So they
+     * are covered one purchase at a time, each priced off what that purchase
+     * actually paid, oldest first — and the log already pairs a sell against
+     * the buy it covers, so arranging an exit for one lot simply takes it out
+     * of this list and brings the next one up on the sweep after.
+     *
+     * The slicing itself is [SellPercent.nextSlice]; what is here is only where
+     * the lots come from, and what to do when there are none of them.
+     *
+     * Null when there is nothing left to arrange, which is the answer meaning
+     * "covered".
+     */
+    private fun lotToCover(
+        position: Position,
+        meta: ClobApi.MarketMeta,
+        free: Double,
+    ): Pair<Double, Double>? {
+        if (free < meta.minimumOrderSize - 1e-6) return null
+        val lots = engine.log.uncoveredLots(position.asset)
+        // Nothing in the log — a position this app did not open — falls back to
+        // the exchange's own average, which is the only cost there is for it.
+        if (lots.isEmpty()) {
+            val avg = position.avgPrice
+            return if (avg > 0.0) free to avg else null
+        }
+
+        return SellPercent.nextSlice(lots, meta.minimumOrderSize, free)
+    }
 
     /**
      * Half again over cost, asked rather than taken.
@@ -1422,13 +1451,24 @@ class AutoSell(
         val sells = open.filter { it.assetId == position.asset && it.side == "SELL" }
         val (pinned, ours) = sells.partition { held(it) }
 
-        // Our own offer from a moment ago is the answer, not a leftover: it is
-        // standing at the price this rule asked for and is waiting to be
-        // taken. Anything else of ours — a rung the ladder put out before this
-        // rule took the position over — is pulled, because two offers on one
-        // position means one of them sells at the wrong price.
-        val stale = ours.filter {
-            rung.cheapAsk <= 0.0 || abs(it.price - rung.cheapAsk) > meta.tickSize / 2
+        /*
+          Several offers on one position are the right answer now, not a
+          leftover: one per purchase, each at half again over what that
+          purchase paid. What is still wrong is an offer below what this rule
+          would ask for the cheapest purchase it is still holding — a rung the
+          ladder put out before the rule took the position over — because that
+          one sells a lot for less than the rule was told to take. Pulling it
+          puts its lot back in the list, and the next sweep re-offers it at the
+          right price.
+        */
+        val uncovered = engine.log.uncoveredLots(position.asset)
+        val floorAsk = uncovered.minOfOrNull { it.price }?.let {
+            SellPercent.targetPrice(it, CHEAP_GAIN, meta.tickSize)
+        }
+        val stale = if (floorAsk == null) {
+            emptyList()
+        } else {
+            ours.filter { it.price < floorAsk - meta.tickSize / 2 }
         }
         if (stale.isNotEmpty()) {
             val session = engine.session() ?: return "нет сессии"
@@ -1441,15 +1481,16 @@ class AutoSell(
             }
             return "выход +50%: веду сам"
         }
-        if (ours.isNotEmpty()) {
-            return "выставлено " + (rung.cheapAsk * 100).toInt() + "¢"
-        }
 
-        val free = mine - pinned.sumOf { it.remaining }
-        if (free < meta.minimumOrderSize - 1e-6) return "покрыто"
-
-        val cost = costOf(position)
-        if (cost <= 0.0) return "нет цены входа"
+        // Everything already offered is covered, ours as much as a hand-placed
+        // one: each of those offers is a purchase that has its exit arranged.
+        val free = mine - sells.sumOf { it.remaining }
+        val (size, cost) = lotToCover(position, meta, free)
+            ?: return if (ours.isNotEmpty()) {
+                "выставлено " + ours.size + " · ждут"
+            } else {
+                "покрыто"
+            }
         val wanted = minOf(
             1.0 - meta.tickSize,
             SellPercent.targetPrice(cost, CHEAP_GAIN, meta.tickSize),
@@ -1481,7 +1522,7 @@ class AutoSell(
         // The rule's own order, not a hand-placed one: in the last minute this
         // position goes back to the ladder, and the ladder may only re-price
         // what a rule put out.
-        val status = tryPlace(position, free, price, lotAt)
+        val status = tryPlace(position, size, price, lotAt)
         if (!status.startsWith("не ") && status != "нет сессии") {
             rung.cheapAsk = price
             rung.cheapAtMs = 0L
@@ -1527,11 +1568,7 @@ class AutoSell(
         }
 
         val free = mine - pinned.sumOf { it.remaining }
-        if (free < meta.minimumOrderSize - 1e-6) return "покрыто"
-
-        val cost = engine.log.uncoveredLots(position.asset).firstOrNull()?.price
-            ?: position.avgPrice.takeIf { it > 0.0 }
-            ?: return "нет цены входа"
+        val (size, cost) = lotToCover(position, meta, free) ?: return "покрыто"
         // The price whose proceeds are the cost plus whatever gain was armed,
         // the fee on both sides already in it. At nought that is break-even,
         // and one tick over it is the first price that is actually a profit;
@@ -1581,7 +1618,7 @@ class AutoSell(
         // tick under the bid: this is an offer at a price, and if the book has
         // slipped since, it waits there rather than chasing.
         val price = maxOf(meta.tickSize, snapToTick(rung.takeHigh, meta.tickSize))
-        val status = tryPlace(position, free, price, lotAt, auto = false)
+        val status = tryPlace(position, size, price, lotAt, auto = false)
         // One occasion, one firing. Whether or not the order came back filled,
         // the ask has been sent at a price the book was showing — leaving the
         // switch on would have it sell the next position too, which is not
@@ -1590,14 +1627,23 @@ class AutoSell(
             rung.takeAtMs = 0L
             rung.takeHigh = 0.0
             // A standing one is not a button pressed once: it was set as the
-            // way out of every window, so it fires and stays. Only the two
-            // fixed chips put themselves back.
-            if (!settings.anyProfitStanding) update(settings.copy(anyProfit = false))
+            // way out of every window, so it fires and stays. The others put
+            // themselves back — but only once the whole position has an exit:
+            // the sale just placed covers one purchase, and a chip that
+            // disarmed on it would leave the buys behind it to the ladder,
+            // which is not what "sell this position at my price" meant.
+            val covered = engine.log.uncoveredLots(position.asset)
+                .sumOf { it.shares } <= meta.minimumOrderSize - 1e-6
+            if (!settings.anyProfitStanding && covered) {
+                update(settings.copy(anyProfit = false))
+            }
             engine.log(
                 "info",
                 "Выход по " +
                     (if (gain > 0.0) "+" + (gain * 100).toInt() + "%" else "+$over¢") +
-                    " сработал" + (if (settings.anyProfitStanding) "" else " — выключаю"),
+                    " сработал на " + String.format("%.1f", size) + " от " +
+                    (cost * 100).toInt() + "¢" +
+                    (if (settings.anyProfitStanding || !covered) "" else " — выключаю"),
             )
         }
         return status

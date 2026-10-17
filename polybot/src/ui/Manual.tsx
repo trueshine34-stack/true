@@ -38,6 +38,7 @@ import {
   signedUsd,
   usd,
 } from '../core/money';
+import { nextLotCost } from '../core/lots';
 import { loadManualSettings, saveManualSettings } from '../core/storage';
 import { Fold } from './Fold';
 import { CandlePanel } from './CandlePanel';
@@ -676,21 +677,22 @@ export function Manual({
     the tile beside them prices it: the app's own record of this window's buys,
     with the exchange's average behind it for a position it did not place.
   */
-  const heldAvg = (() => {
+  const held = (() => {
     const leg = (name: 'Up' | 'Down') => {
       const mine = livePositions.filter((p) => p.outcome === name);
       const size = mine.reduce((a, p) => a + p.size, 0);
       if (size <= 1e-6) return null;
       const cost = mine.reduce((a, p) => a + p.size * p.avgPrice, 0);
       const avg = cost > 0 ? cost / size : (localAvg[name] ?? 0);
-      return avg > 0 ? { size, avg } : null;
+      return avg > 0 ? { name, size, avg } : null;
     };
     const up = leg('Up');
     const down = leg('Down');
-    if (up == null) return down?.avg ?? null;
-    if (down == null) return up.avg;
-    return (up.size >= down.size ? up : down).avg;
+    if (up == null) return down;
+    if (down == null) return up;
+    return up.size >= down.size ? up : down;
   })();
+  const heldAvg = held?.avg ?? null;
 
   /**
    * What is still working — from the log, and from the venue over the top.
@@ -1390,13 +1392,21 @@ export function Manual({
   /*
     The cost the exit chips measure from.
 
-    The position's, while there is one. Before that, the price in the row above
-    them: the chips are being read to decide what to buy at, and "+25%" is not
-    a number until something is subtracted from it — so until there is a
-    position they answer for the price about to be paid. Nothing chosen and
-    nothing held, and they say nothing, which is the honest answer.
+    The purchase the rule will cover next, while there is one — not the
+    position's average. The rules sell one purchase at a time, each priced off
+    what that purchase actually paid, so an average on the button would be a
+    number the rule never uses: two buys a dime apart and the chip would name a
+    price between them that neither lot is ever offered at.
+
+    Before there is a position, the price in the row above: the chips are read
+    to decide what to buy at, and "+25%" is not a number until something is
+    subtracted from it. Nothing chosen and nothing held, and they say nothing,
+    which is the honest answer.
   */
-  const exitFrom = heldAvg ?? (limitPriceNum > 0 ? limitPriceNum : null);
+  const exitFrom =
+    (held ? nextLotCost(logged.filter((o) => o.outcome === held.name)) : null) ??
+    heldAvg ??
+    (limitPriceNum > 0 ? limitPriceNum : null);
   // Five shares unless the venue's floor is higher at this price — which it is
   // under twenty cents, where five shares is under a dollar and refused.
   const limitDefaultSize = Math.max(
