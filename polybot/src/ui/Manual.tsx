@@ -1874,7 +1874,13 @@ export function Manual({
                 ? settings.autoSellCustomWaitMs
                 : settings.autoSellTakeWaitMs
           }
-          gain={watchFor === 'custom' ? settings.autoSellCustomGain : null}
+          gain={
+            watchFor === 'custom'
+              ? settings.autoSellCustomGain
+              : watchFor === 'take'
+                ? settings.autoSellTakeGain
+                : null
+          }
           cents={watchFor === 'cents' ? settings.autoSellTakeCents : null}
           onCents={(over) => {
             apply({ ...settings, autoSellTakeCents: over });
@@ -1895,14 +1901,20 @@ export function Manual({
             ).catch(() => {});
           }}
           onGain={(gain) => {
-            apply({ ...settings, autoSellCustomGain: gain });
+            const was =
+              watchFor === 'take'
+                ? settings.autoSellTakeGain
+                : settings.autoSellCustomGain;
+            apply(
+              watchFor === 'take'
+                ? { ...settings, autoSellTakeGain: gain }
+                : { ...settings, autoSellCustomGain: gain },
+            );
             // Only while it is the armed one: changing a number on a chip that
             // is not running must not re-point the rule that is.
             if (
               autoSell.anyProfit &&
-              Math.abs(
-                (autoSell.anyProfitGain ?? 0) - settings.autoSellCustomGain,
-              ) < 1e-9
+              Math.abs((autoSell.anyProfitGain ?? 0) - was) < 1e-9
             ) {
               void PolyBot.autoSellUpdate({ anyProfitGain: gain })
                 .then(() => PolyBot.autoSellState())
@@ -2460,8 +2472,9 @@ export function Manual({
               */}
               {[
                 // Cheapest first, dearest last, which is also the order they
-                // would fire in: a few cents over cost, a tenth, whatever the
-                // third is set to, half again.
+                // would fire in as a window goes right: a few cents over cost,
+                // then the two whose margins are settings, then half again.
+                // Only the fourth one's number is fixed.
                 {
                   gain: 0,
                   label: `+${settings.autoSellTakeCents}¢`,
@@ -2469,22 +2482,45 @@ export function Manual({
                   holds: 'cents' as const,
                 },
                 {
-                  gain: 0.1,
-                  label: '+10%',
+                  gain: settings.autoSellTakeGain,
+                  label: `+${Math.round(settings.autoSellTakeGain * 100)}%`,
                   waitMs: settings.autoSellTakeWaitMs,
                   holds: 'take' as const,
                 },
-                // And the one whose number is a setting rather than a fact.
+                // And the one that can also be left armed across windows.
                 {
                   gain: settings.autoSellCustomGain,
                   label: `+${Math.round(settings.autoSellCustomGain * 100)}%`,
                   waitMs: settings.autoSellCustomWaitMs,
                   holds: 'custom' as const,
                 },
-              ].map(({ gain, label, waitMs, holds }) => {
-                const armed =
+              ].map(({ gain, label, waitMs, holds }, i, chips) => {
+                /*
+                  Which chip is the lit one.
+
+                  The rule holds a gain, not a chip, so a chip knows it is armed
+                  by recognising its own number in it. Two chips can be set to
+                  the same number now that the second one's is a setting too —
+                  and then only one of them is lit: the standing one if that is
+                  what armed it, otherwise the first that matches. Two lit chips
+                  would be two claims on a rule there is only one of.
+                */
+                const mine =
                   (autoSell.anyProfit ?? false) &&
                   Math.abs((autoSell.anyProfitGain ?? 0) - gain) < 1e-9;
+                const standingWins =
+                  settings.autoSellCustomArmed &&
+                  Math.abs(settings.autoSellCustomGain - gain) < 1e-9;
+                const armed =
+                  mine &&
+                  (standingWins
+                    ? holds === 'custom'
+                    : chips.findIndex(
+                        (c) =>
+                          Math.abs(
+                            c.gain - (autoSell.anyProfitGain ?? 0),
+                          ) < 1e-9,
+                      ) === i);
                 // The price this chip is holding out for, worked out the same
                 // way the rule works it out: the cost plus the gain, with the
                 // fee on both sides already in it — measured from the position
@@ -2756,9 +2792,7 @@ function WatchSheet({
               ? 'Выход +50%'
               : over != null
                 ? `Выход +${over}¢`
-                : gain != null
-                  ? `Выход +${Math.round(gain * 100)}%`
-                  : 'Выход +10%'}
+                : `Выход +${Math.round((gain ?? 0) * 100)}%`}
           </h2>
           <button className="xbtn" onClick={onClose} aria-label="Закрыть">
             ✕

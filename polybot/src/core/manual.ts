@@ -141,6 +141,15 @@ export type ManualSettings = {
   autoSellTakeWaitMs: number;
   autoSellCheapWaitMs: number;
   /**
+   * What the second chip holds out for.
+   *
+   * It was a fixed tenth, which is a sensible number and not always the right
+   * one — a window that has gone further than expected is worth asking more of,
+   * and it is the chip reached for in that moment. So it is a setting like the
+   * third one's, and the chip is named after it.
+   */
+  autoSellTakeGain: number;
+  /**
    * How many cents over break-even the first chip asks for.
    *
    * It was fixed at one, which is the smallest profit the venue can price and
@@ -277,6 +286,7 @@ export const DEFAULT_MANUAL_SETTINGS: ManualSettings = {
   autoSellCheapTake: true,
   autoSellTakeWaitMs: 5000,
   autoSellCheapWaitMs: 1500,
+  autoSellTakeGain: 0.1,
   autoSellTakeCents: 1,
   autoSellCustomGain: 0.25,
   autoSellCustomWaitMs: 5000,
