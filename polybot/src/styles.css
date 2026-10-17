@@ -1968,18 +1968,38 @@ button.step.big {
   background: var(--surface);
 }
 
+/*
+  The header is a row of three now rather than one button.
+
+  The count and the running total fold the list; between them and the arrow
+  sits "pull them all", which has to be its own target — a tap meant for it
+  that folded the list instead would be a tap that did the opposite of what it
+  looked like.
+*/
 .histhead {
   display: flex;
   align-items: baseline;
   gap: 8px;
   width: 100%;
-  padding: 7px 14px;
-  border: none;
-  background: none;
+  padding: 0 14px;
   color: var(--muted);
-  font-family: inherit;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+.histhead .histfold {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1 1 auto;
+  padding: 7px 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-variant-numeric: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
@@ -1987,8 +2007,64 @@ button.step.big {
   margin-left: auto;
 }
 
-.histhead:active {
+.histhead .linkbtn {
+  flex: 0 0 auto;
+}
+
+.histhead .foldarrow {
+  flex: 0 0 auto;
+  padding: 7px 0 7px 8px;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.histhead .histfold:active {
   background: var(--surface-2);
+}
+
+/*
+  A row that is still on the book.
+
+  It is not a record yet — it is money at risk, and the panel that used to say
+  so is gone — so it is marked plainly, and tapping it opens its price the way
+  the panel's rows did.
+*/
+.histrow.working {
+  background: rgba(244, 183, 64, 0.07);
+}
+
+.histrow.editable {
+  cursor: pointer;
+}
+
+.histrow.editable:active {
+  background: rgba(244, 183, 64, 0.16);
+}
+
+/*
+  Where the state word would have been, so the rows line up either way — and
+  drawn like that word rather than like a button: this list is read down the
+  right-hand column, and a box on every working row would be the loudest thing
+  on a panel whose job is to be quiet.
+*/
+.histrow .xbtn {
+  flex: 0 0 62px;
+  height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: right;
+}
+
+.histrow .xbtn:active {
+  color: var(--down);
 }
 
 /* One line each: side, price by size, when, and what became of it. */

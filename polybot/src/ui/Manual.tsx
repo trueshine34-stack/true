@@ -1748,92 +1748,6 @@ export function Manual({
               )}
             </div>
 
-            {/*
-              Only what is still working. A round that has closed is history and
-              is filed as such below — leaving it here meant the list you scan
-              for "what am I still exposed to" was mostly things you are not.
-            */}
-            {working.length > 0 && (
-              <>
-                {restingLimits.length > 0 && (
-                  <div className="listhead bare">
-                    <button
-                      className="linkbtn"
-                      disabled={busy}
-                      onClick={() => void cancelLimits()}
-                    >
-                      снять лимитки ({restingLimits.length})
-                    </button>
-                  </div>
-                )}
-                {working.map((t) => {
-                  const live = t.orderId
-                    ? orders.find((x) => x.id === t.orderId)
-                    : undefined;
-                  // Which side to sign a replacement against. The live order's
-                  // own token where the venue is listing it; otherwise the
-                  // row's printed side, which is this event's — but only while
-                  // this event is the one on screen, since a past window's
-                  // "Down" is a different token from this window's.
-                  const editSide = live
-                    ? sideOfToken(live.assetId)
-                    : t.outcome === 'Up' || t.outcome === 'Down'
-                      ? t.outcome
-                      : null;
-                  // A resting sell is as much a price you might want to move
-                  // as a resting buy — and it is the one you move in a hurry.
-                  const editable = t.orderId != null && editSide != null;
-                  const price = (t.status === 'buying' ? t.buyPrice : t.sellPrice) ?? 0;
-                  return (
-                    <div
-                      className={`listrow static trade trade-${t.status}${
-                        editable ? ' editable' : ''
-                      }`}
-                      key={t.key}
-                      onClick={editable ? () => setEditing(t) : undefined}
-                    >
-                      <span
-                        className={t.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}
-                      >
-                        {t.outcome}
-                      </span>
-                      {/* A working order is a price and a size. Nothing else. */}
-                      <span className="listrow-main">
-                        <span className="ordermain">
-                          {cents(price)}
-                          <i>×</i>
-                          {t.shares.toFixed(t.shares % 1 ? 1 : 0)}
-                        </span>
-                      </span>
-                      {/*
-                        The ✕ needs an order id and nothing else. It used to
-                        wait for the venue's listing to confirm the order, and
-                        the listing lags a placement by a second or two — so
-                        the one moment you most want to pull a limit back, just
-                        after putting it out, was the one moment there was no
-                        way to. Cancelling goes by id: the venue either pulls it
-                        or says it is already inactive, and both are answers.
-                      */}
-                      {t.orderId ? (
-                        <button
-                          className="xbtn"
-                          disabled={busy}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void cancel(t.orderId as string);
-                          }}
-                          aria-label="Снять ордер"
-                        >
-                          ✕
-                        </button>
-                      ) : (
-                        <span className="orderdot" aria-hidden />
-                      )}
-                    </div>
-                  );
-                })}
-              </>
-            )}
           </div>
       )}
 
@@ -1882,6 +1796,20 @@ export function Manual({
             orders={logged}
             live={liveIds}
             realised={realisedPnl}
+            busy={busy}
+            restingCount={restingLimits.length}
+            onCancel={(orderId) => void cancel(orderId)}
+            onCancelAll={() => void cancelLimits()}
+            /*
+              The editor works off the paired record rather than off the log
+              row: it needs the side signed against and the shares as the desk
+              counts them, which is what `working` already works out. The log
+              row is only the handle the finger lands on.
+            */
+            onEdit={(orderId) => {
+              const row = working.find((t) => t.orderId === orderId);
+              if (row) setEditing(row);
+            }}
           />
 
         </>
@@ -3410,8 +3338,28 @@ function OrderHistory({
   orders,
   live,
   realised,
+  busy,
+  restingCount,
+  onCancel,
+  onCancelAll,
+  onEdit,
 }: {
   orders: LoggedOrder[];
+  /** Whether an order is already in flight, which disables pulling another. */
+  busy?: boolean;
+  /**
+   * How many orders are still on the book, as the desk counts them.
+   *
+   * There used to be a panel above this one listing them with their own ✕ and
+   * their own "pull them all" — the same orders this list already had, drawn a
+   * second time a few hundred pixels higher. The list won: it was already
+   * there, and the panel was a screenful. So the actions came down here, where
+   * the rows are.
+   */
+  restingCount?: number;
+  onCancel?: (orderId: string) => void;
+  onCancelAll?: () => void;
+  onEdit?: (orderId: string) => void;
   /**
    * Ids the venue says are still on the book.
    *
@@ -3424,6 +3372,17 @@ function OrderHistory({
   realised: number;
 }) {
   const [open, setOpen] = useState(false);
+  /*
+    Open on its own while something is resting, until it is shut by hand.
+
+    Shut by default is right for a record — it is read after the fact — but an
+    order on the book is not a record, it is money at risk right now, and with
+    the panel above gone this list is the only place it appears. So it opens
+    itself when there is something working and stays wherever it is put after
+    that.
+  */
+  const [touched, setTouched] = useState(false);
+  const shown = touched ? open : open || (restingCount ?? 0) > 0;
   /*
     Only what happened and what is still happening.
 
@@ -3446,19 +3405,54 @@ function OrderHistory({
         the fact and almost never while a window is running — and open it was
         half the screen between the price and the buttons.
       */}
-      <button className="histhead" onClick={() => setOpen((v) => !v)}>
-        <span className="muted">{rows.length}</span>
-        <span className={realised >= 0 ? 'up sessum' : 'down sessum'}>
-          {realised !== 0 ? signedUsd(realised) : ''}
-        </span>
-        <span className="foldarrow" aria-hidden>
-          {open ? '−' : '+'}
-        </span>
-      </button>
+      <div className="histhead">
+        <button
+          className="histfold"
+          onClick={() => {
+            setTouched(true);
+            setOpen(!shown);
+          }}
+        >
+          <span className="muted">{rows.length}</span>
+          <span className={realised >= 0 ? 'up sessum' : 'down sessum'}>
+            {realised !== 0 ? signedUsd(realised) : ''}
+          </span>
+        </button>
+        {/* Pulling everything, where pulling one already is. */}
+        {(restingCount ?? 0) > 0 && onCancelAll && (
+          <button className="linkbtn" disabled={busy} onClick={onCancelAll}>
+            снять ({restingCount})
+          </button>
+        )}
+        <button
+          className="foldarrow"
+          onClick={() => {
+            setTouched(true);
+            setOpen(!shown);
+          }}
+          aria-label={shown ? 'Свернуть' : 'Развернуть'}
+        >
+          {shown ? '−' : '+'}
+        </button>
+      </div>
 
-      {open &&
-        rows.map((o) => (
-          <div className="histrow" key={o.id}>
+      {shown &&
+        rows.map((o) => {
+          const state = stateOf(o, live);
+          // Still on the book: this row is a live order, not a record of one,
+          // so it is the row the ✕ and the price editor belong to.
+          const working = state === 'resting' || state === 'partial';
+          const editable = working && o.orderId != null && onEdit != null;
+          return (
+          <div
+            className={`histrow${working ? ' working' : ''}${
+              editable ? ' editable' : ''
+            }`}
+            key={o.id}
+            onClick={
+              editable ? () => onEdit?.(o.orderId as string) : undefined
+            }
+          >
             <span className={o.outcome === 'Up' ? 'up tag-side' : 'down tag-side'}>
               {o.outcome || '—'}
             </span>
@@ -3488,11 +3482,35 @@ function OrderHistory({
                 second: '2-digit',
               })}
             </span>
-            <span className={`histstate ${statusTone(stateOf(o, live))}`}>
-              {statusWord(stateOf(o, live))}
-            </span>
+            {/*
+              The state, or — while it is still working — the way out of it.
+
+              The ✕ goes by order id and nothing else: the venue either pulls it
+              or says it is already inactive, and both are answers. Waiting for
+              the listing to confirm the order first meant the one moment you
+              most want a limit back, just after placing it, was the one moment
+              there was no way to ask.
+            */}
+            {working && o.orderId && onCancel ? (
+              <button
+                className="xbtn"
+                disabled={busy}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancel(o.orderId as string);
+                }}
+                aria-label="Снять ордер"
+              >
+                ✕
+              </button>
+            ) : (
+              <span className={`histstate ${statusTone(state)}`}>
+                {statusWord(state)}
+              </span>
+            )}
           </div>
-        ))}
+          );
+        })}
     </div>
   );
 }
