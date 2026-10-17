@@ -9,8 +9,8 @@ const TXT = {
   l2: 'ÜZEMANYAG',
   l3: 'INGYEN!',
   sub: 'Erste Bank-ügyfeleknek.',
-  date: '2026. október 12–20.',
-  legal1: 'Az akció 2026. október 12-től 20-ig minden Erste Bank-ügyfél számára',
+  date: '2026. október 17–30.',
+  legal1: 'Az akció 2026. október 17-től 30-ig minden Erste Bank-ügyfél számára',
   legal2: 'érvényes a Shell-töltőállomásokon. A kép illusztráció.',
 };
 const NAVY = '#061538', NAVY2 = '#0B2466';

@@ -1,6 +1,6 @@
 # Shell × Erste — тексты объявлений Facebook / Instagram
 
-Акция: 25 литров топлива бесплатно для всех клиентов Erste Bank на АЗС Shell, 12–20 октября 2026.
+Акция: 25 литров топлива бесплатно для всех клиентов Erste Bank на АЗС Shell, 17–30 октября 2026.
 Лимиты Meta соблюдены: основной текст ≤ 125 символов (весь виден до «Ещё»), заголовок ≤ 40, описание ≤ 30.
 
 ## Баннер A «Aranyóra» (золотой час)
@@ -8,7 +8,7 @@
 
 | Поле | Венгерский (в объявление) | Русский (перевод) |
 |---|---|---|
-| Основной текст | Minden út tartogat valami jót. 🌅 Erste Bank-ügyfélként október 12–20. között 25 liter üzemanyag vár Önre ingyen a Shellnél. | В каждой дороге припасено что-то хорошее. 🌅 Клиентов Erste Bank с 12 по 20 октября ждут 25 литров бесплатного топлива на заправках Shell. |
+| Основной текст | Minden út tartogat valami jót. 🌅 Erste Bank-ügyfélként október 17–30. között 25 liter üzemanyag vár Önre ingyen a Shellnél. | В каждой дороге припасено что-то хорошее. 🌅 Клиентов Erste Bank с 17 по 30 октября ждут 25 литров бесплатного топлива на заправках Shell. |
 | Заголовок | Shell és Erste: 25 liter ingyen | Shell и Erste: 25 литров бесплатно |
 | Описание | Minden Erste Bank-ügyfélnek | Каждому клиенту Erste Bank |
 | Кнопка | További információ (LEARN_MORE) | Подробнее |
@@ -18,9 +18,9 @@
 
 | Поле | Венгерский (в объявление) | Русский (перевод) |
 |---|---|---|
-| Основной текст | 25 liter, 0 forint. ⛽ Ha Ön Erste Bank-ügyfél, október 12–20. között 25 liter üzemanyagot tankolhat ingyen a Shellnél. | 25 литров, 0 форинтов. ⛽ Если вы клиент Erste Bank, с 12 по 20 октября вы можете бесплатно заправить 25 литров топлива на заправках Shell. |
+| Основной текст | 25 liter, 0 forint. ⛽ Ha Ön Erste Bank-ügyfél, október 17–30. között 25 liter üzemanyagot tankolhat ingyen a Shellnél. | 25 литров, 0 форинтов. ⛽ Если вы клиент Erste Bank, с 17 по 30 октября вы можете бесплатно заправить 25 литров топлива на заправках Shell. |
 | Заголовок | Tankoljon 25 litert ingyen! | Заправьте 25 литров бесплатно! |
-| Описание | Csak október 12–20. között | Только с 12 по 20 октября |
+| Описание | Csak október 17–30. között | Только с 17 по 30 октября |
 | Кнопка | További információ (LEARN_MORE) | Подробнее |
 
 Кнопку «Ajánlat igénylése» (GET_OFFER) ставить только если банк подтвердит, что бесплатное топливо нужно «получить», то есть активировать. Если оно начисляется автоматически, такая кнопка вводит в заблуждение.

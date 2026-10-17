@@ -147,7 +147,7 @@ const PACK = (() => {
       ctx.scale(lerp(0.6, 1, e), lerp(0.6, 1, e));
       ctx.globalAlpha = Math.min(1, p5 * 3);
       ctx.font = '800 40px Montserrat';
-      const label = '2026. október 12–20.';
+      const label = '2026. október 17–30.';
       const lw = trackedWidth(ctx, label, 0.5);
       const pulse = 1 + 0.025 * Math.sin(Math.PI * inv(13.2, 13.6, t));
       ctx.scale(pulse, pulse);
@@ -200,7 +200,7 @@ const PACK = (() => {
     ctx.save();
     ctx.globalAlpha = a * 0.72;
     ctx.font = '500 18px Montserrat'; ctx.fillStyle = '#fff';
-    ctx.fillText('Az akció 2026. október 12-től 20-ig minden Erste Bank-ügyfél számára', 112, 1030);
+    ctx.fillText('Az akció 2026. október 17-től 30-ig minden Erste Bank-ügyfél számára', 112, 1030);
     ctx.fillText('érvényes a Shell-töltőállomásokon. A kép illusztráció.', 112, 1054);
     ctx.restore();
   }

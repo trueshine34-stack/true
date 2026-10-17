@@ -1,6 +1,6 @@
 # Shell × Erste — „25 liter üzemanyag ingyen!" (15", HU)
 
-Рекламный ролик 15 секунд для акции Shell Hungary и Erste Bank: **25 литров топлива бесплатно для всех клиентов Erste Bank, 12–20 октября 2026**.
+Рекламный ролик 15 секунд для акции Shell Hungary и Erste Bank: **25 литров топлива бесплатно для всех клиентов Erste Bank, 17–30 октября 2026**.
 
 | Файл | Что это |
 |---|---|
@@ -24,9 +24,9 @@
 | 7,23–9,13 | Графика: касание карты Erste → «ELFOGADVA», счётчик 0,00 → **25,00 L**, к оплате **0 Ft**, штамп INGYEN! | бип оплаты, тики счётчика, сигнал на 25,00 |
 | 9,13–10,54 | Водитель садится, уверенно захлопывает дверь | хлопок двери на кадре закрытия |
 | 10,54–11,00 | SUV уезжает в солнце, вспышка в белое | старт двигателя, реверс-свуш в дроп |
-| 11,00–15,00 | Пэкшот: логотипы Shell и Erste, **25 LITER ÜZEMANYAG INGYEN!**, *Erste Bank ügyfeleknek.*, плашка **2026. október 12–20.**, теглайн и юридическая строка | дроп; VO: „Shell és Erste. Több lehetőség az Ön mindennapjaira." |
+| 11,00–15,00 | Пэкшот: логотипы Shell и Erste, **25 LITER ÜZEMANYAG INGYEN!**, *Erste Bank ügyfeleknek.*, плашка **2026. október 17–30.**, теглайн и юридическая строка | дроп; VO: „Shell és Erste. Több lehetőség az Ön mindennapjaira." |
 
-Юридическая строка: *„Az akció 2026. október 12-től 20-ig minden Erste Bank-ügyfél számára érvényes a Shell-töltőállomásokon. A kép illusztráció."*
+Юридическая строка: *„Az akció 2026. október 17-től 30-ig minden Erste Bank-ügyfél számára érvényes a Shell-töltőállomásokon. A kép illusztráció."*
 
 ## Источники и права
 
